@@ -22,16 +22,8 @@ updates:
       interval: "weekly"
       day: "tuesday"
     groups:
-      dev-dependencies:
-        patterns:
-          - "automattic/*"
-          - "dealerdirect/*"
-          - "php-parallel-lint/*"
-          - "phpcompatibility/*"
-          - "phpunit/*"
-          - "squizlabs/*"
-          - "wp-cli/*"
-          - "yoast/*"
+      composer-dependencies:
+        patterns: ["*"]
     labels:
       - "dependencies"
     commit-message:
@@ -46,9 +38,8 @@ updates:
       interval: "weekly"
       day: "wednesday"
     groups:
-      dev-dependencies:
-        patterns:
-          - "@wordpress/*"
+      npm-dependencies:
+        patterns: ["*"]
     labels:
       - "dependencies"
     commit-message:
