@@ -17,7 +17,6 @@ use InvalidArgumentException;
  * SourceUrlTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class SourceUrlTest extends MonkeyStubs {
 

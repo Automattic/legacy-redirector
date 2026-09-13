@@ -30,7 +30,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class ListRedirectsTest extends TestCase {
 
