@@ -36,12 +36,18 @@ jobs:
         include:
           - php: '8.2'
             allowed_failure: false
+            coverage: none
           - php: '8.3'
             allowed_failure: false
+            coverage: none
           - php: '8.4'
             allowed_failure: false
+            coverage: none
+          # One coverage-enabled run: PHPUnit only enforces the strict
+          # covers-annotation settings when a coverage driver is active.
           - php: '8.5'
             allowed_failure: false
+            coverage: xdebug
 
     steps:
       - name: Checkout code
@@ -53,7 +59,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ matrix.php }}
-          coverage: none
+          coverage: ${{ matrix.coverage }}
 
       - name: Install Composer dependencies
         uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
@@ -64,4 +70,9 @@ jobs:
           ./vendor/bin/phpunit --version
 
       - name: Run unit tests
+        if: ${{ matrix.coverage == 'none' }}
         run: composer test:unit
+
+      - name: Run unit tests with strict coverage
+        if: ${{ matrix.coverage != 'none' }}
+        run: composer coverage-ci
