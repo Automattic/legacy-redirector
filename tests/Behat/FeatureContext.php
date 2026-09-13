@@ -29,10 +29,14 @@ final class FeatureContext extends WpEnvFeatureContext {
 	/**
 	 * Get the plugin slug for wp-env command execution.
 	 *
+	 * Derived rather than hardcoded because wp-env mounts the plugin at
+	 * wp-content/plugins/<basename of repo dir>, which differs from the repo
+	 * name for some checkouts (e.g. worktrees).
+	 *
 	 * @return string Plugin directory name.
 	 */
 	protected function get_plugin_slug(): string {
-		return 'wpcom-legacy-redirector';
+		return basename( dirname( __DIR__, 2 ) );
 	}
 
 	/**
@@ -112,26 +116,28 @@ PHP;
 	 * @return void
 	 */
 	public function given_a_wp_installation_with_the_wpcomlr_plugin(): void {
+		$slug = $this->get_plugin_slug();
+
 		// Check if already active first (most common case after first scenario).
-		$this->run_wp_cli_command( 'plugin is-active wpcom-legacy-redirector', false );
+		$this->run_wp_cli_command( "plugin is-active {$slug}", false );
 		if ( 0 === $this->exit_code ) {
 			return; // Already active, nothing to do.
 		}
 
-		// Try the folder/file format (CI environments).
-		$this->run_wp_cli_command( 'plugin is-active wpcom-legacy-redirector/wpcom-legacy-redirector.php', false );
+		// Try the folder/file format.
+		$this->run_wp_cli_command( "plugin is-active {$slug}/wpcom-legacy-redirector.php", false );
 		if ( 0 === $this->exit_code ) {
 			return; // Already active, nothing to do.
 		}
 
-		// Not active, try to activate with slug (local development).
-		$this->run_wp_cli_command( 'plugin activate wpcom-legacy-redirector', false );
+		// Not active, try to activate with slug.
+		$this->run_wp_cli_command( "plugin activate {$slug}", false );
 		if ( 0 === $this->exit_code ) {
 			return;
 		}
 
-		// Try folder/file format (CI environments).
-		$this->run_wp_cli_command( 'plugin activate wpcom-legacy-redirector/wpcom-legacy-redirector.php', false );
+		// Try folder/file format.
+		$this->run_wp_cli_command( "plugin activate {$slug}/wpcom-legacy-redirector.php", false );
 		if ( 0 === $this->exit_code ) {
 			return;
 		}
@@ -276,6 +282,43 @@ PHP;
 	public function save_stdout_as_variable(): void {
 		// This step is handled by the base class or WP-CLI Behat framework.
 		// Kept here for documentation purposes.
+	}
+
+	/**
+	 * Request a front-end path without following redirects.
+	 *
+	 * Issues a real HTTP request against the test site from inside the
+	 * tests-cli container, so redirect behaviour is asserted at the HTTP
+	 * level (status line and headers are captured into STDOUT).
+	 *
+	 * @When I request the front-end path :path
+	 * @param string $path URL path to request, e.g. "/old-page".
+	 * @return void
+	 */
+	public function i_request_the_front_end_path( string $path ): void {
+		$wp_env_cmd = $this->get_wp_env_command();
+		$plugin_dir = $this->get_plugin_slug();
+
+		// Resolve the site's Host header from home_url(), then curl the
+		// tests-wordpress service directly (the site port is not reachable
+		// from inside the CLI container).
+		$container_script = sprintf(
+			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -sI -H "Host: ${HOST_HEADER}" %s 2>&1',
+			escapeshellarg( 'http://tests-wordpress' . $path )
+		);
+
+		$exec_command = sprintf(
+			'%s run tests-cli --env-cwd=wp-content/plugins/%s bash -c %s',
+			$wp_env_cmd,
+			$plugin_dir,
+			escapeshellarg( $container_script )
+		);
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Required to issue HTTP requests for front-end assertions.
+		exec( $exec_command, $output_lines, $exit_code );
+
+		$this->output    = implode( "\n", $output_lines );
+		$this->exit_code = $exit_code;
 	}
 
 	/**
