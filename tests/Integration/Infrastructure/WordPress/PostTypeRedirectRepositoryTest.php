@@ -30,8 +30,6 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class PostTypeRedirectRepositoryTest extends TestCase {

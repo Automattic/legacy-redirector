@@ -70,8 +70,14 @@ final class PluginBootstrapper {
 		// Register redirect handler on template_redirect (early, before canonical).
 		add_filter( 'template_redirect', array( $this, 'maybe_do_redirect' ), 0 );
 
-		// Initialize admin components.
-		$this->init_admin();
+		// Initialize admin components. All of them hook admin-only surfaces
+		// (admin screens, admin-post.php, admin-ajax.php — all define WP_ADMIN),
+		// so skip registration entirely on the front end. This keeps the
+		// global query hooks (pre_get_posts, posts_where, wp_redirect) out of
+		// front-end requests.
+		if ( is_admin() ) {
+			$this->init_admin();
+		}
 
 		// Register WP-CLI commands.
 		$this->register_cli_commands();

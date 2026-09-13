@@ -20,7 +20,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices
  * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  */
 final class UITest extends TestCase {
