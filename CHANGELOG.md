@@ -85,6 +85,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 - Validation notices no longer disclose the title of arbitrary posts via the `ids` query parameter, and render only for users who can manage redirects.
 - Enforce TLS certificate verification on destination validation requests, which previously fell back to `'sslverify' => false`.
+- Destination validation now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` so stored URLs cannot be used to probe loopback, private, or reserved addresses (SSRF). Validating destinations on other internal hosts now requires opting in via the `http_request_host_is_external` filter; see README.
 
 ### Removed
 

@@ -153,6 +153,16 @@ Other behaviour changes to be aware of:
 - `validate` no longer checks destination URLs over HTTP by default when given a single redirect; pass `--check-urls` explicitly (this now behaves the same in batch and targeted modes).
 - `create` no longer rejects external destinations whose host is missing from the `allowed_redirect_hosts` filter. This matches the admin UI: the destination host is automatically allowed at redirect time.
 
+### Destination Validation Uses Safe HTTP Requests
+
+Destination validation (the admin "Validate" action and `wp wpcom-legacy-redirector validate --check-urls`) now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
+
+**What this means for you:**
+
+- External destinations and same-site destinations validate as before, including in local development environments.
+- Destinations on other internal hosts (intranet/staging networks) will report as failed unless you allow the host via WordPress core's `http_request_host_is_external` filter (see README).
+- Destinations on non-standard ports will report as failed in validation. The redirects themselves are unaffected — this only changes validation reporting.
+
 ## No Changes Required
 
 The following APIs remain unchanged:
