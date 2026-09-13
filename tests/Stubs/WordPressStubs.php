@@ -178,6 +178,16 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		}
 
 		/**
+		 * Strip WP-CLI colour tokens (e.g. %G, %n) from a string.
+		 *
+		 * @param string $string The string to colorize.
+		 * @return string The string without colour tokens.
+		 */
+		public static function colorize( string $string ): string {
+			return (string) preg_replace( '/%[a-zA-Z0-9]/', '', $string );
+		}
+
+		/**
 		 * Record a debug message.
 		 *
 		 * @param string $message The message.

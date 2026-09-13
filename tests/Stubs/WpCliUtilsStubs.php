@@ -36,6 +36,46 @@ if ( ! function_exists( 'WP_CLI\\Utils\\format_items' ) ) {
 	}
 }
 
+if ( ! function_exists( 'WP_CLI\\Utils\\get_flag_value' ) ) {
+	/**
+	 * Get the value of an associative argument, with a fallback default.
+	 *
+	 * @param array  $assoc_args Associative arguments.
+	 * @param string $flag       Flag name.
+	 * @param mixed  $fallback   Value to return when the flag is absent.
+	 * @return mixed The flag value, or the fallback.
+	 */
+	function get_flag_value( array $assoc_args, string $flag, $fallback = null ) {
+		return $assoc_args[ $flag ] ?? $fallback;
+	}
+}
+
+if ( ! function_exists( 'WP_CLI\\Utils\\write_csv' ) ) {
+	/**
+	 * Write rows to an open file handle as CSV.
+	 *
+	 * @param resource $fd      File descriptor.
+	 * @param array    $rows    Rows to write.
+	 * @param array    $headers Optional header row.
+	 * @return void
+	 */
+	function write_csv( $fd, array $rows, array $headers = array() ): void {
+		if ( ! empty( $headers ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv -- Test stub writing to a temp file.
+			fputcsv( $fd, $headers );
+		}
+
+		foreach ( $rows as $row ) {
+			if ( ! empty( $headers ) ) {
+				$row = array_merge( array_fill_keys( $headers, '' ), $row );
+			}
+
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fputcsv -- Test stub writing to a temp file.
+			fputcsv( $fd, array_values( $row ) );
+		}
+	}
+}
+
 if ( ! function_exists( 'WP_CLI\\Utils\\make_progress_bar' ) ) {
 	/**
 	 * Create a progress bar.
