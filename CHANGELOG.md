@@ -18,6 +18,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Added
 
+- One-off migration of redirect data created by 1.x, covering both the draft post status 1.x left on every redirect and, on subdirectory multisites, the subsite prefix it baked into stored source paths. Runs automatically in batches, or in one pass via the new `wp wpcom-legacy-redirector migrate` command (`--dry-run` supported).
 - Complete DDD (Domain-Driven Design) architecture with Domain, Application, and Infrastructure layers in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - Full multisite/network support with per-site redirect management in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - Comprehensive WP-CLI commands for redirect management: `list`, `get`, `delete`, `update`, `enable`, `disable`, `validate`.
@@ -25,7 +26,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - Performance reporting for batch validation (shows time elapsed and rate).
 - Broken redirect filtering for CSV export (`--broken-only` and `--check-urls` flags).
 - Status column in CSV export/import for preserving enabled/disabled state.
-- Update and delete modes for CSV import (`--mode=update` and `--mode=delete`).
+- Update and delete modes for CSV import (`--update` and `--delete` flags).
 - CSV export CLI command in https://github.com/Automattic/wpcom-legacy-redirector/pull/35
 - Admin UI with list table for viewing, adding, deleting, and validating redirects using new `manage_redirects` capability in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - "Validate" link in admin UI to check redirect destinations in https://github.com/Automattic/wpcom-legacy-redirector/pull/132

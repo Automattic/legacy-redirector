@@ -2,6 +2,41 @@
 
 This guide covers breaking changes and migration steps when upgrading from version 1.x to 2.0.
 
+## Your Existing Redirects Are Migrated Automatically
+
+Two storage changes between 1.x and 2.0 would otherwise stop every redirect you already have from working, with no error and no warning:
+
+1. **Version 1.x stored redirects as drafts.** It called `wp_insert_post()` without a `post_status`, so WordPress defaulted each redirect to `draft`. Version 2.0 only serves redirects with the `publish` status.
+2. **On subdirectory multisites, 1.x stored source paths with the subsite prefix included** (`/subsite1/old-page`), because it prefixed `home_url()` before saving. Version 2.0 strips the subsite prefix from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
+
+A one-off migration handles both. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated so it runs only once.
+
+### Large redirect sets
+
+If you have a lot of redirects, run the migration in one pass instead of waiting for it to work through in batches:
+
+```bash
+wp wpcom-legacy-redirector migrate
+```
+
+Preview it first if you would rather see what will change:
+
+```bash
+wp wpcom-legacy-redirector migrate --dry-run
+```
+
+On a network, run it per site:
+
+```bash
+wp site list --field=url | xargs -I % wp --url=% wpcom-legacy-redirector migrate
+```
+
+### What the migration will not touch
+
+Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes redirects that were **never** published, which WordPress records with a `post_modified_gmt` of `0000-00-00 00:00:00`. Anything you disable after upgrading keeps a real modified date and is left alone.
+
+If rewriting a subsite path would collide with a redirect that already uses the subsite-relative form, the migration leaves the 1.x redirect untouched and reports the clash rather than silently discarding one of them. `wp wpcom-legacy-redirector migrate` lists any such conflicts for you to reconcile by hand.
+
 ## Breaking Changes
 
 ### Removal of the WPCOM_Legacy_Redirector Class

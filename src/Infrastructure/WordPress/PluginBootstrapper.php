@@ -25,6 +25,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromCsvComman
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\InsertRedirectCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectorCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
@@ -67,6 +68,12 @@ final class PluginBootstrapper {
 		// Register capability on admin_init.
 		add_action( 'admin_init', array( $this, 'register_capability' ) );
 
+		// Migrate 1.x redirect data. Runs on init rather than admin_init
+		// because the data it repairs is what serves front-end redirects, and
+		// a site may go a long time between admin visits. Priority 20 so the
+		// post type is registered (init, priority 10) before we query it.
+		add_action( 'init', array( $this, 'maybe_upgrade' ), 20 );
+
 		// Register redirect handler on template_redirect (early, before canonical).
 		add_filter( 'template_redirect', array( $this, 'maybe_do_redirect' ), 0 );
 
@@ -101,6 +108,15 @@ final class PluginBootstrapper {
 	public function register_capability(): void {
 		$capability = new Capability();
 		$capability->register();
+	}
+
+	/**
+	 * Migrate redirect data created by version 1.x, a batch at a time.
+	 *
+	 * @return void
+	 */
+	public function maybe_upgrade(): void {
+		$this->container->upgrader()->maybe_upgrade();
 	}
 
 	/**
@@ -162,6 +178,11 @@ final class PluginBootstrapper {
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector find-domains',
 			new FindDomainsCommand()
+		);
+
+		\WP_CLI::add_command(
+			'wpcom-legacy-redirector migrate',
+			new MigrateCommand( $this->container->upgrader() )
 		);
 
 		\WP_CLI::add_command(
