@@ -61,8 +61,8 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 * [--end=<end-offset>]
 	 * : Ending offset. Defaults to 99999999.
 	 *
-	 * [--skip_dupes=<skip-dupes>]
-	 * : If set to true, then redirects for a From URL with an existing redirect will be skipped. Defaults to false.
+	 * [--skip-dupes]
+	 * : If set, redirects for a From URL with an existing redirect will be skipped.
 	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
@@ -75,11 +75,11 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 *   - csv
 	 * ---
 	 *
-	 * [--dry_run]
+	 * [--dry-run]
 	 * : If set, redirects are not imported. Defaults to false.
 	 *
 	 * [--verbose]
-	 * : Display notices for successful imports and duplicates (if skip_dupes is used). Defaults to false.
+	 * : Display notices for successful imports and duplicates (if --skip-dupes is used). Defaults to false.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -102,9 +102,9 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 		$offset     = isset( $assoc_args['start'] ) ? intval( $assoc_args['start'] ) : 0;
 		$end_offset = isset( $assoc_args['end'] ) ? intval( $assoc_args['end'] ) : 99999999;
 		$meta_key   = isset( $assoc_args['meta-key'] ) ? sanitize_key( $assoc_args['meta-key'] ) : '';
-		$skip_dupes = isset( $assoc_args['skip_dupes'] ) ? (bool) intval( $assoc_args['skip_dupes'] ) : false;
+		$skip_dupes = isset( $assoc_args['skip-dupes'] );
 		$format     = \WP_CLI\Utils\get_flag_value( $assoc_args, 'format' );
-		$dry_run    = isset( $assoc_args['dry_run'] );
+		$dry_run    = isset( $assoc_args['dry-run'] );
 		$verbose    = isset( $assoc_args['verbose'] );
 		$notices    = array();
 
@@ -186,11 +186,11 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 						$destination = Destination::from_post_id( DestinationPostId::from_int( (int) $redirect->post_id ) );
 						$result      = $this->manager->create_redirect( $source, $destination );
 
-						if ( null === $result ) {
+						if ( $result->is_error() ) {
 							$notices[] = array(
 								'redirect_from' => $redirect->meta_value,
 								'redirect_to'   => $redirect->post_id,
-								'message'       => 'Could not insert redirect',
+								'message'       => $result->error_message(),
 							);
 						} elseif ( $verbose ) {
 							$notices[] = array(

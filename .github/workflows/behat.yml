@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   behat:
-    name: Behat Tests (WP trunk, PHP 8.4)
+    name: Behat Tests (WP trunk, PHP 8.5)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -51,10 +51,10 @@ jobs:
       - name: Install wp-env globally
         run: npm install -g @wordpress/env
 
-      - name: Setup PHP 8.4
+      - name: Setup PHP 8.5
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           coverage: none
 
       - name: Install Composer dependencies

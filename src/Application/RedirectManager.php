@@ -68,6 +68,13 @@ class RedirectManager {
 	 * @return RedirectCreationResult The result containing either the redirect ID or validation error.
 	 */
 	public function create_redirect( SourceUrl $source, Destination $destination, bool $validate = true, ?string $status = null ): RedirectCreationResult {
+		if ( ! $this->insert_allowed() ) {
+			return RedirectCreationResult::error(
+				'insert-not-allowed',
+				__( 'Redirect creation is only allowed via WP-CLI or the admin. Use the wpcom_legacy_redirector_allow_insert filter to allow it elsewhere.', 'wpcom-legacy-redirector' )
+			);
+		}
+
 		if ( $validate ) {
 			$validation = $this->validator->validate_for_creation( $source, $destination );
 			if ( $validation->is_invalid() ) {
@@ -89,6 +96,32 @@ class RedirectManager {
 		} catch ( \Exception $e ) {
 			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Whether redirect creation is allowed in the current context.
+	 *
+	 * Mirrors the 1.x `insert_legacy_redirect()` gate: creation is allowed
+	 * from WP-CLI and the admin; anywhere else (e.g. the front end) it must
+	 * be opted into via the `wpcom_legacy_redirector_allow_insert` filter.
+	 *
+	 * @return bool True if creation is allowed.
+	 */
+	private function insert_allowed(): bool {
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return true;
+		}
+
+		if ( is_admin() ) {
+			return true;
+		}
+
+		/**
+		 * Filters whether redirects may be created outside WP-CLI and the admin.
+		 *
+		 * @param bool $allow_insert Whether to allow creation. Default false.
+		 */
+		return (bool) apply_filters( 'wpcom_legacy_redirector_allow_insert', false );
 	}
 
 	/**

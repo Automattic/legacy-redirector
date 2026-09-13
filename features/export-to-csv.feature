@@ -13,3 +13,13 @@ Feature: Export redirects to CSV
 
     When I run `wp wpcom-legacy-redirector export-to-csv --csv=/tmp/exported-redirects.csv --overwrite`
     Then the return code should be 0
+
+    When I run `wp eval 'echo file_get_contents( "/tmp/exported-redirects.csv" );'`
+    Then STDOUT should contain:
+      """
+      /export-test-1
+      """
+    And STDOUT should contain:
+      """
+      /export-destination
+      """

@@ -116,7 +116,9 @@ final class ListRedirectsTest extends TestCase {
 		$this->columns_manager->render_column( 'to', $post_id );
 		$output = ob_get_clean();
 
-		$this->assertSame( $to_url, $output );
+		// External URLs are bolded on multisite for consistency with relative paths.
+		$expected = is_multisite() ? '<strong>' . $to_url . '</strong>' : $to_url;
+		$this->assertSame( $expected, $output );
 	}
 
 	/**
@@ -135,7 +137,7 @@ final class ListRedirectsTest extends TestCase {
 		$this->columns_manager->render_column( 'to', $post_id );
 		$output = ob_get_clean();
 
-		$this->assertSame( $to_url, $output );
+		$this->assertSame( $this->expected_relative_path_output( $to_url ), $output );
 	}
 
 	/**
@@ -154,7 +156,28 @@ final class ListRedirectsTest extends TestCase {
 		$this->columns_manager->render_column( 'to', $post_id );
 		$output = ob_get_clean();
 
-		$this->assertSame( '/', $output );
+		$this->assertSame( $this->expected_relative_path_output( '/' ), $output );
+	}
+
+	/**
+	 * Expected 'to' column output for a relative path.
+	 *
+	 * On multisite the column prefixes the path with the site's home URL in
+	 * grey; on single site the path is rendered as-is.
+	 *
+	 * @param string $path The relative path.
+	 * @return string Expected rendered output.
+	 */
+	private function expected_relative_path_output( string $path ): string {
+		if ( ! is_multisite() ) {
+			return $path;
+		}
+
+		return sprintf(
+			'<span style="color: #888;">%s</span><strong>%s</strong>',
+			untrailingslashit( home_url() ),
+			$path
+		);
 	}
 
 	/**

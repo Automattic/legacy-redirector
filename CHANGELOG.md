@@ -10,6 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Requires PHP 8.2 or later (previously 7.4).
 - Requires WordPress 6.4 or later (previously 5.9).
+- Removed the `WPCOM_Legacy_Redirector` class, including the public `insert_legacy_redirect()`, `get_redirect_uri()`, and `get_redirect_post_id()` methods. See [UPGRADING.md](UPGRADING.md) for replacements.
+- The `insert-redirect` WP-CLI command now validates by default; pass `--skip-validation` for the previous behaviour.
+- The `import-from-meta` WP-CLI command flags are now kebab-case: `--dry_run` is `--dry-run`, and `--skip_dupes=<bool>` is the boolean flag `--skip-dupes`.
+
+See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Added
 

@@ -106,12 +106,12 @@ final class ExportToCsvCommand extends WP_CLI_Command {
 		}
 
 		// Get count for progress bar (exclude trash for 'any').
+		// wp_count_posts() returns counts as numeric strings.
+		$counts = (array) wp_count_posts( PostType::POST_TYPE );
 		if ( 'any' === $post_status ) {
-			$counts     = (array) wp_count_posts( PostType::POST_TYPE );
-			$post_count = ( $counts['publish'] ?? 0 ) + ( $counts['draft'] ?? 0 );
+			$post_count = (int) ( $counts['publish'] ?? 0 ) + (int) ( $counts['draft'] ?? 0 );
 		} else {
-			$counts     = (array) wp_count_posts( PostType::POST_TYPE );
-			$post_count = $counts[ $post_status ] ?? 0;
+			$post_count = (int) ( $counts[ $post_status ] ?? 0 );
 		}
 
 		$label = $broken_only ? 'Scanning ' : 'Exporting ';

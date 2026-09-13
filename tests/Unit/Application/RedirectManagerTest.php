@@ -60,6 +60,10 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		Functions\when( 'get_current_blog_id' )->justReturn( 1 );
 
+		// Pass the create_redirect() context gate by default (WP_CLI is not
+		// defined in the unit harness, so the gate falls through to is_admin).
+		Functions\when( 'is_admin' )->justReturn( true );
+
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
 		$this->validator  = Mockery::mock( RedirectValidator::class );
 		$this->manager    = new RedirectManager( $this->repository, $this->validator );
@@ -94,6 +98,52 @@ final class RedirectManagerTest extends MonkeyStubs {
 			->shouldReceive( 'save' )
 			->once()
 			->andReturn( $saved_redirect );
+
+		$result = $this->manager->create_redirect( $source, $destination );
+
+		$this->assertFalse( $result->is_error() );
+		$this->assertSame( 123, $result->redirect_id() );
+	}
+
+	/**
+	 * Test create_redirect is blocked on the front end by default.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
+	 */
+	public function test_create_redirect_blocked_on_front_end(): void {
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( '__' )->returnArg();
+
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+
+		$result = $this->manager->create_redirect( $source, $destination );
+
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'insert-not-allowed', $result->error_code() );
+	}
+
+	/**
+	 * Test the wpcom_legacy_redirector_allow_insert filter permits front-end creation.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
+	 */
+	public function test_create_redirect_allowed_on_front_end_via_filter(): void {
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'apply_filters' )->justReturn( true );
+
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+
+		$this->validator
+			->shouldReceive( 'validate_for_creation' )
+			->once()
+			->andReturn( ValidationResult::valid() );
+
+		$this->repository
+			->shouldReceive( 'save' )
+			->once()
+			->andReturn( Redirect::reconstitute( 123, $source, $destination, 'publish' ) );
 
 		$result = $this->manager->create_redirect( $source, $destination );
 

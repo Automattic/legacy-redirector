@@ -125,7 +125,7 @@ final class MultisiteTest extends TestCase {
 			SourceUrl::from_string( '/same-source' )
 		);
 		$this->assertNotNull( $redirect_main );
-		$this->assertSame( $post_id_main, $redirect_main->destination()->post_id() );
+		$this->assertSame( $post_id_main, $redirect_main->destination()->as_post_id()->value() );
 
 		// Switch to site 2 and create redirect with different destination.
 		switch_to_blog( $this->site_2_id );
@@ -138,7 +138,7 @@ final class MultisiteTest extends TestCase {
 			SourceUrl::from_string( '/same-source' )
 		);
 		$this->assertNotNull( $redirect_site_2 );
-		$this->assertSame( $post_id_site_2, $redirect_site_2->destination()->post_id() );
+		$this->assertSame( $post_id_site_2, $redirect_site_2->destination()->as_post_id()->value() );
 
 		// Verify post IDs are different.
 		$this->assertNotSame( $post_id_main, $post_id_site_2 );
@@ -150,6 +150,6 @@ final class MultisiteTest extends TestCase {
 			SourceUrl::from_string( '/same-source' )
 		);
 		$this->assertNotNull( $redirect_main_after );
-		$this->assertSame( $post_id_main, $redirect_main_after->destination()->post_id() );
+		$this->assertSame( $post_id_main, $redirect_main_after->destination()->as_post_id()->value() );
 	}
 }
