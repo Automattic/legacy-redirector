@@ -81,7 +81,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - `wpcom_legacy_redirector_preserve_query_params` filter to allow for the safelisting of params that should be passed through to the redirected URL.
 
-## Changed
+### Changed
 
 - Updated logic to check `wp_parse_url()` query component as the Request value will not be set for test purposes.
 - Updated unit tests.
