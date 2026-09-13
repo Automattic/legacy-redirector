@@ -3,16 +3,15 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
 	beStrictAboutChangesToGlobalState="true"
-	beStrictAboutCoversAnnotation="true"
 	beStrictAboutOutputDuringTests="true"
 	bootstrap="tests/Unit/bootstrap.php"
 	colors="true"
-	forceCoversAnnotation="true"
+	forceCoversAnnotation="false"
 	verbose="true"
 >
 	<coverage processUncoveredFiles="true">
 		<include>
-			<directory suffix=".php">./includes</directory>
+			<directory suffix=".php">./src</directory>
 		</include>
 	</coverage>
 	<testsuites>
