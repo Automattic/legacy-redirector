@@ -153,7 +153,10 @@ final class PostType {
 		return array(
 			'labels'             => $this->get_labels(),
 			'public'             => false,
-			'publicly_queryable' => true,
+			// Must stay false: redirect posts are internal records. Were they
+			// queryable, /?post_type=vip-legacy-redirect&name=<md5-of-source-path>
+			// would render the record publicly and bypass the 404 gate.
+			'publicly_queryable' => false,
 			'show_ui'            => true,
 			'rewrite'            => false,
 			'query_var'          => false,
