@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices;
 
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
@@ -77,13 +78,17 @@ final class ValidationNotices {
 			return;
 		}
 
+		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
+			return;
+		}
+
 		// Get redirect details for context in the notice.
 		$redirect_context = '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		if ( isset( $_GET['ids'] ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 			$post = get_post( absint( $_GET['ids'] ) );
-			if ( $post instanceof \WP_Post ) {
+			if ( $post instanceof \WP_Post && PostType::POST_TYPE === $post->post_type ) {
 				$redirect_context = sprintf(
 					/* translators: %s: source URL path */
 					' ' . __( 'for %s', 'wpcom-legacy-redirector' ),
