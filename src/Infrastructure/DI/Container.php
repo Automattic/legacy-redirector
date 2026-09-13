@@ -17,6 +17,7 @@ use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Simple service container for the plugin.
@@ -142,5 +143,17 @@ final class Container {
 			$this->services['query_repository'] = new PostTypeRedirectQueryRepository();
 		}
 		return $this->services['query_repository'];
+	}
+
+	/**
+	 * Get the data upgrade routine.
+	 *
+	 * @return Upgrader
+	 */
+	public function upgrader(): Upgrader {
+		if ( ! isset( $this->services['upgrader'] ) ) {
+			$this->services['upgrader'] = new Upgrader();
+		}
+		return $this->services['upgrader'];
 	}
 }
