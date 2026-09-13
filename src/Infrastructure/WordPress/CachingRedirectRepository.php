@@ -33,6 +33,17 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	public const CACHE_GROUP = 'vip-legacy-redirect-3';
 
 	/**
+	 * Expiry, in seconds, for negative ("no redirect exists") cache entries.
+	 *
+	 * Positive entries are cached indefinitely and explicitly invalidated on
+	 * save() and delete(). Negative entries cannot be invalidated that way,
+	 * because any 404 URL a visitor requests creates one, so they expire
+	 * instead. Without this, arbitrary 404 traffic would fill the object cache
+	 * permanently and evict useful entries.
+	 */
+	public const NEGATIVE_CACHE_TTL = 300;
+
+	/**
 	 * The inner repository to delegate to.
 	 *
 	 * @var RedirectRepositoryInterface
@@ -64,7 +75,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 			// Cache miss - get from inner repository.
 			$redirect = $this->inner->find_by_source( $source );
 			$post_id  = $redirect ? $redirect->id() : 0;
-			wp_cache_add( $cache_key, $post_id, self::CACHE_GROUP );
+			wp_cache_add( $cache_key, $post_id, self::CACHE_GROUP, 0 === $post_id ? self::NEGATIVE_CACHE_TTL : 0 );
 
 			return $redirect;
 		}
@@ -79,7 +90,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 
 		if ( null === $redirect ) {
 			// Post no longer exists - update cache.
-			wp_cache_set( $cache_key, 0, self::CACHE_GROUP );
+			wp_cache_set( $cache_key, 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
 			return null;
 		}
 
@@ -143,7 +154,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 
 		if ( $result ) {
 			// Mark as deleted in cache.
-			wp_cache_set( $this->get_cache_key( $redirect->source() ), 0, self::CACHE_GROUP );
+			wp_cache_set( $this->get_cache_key( $redirect->source() ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
 		}
 
 		return $result;
@@ -166,7 +177,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 		}
 
 		$post_id = $this->inner->get_id_by_source( $source );
-		wp_cache_add( $cache_key, $post_id, self::CACHE_GROUP );
+		wp_cache_add( $cache_key, $post_id, self::CACHE_GROUP, 0 === $post_id ? self::NEGATIVE_CACHE_TTL : 0 );
 
 		return $post_id;
 	}
