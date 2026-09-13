@@ -3,10 +3,11 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
 	beStrictAboutChangesToGlobalState="true"
+	beStrictAboutCoversAnnotation="true"
 	beStrictAboutOutputDuringTests="true"
 	bootstrap="tests/Integration/bootstrap.php"
 	colors="true"
-	forceCoversAnnotation="false"
+	forceCoversAnnotation="true"
 	verbose="true"
 >
 	<coverage processUncoveredFiles="true">

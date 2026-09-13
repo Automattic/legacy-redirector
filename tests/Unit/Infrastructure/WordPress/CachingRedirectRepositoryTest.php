@@ -25,6 +25,11 @@ use Mockery;
  * Tests the caching decorator for the redirect repository.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class CachingRedirectRepositoryTest extends MonkeyStubs {
 

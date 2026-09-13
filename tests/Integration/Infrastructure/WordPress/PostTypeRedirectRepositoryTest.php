@@ -25,6 +25,14 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * the WordPress custom post type vip-legacy-redirect.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class PostTypeRedirectRepositoryTest extends TestCase {
 
@@ -50,7 +58,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_source returns a redirect for a published redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
 	 */
 	public function test_find_by_source_returns_redirect_for_published_post(): void {
 		$source      = SourceUrl::from_string( '/find-by-source-published' );
@@ -70,7 +78,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_source returns null for a non-existent source URL.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
 	 */
 	public function test_find_by_source_returns_null_for_nonexistent(): void {
 		$source = SourceUrl::from_string( '/does-not-exist-' . wp_generate_uuid4() );
@@ -83,7 +91,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_source returns null for a trashed redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
 	 */
 	public function test_find_by_source_returns_null_for_trashed_redirect(): void {
 		$source      = SourceUrl::from_string( '/find-by-source-trashed' );
@@ -103,7 +111,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_source returns null for a draft redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
 	 */
 	public function test_find_by_source_returns_null_for_draft_redirect(): void {
 		$source      = SourceUrl::from_string( '/find-by-source-draft' );
@@ -132,7 +140,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_id returns redirect for valid ID.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_find_by_id_returns_redirect_for_valid_id(): void {
 		$source      = SourceUrl::from_string( '/find-by-id-test' );
@@ -151,7 +159,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_id returns null for non-existent ID.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_find_by_id_returns_null_for_nonexistent_id(): void {
 		$found = $this->repository->find_by_id( 999999999 );
@@ -162,7 +170,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_id returns null for wrong post type.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_find_by_id_returns_null_for_wrong_post_type(): void {
 		// Create a regular post (not a redirect).
@@ -182,7 +190,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test find_by_id returns redirect even if trashed (unlike find_by_source).
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_find_by_id_returns_redirect_even_if_trashed(): void {
 		$source      = SourceUrl::from_string( '/find-by-id-trashed' );
@@ -208,7 +216,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test exists returns true for an existing published redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::exists
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
 	public function test_exists_returns_true_for_published_redirect(): void {
 		$source      = SourceUrl::from_string( '/exists-published-test' );
@@ -228,7 +236,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	 * WordPress appends __trashed to the post_name when trashing,
 	 * which breaks the hash-based lookup. This is expected behaviour.
 	 *
-	 * @covers PostTypeRedirectRepository::exists
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
 	public function test_exists_returns_false_for_trashed_redirect(): void {
 		$source      = SourceUrl::from_string( '/exists-trashed-test' );
@@ -249,7 +257,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test exists returns true for a draft redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::exists
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
 	public function test_exists_returns_true_for_draft_redirect(): void {
 		$source      = SourceUrl::from_string( '/exists-draft-test' );
@@ -274,7 +282,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test exists returns false for non-existent source.
 	 *
-	 * @covers PostTypeRedirectRepository::exists
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
 	public function test_exists_returns_false_for_nonexistent(): void {
 		$source = SourceUrl::from_string( '/does-not-exist-' . wp_generate_uuid4() );
@@ -291,7 +299,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test save creates a new redirect with URL destination.
 	 *
-	 * @covers PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 */
 	public function test_save_creates_new_redirect_with_url_destination(): void {
 		$source      = SourceUrl::from_string( '/save-new-url-destination' );
@@ -317,7 +325,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test save creates a new redirect with post ID destination.
 	 *
-	 * @covers PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 */
 	public function test_save_creates_new_redirect_with_post_id_destination(): void {
 		// Create destination post.
@@ -346,7 +354,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test save updates an existing redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 */
 	public function test_save_updates_existing_redirect(): void {
 		$source               = SourceUrl::from_string( '/save-update-test' );
@@ -373,7 +381,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test save with relative URL destination.
 	 *
-	 * @covers PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 */
 	public function test_save_with_relative_url_destination(): void {
 		$source      = SourceUrl::from_string( '/save-relative-url' );
@@ -395,7 +403,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test delete permanently removes a redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::delete
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::delete
 	 */
 	public function test_delete_permanently_removes_redirect(): void {
 		$source      = SourceUrl::from_string( '/delete-test' );
@@ -421,7 +429,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test delete returns false for non-persisted redirect.
 	 *
-	 * @covers PostTypeRedirectRepository::delete
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::delete
 	 */
 	public function test_delete_returns_false_for_non_persisted_redirect(): void {
 		$source      = SourceUrl::from_string( '/delete-non-persisted' );
@@ -441,7 +449,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test get_id_by_source returns correct ID.
 	 *
-	 * @covers PostTypeRedirectRepository::get_id_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
 	 */
 	public function test_get_id_by_source_returns_correct_id(): void {
 		$source      = SourceUrl::from_string( '/get-id-by-source-test' );
@@ -458,7 +466,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test get_id_by_source returns 0 for non-existent source.
 	 *
-	 * @covers PostTypeRedirectRepository::get_id_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
 	 */
 	public function test_get_id_by_source_returns_zero_for_nonexistent(): void {
 		$source = SourceUrl::from_string( '/does-not-exist-' . wp_generate_uuid4() );
@@ -474,7 +482,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	 * WordPress appends __trashed to the post_name when trashing,
 	 * which breaks the hash-based lookup.
 	 *
-	 * @covers PostTypeRedirectRepository::get_id_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
 	 */
 	public function test_get_id_by_source_returns_zero_for_trashed(): void {
 		$source      = SourceUrl::from_string( '/get-id-by-source-trashed' );
@@ -499,7 +507,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test redirect reconstituted from post has correct source.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_reconstituted_redirect_has_correct_source(): void {
 		$source      = SourceUrl::from_string( '/reconstituted-source-test?foo=bar' );
@@ -516,7 +524,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test redirect reconstituted with URL destination.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_reconstituted_redirect_with_url_destination(): void {
 		$source      = SourceUrl::from_string( '/reconstituted-url-dest' );
@@ -533,7 +541,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test redirect reconstituted with post ID destination.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_reconstituted_redirect_with_post_id_destination(): void {
 		$destination_post_id = self::factory()->post->create(
@@ -557,7 +565,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test redirect reconstituted with status preserved.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_reconstituted_redirect_has_correct_status(): void {
 		$source      = SourceUrl::from_string( '/reconstituted-status-test' );
@@ -581,7 +589,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test redirect reconstituted has created_at date.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_reconstituted_redirect_has_created_at(): void {
 		$source      = SourceUrl::from_string( '/reconstituted-created-at-test' );
@@ -601,7 +609,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test saving redirect with Unicode in source path.
 	 *
-	 * @covers PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 */
 	public function test_save_with_unicode_source_path(): void {
 		$source      = SourceUrl::from_string( '/unicode-test' );
@@ -619,7 +627,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test saving redirect with query string in source.
 	 *
-	 * @covers PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 */
 	public function test_save_with_query_string_in_source(): void {
 		$source      = SourceUrl::from_string( '/query-test?param=value&other=test' );
@@ -637,7 +645,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test fallback destination when both post_parent and post_excerpt are empty.
 	 *
-	 * @covers PostTypeRedirectRepository::find_by_id
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
 	public function test_fallback_destination_to_home_when_both_empty(): void {
 		// Directly create a redirect post with no destination (edge case).
