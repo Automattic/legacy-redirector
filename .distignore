@@ -1,7 +1,7 @@
 # Directories
 /.claude/
 /.context/
-/.git/
+/.git
 /.github/
 /bin/
 /features/
