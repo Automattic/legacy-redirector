@@ -131,6 +131,28 @@ if ( $result->is_error() ) {
 $id = $result->redirect_id();
 ```
 
+### WP-CLI Command Changes
+
+The WP-CLI command set has been redesigned. There are no backwards-compatible aliases, so any scripts, runbooks, or cron jobs calling the old commands must be updated:
+
+| 1.x command | 2.0 replacement |
+|-------------|-----------------|
+| `insert-redirect <from> <to>` | `create <from> <to>` (add `--porcelain` to capture the new ID) |
+| `import-from-csv --csv=<file>` | `import <file>` (`-` reads from STDIN) |
+| `import-from-csv --csv=<file> --update` | `import <file> --mode=upsert` |
+| `import-from-csv --csv=<file> --delete` | `list --format=ids ... \| xargs wp wpcom-legacy-redirector delete --yes` |
+| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>` |
+| `export-to-csv --broken-only [--check-urls]` | `validate [--check-urls] --format=csv > <file>` |
+| `<command> <id> --by=id` | `<command> <id>` (ID or source path is inferred) |
+| `update <source> <destination>` | `update <redirect> --to=<destination>` |
+| `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` |
+
+Other behaviour changes to be aware of:
+
+- `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp wpcom-legacy-redirector delete /a /b /c --yes`.
+- `validate` no longer checks destination URLs over HTTP by default when given a single redirect; pass `--check-urls` explicitly (this now behaves the same in batch and targeted modes).
+- `create` no longer rejects external destinations whose host is missing from the `allowed_redirect_hosts` filter. This matches the admin UI: the destination host is automatically allowed at redirect time.
+
 ## No Changes Required
 
 The following APIs remain unchanged:

@@ -9,12 +9,15 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
 
 /**
  * Integration tests for UpdateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -42,146 +45,148 @@ final class UpdateCommandTest extends CliTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->command = new UpdateCommand( $this->container()->manager() );
+		$this->command = new UpdateCommand(
+			$this->container()->manager(),
+			new RedirectFetcher( $this->container()->inner_repository() )
+		);
 	}
 
-	// =========================================================================
-	// Tests for updating destination
-	// =========================================================================
+	/**
+	 * Get the stored destination for a source path.
+	 *
+	 * @param string $from The source path.
+	 * @return string|int The destination.
+	 */
+	private function get_destination( string $from ) { // phpcs:ignore NeutronStandard.Functions.TypeHint.NoReturnType -- Mixed return.
+		$repository = $this->container()->inner_repository();
+		$redirect   = $repository->find_by_id(
+			$repository->get_id_by_source( SourceUrl::from_string( $from ) )
+		);
+
+		$dest = $redirect->destination();
+
+		return $dest->is_post_id() ? $dest->as_post_id()->value() : $dest->as_url()->value();
+	}
 
 	/**
-	 * Test updating redirect destination to a new URL.
+	 * Test updating a redirect's destination to a URL.
 	 */
 	public function test_update_destination_to_url(): void {
-		$redirect_id = $this->create_redirect( '/update-test', 'https://example.com/old-dest' );
+		$this->create_redirect( '/update-me', 'https://example.com/old-dest' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/update-test', 'https://example.com/new-dest' ),
-			array()
+			array( '/update-me' ),
+			array( 'to' => 'https://example.com/new-dest' )
 		);
 
-		$this->assert_success_contains( 'Updated' );
-		$this->assert_stdout_contains( '/update-test' );
-		$this->assert_stdout_contains( 'https://example.com/new-dest' );
-
-		// Verify the destination was actually updated.
-		$redirect = $this->container()->inner_repository()->find_by_id( $redirect_id );
-		$this->assertEquals( 'https://example.com/new-dest', $redirect->destination()->as_url()->value() );
+		$this->assert_success_contains( 'Updated redirect: /update-me' );
+		$this->assertSame( 'https://example.com/new-dest', $this->get_destination( '/update-me' ) );
 	}
 
 	/**
-	 * Test updating redirect destination to a relative path.
-	 */
-	public function test_update_destination_to_path(): void {
-		$redirect_id = $this->create_redirect( '/path-update', 'https://example.com/old' );
-
-		$this->invoke_command(
-			$this->command,
-			array( '/path-update', '/new-path' ),
-			array()
-		);
-
-		$this->assert_success_contains( 'Updated' );
-
-		// Verify the destination was updated.
-		$redirect = $this->container()->inner_repository()->find_by_id( $redirect_id );
-		$this->assertEquals( '/new-path', $redirect->destination()->as_url()->value() );
-	}
-
-	/**
-	 * Test updating redirect destination to a post ID.
+	 * Test updating a redirect's destination to a post ID.
 	 */
 	public function test_update_destination_to_post_id(): void {
-		$redirect_id = $this->create_redirect( '/post-update', 'https://example.com/old' );
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/update-to-post', 'https://example.com/old' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/post-update', (string) $post_id ),
-			array()
+			array( '/update-to-post' ),
+			array( 'to' => (string) $post_id )
 		);
 
-		$this->assert_success_contains( 'Updated' );
-		$this->assert_stdout_contains( (string) $post_id );
-
-		// Verify the destination was updated.
-		$redirect = $this->container()->inner_repository()->find_by_id( $redirect_id );
-		$this->assertTrue( $redirect->destination()->is_post_id() );
-		$this->assertEquals( $post_id, $redirect->destination()->as_post_id()->value() );
+		$this->assert_command_success();
+		$this->assertSame( $post_id, $this->get_destination( '/update-to-post' ) );
 	}
 
 	/**
-	 * Test updating from post ID destination to URL destination.
+	 * Test updating a redirect by ID.
 	 */
-	public function test_update_from_post_to_url(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/post-to-url', $post_id );
+	public function test_update_by_id(): void {
+		$redirect_id = $this->create_redirect( '/update-by-id', 'https://example.com/old' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/post-to-url', 'https://example.com/new-url' ),
-			array()
+			array( (string) $redirect_id ),
+			array( 'to' => '/new-path' )
 		);
 
-		$this->assert_success_contains( 'Updated' );
-
-		// Verify the destination type changed.
-		$redirect = $this->container()->inner_repository()->find_by_id( $redirect_id );
-		$this->assertFalse( $redirect->destination()->is_post_id() );
-		$this->assertEquals( 'https://example.com/new-url', $redirect->destination()->as_url()->value() );
+		$this->assert_command_success();
+		$this->assertSame( '/new-path', $this->get_destination( '/update-by-id' ) );
 	}
 
-	// =========================================================================
-	// Tests for status changes
-	// =========================================================================
-
 	/**
-	 * Test updating destination and disabling redirect.
+	 * Test updating destination and status together.
 	 */
 	public function test_update_with_status_disabled(): void {
-		$redirect_id = $this->create_redirect( '/status-test', 'https://example.com/old' );
+		$redirect_id = $this->create_redirect( '/update-disable', 'https://example.com/old' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/status-test', 'https://example.com/new' ),
+			array( '/update-disable' ),
+			array(
+				'to'     => 'https://example.com/new',
+				'status' => 'disabled',
+			)
+		);
+
+		$this->assert_command_success();
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+		$this->assertSame( 'https://example.com/new', $this->get_destination( '/update-disable' ) );
+	}
+
+	/**
+	 * Test updating status only.
+	 */
+	public function test_update_status_only(): void {
+		$redirect_id = $this->create_redirect( '/update-status-only', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-status-only' ),
 			array( 'status' => 'disabled' )
 		);
 
-		$this->assert_success_contains( 'Updated' );
-		$this->assert_stdout_contains( 'status: disabled' );
-
-		// Verify the status was changed.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'draft', $post->post_status );
+		$this->assert_command_success();
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+		// Destination unchanged.
+		$this->assertSame( 'https://example.com/dest', $this->get_destination( '/update-status-only' ) );
 	}
 
 	/**
-	 * Test updating destination and explicitly setting status to enabled.
-	 *
-	 * Note: update_by_source only works on enabled redirects.
-	 * This test verifies the --status=enabled flag works on an already-enabled redirect.
+	 * Test updating multiple redirects to the same destination.
 	 */
-	public function test_update_with_status_enabled(): void {
-		$redirect_id = $this->create_redirect( '/enable-status', 'https://example.com/old' );
+	public function test_update_multiple(): void {
+		$this->create_redirect( '/update-multi-one', 'https://example.com/a' );
+		$this->create_redirect( '/update-multi-two', 'https://example.com/b' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/enable-status', 'https://example.com/new' ),
-			array( 'status' => 'enabled' )
+			array( '/update-multi-one', '/update-multi-two' ),
+			array( 'to' => '/shared-target' )
 		);
 
-		$this->assert_success_contains( 'Updated' );
-		$this->assert_stdout_contains( 'status: enabled' );
-
-		// Verify the redirect is still enabled.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'publish', $post->post_status );
+		$this->assert_success_contains( 'Updated 2 redirects.' );
+		$this->assertSame( '/shared-target', $this->get_destination( '/update-multi-one' ) );
+		$this->assertSame( '/shared-target', $this->get_destination( '/update-multi-two' ) );
 	}
 
-	// =========================================================================
-	// Tests for error handling
-	// =========================================================================
+	/**
+	 * Test error when neither --to nor --status is given.
+	 */
+	public function test_update_requires_a_change(): void {
+		$this->create_redirect( '/update-no-op', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-no-op' ),
+			array()
+		);
+
+		$this->assert_error_contains( 'at least one of --to or --status' );
+	}
 
 	/**
 	 * Test error when redirect not found.
@@ -189,36 +194,24 @@ final class UpdateCommandTest extends CliTestCase {
 	public function test_update_not_found(): void {
 		$this->invoke_command(
 			$this->command,
-			array( '/nonexistent', 'https://example.com/dest' ),
-			array()
+			array( '/nonexistent' ),
+			array( 'to' => '/anywhere' )
 		);
 
-		$this->assert_error_contains( 'not found' );
-	}
-
-	/**
-	 * Test error for invalid source path.
-	 */
-	public function test_update_invalid_source(): void {
-		$this->invoke_command(
-			$this->command,
-			array( '', 'https://example.com/dest' ),
-			array()
-		);
-
-		$this->assert_error_contains( 'Invalid source path' );
+		$this->assert_command_error();
+		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
 	}
 
 	/**
 	 * Test error for invalid destination.
 	 */
 	public function test_update_invalid_destination(): void {
-		$this->create_redirect( '/invalid-dest-test', 'https://example.com/old' );
+		$this->create_redirect( '/update-bad-dest', 'https://example.com/dest' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/invalid-dest-test', '' ),
-			array()
+			array( '/update-bad-dest' ),
+			array( 'to' => '' )
 		);
 
 		$this->assert_error_contains( 'Invalid destination' );

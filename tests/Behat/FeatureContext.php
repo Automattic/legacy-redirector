@@ -260,7 +260,7 @@ PHP;
 	 */
 	public function there_is_a_redirect_from_to( string $from, string $to ): void {
 		$this->run_wp_cli_command(
-			sprintf( 'wpcom-legacy-redirector insert-redirect %s %s', $from, $to ),
+			sprintf( 'wpcom-legacy-redirector create %s %s', $from, $to ),
 			false
 		);
 

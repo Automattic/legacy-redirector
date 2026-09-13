@@ -56,30 +56,36 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 * : Name of the meta key to import from. The meta value contains the From value. The To is the post ID that the meta key is for.
 	 *
 	 * [--start=<start-offset>]
-	 * : Starting offset. Defaults to 0.
+	 * : Starting offset.
+	 * ---
+	 * default: 0
+	 * ---
 	 *
 	 * [--end=<end-offset>]
-	 * : Ending offset. Defaults to 99999999.
+	 * : Ending offset.
+	 * ---
+	 * default: 99999999
+	 * ---
 	 *
 	 * [--skip-dupes]
-	 * : If set, redirects for a From URL with an existing redirect will be skipped.
-	 *
-	 * [--format=<format>]
-	 * : Render output in a particular format.
-	 * ---
-	 * default: csv
-	 * options:
-	 *   - table
-	 *   - json
-	 *   - yaml
-	 *   - csv
-	 * ---
+	 * : Skip source URLs that already have a redirect.
 	 *
 	 * [--dry-run]
-	 * : If set, redirects are not imported. Defaults to false.
+	 * : Preview the import without making changes.
 	 *
 	 * [--verbose]
-	 * : Display notices for successful imports and duplicates (if --skip-dupes is used). Defaults to false.
+	 * : Report successful imports and skipped duplicates, not just problems.
+	 *
+	 * [--format=<format>]
+	 * : Render per-row notices in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - csv
+	 *   - json
+	 *   - yaml
+	 * ---
 	 *
 	 * ## EXAMPLES
 	 *
@@ -88,6 +94,8 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 *     ---Live Run---
 	 *     Importing 143 redirects
 	 *     All of your redirects have been imported. Nice work!
+	 *
+	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
@@ -99,11 +107,11 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 
 		global $wpdb;
 
-		$offset     = isset( $assoc_args['start'] ) ? intval( $assoc_args['start'] ) : 0;
-		$end_offset = isset( $assoc_args['end'] ) ? intval( $assoc_args['end'] ) : 99999999;
-		$meta_key   = isset( $assoc_args['meta-key'] ) ? sanitize_key( $assoc_args['meta-key'] ) : '';
+		$offset     = (int) ( $assoc_args['start'] ?? 0 );
+		$end_offset = (int) ( $assoc_args['end'] ?? 99999999 );
+		$meta_key   = sanitize_key( $assoc_args['meta-key'] ?? '' );
 		$skip_dupes = isset( $assoc_args['skip-dupes'] );
-		$format     = \WP_CLI\Utils\get_flag_value( $assoc_args, 'format' );
+		$format     = $assoc_args['format'] ?? 'table';
 		$dry_run    = isset( $assoc_args['dry-run'] );
 		$verbose    = isset( $assoc_args['verbose'] );
 		$notices    = array();
@@ -124,6 +132,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 
 		if ( 0 === absint( $total_redirects ) ) {
 			WP_CLI::error( sprintf( 'No redirects found for meta_key: %s', $meta_key ) );
+			return;
 		}
 
 		$progress = \WP_CLI\Utils\make_progress_bar(
@@ -150,33 +159,21 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 
 				$from_path = wp_parse_url( $redirect->meta_value, PHP_URL_PATH );
 				if ( ! $from_path ) {
-					$notices[] = array(
-						'redirect_from' => $redirect->meta_value,
-						'redirect_to'   => $redirect->post_id,
-						'message'       => 'Invalid source URL - no path found',
-					);
+					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Invalid source URL - no path found' );
 					continue;
 				}
 
 				try {
 					$source = SourceUrl::from_string( $from_path );
 				} catch ( \InvalidArgumentException $e ) {
-					$notices[] = array(
-						'redirect_from' => $redirect->meta_value,
-						'redirect_to'   => $redirect->post_id,
-						'message'       => $e->getMessage(),
-					);
+					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
 					continue;
 				}
 
 				$existing_redirect = $this->repository->get_id_by_source( $source );
 				if ( $skip_dupes && 0 !== $existing_redirect ) {
 					if ( $verbose ) {
-						$notices[] = array(
-							'redirect_from' => $redirect->meta_value,
-							'redirect_to'   => $redirect->post_id,
-							'message'       => sprintf( 'Skipped - Redirect for this from URL already exists (%s)', $redirect->meta_value ),
-						);
+						$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, sprintf( 'Skipped - Redirect for this from URL already exists (%s)', $redirect->meta_value ) );
 					}
 					continue;
 				}
@@ -187,24 +184,12 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 						$result      = $this->manager->create_redirect( $source, $destination );
 
 						if ( $result->is_error() ) {
-							$notices[] = array(
-								'redirect_from' => $redirect->meta_value,
-								'redirect_to'   => $redirect->post_id,
-								'message'       => $result->error_message(),
-							);
+							$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $result->error_message() ?? 'Could not insert redirect' );
 						} elseif ( $verbose ) {
-							$notices[] = array(
-								'redirect_from' => $redirect->meta_value,
-								'redirect_to'   => $redirect->post_id,
-								'message'       => 'Successfully imported',
-							);
+							$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Successfully imported' );
 						}
 					} catch ( \InvalidArgumentException $e ) {
-						$notices[] = array(
-							'redirect_from' => $redirect->meta_value,
-							'redirect_to'   => $redirect->post_id,
-							'message'       => $e->getMessage(),
-						);
+						$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
 					}
 				}
 
@@ -225,5 +210,21 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 		} else {
 			WP_CLI::log( WP_CLI::colorize( '%GAll of your redirects have been imported. Nice work!%n ' ) );
 		}
+	}
+
+	/**
+	 * Build a notice row.
+	 *
+	 * @param string $redirect_from The source URL from meta.
+	 * @param int    $redirect_to   The destination post ID.
+	 * @param string $message       The notice message.
+	 * @return array{redirect_from: string, redirect_to: int, message: string}
+	 */
+	private function notice( string $redirect_from, int $redirect_to, string $message ): array {
+		return array(
+			'redirect_from' => $redirect_from,
+			'redirect_to'   => $redirect_to,
+			'message'       => $message,
+		);
 	}
 }

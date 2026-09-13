@@ -42,13 +42,13 @@ Behat tests provide unique value for:
 | testing.feature | WP-CLI loads for your tests | Validates wp-env setup works |
 | testing.feature | WP-CLI recognises plugin commands | Validates plugin activation |
 | testing.feature | WP-CLI recognises wpcom-legacy-redirector commands | Validates command registration |
-| insert-redirect.feature | Insert a redirect to a path | Smoke test for basic insert |
-| insert-redirect.feature | Redirect to disallowed host is not allowed | Tests `allowed_redirect_hosts` filter contract |
+| create.feature | Create a redirect to a path | Smoke test for basic creation |
+| create.feature | Creating a duplicate redirect fails | Tests error contract and exit code |
 | list.feature | List all redirects | Smoke test for list output format |
+| list.feature | Export redirects as CSV | Tests the supported CSV export path |
 | validate.feature | Validate batch mode with no issues | Tests batch processing with real WordPress |
 | validate.feature | Validate redirect pointing to trashed post | Tests WordPress post state integration |
-| import-from-csv.feature | Import redirects from a valid CSV file | Tests file I/O + bulk workflow |
-| export-to-csv.feature | Export redirects to a CSV file | Tests file I/O + bulk workflow |
+| import.feature | Import redirects from a valid CSV file | Tests file I/O + bulk workflow |
 
 **Total: ~10 key scenarios** covering the critical paths.
 
@@ -98,7 +98,7 @@ composer behat
 composer behat -- features/testing.feature
 
 # Run a specific scenario by line number
-composer behat -- features/insert-redirect.feature:9
+composer behat -- features/create.feature:9
 ```
 
 ## Maintaining Behat Tests

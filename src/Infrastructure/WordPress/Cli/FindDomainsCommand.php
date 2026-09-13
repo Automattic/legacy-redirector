@@ -9,7 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
-use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -19,82 +19,110 @@ use WP_CLI_Command;
 final class FindDomainsCommand extends WP_CLI_Command {
 
 	/**
+	 * Number of URLs fetched per page.
+	 *
+	 * @var int
+	 */
+	private const PAGE_SIZE = 500;
+
+	/**
+	 * The query repository.
+	 *
+	 * @var RedirectQueryRepositoryInterface
+	 */
+	private RedirectQueryRepositoryInterface $query_repository;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
+	 */
+	public function __construct( RedirectQueryRepositoryInterface $query_repository ) {
+		$this->query_repository = $query_repository;
+	}
+
+	/**
 	 * Find domains redirected to, useful to populate the allowed_redirect_hosts filter.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--format=<format>]
+	 * : Render output in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - csv
+	 *   - json
+	 *   - yaml
+	 *   - count
+	 * ---
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     # Get a list of the domains used as redirect destinations
+	 *     # Get a list of the domains used as redirect destinations.
 	 *     $ wp wpcom-legacy-redirector find-domains
-	 *     Finding domains  100% [========]
-	 *     Found 2 unique outbound domains.
-	 *     example.com
-	 *     example.org
+	 *
+	 *     # Get the domains as a plain CSV column.
+	 *     $ wp wpcom-legacy-redirector find-domains --format=csv
+	 *
+	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		global $wpdb;
+		$format   = $assoc_args['format'] ?? 'table';
+		$is_table = 'table' === $format;
+		$domains  = array();
+		$offset   = 0;
 
-		$posts_per_page = 500;
-		$paged          = 0;
-		$domains        = array();
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- CLI command for bulk operation.
-		$total_redirects = $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT( ID ) FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s",
-				PostType::POST_TYPE,
-				'http%'
-			)
-		);
-
-		$progress = \WP_CLI\Utils\make_progress_bar( 'Finding domains', (int) $total_redirects );
+		$total    = $this->query_repository->count_external_destinations();
+		$progress = $is_table ? \WP_CLI\Utils\make_progress_bar( 'Finding domains', $total ) : null;
 
 		do {
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- CLI command for bulk operation.
-			$redirect_urls = $wpdb->get_col(
-				$wpdb->prepare(
-					"SELECT post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s ORDER BY ID ASC LIMIT %d, %d",
-					PostType::POST_TYPE,
-					'http%',
-					( $paged * $posts_per_page ),
-					$posts_per_page
-				)
-			);
+			$redirect_urls = $this->query_repository->get_external_destination_urls( self::PAGE_SIZE, $offset );
 
 			foreach ( $redirect_urls as $redirect_url ) {
-				$progress->tick();
-				if ( ! empty( $redirect_url ) ) {
-					$redirect_host = wp_parse_url( $redirect_url, PHP_URL_HOST );
-					if ( $redirect_host ) {
-						$domains[] = $redirect_host;
-					}
+				if ( null !== $progress ) {
+					$progress->tick();
+				}
+
+				if ( empty( $redirect_url ) ) {
+					continue;
+				}
+
+				$redirect_host = wp_parse_url( $redirect_url, PHP_URL_HOST );
+				if ( $redirect_host ) {
+					$domains[ $redirect_host ] = true;
 				}
 			}
 
-			sleep( 1 );
-			++$paged;
-			$redirect_urls_count = count( $redirect_urls );
-		} while ( $redirect_urls_count );
+			$offset            += self::PAGE_SIZE;
+			$fetched_urls_count = count( $redirect_urls );
+		} while ( self::PAGE_SIZE === $fetched_urls_count );
 
-		$progress->finish();
+		if ( null !== $progress ) {
+			$progress->finish();
+		}
 
-		$domains       = array_unique( $domains );
-		$domains_count = count( $domains );
+		$domains = array_keys( $domains );
+		sort( $domains );
 
-		/* translators: %s = count of the domains */
-		$translatable_text = _n(
-			'Found %s unique outbound domain.',
-			'Found %s unique outbound domains.',
-			$domains_count,
-			'wpcom-legacy-redirector'
+		if ( 'count' === $format ) {
+			WP_CLI::line( (string) count( $domains ) );
+			return;
+		}
+
+		if ( $is_table ) {
+			WP_CLI::line( sprintf( 'Found %s unique outbound domain(s).', number_format_i18n( count( $domains ) ) ) );
+		}
+
+		$items = array_map(
+			fn( string $domain ) => array( 'domain' => $domain ),
+			$domains
 		);
 
-		WP_CLI::line( sprintf( $translatable_text, number_format( $domains_count ) ) );
-
-		foreach ( $domains as $domain ) {
-			WP_CLI::line( $domain );
-		}
+		\WP_CLI\Utils\format_items( $format, $items, array( 'domain' ) );
 	}
 }

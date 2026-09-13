@@ -1,0 +1,233 @@
+<?php
+/**
+ * CreateCommand CLI integration tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Integration\Cli
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
+
+/**
+ * Integration tests for CreateCommand.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
+ */
+final class CreateCommandTest extends CliTestCase {
+
+	/**
+	 * The command under test.
+	 *
+	 * @var CreateCommand
+	 */
+	private CreateCommand $command;
+
+	/**
+	 * Set up test fixtures.
+	 *
+	 * @return void
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		$this->command = new CreateCommand( $this->container()->manager() );
+	}
+
+	/**
+	 * Test creating a redirect to a relative path.
+	 */
+	public function test_create_redirect_to_path(): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'target-page',
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array( '/old-page', '/target-page' ),
+			array()
+		);
+
+		$this->assert_success_contains( '/old-page -> /target-page' );
+	}
+
+	/**
+	 * Test creating a redirect to a post ID.
+	 */
+	public function test_create_redirect_to_post_id(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/post-redirect', (string) $post_id ),
+			array()
+		);
+
+		$this->assert_success_contains( sprintf( '/post-redirect -> %d', $post_id ) );
+	}
+
+	/**
+	 * Test creating a redirect to a full URL on an external host.
+	 *
+	 * External hosts are accepted at creation time; the executor auto-allows
+	 * the stored host at redirect time.
+	 */
+	public function test_create_redirect_to_external_url(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/external', 'https://external.example.com/page' ),
+			array( 'skip-validation' => true )
+		);
+
+		$this->assert_success_contains( '/external -> https://external.example.com/page' );
+	}
+
+	/**
+	 * Test creating a disabled redirect.
+	 */
+	public function test_create_disabled_redirect(): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'disabled-target',
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array( '/disabled-source', '/disabled-target' ),
+			array( 'status' => 'disabled' )
+		);
+
+		$this->assert_success_contains( '(disabled)' );
+
+		$redirect = $this->container()->inner_repository()->find_by_id(
+			$this->container()->inner_repository()->get_id_by_source(
+				\Automattic\LegacyRedirector\Domain\SourceUrl::from_string( '/disabled-source' )
+			)
+		);
+		$this->assertNotNull( $redirect );
+		$this->assertFalse( $redirect->is_active() );
+	}
+
+	/**
+	 * Test that the new redirect ID is printed with --porcelain.
+	 */
+	public function test_create_porcelain_outputs_id(): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'porcelain-target',
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array( '/porcelain-source', '/porcelain-target' ),
+			array( 'porcelain' => true )
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$stdout = trim( $this->get_stdout() );
+		$this->assertMatchesRegularExpression( '/^\d+$/', $stdout );
+	}
+
+	/**
+	 * Test that validation rejects a destination post that does not exist.
+	 */
+	public function test_create_validates_post_exists(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/bad-dest', '999999' ),
+			array()
+		);
+
+		$this->assert_command_error();
+	}
+
+	/**
+	 * Test that validation rejects an unpublished destination post.
+	 */
+	public function test_create_validates_post_is_published(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/draft-dest', (string) $post_id ),
+			array()
+		);
+
+		$this->assert_command_error();
+	}
+
+	/**
+	 * Test that --skip-validation bypasses destination validation.
+	 */
+	public function test_create_skip_validation(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/unvalidated', '/nonexistent-target' ),
+			array( 'skip-validation' => true )
+		);
+
+		$this->assert_command_success();
+	}
+
+	/**
+	 * Test that identical source and destination are rejected.
+	 */
+	public function test_create_rejects_same_source_and_destination(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/same-page', '/same-page' ),
+			array()
+		);
+
+		$this->assert_command_error();
+	}
+
+	/**
+	 * Test that a duplicate source is rejected.
+	 */
+	public function test_create_rejects_duplicate(): void {
+		$this->create_redirect( '/duplicate-source', 'https://example.com/first' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/duplicate-source', 'https://example.com/second' ),
+			array()
+		);
+
+		$this->assert_command_error();
+	}
+
+	/**
+	 * Test that an invalid source is rejected.
+	 */
+	public function test_create_rejects_invalid_source(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '', '/valid-target' ),
+			array( 'skip-validation' => true )
+		);
+
+		$this->assert_command_error();
+	}
+}

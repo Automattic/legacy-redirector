@@ -11,8 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Requires PHP 8.2 or later (previously 7.4).
 - Requires WordPress 6.4 or later (previously 5.9).
 - Removed the `WPCOM_Legacy_Redirector` class, including the public `insert_legacy_redirect()`, `get_redirect_uri()`, and `get_redirect_post_id()` methods. See [UPGRADING.md](UPGRADING.md) for replacements.
-- The `insert-redirect` WP-CLI command now validates by default; pass `--skip-validation` for the previous behaviour.
-- The `import-from-meta` WP-CLI command flags are now kebab-case: `--dry_run` is `--dry-run`, and `--skip_dupes=<bool>` is the boolean flag `--skip-dupes`.
+- The WP-CLI command set has been redesigned with no backwards-compatible aliases. See [UPGRADING.md](UPGRADING.md) for the full old-to-new command mapping: `insert-redirect` is now `create` (validating by default), `import-from-csv` is now `import`, `export-to-csv` has been removed in favour of `list --format=csv`, and `import-from-meta` flags are now kebab-case.
 
 See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
@@ -21,13 +20,14 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - One-off migration of redirect data created by 1.x, covering both the draft post status 1.x left on every redirect and, on subdirectory multisites, the subsite prefix it baked into stored source paths. Runs automatically in batches, or in one pass via the new `wp wpcom-legacy-redirector migrate` command (`--dry-run` supported).
 - Complete DDD (Domain-Driven Design) architecture with Domain, Application, and Infrastructure layers in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - Full multisite/network support with per-site redirect management in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
-- Comprehensive WP-CLI commands for redirect management: `list`, `get`, `delete`, `update`, `enable`, `disable`, `validate`.
-- Single redirect validation mode (`wp wpcom-legacy-redirector validate /path` or `--by=id`).
-- Performance reporting for batch validation (shows time elapsed and rate).
-- Broken redirect filtering for CSV export (`--broken-only` and `--check-urls` flags).
+- Comprehensive WP-CLI commands for redirect management: `create`, `get`, `list`, `update`, `delete`, `enable`, `disable`, `validate`, `import`. All commands accept a redirect ID or source path, and the write commands accept multiple redirects at once.
+- Targeted validation (`wp wpcom-legacy-redirector validate /path 123`) alongside batch mode, with `--fix` to disable broken redirects.
+- Broken redirect export via `wp wpcom-legacy-redirector validate --format=csv`.
+- `--porcelain` flag for `create`, printing just the new redirect ID for scripting.
+- `--fields` flag for `get` and `list` to limit output columns.
 - Status column in CSV export/import for preserving enabled/disabled state.
-- Update and delete modes for CSV import (`--update` and `--delete` flags).
-- CSV export CLI command in https://github.com/Automattic/wpcom-legacy-redirector/pull/35
+- Upsert mode for CSV import (`import --mode=upsert`).
+- STDIN support for CSV import (`wp wpcom-legacy-redirector import -`).
 - Admin UI with list table for viewing, adding, deleting, and validating redirects using new `manage_redirects` capability in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - "Validate" link in admin UI to check redirect destinations in https://github.com/Automattic/wpcom-legacy-redirector/pull/132
 - `wpcom-legacy-redirector find-domains` CLI command for listing redirect target domains.
@@ -36,13 +36,17 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - GPL v2 LICENSE file.
 - CONTRIBUTING.md documentation in https://github.com/Automattic/wpcom-legacy-redirector/pull/157
 - Progress bar for `import-from-meta` command.
-- `--verbose` flag for `import-from-meta` and `import-from-csv` commands.
-- `--skip-validation` flag for insert-redirect (validation enabled by default, matching UI behaviour).
+- `--verbose` flag for `import` and `import-from-meta` commands.
+- `--skip-validation` flag for `create` (validation enabled by default, matching UI behaviour).
+- `--format` flag for `find-domains`, including a `count` format.
 
 ### Changed
 
 - Rename `verify` command to `validate` and use `from`/`to` terminology in CLI output for consistency with UI.
-- Validation enabled by default for `insert-redirect` CLI command (previously skipped).
+- Validation enabled by default for the `create` CLI command (previously skipped).
+- External redirect destinations are accepted at creation time from all entry points; the destination host is automatically allowed at redirect time. Previously the CLI rejected hosts missing from the `allowed_redirect_hosts` filter while the admin UI accepted them.
+- `import-from-meta` flags renamed to kebab-case: `--skip_dupes` is now `--skip-dupes` (a plain flag) and `--dry_run` is now `--dry-run`.
+- Deleting multiple redirects requires a single confirmation (or `--yes`), including when fed from `list --format=ids`.
 - Improved terminology to be more inclusive in https://github.com/Automattic/wpcom-legacy-redirector/pull/78
 - Split unit and integration tests with expanded coverage (357 total tests).
 - Use `x_redirect_by` header instead of custom header in https://github.com/Automattic/wpcom-legacy-redirector/pull/70
@@ -58,6 +62,9 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Fixed
 
+- `validate --fix` now disables redirects through the redirect manager, invalidating the lookup cache, instead of writing the post status directly.
+- `validate` now detects trashed posts behind relative-path destinations without `--check-urls` (trashing renames the post slug, so the path lookup silently missed them).
+- `import-from-meta` now reports rows that fail to import (failures were previously silently swallowed).
 - Resolve WP-CLI synopsis parsing warnings in ValidateCommand.
 - Prevent undefined array key warning in get_redirect_data() in https://github.com/Automattic/wpcom-legacy-redirector/pull/153
 - CLI insert-redirect now works with post ID destination in https://github.com/Automattic/wpcom-legacy-redirector/pull/155
@@ -76,6 +83,10 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Removed
 
+- `export-to-csv` CLI command; use `list --format=csv` instead, or `validate --format=csv` for broken redirects.
+- `import-from-csv` CLI command; use `import <file>` instead. Its `--delete` mode is replaced by piping `list --format=ids` into `delete`.
+- `insert-redirect` CLI command; use `create` instead.
+- `--by=<field>` flag on `get`, `delete`, `enable`, `disable`, and `validate`; these commands now infer whether a redirect is identified by ID or source path.
 - Remove deprecated `wpcom_vip_get_page_by_path()` function in https://github.com/Automattic/wpcom-legacy-redirector/pull/135
 - Remove obsolete Travis CI configuration in https://github.com/Automattic/wpcom-legacy-redirector/pull/156
 - Drop support for PHP 5.3-8.1.

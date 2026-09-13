@@ -10,13 +10,17 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\GetCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 
 /**
  * Integration tests for GetCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\GetCommand
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
@@ -42,7 +46,9 @@ final class GetCommandTest extends CliTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->command = new GetCommand( $this->container()->inner_repository() );
+		$this->command = new GetCommand(
+			new RedirectFetcher( $this->container()->inner_repository() )
+		);
 	}
 
 	// =========================================================================
@@ -150,7 +156,7 @@ final class GetCommandTest extends CliTestCase {
 		$this->invoke_command(
 			$this->command,
 			array( (string) $redirect_id ),
-			array( 'by' => 'id' )
+			array()
 		);
 
 		$this->assertFalse( $this->output->had_error() );
@@ -165,14 +171,14 @@ final class GetCommandTest extends CliTestCase {
 		$this->invoke_command(
 			$this->command,
 			array( '999999' ),
-			array( 'by' => 'id' )
+			array()
 		);
 
 		$this->assert_error_contains( 'not found' );
 	}
 
 	// =========================================================================
-	// Tests for field option
+	// Tests for field options
 	// =========================================================================
 
 	/**
@@ -210,24 +216,37 @@ final class GetCommandTest extends CliTestCase {
 		$this->assert_stderr_contains( 'Available fields' );
 	}
 
-	// =========================================================================
-	// Tests for default behavior
-	// =========================================================================
-
 	/**
-	 * Test that source lookup is the default.
+	 * Test limiting output to selected fields.
 	 */
-	public function test_defaults_to_source_lookup(): void {
-		$this->create_redirect( '/default-lookup', 'https://example.com/dest' );
+	public function test_get_limited_fields(): void {
+		$this->create_redirect( '/fields-test', 'https://example.com/dest' );
 
-		// No --by argument.
 		$this->invoke_command(
 			$this->command,
-			array( '/default-lookup' ),
-			array()
+			array( '/fields-test' ),
+			array( 'fields' => 'from,to' )
 		);
 
 		$this->assertFalse( $this->output->had_error() );
-		$this->assert_stdout_contains( '/default-lookup' );
+		$stdout = $this->get_stdout();
+		$this->assertStringContainsString( '/fields-test', $stdout );
+		$this->assertStringContainsString( 'https://example.com/dest', $stdout );
+		$this->assertStringNotContainsString( 'hash', $stdout );
+	}
+
+	/**
+	 * Test error for invalid --fields value.
+	 */
+	public function test_get_invalid_fields(): void {
+		$this->create_redirect( '/fields-invalid', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/fields-invalid' ),
+			array( 'fields' => 'from,bogus' )
+		);
+
+		$this->assert_error_contains( 'Invalid fields' );
 	}
 }

@@ -20,6 +20,13 @@ use WP_CLI_Command;
 final class ListCommand extends WP_CLI_Command {
 
 	/**
+	 * Default output fields.
+	 *
+	 * @var string[]
+	 */
+	private const DEFAULT_FIELDS = array( 'ID', 'from', 'to', 'type', 'status' );
+
+	/**
 	 * The query repository.
 	 *
 	 * @var RedirectQueryRepositoryInterface
@@ -94,6 +101,9 @@ final class ListCommand extends WP_CLI_Command {
 	 *   - DESC
 	 * ---
 	 *
+	 * [--fields=<fields>]
+	 * : Limit output to specific fields (comma-separated). Available: ID, from, to, type, status.
+	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
 	 * ---
@@ -124,8 +134,10 @@ final class ListCommand extends WP_CLI_Command {
 	 *     # Get count of all redirects.
 	 *     $ wp wpcom-legacy-redirector list --format=count
 	 *
-	 *     # Export first 500 redirect IDs.
-	 *     $ wp wpcom-legacy-redirector list --limit=500 --format=ids
+	 *     # Export all redirects to a CSV file.
+	 *     $ wp wpcom-legacy-redirector list --limit=100000 --format=csv > redirects.csv
+	 *
+	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
@@ -133,6 +145,17 @@ final class ListCommand extends WP_CLI_Command {
 	public function __invoke( array $args, array $assoc_args ): void {
 		$format   = $assoc_args['format'] ?? 'table';
 		$criteria = RedirectCriteria::from_args( $assoc_args );
+
+		// Resolve output fields.
+		$fields = self::DEFAULT_FIELDS;
+		if ( isset( $assoc_args['fields'] ) ) {
+			$fields  = array_map( 'trim', explode( ',', $assoc_args['fields'] ) );
+			$invalid = array_diff( $fields, self::DEFAULT_FIELDS );
+			if ( ! empty( $invalid ) ) {
+				WP_CLI::error( sprintf( 'Invalid fields: %s. Available fields: %s', implode( ', ', $invalid ), implode( ', ', self::DEFAULT_FIELDS ) ) );
+				return;
+			}
+		}
 
 		// Handle count format - only needs count, not full results.
 		if ( 'count' === $format ) {
@@ -142,8 +165,7 @@ final class ListCommand extends WP_CLI_Command {
 		}
 
 		// Fetch redirects matching criteria.
-		$redirects   = $this->query_repository->find_matching( $criteria );
-		$total_count = $this->query_repository->count_matching( $criteria );
+		$redirects = $this->query_repository->find_matching( $criteria );
 
 		// Handle ids format.
 		if ( 'ids' === $format ) {
@@ -166,19 +188,22 @@ final class ListCommand extends WP_CLI_Command {
 			$redirects
 		);
 
-		\WP_CLI\Utils\format_items( $format, $items, array( 'ID', 'from', 'to', 'type', 'status' ) );
+		\WP_CLI\Utils\format_items( $format, $items, $fields );
 
 		// Show pagination info for table format.
-		if ( 'table' === $format && $total_count > count( $redirects ) ) {
-			WP_CLI::line( '' );
-			WP_CLI::line(
-				sprintf(
-					'Showing %d-%d of %d redirects. Use --offset and --limit for pagination.',
-					$criteria->offset() + 1,
-					$criteria->offset() + count( $redirects ),
-					$total_count
-				)
-			);
+		if ( 'table' === $format ) {
+			$total_count = $this->query_repository->count_matching( $criteria );
+			if ( $total_count > count( $redirects ) ) {
+				WP_CLI::line( '' );
+				WP_CLI::line(
+					sprintf(
+						'Showing %d-%d of %d redirects. Use --offset and --limit for pagination.',
+						$criteria->offset() + 1,
+						$criteria->offset() + count( $redirects ),
+						$total_count
+					)
+				);
+			}
 		}
 	}
 

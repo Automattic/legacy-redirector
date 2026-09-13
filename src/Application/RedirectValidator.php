@@ -458,6 +458,15 @@ class RedirectValidator {
 		// Try to find a post by path.
 		$post = get_page_by_path( ltrim( $path, '/' ), OBJECT, array( 'post', 'page' ) );
 
+		// Trashing renames post_name with a __trashed suffix, so a direct
+		// lookup misses trashed destinations - check for the renamed slug.
+		if ( null === $post ) {
+			$trashed = get_page_by_path( ltrim( $path, '/' ) . '__trashed', OBJECT, array( 'post', 'page' ) );
+			if ( null !== $trashed && 'trash' === $trashed->post_status ) {
+				return new ValidationIssue( $redirect, ValidationIssueType::POST_TRASHED );
+			}
+		}
+
 		if ( null !== $post ) {
 			if ( 'trash' === $post->post_status ) {
 				return new ValidationIssue( $redirect, ValidationIssueType::POST_TRASHED );
