@@ -9,6 +9,8 @@ on:
       - 'behat.yml'
       - 'composer.json'
       - '.wp-env.json'
+      - 'package.json'
+      - 'package-lock.json'
   pull_request:
     branches: [develop, main]
     paths:
@@ -18,6 +20,8 @@ on:
       - 'behat.yml'
       - 'composer.json'
       - '.wp-env.json'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 concurrency:
