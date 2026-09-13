@@ -131,7 +131,10 @@ final class ExportToCsvCommand extends WP_CLI_Command {
 					'paged'            => $paged,
 					'post_type'        => PostType::POST_TYPE,
 					'post_status'      => $query_status,
-					'suppress_filters' => 'false',
+					// The export must be exhaustive: suppress posts_* filters so
+					// third-party plugins (multilingual, search, visibility) cannot
+					// silently exclude redirects. Note pre_get_posts still runs.
+					'suppress_filters' => true,
 				)
 			);
 
