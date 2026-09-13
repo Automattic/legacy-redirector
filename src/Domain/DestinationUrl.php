@@ -64,7 +64,8 @@ final class DestinationUrl {
 
 		// Validate absolute URLs have a valid scheme.
 		if ( ! $is_relative ) {
-			$scheme = wp_parse_url( $url, PHP_URL_SCHEME );
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
+			$scheme = parse_url( $url, PHP_URL_SCHEME );
 			if ( empty( $scheme ) || ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
 				throw new InvalidArgumentException( 'Absolute destination URLs must use http or https scheme.' );
 			}

@@ -9,7 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Domain;
 
-use Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils;
 use InvalidArgumentException;
 
 /**
@@ -89,21 +88,7 @@ final class SourceUrl {
 		}
 
 		// Parse URL into components.
-		try {
-			$components = UrlUtils::mb_parse_url( $url );
-		} catch ( InvalidArgumentException $e ) {
-			throw new InvalidArgumentException(
-				sprintf(
-					'The URL could not be parsed: %s',
-					esc_html( $e->getMessage() )
-				)
-			);
-		}
-
-		// Must be an array with at least a path or query.
-		if ( ! is_array( $components ) ) {
-			throw new InvalidArgumentException( 'The URL could not be parsed.' );
-		}
+		$components = self::mb_parse_url( $url );
 
 		if ( ! isset( $components['path'] ) && ! isset( $components['query'] ) ) {
 			throw new InvalidArgumentException( 'The URL contains neither a path nor query string.' );
@@ -117,6 +102,46 @@ final class SourceUrl {
 		}
 
 		return $normalised;
+	}
+
+	/**
+	 * UTF-8 aware parse_url().
+	 *
+	 * Percent-encodes multibyte characters (except reserved URL characters)
+	 * before parsing, then decodes the resulting components, so URLs such as
+	 * /فوتوغرافيا/?test=فوتوغرافيا parse correctly.
+	 *
+	 * Deliberately uses PHP's parse_url() rather than wp_parse_url() so the
+	 * domain layer stays free of WordPress dependencies; on PHP >= 5.4.7 the
+	 * two are equivalent for the path and full-URL inputs this receives.
+	 *
+	 * @param string $url The URL to parse.
+	 * @return array<string, string|int> The URL components.
+	 *
+	 * @throws InvalidArgumentException If the URL is malformed.
+	 */
+	private static function mb_parse_url( string $url ): array {
+		$encoded_url = preg_replace_callback(
+			'|[^!*\'();:@&=+$,\/?%#\[\]]+|usD',
+			static function ( array $matches ): string {
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.urlencode_urlencode -- Required for proper percent-encoding of UTF-8 chars.
+				return urlencode( $matches[0] );
+			},
+			$url
+		);
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
+		$parts = parse_url( $encoded_url );
+
+		if ( false === $parts ) {
+			throw new InvalidArgumentException( 'The URL could not be parsed.' );
+		}
+
+		foreach ( $parts as $name => $value ) {
+			$parts[ $name ] = urldecode( (string) $value );
+		}
+
+		return $parts;
 	}
 
 	/**

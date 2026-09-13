@@ -29,7 +29,6 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
