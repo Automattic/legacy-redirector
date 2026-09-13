@@ -55,6 +55,24 @@ jobs:
           # every later "which build is this?" question unanswerable.
           [ "$FAILED" -eq 0 ]
 
+      - name: Check the plugin has no runtime Composer dependencies
+        run: |
+          set -eu
+
+          # The ZIP ships no vendor/ directory: src/ classes load through the
+          # fallback autoloader in the main plugin file, which only knows how
+          # to find this plugin's own namespace. Add a dependency that is
+          # needed at runtime and the ZIP still installs and activates, then
+          # fatals on a missing class in production. composer/installers is
+          # exempt because it only ever runs at install time.
+          UNEXPECTED="$(jq -r '(.require // {}) | keys[] | select(. != "php" and . != "composer/installers")' composer.json)"
+
+          if [ -n "$UNEXPECTED" ]; then
+            echo "::error::composer.json requires packages that the ZIP will not ship: $(echo "$UNEXPECTED" | tr '\n' ' ')"
+            echo "Either drop the dependency, or stop excluding /vendor/ in .distignore and install it here with 'composer install --no-dev'."
+            exit 1
+          fi
+
       - name: Build the distributable ZIP
         env:
           TAG: ${{ github.ref_name }}
@@ -75,10 +93,61 @@ jobs:
           ZIP_PATH="$RUNNER_TEMP/${SLUG}-${VERSION}.zip"
           ( cd "$RUNNER_TEMP/dist" && zip -rq "$ZIP_PATH" "$SLUG" )
 
-          echo "ZIP contents:"
-          unzip -l "$ZIP_PATH"
+          # Checked, not just printed for a human to squint at: a .distignore
+          # pattern that swallowed src/ would publish a ZIP that fatals on
+          # activation, and every other check in this workflow would pass.
+          unzip -Z1 "$ZIP_PATH" > "$RUNNER_TEMP/zip.list"
 
+          echo "ZIP contents:"
+          cat "$RUNNER_TEMP/zip.list"
+
+          MISSING=0
+          for path in \
+            'wpcom-legacy-redirector.php' \
+            'src/Infrastructure/DI/Container.php' \
+            'src/Infrastructure/WordPress/PluginBootstrapper.php'
+          do
+            if ! grep -qxF "${SLUG}/${path}" "$RUNNER_TEMP/zip.list"; then
+              echo "::error::The ZIP is missing ${path}"
+              MISSING=1
+            fi
+          done
+
+          # These three are what the plugin file loads and instantiates the
+          # moment WordPress includes it, so their absence is a dead install.
+          [ "$MISSING" -eq 0 ]
+
+          echo "SLUG=${SLUG}" >> "$GITHUB_ENV"
           echo "ZIP_PATH=${ZIP_PATH}" >> "$GITHUB_ENV"
+
+      - name: Check .distignore and .gitattributes agree
+        run: |
+          set -eu
+
+          # Two exclude lists with one job between them: .distignore shapes the
+          # release ZIP, .gitattributes export-ignore shapes the source archive
+          # that Composer installs from. Nothing keeps them in step, and the
+          # drift stays invisible until someone inspects an installed copy.
+          # Diffing the two file lists needs no third list to maintain.
+          git archive --format=tar HEAD | tar -t | grep -v '/$' | sort \
+            > "$RUNNER_TEMP/archive.list"
+          grep -v '/$' "$RUNNER_TEMP/zip.list" | sed "s|^${SLUG}/||" | sort \
+            > "$RUNNER_TEMP/dist.list"
+
+          ONLY_ARCHIVE="$(comm -23 "$RUNNER_TEMP/archive.list" "$RUNNER_TEMP/dist.list")"
+          ONLY_DIST="$(comm -13 "$RUNNER_TEMP/archive.list" "$RUNNER_TEMP/dist.list")"
+
+          # Extra dev files in one install path is bloat, not breakage, so this
+          # warns rather than fails: a release fixing a fatal should not be
+          # blocked by a stray AGENTS.md, and a hard failure here costs a
+          # re-tag. Swap the warnings for ::error:: and an exit 1 to enforce.
+          if [ -n "$ONLY_ARCHIVE" ]; then
+            echo "::warning::In the source archive but not the ZIP - missing export-ignore in .gitattributes: $(echo "$ONLY_ARCHIVE" | tr '\n' ' ')"
+          fi
+
+          if [ -n "$ONLY_DIST" ]; then
+            echo "::warning::In the ZIP but not the source archive - missing from .distignore: $(echo "$ONLY_DIST" | tr '\n' ' ')"
+          fi
 
       - name: Prepare release title and notes
         id: prep
