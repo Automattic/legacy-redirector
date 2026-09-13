@@ -10,7 +10,7 @@
   },
   "env": {
     "tests": {
-      "phpVersion": "8.4",
+      "phpVersion": "8.5",
       "core": "WordPress/WordPress#trunk"
     }
   }

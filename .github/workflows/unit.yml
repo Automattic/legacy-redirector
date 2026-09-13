@@ -40,6 +40,8 @@ jobs:
             allowed_failure: false
           - php: '8.4'
             allowed_failure: false
+          - php: '8.5'
+            allowed_failure: false
 
     steps:
       - name: Checkout code

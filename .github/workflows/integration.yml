@@ -41,6 +41,10 @@ jobs:
           # Check latest WP with the latest PHP.
           - wordpress: 'master'
             php: 'latest'
+          # Check multisite on latest WP with the latest PHP.
+          - wordpress: 'master'
+            php: 'latest'
+            multisite: true
 
     env:
       WP_ENV_CORE: WordPress/WordPress#${{ matrix.wordpress }}
