@@ -138,7 +138,8 @@ final class PluginBootstrapper {
 		$admin = new AdminBootstrapper(
 			$this->container->repository(),
 			$this->container->manager(),
-			$this->container->validator()
+			$this->container->validator(),
+			$this->container->query_repository()
 		);
 		$admin->init();
 

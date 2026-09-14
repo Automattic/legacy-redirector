@@ -55,4 +55,15 @@ interface RedirectQueryRepositoryInterface {
 	 * @return int The total count.
 	 */
 	public function count_external_destinations(): int;
+
+	/**
+	 * Count active redirects grouped by destination kind.
+	 *
+	 * Counts published and draft redirects for each of: destinations that
+	 * point at a post ID, internal relative paths, and external URLs
+	 * (absolute URLs whose host is not this site's).
+	 *
+	 * @return array{post_id: int, path: int, external: int} Counts by kind.
+	 */
+	public function count_by_destination_type(): array;
 }

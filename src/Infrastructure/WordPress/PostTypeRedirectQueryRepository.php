@@ -104,6 +104,54 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	}
 
 	/**
+	 * Count active redirects grouped by destination kind.
+	 *
+	 * @return array{post_id: int, path: int, external: int} Counts by kind.
+	 */
+	public function count_by_destination_type(): array {
+		global $wpdb;
+
+		$post_type = PostType::POST_TYPE;
+		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+
+		// Count redirects to post IDs (post_parent > 0).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
+		$post_id_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_parent > 0",
+				$post_type
+			)
+		);
+
+		// Count internal path redirects (relative paths starting with /).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
+		$path_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s",
+				$post_type,
+				'/%'
+			)
+		);
+
+		// Count external redirects (URLs starting with http that don't contain the home host).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
+		$external_count = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s AND post_excerpt NOT LIKE %s",
+				$post_type,
+				'http%',
+				'%' . $wpdb->esc_like( $home_host ) . '%'
+			)
+		);
+
+		return array(
+			'post_id'  => $post_id_count,
+			'path'     => $path_count,
+			'external' => $external_count,
+		);
+	}
+
+	/**
 	 * Build WP_Query arguments from criteria.
 	 *
 	 * @param RedirectCriteria $criteria The query criteria.
