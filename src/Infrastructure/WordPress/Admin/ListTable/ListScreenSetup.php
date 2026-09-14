@@ -15,7 +15,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 /**
  * Adds contextual help and page title actions to the redirects list screen.
  */
-final class ScreenEnhancements {
+final class ListScreenSetup {
 
 	/**
 	 * Register hooks.

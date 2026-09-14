@@ -11,13 +11,14 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDuplicateHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ScreenEnhancements;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage;
@@ -49,20 +50,30 @@ final class AdminBootstrapper {
 	private RedirectValidator $validator;
 
 	/**
+	 * Redirect query repository.
+	 *
+	 * @var RedirectQueryRepositoryInterface
+	 */
+	private RedirectQueryRepositoryInterface $query_repository;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param RedirectRepositoryInterface $repository Redirect repository.
-	 * @param RedirectManager             $manager    Redirect manager.
-	 * @param RedirectValidator           $validator  Redirect validator.
+	 * @param RedirectRepositoryInterface      $repository       Redirect repository.
+	 * @param RedirectManager                  $manager          Redirect manager.
+	 * @param RedirectValidator                $validator        Redirect validator.
+	 * @param RedirectQueryRepositoryInterface $query_repository Redirect query repository.
 	 */
 	public function __construct(
 		RedirectRepositoryInterface $repository,
 		RedirectManager $manager,
-		RedirectValidator $validator
+		RedirectValidator $validator,
+		RedirectQueryRepositoryInterface $query_repository
 	) {
-		$this->repository = $repository;
-		$this->manager    = $manager;
-		$this->validator  = $validator;
+		$this->repository       = $repository;
+		$this->manager          = $manager;
+		$this->validator        = $validator;
+		$this->query_repository = $query_repository;
 	}
 
 	/**
@@ -112,11 +123,11 @@ final class AdminBootstrapper {
 		$row_actions = new RowActionsManager();
 		$row_actions->register();
 
-		$view_filters = new ViewFilters();
+		$view_filters = new ViewFilters( $this->query_repository );
 		$view_filters->register();
 
-		$screen_enhancements = new ScreenEnhancements();
-		$screen_enhancements->register();
+		$list_screen_setup = new ListScreenSetup();
+		$list_screen_setup->register();
 	}
 
 	/**

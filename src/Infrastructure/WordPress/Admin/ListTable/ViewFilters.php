@@ -9,12 +9,29 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
  * Handles status view filters and destination type filters for the redirects list table.
  */
 final class ViewFilters {
+
+	/**
+	 * The redirect query repository.
+	 *
+	 * @var RedirectQueryRepositoryInterface
+	 */
+	private RedirectQueryRepositoryInterface $query_repository;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectQueryRepositoryInterface $query_repository The redirect query repository.
+	 */
+	public function __construct( RedirectQueryRepositoryInterface $query_repository ) {
+		$this->query_repository = $query_repository;
+	}
 
 	/**
 	 * Register hooks.
@@ -134,46 +151,7 @@ final class ViewFilters {
 	 * @return array{post_id: int, path: int, external: int} Counts by type.
 	 */
 	private function get_destination_type_counts(): array {
-		global $wpdb;
-
-		$post_type = PostType::POST_TYPE;
-		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
-
-		// Count redirects to post IDs (post_parent > 0).
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
-		$post_id_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_parent > 0",
-				$post_type
-			)
-		);
-
-		// Count internal path redirects (relative paths starting with /).
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
-		$path_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s",
-				$post_type,
-				'/%'
-			)
-		);
-
-		// Count external redirects (URLs starting with http that don't contain the home host).
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
-		$external_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s AND post_excerpt NOT LIKE %s",
-				$post_type,
-				'http%',
-				'%' . $wpdb->esc_like( $home_host ) . '%'
-			)
-		);
-
-		return array(
-			'post_id'  => $post_id_count,
-			'path'     => $path_count,
-			'external' => $external_count,
-		);
+		return $this->query_repository->count_by_destination_type();
 	}
 
 	/**

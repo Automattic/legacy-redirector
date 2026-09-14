@@ -22,6 +22,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  */
 final class UITest extends TestCase {
 
@@ -45,7 +46,7 @@ final class UITest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->view_filters = new ViewFilters();
+		$this->view_filters = new ViewFilters( $this->query_repository() );
 
 		$this->notices = new ValidationNotices(
 			$this->repository(),
