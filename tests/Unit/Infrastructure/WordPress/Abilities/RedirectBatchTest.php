@@ -104,6 +104,42 @@ final class RedirectBatchTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test the action runs for resolved redirects, and failures are collected.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch::apply
+	 */
+	public function test_apply_counts_changes_and_collects_failures(): void {
+		$redirect = Redirect::reconstitute(
+			12,
+			SourceUrl::from_string( '/old' ),
+			Destination::from_mixed( '/new' ),
+			'publish'
+		);
+
+		$this->repository->shouldReceive( 'find_by_id' )->with( 12 )->andReturn( $redirect );
+		$this->repository->shouldReceive( 'find_by_id' )->with( 13 )->andReturn( $redirect );
+		$this->repository->shouldReceive( 'find_by_id' )->with( 99 )->andReturn( null );
+
+		$seen = array();
+
+		$result = $this->batch->apply(
+			array( 12, 13, 99 ),
+			static function ( Redirect $resolved ) use ( &$seen ): bool {
+				$seen[] = $resolved->id();
+
+				// Refuse the second one, to prove a refusal is not counted.
+				return 1 === count( $seen );
+			},
+			'Could not be changed.'
+		);
+
+		$this->assertCount( 2, $seen, 'The action should not run for unresolved identifiers.' );
+		$this->assertSame( 1, $result['changed'] );
+		$this->assertCount( 2, $result['failures'] );
+		$this->assertSame( 'Could not be changed.', $result['failures'][1]['reason'] );
+	}
+
+	/**
 	 * Test an unparseable identifier is reported rather than thrown.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch::resolve

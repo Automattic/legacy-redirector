@@ -82,4 +82,35 @@ final class RedirectBatch {
 			'failures' => $failures,
 		);
 	}
+
+	/**
+	 * Resolve identifiers and act on each redirect that resolves.
+	 *
+	 * @param array<int, string|int> $identifiers    Redirect IDs or source paths.
+	 * @param callable               $action         Receives a Redirect, returns true when the change was made.
+	 * @param string                 $failure_reason Reason to report when the action does not succeed.
+	 * @return array{changed: int, failures: array<int, array{redirect: string, reason: string}>}
+	 */
+	public function apply( array $identifiers, callable $action, string $failure_reason ): array {
+		$batch    = $this->resolve( $identifiers );
+		$failures = $batch['failures'];
+		$changed  = 0;
+
+		foreach ( $batch['resolved'] as $item ) {
+			if ( ! $action( $item['redirect'] ) ) {
+				$failures[] = array(
+					'redirect' => $item['identifier'],
+					'reason'   => $failure_reason,
+				);
+				continue;
+			}
+
+			++$changed;
+		}
+
+		return array(
+			'changed'  => $changed,
+			'failures' => $failures,
+		);
+	}
 }

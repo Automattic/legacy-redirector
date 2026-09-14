@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
 /**
@@ -103,26 +104,17 @@ final class DeleteRedirectAbility implements AbilityInterface {
 	 * @return array{deleted: int, failed: array<int, array{redirect: string, reason: string}>} The outcome.
 	 */
 	public function execute( $input = array() ): array {
-		$input    = is_array( $input ) ? $input : array();
-		$batch    = $this->batch->resolve( $input['redirects'] ?? array() );
-		$failures = $batch['failures'];
-		$deleted  = 0;
+		$input = is_array( $input ) ? $input : array();
 
-		foreach ( $batch['resolved'] as $item ) {
-			if ( ! $this->manager->delete_by_id( (int) $item['redirect']->id() ) ) {
-				$failures[] = array(
-					'redirect' => $item['identifier'],
-					'reason'   => __( 'The redirect could not be deleted.', 'wpcom-legacy-redirector' ),
-				);
-				continue;
-			}
-
-			++$deleted;
-		}
+		$result = $this->batch->apply(
+			$input['redirects'] ?? array(),
+			fn( Redirect $redirect ): bool => $this->manager->delete_by_id( (int) $redirect->id() ),
+			__( 'The redirect could not be deleted.', 'wpcom-legacy-redirector' )
+		);
 
 		return array(
-			'deleted' => $deleted,
-			'failed'  => $failures,
+			'deleted' => $result['changed'],
+			'failed'  => $result['failures'],
 		);
 	}
 }

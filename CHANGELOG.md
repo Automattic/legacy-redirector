@@ -17,7 +17,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Added
 
-- Abilities API registrations on WordPress 6.9 and later, so MCP clients can create, read, update, delete, and validate redirects, and list the external domains redirects point at. Every ability requires the `manage_redirects` capability and goes through the same services as the admin screens and WP-CLI.
+- Abilities API registrations on WordPress 6.9 and later, so MCP clients can create, read, update, enable, disable, delete, and validate redirects, and list the external domains redirects point at. Every ability requires the `manage_redirects` capability and goes through the same services as the admin screens and WP-CLI.
 - One-off migration of redirect data created by 1.x, covering both the draft post status 1.x left on every redirect and, on subdirectory multisites, the subsite prefix it baked into stored source paths. Runs automatically in batches, or in one pass via the new `wp wpcom-legacy-redirector migrate` command (`--dry-run` supported).
 - Complete DDD (Domain-Driven Design) architecture with Domain, Application, and Infrastructure layers in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - Full multisite/network support with per-site redirect management in https://github.com/Automattic/wpcom-legacy-redirector/pull/159

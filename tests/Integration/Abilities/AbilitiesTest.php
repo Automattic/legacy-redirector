@@ -29,6 +29,7 @@ use WP_Ability;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
@@ -118,6 +119,7 @@ final class AbilitiesTest extends TestCase {
 			'get-redirect',
 			'list-redirects',
 			'update-redirect',
+			'set-redirect-status',
 			'delete-redirect',
 			'validate-redirects',
 			'find-redirect-domains',
@@ -207,6 +209,50 @@ final class AbilitiesTest extends TestCase {
 		$enabled = $this->ability( 'list-redirects' )->execute( array( 'status' => 'enabled' ) );
 
 		$this->assertSame( 0, $enabled['total'] );
+	}
+
+	/**
+	 * Test a redirect can be turned off and back on without changing where it points.
+	 *
+	 * @return void
+	 */
+	public function test_set_redirect_status_toggles_a_redirect(): void {
+		$destination = $this->path_to_new_post( 'status-target' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/toggled',
+				'to'   => $destination,
+			)
+		);
+
+		$disabled = $this->ability( 'set-redirect-status' )->execute(
+			array(
+				'redirects' => array( '/toggled' ),
+				'status'    => 'disabled',
+			)
+		);
+
+		$this->assertSame( 1, $disabled['updated'] );
+		$this->assertSame( array(), $disabled['failed'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( 'disabled', $fetched['status'] );
+		$this->assertSame( $destination, $fetched['to'], 'The destination should be untouched.' );
+
+		$enabled = $this->ability( 'set-redirect-status' )->execute(
+			array(
+				'redirects' => array( $created['id'] ),
+				'status'    => 'enabled',
+			)
+		);
+
+		$this->assertSame( 1, $enabled['updated'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( 'enabled', $fetched['status'] );
 	}
 
 	/**

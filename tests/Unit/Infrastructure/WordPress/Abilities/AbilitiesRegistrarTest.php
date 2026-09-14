@@ -98,7 +98,7 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 			$this->assertArrayHasKey( 'readonly', $args['meta']['annotations'], $name . ' needs a readonly annotation.' );
 		}
 
-		$this->assertCount( 7, $names );
+		$this->assertCount( 8, $names );
 	}
 
 	/**
@@ -113,6 +113,7 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 		$writes = array(
 			'wpcom-legacy-redirector/create-redirect',
 			'wpcom-legacy-redirector/update-redirect',
+			'wpcom-legacy-redirector/set-redirect-status',
 			'wpcom-legacy-redirector/delete-redirect',
 		);
 
@@ -132,6 +133,10 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 		$this->assertFalse(
 			$annotations['wpcom-legacy-redirector/update-redirect']['destructive'],
 			'Updating a redirect is not destructive.'
+		);
+		$this->assertFalse(
+			$annotations['wpcom-legacy-redirector/set-redirect-status']['destructive'],
+			'Disabling a redirect keeps it, so it is not destructive.'
 		);
 		$this->assertTrue(
 			$annotations['wpcom-legacy-redirector/validate-redirects']['readonly'],
@@ -177,7 +182,7 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 	 */
 	public function test_register_abilities_registers_every_ability(): void {
 		Functions\expect( 'wp_register_ability' )
-			->times( 7 )
+			->times( 8 )
 			->with( Mockery::type( 'string' ), Mockery::type( 'array' ) );
 
 		$this->registrar->register_abilities();

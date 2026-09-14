@@ -133,6 +133,7 @@ final class AbilitiesRegistrar {
 			new GetRedirectAbility( $this->fetcher ),
 			new ListRedirectsAbility( $this->query_repository ),
 			new UpdateRedirectAbility( $this->manager, $batch ),
+			new SetRedirectStatusAbility( $this->manager, $batch ),
 			new DeleteRedirectAbility( $this->manager, $batch ),
 			new ValidateRedirectsAbility( $this->query_repository, $this->auditor, $batch ),
 			new FindRedirectDomainsAbility( $this->query_repository ),

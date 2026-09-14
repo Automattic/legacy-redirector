@@ -193,12 +193,13 @@ On WordPress 6.9 and later, the plugin registers abilities so that MCP clients a
 | `wpcom-legacy-redirector/create-redirect` | Create a redirect |
 | `wpcom-legacy-redirector/get-redirect` | Get one redirect, by ID or source path |
 | `wpcom-legacy-redirector/list-redirects` | List redirects, with filters and paging |
-| `wpcom-legacy-redirector/update-redirect` | Change the destination and/or status of one or more redirects |
+| `wpcom-legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects |
+| `wpcom-legacy-redirector/set-redirect-status` | Enable or disable one or more redirects |
 | `wpcom-legacy-redirector/delete-redirect` | Delete one or more redirects |
 | `wpcom-legacy-redirector/validate-redirects` | Report redirects with broken destinations |
 | `wpcom-legacy-redirector/find-redirect-domains` | List the external domains redirects point at |
 
-Every ability requires the `manage_redirects` capability, including the read-only ones. Enabling and disabling redirects is part of `update-redirect`, via its `status` argument.
+Every ability requires the `manage_redirects` capability, including the read-only ones. Disabling a redirect keeps it and its destination, but stops serving it to visitors.
 
 ## Documentation
 

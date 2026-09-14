@@ -1,6 +1,6 @@
 <?php
 /**
- * Update redirect ability.
+ * Set redirect status ability.
  *
  * @package Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities
  */
@@ -10,15 +10,18 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
-use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
-use WP_Error;
 
 /**
- * Updates the destination and/or status of one or more redirects.
+ * Enables or disables redirects, without touching their destinations.
+ *
+ * `update-redirect` can also change status, as a side effect of an edit.
+ * This ability exists because turning a redirect on or off is a task in its
+ * own right — it is what the admin row and bulk actions do — and a client
+ * should be able to ask for it without describing an update.
  */
-final class UpdateRedirectAbility implements AbilityInterface {
+final class SetRedirectStatusAbility implements AbilityInterface {
 
 	/**
 	 * The redirect manager.
@@ -51,7 +54,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	 * @return string The ability name.
 	 */
 	public function name(): string {
-		return 'wpcom-legacy-redirector/update-redirect';
+		return 'wpcom-legacy-redirector/set-redirect-status';
 	}
 
 	/**
@@ -61,19 +64,15 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	 */
 	public function args(): array {
 		return array(
-			'label'               => __( 'Update Redirects', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Enable or Disable Redirects', 'wpcom-legacy-redirector' ),
+			'description'         => __( 'Turns redirects on or off without deleting them or changing where they point. A disabled redirect stays in the list and keeps its destination, but is no longer served to visitors, who get whatever the site would otherwise serve for that path. Accepts one redirect or several.', 'wpcom-legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
-				'required'             => array( 'redirects' ),
+				'required'             => array( 'redirects', 'status' ),
 				'properties'           => array(
 					'redirects' => RedirectSchema::identifiers_schema(
-						__( 'The redirects to update, each given as a redirect ID or the path it redirects from.', 'wpcom-legacy-redirector' )
-					),
-					'to'        => array(
-						'type'        => array( 'string', 'integer' ),
-						'description' => __( 'The new destination: a path, an absolute URL, or a post ID.', 'wpcom-legacy-redirector' ),
+						__( 'The redirects to enable or disable, each given as a redirect ID or the path it redirects from.', 'wpcom-legacy-redirector' )
 					),
 					'status'    => array(
 						'type'        => 'string',
@@ -89,7 +88,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 				'properties'           => array(
 					'updated' => array(
 						'type'        => 'integer',
-						'description' => __( 'How many redirects were updated.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects had their status set.', 'wpcom-legacy-redirector' ),
 					),
 					'failed'  => RedirectSchema::failures_schema(),
 				),
@@ -109,55 +108,19 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	}
 
 	/**
-	 * Update the redirects.
+	 * Set the status of the redirects.
 	 *
 	 * @param mixed $input The validated ability input.
-	 * @return array{updated: int, failed: array<int, array{redirect: string, reason: string}>}|WP_Error The outcome, or an error if the input asks for no change.
+	 * @return array{updated: int, failed: array<int, array{redirect: string, reason: string}>} The outcome.
 	 */
-	public function execute( $input = array() ) {
+	public function execute( $input = array() ): array {
 		$input       = is_array( $input ) ? $input : array();
-		$destination = null;
-		$status      = null;
-
-		if ( ! isset( $input['to'] ) && ! isset( $input['status'] ) ) {
-			return new WP_Error(
-				'wpcom_legacy_redirector_nothing_to_update',
-				__( 'Pass a new destination, a new status, or both.', 'wpcom-legacy-redirector' )
-			);
-		}
-
-		if ( isset( $input['to'] ) ) {
-			$to = $input['to'];
-
-			try {
-				$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
-			} catch ( \InvalidArgumentException $e ) {
-				return new WP_Error(
-					'wpcom_legacy_redirector_invalid_destination',
-					sprintf(
-						/* translators: 1: destination, 2: error message. */
-						__( 'Not a valid destination: %1$s (%2$s)', 'wpcom-legacy-redirector' ),
-						(string) $to,
-						$e->getMessage()
-					)
-				);
-			}
-		}
-
-		if ( isset( $input['status'] ) ) {
-			$status = 'disabled' === $input['status'] ? 'draft' : 'publish';
-		}
+		$post_status = 'disabled' === ( $input['status'] ?? '' ) ? 'draft' : 'publish';
 
 		$result = $this->batch->apply(
 			$input['redirects'] ?? array(),
-			function ( Redirect $redirect ) use ( $destination, $status ): bool {
-				$redirect_id = (int) $redirect->id();
-
-				return null !== $destination
-					? $this->manager->update_destination( $redirect_id, $destination, $status )
-					: $this->manager->change_status( $redirect_id, (string) $status );
-			},
-			__( 'The redirect could not be saved.', 'wpcom-legacy-redirector' )
+			fn( Redirect $redirect ): bool => $this->manager->change_status( (int) $redirect->id(), $post_status ),
+			__( 'The redirect status could not be changed.', 'wpcom-legacy-redirector' )
 		);
 
 		return array(
