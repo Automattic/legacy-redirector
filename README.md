@@ -144,6 +144,18 @@ add_filter( 'wpcom_legacy_redirector_redirect_status', function( $status, $url )
 }, 10, 2 );
 ```
 
+### Modify Redirect Cache Lifetime
+
+Redirect responses are sent with a `Cache-Control: max-age` header so browsers do not cache them indefinitely. The default is one day for 301 redirects and one minute otherwise:
+
+```php
+add_filter( 'wpcom_legacy_redirector_redirect_max_age', function( $max_age, $url, $status ) {
+    return HOUR_IN_SECONDS;
+}, 10, 3 );
+```
+
+Return `0` to suppress the header, e.g. where an edge cache manages redirect caching instead.
+
 ### Modify Request Path
 
 Alter the path before redirect lookup:
