@@ -24,7 +24,7 @@ Thank you for your interest in contributing to WPCOM Legacy Redirector! This doc
 
 3. **Start the development environment:**
    ```bash
-   wp-env start
+   npx wp-env start
    ```
 
 ## Testing
@@ -58,7 +58,7 @@ composer lint
 composer cs
 
 # Auto-fix coding standards issues
-composer cbf
+composer cs-fix
 ```
 
 ## Making Changes
@@ -95,7 +95,7 @@ composer cbf
 ### Code Standards
 
 - We follow [WordPress VIP Coding Standards](https://github.com/Automattic/VIP-Coding-Standards)
-- Run `composer cbf` to auto-fix PHP issues
+- Run `composer cs-fix` to auto-fix what PHPCS can fix automatically
 - All public methods should have PHPDoc comments
 - Use meaningful variable and function names
 
@@ -103,8 +103,10 @@ composer cbf
 
 - All new features should include tests
 - Bug fixes should include a test that fails without the fix
-- Unit tests go in `tests/Unit/`
-- Integration tests go in `tests/Integration/`
+- Unit tests go in `tests/Unit/` and extend `MonkeyStubs` (Brain Monkey, no WordPress loaded), for domain and application logic that can be isolated
+- Integration tests go in `tests/Integration/` and extend the local `TestCase`, for anything that needs real WordPress
+- Behat scenarios live in `features/`, with step definitions in `tests/Behat/`. Keep them to CLI contracts and critical happy paths; they are slow, so edge cases belong in integration tests
+- Coverage annotations are docblock `@covers` and `@uses` tags, not PHP attributes: the suite runs on PHPUnit 9
 - Follow the Arrange-Act-Assert pattern
 - Use meaningful test names: `test_redirect_to_post_id_with_validation()`
 
@@ -125,30 +127,35 @@ composer cbf
 
 ## Architecture Overview
 
-The plugin uses a custom post type (`vip-legacy-redirect`) to store redirects:
+The code in `src/` is arranged in three layers, and the dependencies only point inwards: `Domain` knows nothing about the other two, `Application` may use `Domain`, and `Infrastructure` may use both.
 
-- **`post_name`**: MD5 hash of the "from" URL (for fast indexed lookups)
-- **`post_title`**: Human-readable "from" URL
-- **`post_parent`**: Destination post ID (for internal redirects)
-- **`post_excerpt`**: Destination URL (for external redirects)
+- **`Domain/`** — the model: `Redirect` (entity), the `SourceUrl` and `Destination` value objects, `RedirectCriteria`, `ValidationIssue`, and the repository interfaces. Value objects are immutable; create a new instance rather than adding a setter.
+- **`Application/`** — the use cases: `RedirectManager` (create, update, status, delete), `RedirectResolver` (runtime resolution), `RedirectValidator` (rules applied before saving), `RedirectAuditor` (checking existing redirects for broken destinations), and `RedirectFetcher` (resolving an ID or source path to a redirect).
+- **`Infrastructure/`** — everything WordPress-specific: `PostTypeRedirectRepository` and the `CachingRedirectRepository` decorator around it, `PostType`, `Capability`, `RedirectRequestHandler` (performs the redirect), and the three client surfaces below.
 
-Key classes:
+### Storage
 
-- `WPCOM_Legacy_Redirector`: Main plugin class with redirect insertion and validation
-- `Lookup`: Handles redirect resolution and caching
-- `Post_Type`: Registers the custom post type
-- `Capability`: Manages the `manage_redirects` capability
-- `List_Redirects`: Admin list table customisation
-- `WPCOM_Legacy_Redirector_CLI`: WP-CLI commands
-- `WPCOM_Legacy_Redirector_UI`: Admin interface for adding redirects
+Redirects are stored as a custom post type (`vip-legacy-redirect`):
+
+- **`post_name`**: MD5 hash of the "from" path (indexed, so lookups stay fast at scale)
+- **`post_title`**: the human-readable "from" path
+- **`post_parent`**: destination post ID, when redirecting to a post on this site
+- **`post_excerpt`**: destination URL or path, otherwise
+- **`post_status`**: `publish` for an enabled redirect, `draft` for a disabled one
+
+This schema is a persistence detail. Read and write it through the repositories rather than reaching for `get_post()` or `$wpdb` in a command, an ability, or an admin screen.
 
 ### Client Surfaces
 
-Redirects can be managed from three places, all of which must go through the application services so that validation, capabilities, and cache invalidation stay consistent:
+Redirects can be managed from three places. All of them are presentation only: each translates its own input into calls on the application services, so that validation, capability checks, and cache invalidation behave identically whichever one you use.
 
 - **Admin UI** (`src/Infrastructure/WordPress/Admin/`)
 - **WP-CLI** (`src/Infrastructure/WordPress/Cli/`)
-- **Abilities API** (`src/Infrastructure/WordPress/Abilities/`) — registered on WordPress 6.9+ so MCP clients can manage redirects. Ability names mirror the CLI verbs; when you add or change a command, consider whether the matching ability needs the same change.
+- **Abilities API** (`src/Infrastructure/WordPress/Abilities/`) — registered on WordPress 6.9+ so MCP clients can manage redirects
+
+Ability names mirror the CLI verbs, so when you add or change a command, consider whether the matching ability needs the same change. Behaviour that two surfaces need belongs in `Application/`, not in a command, an ability, or an admin handler.
+
+Services are wired through the DI container (`src/Infrastructure/DI/Container.php`); prefer that over scattering `new` calls in production code. The test suite deliberately constructs services directly — see `tests/Integration/RedirectTestHelper.php`.
 
 ## Getting Help
 
