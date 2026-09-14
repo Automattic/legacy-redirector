@@ -131,6 +131,25 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test render_column HTML-encodes ampersands in external URLs.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_posts_custom_column_encodes_ampersands_in_external_to_url(): void {
+		$from_url = '/test-from-query-args';
+		$to_url   = 'http://example.com/external?foo=1&bar=2';
+
+		$post_id = $this->create_redirect( $from_url, $to_url );
+		$this->assertIsInt( $post_id );
+
+		ob_start();
+		$this->columns_manager->render_column( 'to', $post_id );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'foo=1&#038;bar=2', $output );
+	}
+
+	/**
 	 * Test render_column displays relative path for 'to' column.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column

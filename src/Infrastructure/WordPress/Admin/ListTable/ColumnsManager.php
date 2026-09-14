@@ -169,9 +169,9 @@ final class ColumnsManager {
 		} elseif ( str_starts_with( $excerpt, 'http' ) ) {
 			// On multisite, use bold for consistency with relative paths.
 			if ( is_multisite() ) {
-				printf( '<strong>%s</strong>', esc_url_raw( $excerpt ) );
+				printf( '<strong>%s</strong>', esc_url( $excerpt ) );
 			} else {
-				echo esc_url_raw( $excerpt );
+				echo esc_url( $excerpt );
 			}
 		} elseif ( 'private' === $this->check_path_publicity( $excerpt ) ) {
 			$this->render_relative_path_with_prefix( $excerpt );
