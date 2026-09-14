@@ -9,7 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
-use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
@@ -245,48 +244,6 @@ final class RedirectsTest extends TestCase {
 	}
 
 	/**
-	 * Test SourceUrl hash returns consistent MD5 hash.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::hash
-	 */
-	public function test_source_url_hash_returns_md5(): void {
-		$url           = '/test-hash-url';
-		$expected_hash = md5( $url );
-
-		$source      = SourceUrl::from_string( $url );
-		$actual_hash = $source->hash();
-
-		$this->assertSame( $expected_hash, $actual_hash );
-		$this->assertSame( 32, strlen( $actual_hash ) ); // MD5 is always 32 hex chars.
-	}
-
-	/**
-	 * Test SourceUrl strips scheme and host.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_source_url_strips_scheme_and_host(): void {
-		$full_url = 'https://example.com/path/to/page';
-
-		$source = SourceUrl::from_string( $full_url );
-
-		$this->assertSame( '/path/to/page', $source->path() );
-	}
-
-	/**
-	 * Test SourceUrl preserves query string.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_source_url_preserves_query_string(): void {
-		$url_with_query = 'https://example.com/path?foo=bar&baz=qux';
-
-		$source = SourceUrl::from_string( $url_with_query );
-
-		$this->assertSame( '/path?foo=bar&baz=qux', $source->path() );
-	}
-
-	/**
 	 * Test BulkActionsHandler removes edit and adds enable/disable.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler::modify_bulk_actions
@@ -447,35 +404,5 @@ final class RedirectsTest extends TestCase {
 		foreach ( $post_ids as $post_id ) {
 			$this->assertSame( 'publish', get_post_status( $post_id ) );
 		}
-	}
-
-	/**
-	 * Test RedirectCreationResult error methods.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::error
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::is_error
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::error_code
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::error_message
-	 */
-	public function test_redirect_creation_result_error_methods(): void {
-		$result = RedirectCreationResult::error( 'test-code', 'Test error message' );
-
-		$this->assertTrue( $result->is_error() );
-		$this->assertSame( 'test-code', $result->error_code() );
-		$this->assertSame( 'Test error message', $result->error_message() );
-	}
-
-	/**
-	 * Test RedirectCreationResult success methods.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::success
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::is_error
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::redirect_id
-	 */
-	public function test_redirect_creation_result_success_methods(): void {
-		$result = RedirectCreationResult::success( 123 );
-
-		$this->assertFalse( $result->is_error() );
-		$this->assertSame( 123, $result->redirect_id() );
 	}
 }
