@@ -88,9 +88,11 @@ final class StatusActionsHandler {
 			wp_die( esc_html__( 'You do not have permission to modify redirects.', 'wpcom-legacy-redirector' ) );
 		}
 
-		// Get the redirect source before modifying.
+		// Get the redirect source before modifying. RedirectManager rejects posts
+		// of other types too, but this handler reads the title before calling it,
+		// so it checks the type itself rather than relying on that.
 		$redirect_post = get_post( $redirect_id );
-		if ( ! $redirect_post ) {
+		if ( ! $redirect_post || PostType::POST_TYPE !== $redirect_post->post_type ) {
 			wp_die( esc_html__( 'Invalid redirect.', 'wpcom-legacy-redirector' ) );
 		}
 		$redirect_source = $redirect_post->post_title;
