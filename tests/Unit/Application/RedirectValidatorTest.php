@@ -665,7 +665,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$wp_error = Mockery::mock( 'WP_Error' );
 
 		Functions\expect( 'wp_remote_get' )
-			->twice()
+			->once()
 			->andReturn( $wp_error );
 
 		Functions\expect( 'is_wp_error' )
@@ -1052,7 +1052,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$wp_error    = Mockery::mock( 'WP_Error' );
 
 		Functions\expect( 'wp_remote_get' )
-			->twice()
+			->once()
 			->andReturn( $wp_error );
 
 		Functions\expect( 'is_wp_error' )

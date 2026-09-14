@@ -360,10 +360,6 @@ class RedirectValidator {
 			$response = vip_safe_wp_remote_get( $url );
 		} else {
 			$response = wp_remote_get( $url );
-			// Retry without SSL verification for self-signed certificates.
-			if ( is_wp_error( $response ) ) {
-				$response = wp_remote_get( $url, array( 'sslverify' => false ) );
-			}
 		}
 
 		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
@@ -504,7 +500,6 @@ class RedirectValidator {
 			array(
 				'timeout'     => 5,
 				'redirection' => 0, // Don't follow redirects.
-				'sslverify'   => false,
 			)
 		);
 

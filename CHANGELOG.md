@@ -74,12 +74,15 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - Admin redirect save on subsites in https://github.com/Automattic/wpcom-legacy-redirector/pull/93
 - wpcom_vip_add_role_caps capability management in https://github.com/Automattic/wpcom-legacy-redirector/pull/94
 - import-from-meta batch size check in https://github.com/Automattic/wpcom-legacy-redirector/pull/68
-- Allow self-signed certificates to pass 404 check in https://github.com/Automattic/wpcom-legacy-redirector/pull/65
 - Retain submitted field values on validation error in https://github.com/Automattic/wpcom-legacy-redirector/pull/62
 - Filter bulk actions dropdown to remove edit option in https://github.com/Automattic/wpcom-legacy-redirector/pull/60
 - Exclude redirect post type from ElasticPress indexing.
 - Trim whitespace around CSV file path to support drag-and-drop.
 - Ensure `POST` var is set during CLI command.
+
+### Security
+
+- Enforce TLS certificate verification on destination validation requests, which previously fell back to `'sslverify' => false`.
 
 ### Removed
 
