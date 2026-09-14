@@ -33,9 +33,12 @@ class RedirectManager {
 	/**
 	 * The redirect validator.
 	 *
-	 * @var RedirectValidator
+	 * Created lazily: most manager operations (delete, enable, disable,
+	 * unvalidated creation) never need it.
+	 *
+	 * @var RedirectValidator|null
 	 */
-	private RedirectValidator $validator;
+	private ?RedirectValidator $validator;
 
 	/**
 	 * Cache group for redirect lookups.
@@ -48,11 +51,20 @@ class RedirectManager {
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository The redirect repository.
-	 * @param RedirectValidator|null      $validator  The redirect validator (optional, created if not provided).
+	 * @param RedirectValidator|null      $validator  The redirect validator (optional, created on first use if not provided).
 	 */
 	public function __construct( RedirectRepositoryInterface $repository, ?RedirectValidator $validator = null ) {
 		$this->repository = $repository;
-		$this->validator  = $validator ?? new RedirectValidator( $repository );
+		$this->validator  = $validator;
+	}
+
+	/**
+	 * Get the redirect validator, creating it on first use.
+	 *
+	 * @return RedirectValidator The validator.
+	 */
+	private function validator(): RedirectValidator {
+		return $this->validator ??= new RedirectValidator( $this->repository );
 	}
 
 	/**
@@ -76,7 +88,7 @@ class RedirectManager {
 		}
 
 		if ( $validate ) {
-			$validation = $this->validator->validate_for_creation( $source, $destination );
+			$validation = $this->validator()->validate_for_creation( $source, $destination );
 			if ( $validation->is_invalid() ) {
 				return RedirectCreationResult::from_validation( $validation );
 			}

@@ -24,9 +24,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class CreateCommandTest extends CliTestCase {
 
@@ -45,7 +43,7 @@ final class CreateCommandTest extends CliTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->command = new CreateCommand( $this->container()->manager() );
+		$this->command = new CreateCommand( $this->manager() );
 	}
 
 	/**
@@ -118,8 +116,8 @@ final class CreateCommandTest extends CliTestCase {
 
 		$this->assert_success_contains( '(disabled)' );
 
-		$redirect = $this->container()->inner_repository()->find_by_id(
-			$this->container()->inner_repository()->get_id_by_source(
+		$redirect = $this->inner_repository()->find_by_id(
+			$this->inner_repository()->get_id_by_source(
 				\Automattic\LegacyRedirector\Domain\SourceUrl::from_string( '/disabled-source' )
 			)
 		);

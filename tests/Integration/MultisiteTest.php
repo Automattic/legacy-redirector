@@ -28,7 +28,6 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  */
 final class MultisiteTest extends TestCase {
 
@@ -69,7 +68,7 @@ final class MultisiteTest extends TestCase {
 		$this->create_redirect( '/shared-path', '/destination-1' );
 
 		// Verify it exists.
-		$data = $this->container()->executor()->get_redirect_data( '/shared-path' );
+		$data = $this->executor()->get_redirect_data( '/shared-path' );
 		$this->assertNotNull( $data );
 		$this->assertStringContainsString( 'destination-1', $data['url'] );
 
@@ -77,13 +76,13 @@ final class MultisiteTest extends TestCase {
 		switch_to_blog( $this->site_2_id );
 
 		// Should NOT see site 1's redirect.
-		$data_site_2 = $this->container()->executor()->get_redirect_data( '/shared-path' );
+		$data_site_2 = $this->executor()->get_redirect_data( '/shared-path' );
 		$this->assertNull( $data_site_2 );
 
 		// Create different redirect on site 2.
 		$this->create_redirect( '/shared-path', '/destination-2' );
 
-		$data_site_2_after = $this->container()->executor()->get_redirect_data( '/shared-path' );
+		$data_site_2_after = $this->executor()->get_redirect_data( '/shared-path' );
 		$this->assertNotNull( $data_site_2_after );
 		$this->assertStringContainsString( 'destination-2', $data_site_2_after['url'] );
 
@@ -91,7 +90,7 @@ final class MultisiteTest extends TestCase {
 		restore_current_blog();
 
 		// Main site should still have its original redirect.
-		$data_main = $this->container()->executor()->get_redirect_data( '/shared-path' );
+		$data_main = $this->executor()->get_redirect_data( '/shared-path' );
 		$this->assertNotNull( $data_main );
 		$this->assertStringContainsString( 'destination-1', $data_main['url'] );
 	}
@@ -103,10 +102,10 @@ final class MultisiteTest extends TestCase {
 		$source = SourceUrl::from_string( '/test-path' );
 		$this->create_redirect( '/test-path', '/dest' );
 
-		$this->assertTrue( $this->container()->repository()->exists( $source ) );
+		$this->assertTrue( $this->repository()->exists( $source ) );
 
 		switch_to_blog( $this->site_2_id );
-		$this->assertFalse( $this->container()->repository()->exists( $source ) );
+		$this->assertFalse( $this->repository()->exists( $source ) );
 	}
 
 	/**
@@ -116,11 +115,11 @@ final class MultisiteTest extends TestCase {
 		$source = SourceUrl::from_string( '/find-test' );
 		$this->create_redirect( '/find-test', '/dest' );
 
-		$redirect = $this->container()->repository()->find_by_source( $source );
+		$redirect = $this->repository()->find_by_source( $source );
 		$this->assertNotNull( $redirect );
 
 		switch_to_blog( $this->site_2_id );
-		$redirect_site_2 = $this->container()->repository()->find_by_source( $source );
+		$redirect_site_2 = $this->repository()->find_by_source( $source );
 		$this->assertNull( $redirect_site_2 );
 	}
 
@@ -133,7 +132,7 @@ final class MultisiteTest extends TestCase {
 		$this->create_redirect( '/same-source', $post_id_main );
 
 		// Verify on main site.
-		$redirect_main = $this->container()->repository()->find_by_source(
+		$redirect_main = $this->repository()->find_by_source(
 			SourceUrl::from_string( '/same-source' )
 		);
 		$this->assertNotNull( $redirect_main );
@@ -146,7 +145,7 @@ final class MultisiteTest extends TestCase {
 		$this->create_redirect( '/same-source', $post_id_site_2 );
 
 		// Verify on site 2.
-		$redirect_site_2 = $this->container()->repository()->find_by_source(
+		$redirect_site_2 = $this->repository()->find_by_source(
 			SourceUrl::from_string( '/same-source' )
 		);
 		$this->assertNotNull( $redirect_site_2 );
@@ -158,7 +157,7 @@ final class MultisiteTest extends TestCase {
 		// Switch back and verify main site still correct.
 		restore_current_blog();
 
-		$redirect_main_after = $this->container()->repository()->find_by_source(
+		$redirect_main_after = $this->repository()->find_by_source(
 			SourceUrl::from_string( '/same-source' )
 		);
 		$this->assertNotNull( $redirect_main_after );

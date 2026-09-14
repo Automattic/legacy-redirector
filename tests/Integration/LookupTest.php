@@ -28,7 +28,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectReposito
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class LookupTest extends TestCase {
@@ -48,7 +47,7 @@ final class LookupTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 
 		$this->assertEquals( $to_url, $redirect_data['url'] );
 		$this->assertEquals( $redirect_status, $redirect_data['status_code'] );
@@ -88,7 +87,7 @@ final class LookupTest extends TestCase {
 	 * @param string $url URL without a path component.
 	 */
 	public function test_get_redirect_data_returns_null_for_urls_without_path( $url ) {
-		$this->assertNull( $this->container()->executor()->get_redirect_data( $url ) );
+		$this->assertNull( $this->executor()->get_redirect_data( $url ) );
 	}
 
 	/**
@@ -120,7 +119,7 @@ final class LookupTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Verify the redirect works initially.
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 		$this->assertIsArray( $redirect_data );
 		$this->assertEquals( $to_url, $redirect_data['url'] );
 
@@ -132,7 +131,7 @@ final class LookupTest extends TestCase {
 		wp_cache_delete( $url_hash, CachingRedirectRepository::CACHE_GROUP );
 
 		// Verify the redirect no longer works.
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 		$this->assertNull( $redirect_data );
 	}
 
@@ -163,7 +162,7 @@ final class LookupTest extends TestCase {
 		wp_cache_delete( $url_hash, CachingRedirectRepository::CACHE_GROUP );
 
 		// Verify the redirect does not work.
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 		$this->assertNull( $redirect_data );
 	}
 
@@ -187,7 +186,7 @@ final class LookupTest extends TestCase {
 		$post_id = $this->create_redirect( $from_url, $destination_post_id );
 		$this->assertIsInt( $post_id );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 
 		$this->assertSame( get_permalink( $destination_post_id ), $redirect_data['url'] );
 	}
@@ -203,7 +202,7 @@ final class LookupTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 
 		$this->assertSame( home_url() . $to_url, $redirect_data['url'] );
 	}
@@ -220,7 +219,7 @@ final class LookupTest extends TestCase {
 		$this->create_redirect( $from_url, $to_url );
 
 		// First call should set cache.
-		$first_result = $this->container()->executor()->get_redirect_data( $from_url );
+		$first_result = $this->executor()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $first_result['url'] );
 
 		// Check cache is set (key includes blog ID prefix for multisite safety).
@@ -229,7 +228,7 @@ final class LookupTest extends TestCase {
 		$this->assertNotFalse( $cached_id );
 
 		// Second call should return same result (from cache).
-		$second_result = $this->container()->executor()->get_redirect_data( $from_url );
+		$second_result = $this->executor()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $second_result['url'] );
 	}
 
@@ -246,7 +245,7 @@ final class LookupTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Prime the cache.
-		$result = $this->container()->executor()->get_redirect_data( $from_url );
+		$result = $this->executor()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $result['url'] );
 
 		// Delete the post permanently.
@@ -254,7 +253,7 @@ final class LookupTest extends TestCase {
 
 		// The redirect should no longer work.
 		// Note: Cache still holds the post ID, but get_post() returns null.
-		$result_after_delete = $this->container()->executor()->get_redirect_data( $from_url );
+		$result_after_delete = $this->executor()->get_redirect_data( $from_url );
 		$this->assertNull( $result_after_delete );
 	}
 
@@ -270,7 +269,7 @@ final class LookupTest extends TestCase {
 		$expected_post_id = $this->create_redirect( $from_url, $to_url );
 		$this->assertIsInt( $expected_post_id );
 
-		$actual_post_id = $this->container()->inner_repository()->get_id_by_source( SourceUrl::from_string( $from_url ) );
+		$actual_post_id = $this->inner_repository()->get_id_by_source( SourceUrl::from_string( $from_url ) );
 
 		$this->assertEquals( $expected_post_id, $actual_post_id );
 	}
@@ -283,7 +282,7 @@ final class LookupTest extends TestCase {
 	public function test_get_id_by_source_returns_zero_for_nonexistent(): void {
 		$nonexistent_url = '/this-redirect-does-not-exist-' . wp_generate_uuid4();
 
-		$post_id = $this->container()->inner_repository()->get_id_by_source( SourceUrl::from_string( $nonexistent_url ) );
+		$post_id = $this->inner_repository()->get_id_by_source( SourceUrl::from_string( $nonexistent_url ) );
 
 		$this->assertEquals( 0, $post_id );
 	}
@@ -313,7 +312,7 @@ final class LookupTest extends TestCase {
 		);
 
 		// Request with original path should be redirected via filtered path.
-		$redirect_data = $this->container()->executor()->get_redirect_data( $original_from );
+		$redirect_data = $this->executor()->get_redirect_data( $original_from );
 
 		$this->assertIsArray( $redirect_data );
 		$this->assertSame( $to_url, $redirect_data['url'] );
@@ -341,7 +340,7 @@ final class LookupTest extends TestCase {
 			}
 		);
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 
 		$this->assertSame( 302, $redirect_data['status_code'] );
 
@@ -363,7 +362,7 @@ final class LookupTest extends TestCase {
 		// Add filter to return false (block the redirect).
 		add_filter( 'wpcom_legacy_redirector_request_path', '__return_false' );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 
 		$this->assertNull( $redirect_data );
 

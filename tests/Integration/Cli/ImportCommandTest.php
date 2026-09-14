@@ -25,9 +25,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportCommand;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\UrlUtils
  */
 final class ImportCommandTest extends CliTestCase {
 
@@ -53,7 +51,7 @@ final class ImportCommandTest extends CliTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->command = new ImportCommand( $this->container()->manager() );
+		$this->command = new ImportCommand( $this->manager() );
 	}
 
 	/**
@@ -93,7 +91,7 @@ final class ImportCommandTest extends CliTestCase {
 	 * @return bool
 	 */
 	private function redirect_exists( string $from ): bool {
-		return $this->container()->inner_repository()->get_id_by_source( SourceUrl::from_string( $from ) ) > 0;
+		return $this->inner_repository()->get_id_by_source( SourceUrl::from_string( $from ) ) > 0;
 	}
 
 	/**
@@ -127,7 +125,7 @@ final class ImportCommandTest extends CliTestCase {
 
 		$this->assert_command_success();
 
-		$repository = $this->container()->inner_repository();
+		$repository = $this->inner_repository();
 		$redirect   = $repository->find_by_id(
 			$repository->get_id_by_source( SourceUrl::from_string( '/import-disabled' ) )
 		);
@@ -167,7 +165,7 @@ final class ImportCommandTest extends CliTestCase {
 
 		$this->assert_success_contains( 'Processed 1 redirects.' );
 
-		$repository = $this->container()->inner_repository();
+		$repository = $this->inner_repository();
 		$redirect   = $repository->find_by_id(
 			$repository->get_id_by_source( SourceUrl::from_string( '/import-upsert' ) )
 		);

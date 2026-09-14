@@ -24,7 +24,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class DeleteCommandTest extends CliTestCase {
@@ -45,8 +44,8 @@ final class DeleteCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new DeleteCommand(
-			$this->container()->manager(),
-			new RedirectFetcher( $this->container()->inner_repository() )
+			$this->manager(),
+			new RedirectFetcher( $this->inner_repository() )
 		);
 	}
 

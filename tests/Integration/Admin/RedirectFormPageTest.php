@@ -34,7 +34,6 @@ use WPDieException;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
@@ -56,9 +55,9 @@ final class RedirectFormPageTest extends TestCase {
 		parent::set_up();
 
 		$this->page = new RedirectFormPage(
-			$this->container()->inner_repository(),
-			$this->container()->manager(),
-			$this->container()->validator()
+			$this->inner_repository(),
+			$this->manager(),
+			$this->validator()
 		);
 
 		$_POST = array();
@@ -172,7 +171,7 @@ final class RedirectFormPageTest extends TestCase {
 	 * @return int The redirect post ID, or 0.
 	 */
 	private function redirect_id_for( string $source ): int {
-		return $this->container()->inner_repository()->get_id_by_source( SourceUrl::from_string( $source ) );
+		return $this->inner_repository()->get_id_by_source( SourceUrl::from_string( $source ) );
 	}
 
 	/**
@@ -182,7 +181,7 @@ final class RedirectFormPageTest extends TestCase {
 	 * @return \Automattic\LegacyRedirector\Domain\Redirect|null The redirect, or null.
 	 */
 	private function find_redirect( string $source ) {
-		return $this->container()->inner_repository()->find_by_source( SourceUrl::from_string( $source ) );
+		return $this->inner_repository()->find_by_source( SourceUrl::from_string( $source ) );
 	}
 
 	// =========================================================================
