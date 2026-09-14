@@ -30,6 +30,7 @@ wpcom-legacy-redirector/
 │   └── Infrastructure/     # WordPress integration, persistence
 │       ├── PostType/       # Custom post type for redirect storage
 │       ├── Repository/     # PostTypeRedirectRepository, CachingRedirectRepository
+│       ├── Abilities/      # Abilities API registrations (WordPress 6.9+)
 │       ├── Admin/          # Admin UI (BulkActions, RowActions, ListTable, Ajax)
 │       └── CLI/            # WP-CLI commands (Create, List, Validate, Import, FindDomains, etc.)
 ├── tests/
@@ -47,7 +48,7 @@ wpcom-legacy-redirector/
 
 - **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectStatus`, `RedirectCriteria`; `ValidationIssue`; repository interfaces
 - **Application**: `RedirectManager` (CRUD), `RedirectResolver` (runtime resolution), `RedirectValidator` (rule validation), `ValidationResult`
-- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, `RedirectRequestHandler` (performs the HTTP redirect), admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.)
+- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, `RedirectRequestHandler` (performs the HTTP redirect), admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.), `AbilitiesRegistrar` and the `*Ability` classes behind it
 
 ### Dependencies
 
@@ -90,6 +91,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Domain-Driven Design with CQRS elements**: Three-layer architecture (Domain/Application/Infrastructure). The RedirectManager handles writes, RedirectResolver handles reads. Do not bypass layers.
 - **Value objects for URLs**: `SourceUrl` and `DestinationUrl` are distinct value objects (not plain strings). This prevents accidentally swapping source and destination. Always use the appropriate value object.
 - **Custom post type for storage**: Redirects are stored as a custom post type for performance and compatibility with VIP Go's infrastructure. Do not switch to custom database tables or options.
+- **Three client surfaces, one application layer**: the admin UI, WP-CLI, and the Abilities API are all presentation only. Each translates its own input into calls on `RedirectManager`, `RedirectAuditor`, and the repositories. Behaviour that any two of them need belongs in Application, not in a command or an ability. The abilities deliberately mirror the CLI verbs so the three surfaces stay in step.
 - **Caching repository decorator**: `CachingRedirectRepository` wraps `PostTypeRedirectRepository` with object cache. Redirect lookups happen on every page load, so caching is critical for performance.
 - **Separate PHPUnit configs**: Unit and integration tests use different PHPUnit config files because integration tests need WordPress loaded and use wp-env.
 - **One wp-env environment**: `.wp-env.json` sets `"testsEnvironment": false`, so `wp-env start` brings up a single environment and every test runs in the `cli` container. There is no `tests-cli`.

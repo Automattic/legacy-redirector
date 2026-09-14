@@ -16,6 +16,7 @@ A WordPress plugin for handling legacy redirects in a scalable manner. Designed 
 - **Scalable**: Handles thousands of redirects efficiently using MD5-indexed lookups
 - **Admin UI**: Add and manage redirects through the WordPress admin
 - **WP-CLI support**: Bulk import/export via command line
+- **Abilities API**: Redirects can be managed by MCP clients and other agents on WordPress 6.9+
 - **Multisite compatible**: Works on single sites and multisite networks
 - **Query parameter preservation**: Optionally preserve UTM and other tracking parameters
 - **VIP-ready**: Built for WordPress VIP environments
@@ -213,6 +214,23 @@ Note: even with this filter, safe requests only use ports 80, 443, and 8080 (plu
 | `find-domains` | List destination domains |
 
 For detailed command options, run `wp help wpcom-legacy-redirector`.
+
+## Abilities API
+
+On WordPress 6.9 and later, the plugin registers abilities so that MCP clients and other agents can manage redirects with the same validation, capability checks, and cache invalidation as the admin screens and WP-CLI. Nothing is registered on earlier versions, and abilities are only built when something asks for them, so front-end requests are unaffected.
+
+| Ability | Description |
+|---------|-------------|
+| `wpcom-legacy-redirector/create-redirect` | Create a redirect |
+| `wpcom-legacy-redirector/get-redirect` | Get one redirect, by ID or source path |
+| `wpcom-legacy-redirector/list-redirects` | List redirects, with filters and paging |
+| `wpcom-legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects |
+| `wpcom-legacy-redirector/set-redirect-status` | Enable or disable one or more redirects |
+| `wpcom-legacy-redirector/delete-redirect` | Delete one or more redirects |
+| `wpcom-legacy-redirector/validate-redirects` | Report redirects with broken destinations |
+| `wpcom-legacy-redirector/find-redirect-domains` | List the external domains redirects point at |
+
+Every ability requires the `manage_redirects` capability, including the read-only ones. Disabling a redirect keeps it and its destination, but stops serving it to visitors.
 
 ## Documentation
 

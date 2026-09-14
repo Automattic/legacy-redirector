@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
+use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 
 /**

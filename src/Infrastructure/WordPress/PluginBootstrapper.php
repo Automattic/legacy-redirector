@@ -9,8 +9,8 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
-use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Infrastructure\DI\Container;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\AdminBootstrapper;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler;
@@ -26,7 +26,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectorCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
@@ -89,6 +88,9 @@ final class PluginBootstrapper {
 
 		// Register WP-CLI commands.
 		$this->register_cli_commands();
+
+		// Register Abilities API abilities (WordPress 6.9+).
+		$this->register_abilities();
 	}
 
 	/**
@@ -162,6 +164,21 @@ final class PluginBootstrapper {
 	}
 
 	/**
+	 * Register the plugin's abilities with the Abilities API.
+	 *
+	 * @return void
+	 */
+	private function register_abilities(): void {
+		$abilities = new AbilitiesRegistrar(
+			$this->container->manager(),
+			$this->container->fetcher(),
+			$this->container->query_repository(),
+			$this->container->auditor()
+		);
+		$abilities->register();
+	}
+
+	/**
 	 * Register WP-CLI commands.
 	 *
 	 * @return void
@@ -172,7 +189,7 @@ final class PluginBootstrapper {
 		}
 
 		$manager = $this->container->manager();
-		$fetcher = new RedirectFetcher( $this->container->repository() );
+		$fetcher = $this->container->fetcher();
 
 		// Register parent command for help text.
 		\WP_CLI::add_command(
@@ -225,7 +242,7 @@ final class PluginBootstrapper {
 			new ValidateCommand(
 				$fetcher,
 				$this->container->query_repository(),
-				new RedirectAuditor(),
+				$this->container->auditor(),
 				$manager
 			)
 		);
