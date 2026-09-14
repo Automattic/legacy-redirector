@@ -20,7 +20,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectManager
  * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult
- * @uses \Automattic\LegacyRedirector\Application\RedirectExecutor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -94,7 +94,7 @@ final class RedirectsTest extends TestCase {
 		$post_id = $this->create_redirect( $from, $to );
 		$this->assertIsInt( $post_id );
 
-		$redirect_data = $this->executor()->get_redirect_data( $from );
+		$redirect_data = $this->resolver()->get_redirect_data( $from );
 
 		if ( \is_null( $expected ) ) {
 			$expected = $to;
@@ -157,7 +157,7 @@ final class RedirectsTest extends TestCase {
 	 * Verify that safelisted parameters are maintained on final redirect URLs.
 	 *
 	 * @dataProvider get_protected_redirect_data
-	 * @covers       \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers       \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @param string $from           From path.
 	 * @param string $to             Destination.
 	 * @param string $protected_from From path with preserved params.
@@ -179,7 +179,7 @@ final class RedirectsTest extends TestCase {
 
 		$this->create_redirect( $from, $to );
 
-		$redirect_data = $this->executor()->get_redirect_data( $protected_from );
+		$redirect_data = $this->resolver()->get_redirect_data( $protected_from );
 		$this->assertEquals( $redirect_data['url'], $protected_to, 'get_redirect_data failed' );
 	}
 
@@ -203,7 +203,7 @@ final class RedirectsTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Verify the redirect works.
-		$redirect_data = $this->executor()->get_redirect_data( '/redirect-to-post-id' );
+		$redirect_data = $this->resolver()->get_redirect_data( '/redirect-to-post-id' );
 		$this->assertEquals( get_permalink( $destination_post_id ), $redirect_data['url'] );
 	}
 
@@ -282,7 +282,7 @@ final class RedirectsTest extends TestCase {
 
 		// The critical test: despite priming cache with 0, lookup should work.
 		// This verifies the cache was properly invalidated and updated.
-		$result = $this->executor()->get_redirect_data( $from_url );
+		$result = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertNotNull( $result );
 		$this->assertSame( $to_url, $result['url'] );
 	}
@@ -312,7 +312,7 @@ final class RedirectsTest extends TestCase {
 	 * This verifies that when a redirect to an external URL is created,
 	 * the external host will be allowed by wp_safe_redirect().
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::allow_redirect_host
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_external_redirect_host_is_allowed(): void {
 		$from_url = '/external-host-test-' . wp_generate_uuid4();
@@ -323,7 +323,7 @@ final class RedirectsTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Verify the redirect data resolves correctly.
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertIsArray( $redirect_data );
 		$this->assertSame( $to_url, $redirect_data['url'] );
 
@@ -337,7 +337,7 @@ final class RedirectsTest extends TestCase {
 	/**
 	 * Test that redirect to external URL resolves correctly.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_resolves_external_url(): void {
 		$from_url = '/external-uri-test-' . wp_generate_uuid4();
@@ -345,7 +345,7 @@ final class RedirectsTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertSame( $to_url, $redirect_data['url'] );
 	}

@@ -11,7 +11,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
-use Automattic\LegacyRedirector\Application\RedirectExecutor;
+use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -73,12 +73,12 @@ trait RedirectTestHelper {
 	}
 
 	/**
-	 * Get the redirect executor.
+	 * Get the redirect resolver.
 	 *
-	 * @return RedirectExecutor The executor.
+	 * @return RedirectResolver The resolver.
 	 */
-	protected function executor(): RedirectExecutor {
-		return $this->services['executor'] ??= new RedirectExecutor( $this->repository(), 'WPCOM Legacy Redirector' );
+	protected function resolver(): RedirectResolver {
+		return $this->services['resolver'] ??= new RedirectResolver( $this->repository() );
 	}
 
 	/**

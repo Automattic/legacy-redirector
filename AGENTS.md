@@ -25,7 +25,7 @@ wpcom-legacy-redirector/
 │   │   └── ValidationIssue.php
 │   ├── Application/        # Use cases and services
 │   │   ├── RedirectManager.php     # Create, update, delete redirects
-│   │   ├── RedirectExecutor.php    # Runtime redirect resolution
+│   │   ├── RedirectResolver.php    # Runtime redirect resolution
 │   │   └── RedirectValidator.php   # Validate redirect rules
 │   └── Infrastructure/     # WordPress integration, persistence
 │       ├── PostType/       # Custom post type for redirect storage
@@ -46,8 +46,8 @@ wpcom-legacy-redirector/
 ### Key Classes
 
 - **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectStatus`, `RedirectCriteria`; `ValidationIssue`; repository interfaces
-- **Application**: `RedirectManager` (CRUD), `RedirectExecutor` (runtime resolution), `RedirectValidator` (rule validation), `ValidationResult`
-- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.)
+- **Application**: `RedirectManager` (CRUD), `RedirectResolver` (runtime resolution), `RedirectValidator` (rule validation), `ValidationResult`
+- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, `RedirectRequestHandler` (performs the HTTP redirect), admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.)
 
 ### Dependencies
 
@@ -87,7 +87,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 
 ## Architectural Decisions
 
-- **Domain-Driven Design with CQRS elements**: Three-layer architecture (Domain/Application/Infrastructure). The RedirectManager handles writes, RedirectExecutor handles reads. Do not bypass layers.
+- **Domain-Driven Design with CQRS elements**: Three-layer architecture (Domain/Application/Infrastructure). The RedirectManager handles writes, RedirectResolver handles reads. Do not bypass layers.
 - **Value objects for URLs**: `SourceUrl` and `DestinationUrl` are distinct value objects (not plain strings). This prevents accidentally swapping source and destination. Always use the appropriate value object.
 - **Custom post type for storage**: Redirects are stored as a custom post type for performance and compatibility with VIP Go's infrastructure. Do not switch to custom database tables or options.
 - **Caching repository decorator**: `CachingRedirectRepository` wraps `PostTypeRedirectRepository` with object cache. Redirect lookups happen on every page load, so caching is critical for performance.
@@ -101,7 +101,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - Integration tests require `npx wp-env start` running first.
 - **Do not violate DDD layer boundaries**: Domain must not `use` anything from Infrastructure or Application.
 - **Value objects are immutable**: Never add setters to `SourceUrl`, `DestinationUrl`, `Redirect`, or other domain value objects. Create new instances instead.
-- **Performance is critical**: The `RedirectExecutor` runs on every page load to check for redirects. Any performance regression here affects every request on the site. Always profile changes to the redirect resolution path.
+- **Performance is critical**: The `RedirectResolver` runs on every 404 to check for redirects. Any performance regression here affects every request on the site. Always profile changes to the redirect resolution path.
 - Do not bypass the caching layer. Always access redirects through the repository interface, which includes caching.
 - **Redirect loops**: When adding or modifying redirects, validate that the change does not create redirect loops (A→B→A). The `RedirectValidator` handles this — use it.
 - Behat tests are slow (10-20 seconds per scenario). Do not write Behat tests for edge cases — use integration tests instead.

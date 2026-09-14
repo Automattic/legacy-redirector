@@ -41,7 +41,7 @@ If rewriting a subsite path would collide with a redirect that already uses the 
 
 ### Removal of the WPCOM_Legacy_Redirector Class
 
-The global `WPCOM_Legacy_Redirector` class has been removed. Redirect creation is now handled by the `RedirectManager` service and lookups by the `RedirectExecutor` service, both available via the `Container` class.
+The global `WPCOM_Legacy_Redirector` class has been removed. Redirect creation is now handled by the `RedirectManager` service and lookups by the `RedirectResolver` service, both available via the `Container` class.
 
 #### Migration Examples
 
@@ -87,7 +87,7 @@ $destination = Destination::from_mixed( 123 ); // post ID
 $result      = $manager->create_redirect( $source, $destination );
 
 // Look up a redirect (returns array with 'url' and 'status_code' keys, or null if none)
-$redirect_data = Container::instance()->executor()->get_redirect_data( '/old-page' );
+$redirect_data = Container::instance()->resolver()->get_redirect_data( '/old-page' );
 if ( null !== $redirect_data ) {
     $uri    = $redirect_data['url'];
     $status = $redirect_data['status_code'];
@@ -104,7 +104,7 @@ The following public methods are no longer available:
 | Method | Replacement |
 |--------|-------------|
 | `WPCOM_Legacy_Redirector::insert_legacy_redirect()` | `Container::instance()->manager()->create_redirect()` |
-| `WPCOM_Legacy_Redirector::get_redirect_uri()` | `Container::instance()->executor()->get_redirect_data($url)['url']` — returns `null` (not `false`) when no redirect exists |
+| `WPCOM_Legacy_Redirector::get_redirect_uri()` | `Container::instance()->resolver()->get_redirect_data($url)['url']` — returns `null` (not `false`) when no redirect exists |
 | `WPCOM_Legacy_Redirector::get_redirect_post_id()` | `Container::instance()->inner_repository()->get_id_by_source(SourceUrl::from_string($url))` |
 | `WPCOM_Legacy_Redirector::start()` / `init()` / `maybe_do_redirect()` | Handled automatically by the plugin bootstrap |
 
@@ -168,8 +168,8 @@ The `Container` class provides access to all DDD services:
 ```php
 use Automattic\LegacyRedirector\Infrastructure\DI\Container;
 
-// Get the redirect executor (for lookups)
-$executor = Container::instance()->executor();
+// Get the redirect resolver (for lookups)
+$resolver = Container::instance()->resolver();
 
 // Get the repository (for direct database access)
 $repository = Container::instance()->repository(); // With caching
@@ -191,7 +191,7 @@ If you have tests that depend on the `WPCOM_Legacy_Redirector` class, update the
 $this->assertSame( $expected_uri, WPCOM_Legacy_Redirector::get_redirect_uri( $url ) );
 
 // After
-$redirect_data = Container::instance()->executor()->get_redirect_data( $url );
+$redirect_data = Container::instance()->resolver()->get_redirect_data( $url );
 $this->assertSame( $expected_uri, $redirect_data['url'] );
 ```
 

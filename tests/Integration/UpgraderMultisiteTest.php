@@ -160,7 +160,7 @@ final class UpgraderMultisiteTest extends TestCase {
 
 		$this->upgrader->run_batch( 100 );
 
-		$redirect_data = $this->executor()->get_redirect_data( '/old-page' );
+		$redirect_data = $this->resolver()->get_redirect_data( '/old-page' );
 
 		$this->assertNotEmpty( $redirect_data, 'The migrated redirect should resolve for a subsite-relative request.' );
 		$this->assertSame( 'https://example.com/new', $redirect_data['url'] );
