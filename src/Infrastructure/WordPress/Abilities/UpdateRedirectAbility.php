@@ -1,0 +1,177 @@
+<?php
+/**
+ * Update redirect ability.
+ *
+ * @package Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
+
+use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use WP_Error;
+
+/**
+ * Updates the destination and/or status of one or more redirects.
+ */
+final class UpdateRedirectAbility implements AbilityInterface {
+
+	/**
+	 * The redirect manager.
+	 *
+	 * @var RedirectManager
+	 */
+	private RedirectManager $manager;
+
+	/**
+	 * The batch resolver.
+	 *
+	 * @var RedirectBatch
+	 */
+	private RedirectBatch $batch;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectManager $manager The redirect manager.
+	 * @param RedirectBatch   $batch   The batch resolver.
+	 */
+	public function __construct( RedirectManager $manager, RedirectBatch $batch ) {
+		$this->manager = $manager;
+		$this->batch   = $batch;
+	}
+
+	/**
+	 * Get the namespaced ability name.
+	 *
+	 * @return string The ability name.
+	 */
+	public function name(): string {
+		return 'wpcom-legacy-redirector/update-redirect';
+	}
+
+	/**
+	 * Get the arguments to register the ability with.
+	 *
+	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
+	 */
+	public function args(): array {
+		return array(
+			'label'               => __( 'Update Redirects', 'wpcom-legacy-redirector' ),
+			'description'         => __( 'Changes where one or more existing redirects point, whether they are served to visitors, or both. Setting the status to disabled turns a redirect off without deleting it; setting it to enabled turns it back on. At least one of the destination or the status must be given.', 'wpcom-legacy-redirector' ),
+			'category'            => AbilitiesRegistrar::CATEGORY,
+			'input_schema'        => array(
+				'type'                 => 'object',
+				'required'             => array( 'redirects' ),
+				'properties'           => array(
+					'redirects' => RedirectSchema::identifiers_schema(
+						__( 'The redirects to update, each given as a redirect ID or the path it redirects from.', 'wpcom-legacy-redirector' )
+					),
+					'to'        => array(
+						'type'        => array( 'string', 'integer' ),
+						'description' => __( 'The new destination: a path, an absolute URL, or a post ID.', 'wpcom-legacy-redirector' ),
+					),
+					'status'    => array(
+						'type'        => 'string',
+						'enum'        => array( 'enabled', 'disabled' ),
+						'description' => __( 'Whether the redirects should be served to visitors.', 'wpcom-legacy-redirector' ),
+					),
+				),
+				'additionalProperties' => false,
+			),
+			'output_schema'       => array(
+				'type'                 => 'object',
+				'required'             => array( 'updated', 'failed' ),
+				'properties'           => array(
+					'updated' => array(
+						'type'        => 'integer',
+						'description' => __( 'How many redirects were updated.', 'wpcom-legacy-redirector' ),
+					),
+					'failed'  => RedirectSchema::failures_schema(),
+				),
+				'additionalProperties' => false,
+			),
+			'execute_callback'    => array( $this, 'execute' ),
+			'permission_callback' => array( Capability::class, 'current_user_can_manage' ),
+			'meta'                => array(
+				'annotations'  => array(
+					'readonly'    => false,
+					'destructive' => false,
+					'idempotent'  => true,
+				),
+				'show_in_rest' => true,
+			),
+		);
+	}
+
+	/**
+	 * Update the redirects.
+	 *
+	 * @param mixed $input The validated ability input.
+	 * @return array{updated: int, failed: array<int, array{redirect: string, reason: string}>}|WP_Error The outcome, or an error if the input asks for no change.
+	 */
+	public function execute( $input = array() ) {
+		$input       = is_array( $input ) ? $input : array();
+		$destination = null;
+		$status      = null;
+
+		if ( ! isset( $input['to'] ) && ! isset( $input['status'] ) ) {
+			return new WP_Error(
+				'wpcom_legacy_redirector_nothing_to_update',
+				__( 'Pass a new destination, a new status, or both.', 'wpcom-legacy-redirector' )
+			);
+		}
+
+		if ( isset( $input['to'] ) ) {
+			$to = $input['to'];
+
+			try {
+				$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
+			} catch ( \InvalidArgumentException $e ) {
+				return new WP_Error(
+					'wpcom_legacy_redirector_invalid_destination',
+					sprintf(
+						/* translators: 1: destination, 2: error message. */
+						__( 'Not a valid destination: %1$s (%2$s)', 'wpcom-legacy-redirector' ),
+						(string) $to,
+						$e->getMessage()
+					)
+				);
+			}
+		}
+
+		if ( isset( $input['status'] ) ) {
+			$status = 'disabled' === $input['status'] ? 'draft' : 'publish';
+		}
+
+		$batch    = $this->batch->resolve( $input['redirects'] ?? array() );
+		$failures = $batch['failures'];
+		$updated  = 0;
+
+		foreach ( $batch['resolved'] as $item ) {
+			$redirect_id = (int) $item['redirect']->id();
+
+			$changed = null !== $destination
+				? $this->manager->update_destination( $redirect_id, $destination, $status )
+				: $this->manager->change_status( $redirect_id, (string) $status );
+
+			if ( ! $changed ) {
+				$failures[] = array(
+					'redirect' => $item['identifier'],
+					'reason'   => __( 'The redirect could not be saved.', 'wpcom-legacy-redirector' ),
+				);
+				continue;
+			}
+
+			++$updated;
+		}
+
+		return array(
+			'updated' => $updated,
+			'failed'  => $failures,
+		);
+	}
+}

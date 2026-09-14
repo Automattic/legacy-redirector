@@ -9,6 +9,8 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\DI;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
@@ -126,6 +128,30 @@ final class Container {
 			$this->services['query_repository'] = new PostTypeRedirectQueryRepository();
 		}
 		return $this->services['query_repository'];
+	}
+
+	/**
+	 * Get the redirect fetcher, which resolves IDs and source paths to redirects.
+	 *
+	 * @return RedirectFetcher
+	 */
+	public function fetcher(): RedirectFetcher {
+		if ( ! isset( $this->services['fetcher'] ) ) {
+			$this->services['fetcher'] = new RedirectFetcher( $this->repository() );
+		}
+		return $this->services['fetcher'];
+	}
+
+	/**
+	 * Get the redirect auditor, which checks redirects for broken destinations.
+	 *
+	 * @return RedirectAuditor
+	 */
+	public function auditor(): RedirectAuditor {
+		if ( ! isset( $this->services['auditor'] ) ) {
+			$this->services['auditor'] = new RedirectAuditor();
+		}
+		return $this->services['auditor'];
 	}
 
 	/**

@@ -51,6 +51,15 @@ final class Capability {
 	}
 
 	/**
+	 * Whether the current user may manage redirects.
+	 *
+	 * @return bool True if the current user has the manage_redirects capability.
+	 */
+	public static function current_user_can_manage(): bool {
+		return current_user_can( self::MANAGE_REDIRECTS_CAPABILITY );
+	}
+
+	/**
 	 * Register the manage_redirects capability on configured roles.
 	 *
 	 * Uses VIP helper functions when available, with fallback to standard WordPress.

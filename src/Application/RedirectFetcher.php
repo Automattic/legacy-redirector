@@ -1,20 +1,20 @@
 <?php
 /**
- * Redirect fetcher for CLI commands.
+ * Redirect fetcher.
  *
- * @package Automattic\LegacyRedirector
+ * @package Automattic\LegacyRedirector\Application
  */
 
 declare( strict_types = 1 );
 
-namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
+namespace Automattic\LegacyRedirector\Application;
 
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 
 /**
- * Resolves CLI redirect identifiers to Redirect entities.
+ * Resolves redirect identifiers to Redirect entities.
  *
  * An identifier is either a numeric redirect ID or a source path.
  * The two are unambiguous because source paths always start with a slash.

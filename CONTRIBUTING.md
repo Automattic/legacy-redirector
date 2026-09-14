@@ -142,6 +142,14 @@ Key classes:
 - `WPCOM_Legacy_Redirector_CLI`: WP-CLI commands
 - `WPCOM_Legacy_Redirector_UI`: Admin interface for adding redirects
 
+### Client Surfaces
+
+Redirects can be managed from three places, all of which must go through the application services so that validation, capabilities, and cache invalidation stay consistent:
+
+- **Admin UI** (`src/Infrastructure/WordPress/Admin/`)
+- **WP-CLI** (`src/Infrastructure/WordPress/Cli/`)
+- **Abilities API** (`src/Infrastructure/WordPress/Abilities/`) — registered on WordPress 6.9+ so MCP clients can manage redirects. Ability names mirror the CLI verbs; when you add or change a command, consider whether the matching ability needs the same change.
+
 ## Getting Help
 
 - **GitHub Issues**: For bug reports and feature requests
