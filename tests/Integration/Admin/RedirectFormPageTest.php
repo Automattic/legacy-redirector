@@ -48,6 +48,13 @@ final class RedirectFormPageTest extends TestCase {
 	private RedirectFormPage $page;
 
 	/**
+	 * Default HTTP mock marking every destination reachable.
+	 *
+	 * @var callable
+	 */
+	private $http_ok;
+
+	/**
 	 * Set up test fixtures.
 	 *
 	 * @return void
@@ -61,6 +68,19 @@ final class RedirectFormPageTest extends TestCase {
 			$this->validator()
 		);
 
+		// The reachability check on save would otherwise make a real request
+		// to home_url(), which in wp-env serves a different install than the
+		// tests database and 404s everything. Default to reachable; tests
+		// exercising rejection add their own 404 filter, which runs later
+		// and wins.
+		$this->http_ok = static function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $this->http_ok );
+
 		$_POST = array();
 	}
 
@@ -70,6 +90,7 @@ final class RedirectFormPageTest extends TestCase {
 	 * @return void
 	 */
 	public function tear_down(): void {
+		remove_filter( 'pre_http_request', $this->http_ok );
 		$_POST = array();
 
 		parent::tear_down();
