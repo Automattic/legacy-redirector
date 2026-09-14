@@ -3,7 +3,7 @@
 ## Why Behat Tests Exist
 
 Behat tests verify the **CLI contract** - the actual user experience when running WP-CLI commands.
-They are slow (~15s per scenario) because they run against a real WordPress instance via wp-env.
+They are slower than PHPUnit (~2s per scenario) because they run against a real WordPress instance via wp-env.
 
 Unit tests mock everything; Behat tests are full end-to-end. There's value in having a small number
 of Behat tests that verify the complete workflow works, while keeping the majority of test coverage
