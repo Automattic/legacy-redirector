@@ -51,7 +51,7 @@ final class ValidationNotices {
 	 */
 	public function register(): void {
 		add_action( 'admin_notices', array( $this, 'display_validation_notices' ) );
-		add_action( 'after_setup_theme', array( $this, 'handle_validation_action' ) );
+		add_action( 'admin_init', array( $this, 'handle_validation_action' ) );
 		add_filter( 'removable_query_args', array( $this, 'add_removable_args' ) );
 	}
 
@@ -145,6 +145,10 @@ final class ValidationNotices {
 
 		if ( ! isset( $_REQUEST['_validate_redirect'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_REQUEST['_validate_redirect'] ) ), 'validate_vip_legacy_redirect' ) ) {
 			return;
+		}
+
+		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
+			wp_die( esc_html__( 'You do not have permission to validate redirects.', 'wpcom-legacy-redirector' ) );
 		}
 
 		$redirect = $this->repository->find_by_id( $post_id );

@@ -27,6 +27,13 @@ use WP_Post;
 final class ValidationNoticesTest extends MonkeyStubs {
 
 	/**
+	 * The mock repository.
+	 *
+	 * @var RedirectRepositoryInterface&Mockery\MockInterface
+	 */
+	private $repository;
+
+	/**
 	 * The notices handler under test.
 	 *
 	 * @var ValidationNotices
@@ -45,13 +52,11 @@ final class ValidationNoticesTest extends MonkeyStubs {
 		Monkey\Functions\stubEscapeFunctions();
 		Monkey\Functions\stubs( array( 'wp_kses_post' ) );
 
-		$this->notices = new ValidationNotices(
-			Mockery::mock( RedirectRepositoryInterface::class ),
+		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
+		$this->notices    = new ValidationNotices(
+			$this->repository,
 			Mockery::mock( RedirectValidator::class )
 		);
-
-		$_GET['validate'] = 'valid';
-		$_GET['ids']      = '123';
 	}
 
 	/**
@@ -60,7 +65,7 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	 * @return void
 	 */
 	protected function tear_down(): void {
-		unset( $_GET['validate'], $_GET['ids'] );
+		unset( $_GET['validate'], $_GET['ids'], $_GET['action'], $_GET['post'], $_REQUEST['_validate_redirect'] );
 
 		parent::tear_down();
 	}
@@ -71,6 +76,7 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
 	public function test_display_validation_notices_requires_capability(): void {
+		$this->prime_notice_request();
 		Functions\when( 'current_user_can' )->justReturn( false );
 		Functions\expect( 'get_post' )->never();
 
@@ -83,6 +89,7 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
 	public function test_display_validation_notices_ignores_other_post_types(): void {
+		$this->prime_notice_request();
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'get_post' )->justReturn( $this->post( 'post', 'Secret draft title' ) );
 
@@ -95,10 +102,65 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
 	public function test_display_validation_notices_shows_redirect_source(): void {
+		$this->prime_notice_request();
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'get_post' )->justReturn( $this->post( PostType::POST_TYPE, '/old-page' ) );
 
 		$this->assertStringContainsString( '/old-page', $this->render() );
+	}
+
+	/**
+	 * Test register hooks the validation handler on admin_init, not a front-end hook.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::register
+	 */
+	public function test_register_hooks_validation_handler_on_admin_init(): void {
+		Functions\expect( 'add_action' )
+			->once()
+			->with( 'admin_notices', Mockery::type( 'array' ) );
+
+		Functions\expect( 'add_action' )
+			->once()
+			->with( 'admin_init', Mockery::type( 'array' ) );
+
+		Functions\expect( 'add_filter' )
+			->once()
+			->with( 'removable_query_args', Mockery::type( 'array' ) );
+
+		$this->notices->register();
+	}
+
+	/**
+	 * Test handle_validation_action dies without validating when the user lacks the capability.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 */
+	public function test_handle_validation_action_requires_capability(): void {
+		$_GET['action']                 = 'validate';
+		$_GET['post']                   = '123';
+		$_REQUEST['_validate_redirect'] = 'valid-nonce';
+
+		Functions\when( 'wp_verify_nonce' )->justReturn( true );
+		Functions\when( 'current_user_can' )->justReturn( false );
+		Functions\expect( 'wp_die' )
+			->once()
+			->andThrow( new \RuntimeException( 'wp_die' ) );
+
+		$this->repository->shouldNotReceive( 'find_by_id' );
+
+		$this->expectException( \RuntimeException::class );
+
+		$this->notices->handle_validation_action();
+	}
+
+	/**
+	 * Prime the request superglobals for a notice display.
+	 *
+	 * @return void
+	 */
+	private function prime_notice_request(): void {
+		$_GET['validate'] = 'valid';
+		$_GET['ids']      = '123';
 	}
 
 	/**
