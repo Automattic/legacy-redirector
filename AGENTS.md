@@ -92,6 +92,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Custom post type for storage**: Redirects are stored as a custom post type for performance and compatibility with VIP Go's infrastructure. Do not switch to custom database tables or options.
 - **Caching repository decorator**: `CachingRedirectRepository` wraps `PostTypeRedirectRepository` with object cache. Redirect lookups happen on every page load, so caching is critical for performance.
 - **Separate PHPUnit configs**: Unit and integration tests use different PHPUnit config files because integration tests need WordPress loaded and use wp-env.
+- **One wp-env environment**: `.wp-env.json` sets `"testsEnvironment": false`, so `wp-env start` brings up a single environment and every test runs in the `cli` container. There is no `tests-cli`.
 - **Tier 1 plugin**: This is a well-maintained, modernised plugin. It serves as a reference implementation for the standards.
 
 ## Common Pitfalls

@@ -35,7 +35,7 @@ final class FeatureContext extends WpEnvFeatureContext {
 	private const CONTAINER_PLUGIN_PATH = '/var/www/html/wp-content/plugins/';
 
 	/**
-	 * Resolved tests-cli container name, or empty string when unavailable.
+	 * Resolved cli container name, or empty string when unavailable.
 	 *
 	 * Null means "not yet looked up". Empty string means "looked up and not
 	 * found", so a failing lookup is not repeated for every step.
@@ -81,11 +81,11 @@ final class FeatureContext extends WpEnvFeatureContext {
 	}
 
 	/**
-	 * Locate the wp-env tests-cli container serving THIS checkout.
+	 * Locate the wp-env cli container serving THIS checkout.
 	 *
 	 * Container names are derived by wp-env from a hash of the environment
 	 * path, and a developer may have several environments running at once (one
-	 * per git worktree). Picking the first container matching "tests-cli" would
+	 * per git worktree). Picking the first container matching "cli" would
 	 * therefore run this suite's destructive resets against somebody else's
 	 * database, so the container is identified by matching a bind-mount source
 	 * against this checkout's path instead of by name.
@@ -109,13 +109,25 @@ final class FeatureContext extends WpEnvFeatureContext {
 
 		$names = array();
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- Test harness; must shell out to Docker.
-		exec( 'docker ps --filter name=tests-cli --format "{{.Names}}" 2>&1', $names, $exit_code );
+		exec( 'docker ps --filter name=cli --format "{{.Names}}" 2>&1', $names, $exit_code );
 		$names = array_values( array_filter( array_map( 'trim', $names ) ) );
+
+		// The name filter is a substring match, so it also catches the tests-cli
+		// containers of checkouts still on the two-environment layout. Those are
+		// never ours: this environment sets "testsEnvironment": false.
+		$names = array_values(
+			array_filter(
+				$names,
+				static function ( $name ) {
+					return ! str_contains( $name, 'tests-cli' );
+				}
+			)
+		);
 
 		if ( 0 !== $exit_code ) {
 			$message = "Could not list Docker containers (exit code {$exit_code}):\n"
 				. implode( "\n", $names )
-				. "\n\nThe Behat suite talks to the wp-env tests-cli container directly. Is Docker running?";
+				. "\n\nThe Behat suite talks to the wp-env cli container directly. Is Docker running?";
 
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 			throw new RuntimeException( $message );
@@ -152,18 +164,18 @@ final class FeatureContext extends WpEnvFeatureContext {
 			$report .= "\n  {$name}\n    " . implode( "\n    ", $mounts );
 		}
 
-		$message = "No running wp-env tests-cli container has a bind mount for this checkout.\n\n"
+		$message = "No running wp-env cli container has a bind mount for this checkout.\n\n"
 			. "Looking for: {$repo_root}\n"
 			. ( empty( $inspected )
-				? 'No tests-cli containers are running. Start one with: npx wp-env start'
-				: "Mounts of the tests-cli containers that are running:{$report}" );
+				? 'No cli containers are running. Start one with: npx wp-env start'
+				: "Mounts of the cli containers that are running:{$report}" );
 
 		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 		throw new RuntimeException( $message );
 	}
 
 	/**
-	 * Run a shell command inside the wp-env tests-cli container.
+	 * Run a shell command inside the wp-env cli container.
 	 *
 	 * `wp-env run` creates and tears down a fresh container for every single
 	 * invocation (measured at ~1s each, before npx startup); `docker exec`
@@ -560,7 +572,7 @@ PHP;
 	 * Request a front-end path without following redirects.
 	 *
 	 * Issues a real HTTP request against the test site from inside the
-	 * tests-cli container, so redirect behaviour is asserted at the HTTP
+	 * cli container, so redirect behaviour is asserted at the HTTP
 	 * level (status line and headers are captured into STDOUT).
 	 *
 	 * @When I request the front-end path :path
@@ -569,11 +581,11 @@ PHP;
 	 */
 	public function i_request_the_front_end_path( string $path ): void {
 		// Resolve the site's Host header from home_url(), then curl the
-		// tests-wordpress service directly (the site port is not reachable
+		// `wordpress` service directly (the site port is not reachable
 		// from inside the CLI container).
 		$container_script = sprintf(
 			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -sI -H "Host: ${HOST_HEADER}" %s 2>&1',
-			escapeshellarg( 'http://tests-wordpress' . $path )
+			escapeshellarg( 'http://wordpress' . $path )
 		);
 
 		list( $output_lines, $exit_code ) = self::run_in_container( $container_script, true );
