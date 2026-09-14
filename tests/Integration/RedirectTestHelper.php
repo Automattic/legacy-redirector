@@ -11,21 +11,84 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Application\RedirectExecutor;
+use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Infrastructure\DI\Container;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
 
 /**
  * Trait providing helper methods for redirect operations in tests.
+ *
+ * Builds plugin services directly, mirroring the production Container wiring,
+ * so tests construct exactly what they use instead of routing through the
+ * DI container singleton. Services are memoised per test instance.
  */
 trait RedirectTestHelper {
 
 	/**
-	 * Get the DI container instance.
+	 * Memoised service instances.
 	 *
-	 * @return Container The container.
+	 * @var array<string, object>
 	 */
-	abstract protected function container(): Container;
+	private array $services = array();
+
+	/**
+	 * Get the uncached redirect repository.
+	 *
+	 * @return PostTypeRedirectRepository The repository.
+	 */
+	protected function inner_repository(): PostTypeRedirectRepository {
+		return $this->services['inner_repository'] ??= new PostTypeRedirectRepository();
+	}
+
+	/**
+	 * Get the caching redirect repository.
+	 *
+	 * @return CachingRedirectRepository The caching repository.
+	 */
+	protected function repository(): CachingRedirectRepository {
+		return $this->services['repository'] ??= new CachingRedirectRepository( $this->inner_repository() );
+	}
+
+	/**
+	 * Get the redirect manager.
+	 *
+	 * @return RedirectManager The manager.
+	 */
+	protected function manager(): RedirectManager {
+		return $this->services['manager'] ??= new RedirectManager( $this->inner_repository() );
+	}
+
+	/**
+	 * Get the redirect validator.
+	 *
+	 * @return RedirectValidator The validator.
+	 */
+	protected function validator(): RedirectValidator {
+		return $this->services['validator'] ??= new RedirectValidator( $this->inner_repository() );
+	}
+
+	/**
+	 * Get the redirect executor.
+	 *
+	 * @return RedirectExecutor The executor.
+	 */
+	protected function executor(): RedirectExecutor {
+		return $this->services['executor'] ??= new RedirectExecutor( $this->repository(), 'WPCOM Legacy Redirector' );
+	}
+
+	/**
+	 * Get the redirect query repository.
+	 *
+	 * @return PostTypeRedirectQueryRepository The query repository.
+	 */
+	protected function query_repository(): PostTypeRedirectQueryRepository {
+		return $this->services['query_repository'] ??= new PostTypeRedirectQueryRepository();
+	}
 
 	/**
 	 * Create a redirect using the new API.
@@ -38,7 +101,7 @@ trait RedirectTestHelper {
 	 * @throws \RuntimeException If the redirect could not be created.
 	 */
 	protected function create_redirect( string $from, $to, bool $validate = false ): int {
-		$manager     = $this->container()->manager();
+		$manager     = $this->manager();
 		$source      = SourceUrl::from_string( $from );
 		$destination = Destination::from_mixed( $to );
 		$result      = $manager->create_redirect( $source, $destination, $validate );
@@ -79,7 +142,7 @@ trait RedirectTestHelper {
 	 * @return \Automattic\LegacyRedirector\Application\RedirectCreationResult The result.
 	 */
 	protected function create_redirect_result( string $from, $to, bool $validate = false ) {
-		$manager     = $this->container()->manager();
+		$manager     = $this->manager();
 		$source      = SourceUrl::from_string( $from );
 		$destination = Destination::from_mixed( $to );
 

@@ -28,7 +28,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
@@ -50,10 +49,10 @@ final class ValidateCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new ValidateCommand(
-			new RedirectFetcher( $this->container()->inner_repository() ),
-			$this->container()->query_repository(),
-			$this->container()->validator(),
-			$this->container()->manager()
+			new RedirectFetcher( $this->inner_repository() ),
+			$this->query_repository(),
+			$this->validator(),
+			$this->manager()
 		);
 	}
 

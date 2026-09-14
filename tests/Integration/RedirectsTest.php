@@ -29,7 +29,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -96,7 +95,7 @@ final class RedirectsTest extends TestCase {
 		$post_id = $this->create_redirect( $from, $to );
 		$this->assertIsInt( $post_id );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from );
+		$redirect_data = $this->executor()->get_redirect_data( $from );
 
 		if ( \is_null( $expected ) ) {
 			$expected = $to;
@@ -181,7 +180,7 @@ final class RedirectsTest extends TestCase {
 
 		$this->create_redirect( $from, $to );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $protected_from );
+		$redirect_data = $this->executor()->get_redirect_data( $protected_from );
 		$this->assertEquals( $redirect_data['url'], $protected_to, 'get_redirect_data failed' );
 	}
 
@@ -205,7 +204,7 @@ final class RedirectsTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Verify the redirect works.
-		$redirect_data = $this->container()->executor()->get_redirect_data( '/redirect-to-post-id' );
+		$redirect_data = $this->executor()->get_redirect_data( '/redirect-to-post-id' );
 		$this->assertEquals( get_permalink( $destination_post_id ), $redirect_data['url'] );
 	}
 
@@ -293,7 +292,7 @@ final class RedirectsTest extends TestCase {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler::modify_bulk_actions
 	 */
 	public function test_bulk_actions_handler_removes_edit_and_adds_enable_disable(): void {
-		$handler = new BulkActionsHandler( $this->container()->manager() );
+		$handler = new BulkActionsHandler( $this->manager() );
 
 		$actions = array(
 			'edit'   => 'Edit',
@@ -326,7 +325,7 @@ final class RedirectsTest extends TestCase {
 
 		// The critical test: despite priming cache with 0, lookup should work.
 		// This verifies the cache was properly invalidated and updated.
-		$result = $this->container()->executor()->get_redirect_data( $from_url );
+		$result = $this->executor()->get_redirect_data( $from_url );
 		$this->assertNotNull( $result );
 		$this->assertSame( $to_url, $result['url'] );
 	}
@@ -367,7 +366,7 @@ final class RedirectsTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Verify the redirect data resolves correctly.
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 		$this->assertIsArray( $redirect_data );
 		$this->assertSame( $to_url, $redirect_data['url'] );
 
@@ -389,7 +388,7 @@ final class RedirectsTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		$redirect_data = $this->container()->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->executor()->get_redirect_data( $from_url );
 
 		$this->assertSame( $to_url, $redirect_data['url'] );
 	}
@@ -408,7 +407,7 @@ final class RedirectsTest extends TestCase {
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
 
 		// Disable the redirect.
-		$manager = $this->container()->manager();
+		$manager = $this->manager();
 		$result  = $manager->disable( $post_id );
 		$this->assertTrue( $result );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
@@ -431,7 +430,7 @@ final class RedirectsTest extends TestCase {
 			$post_ids[] = $this->create_redirect( '/bulk-test-' . $i . '-' . wp_generate_uuid4(), 'http://example.com/' );
 		}
 
-		$manager = $this->container()->manager();
+		$manager = $this->manager();
 
 		// Bulk disable.
 		$disabled = $manager->bulk_disable( $post_ids );

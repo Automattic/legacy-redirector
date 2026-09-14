@@ -23,7 +23,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
@@ -44,7 +43,7 @@ final class ListCommandTest extends CliTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->command = new ListCommand( $this->container()->query_repository() );
+		$this->command = new ListCommand( $this->query_repository() );
 	}
 
 	// =========================================================================

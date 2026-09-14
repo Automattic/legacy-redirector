@@ -25,7 +25,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class UpdateCommandTest extends CliTestCase {
@@ -46,8 +45,8 @@ final class UpdateCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new UpdateCommand(
-			$this->container()->manager(),
-			new RedirectFetcher( $this->container()->inner_repository() )
+			$this->manager(),
+			new RedirectFetcher( $this->inner_repository() )
 		);
 	}
 
@@ -58,7 +57,7 @@ final class UpdateCommandTest extends CliTestCase {
 	 * @return string|int The destination.
 	 */
 	private function get_destination( string $from ) { // phpcs:ignore NeutronStandard.Functions.TypeHint.NoReturnType -- Mixed return.
-		$repository = $this->container()->inner_repository();
+		$repository = $this->inner_repository();
 		$redirect   = $repository->find_by_id(
 			$repository->get_id_by_source( SourceUrl::from_string( $from ) )
 		);
