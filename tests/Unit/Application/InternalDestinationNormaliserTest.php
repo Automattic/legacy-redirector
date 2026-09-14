@@ -83,6 +83,8 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 			'host suffix attack untouched'     => array( 'https://example.com', 'https://example.com.attacker.net/x', 'https://example.com.attacker.net/x' ),
 			'query mentioning host untouched'  => array( 'https://example.com', 'https://evil.com/?ref=example.com', 'https://evil.com/?ref=example.com' ),
 			'different port untouched'         => array( 'https://example.com', 'https://example.com:8080/foo', 'https://example.com:8080/foo' ),
+			'double slash untouched'           => array( 'https://example.com', 'https://example.com//foo', 'https://example.com//foo' ),
+			'credentials untouched'            => array( 'https://example.com', 'https://user:pass@example.com/foo', 'https://user:pass@example.com/foo' ),
 
 			// Subdirectory multisite.
 			'subsite path made relative'       => array( 'https://example.com/sub1', 'https://example.com/sub1/foo', '/foo' ),
@@ -90,6 +92,7 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 			'subsite prefix boundary held'     => array( 'https://example.com/sub1', 'https://example.com/sub10/foo', 'https://example.com/sub10/foo' ),
 			'other subsite untouched'          => array( 'https://example.com/sub1', 'https://example.com/sub2/bar', 'https://example.com/sub2/bar' ),
 			'network root untouched'           => array( 'https://example.com/sub1', 'https://example.com/', 'https://example.com/' ),
+			'subsite double slash untouched'   => array( 'https://example.com/sub1', 'https://example.com/sub1//x', 'https://example.com/sub1//x' ),
 		);
 	}
 

@@ -388,9 +388,7 @@ final class Upgrader {
 			return null;
 		}
 
-		$path = $this->normaliser->to_internal_path( $excerpt );
-
-		return $path === $excerpt ? null : $path;
+		return $this->normaliser->to_internal_path( $excerpt );
 	}
 
 	/**

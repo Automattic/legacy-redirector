@@ -32,6 +32,16 @@ use Automattic\LegacyRedirector\Domain\DestinationUrl;
 final class InternalDestinationNormaliser {
 
 	/**
+	 * The last home URL parsed, and its parsed form.
+	 *
+	 * Keyed by the URL string so a switch_to_blog() between calls reparses,
+	 * while a loop over many rows on one site (the migration dry run) does not.
+	 *
+	 * @var array{0: string, 1: array<string, mixed>|false}|null
+	 */
+	private ?array $parsed_home = null;
+
+	/**
 	 * Normalise a destination to its canonical stored form.
 	 *
 	 * @param Destination $destination The destination as entered.
@@ -56,8 +66,13 @@ final class InternalDestinationNormaliser {
 	 * @return string|null The site-relative path, or null when the URL is not internal.
 	 */
 	public function to_internal_path( string $url ): ?string {
-		$target = wp_parse_url( $url );
-		$home   = wp_parse_url( home_url() );
+		$target   = wp_parse_url( $url );
+		$home_url = home_url();
+
+		if ( null === $this->parsed_home || $this->parsed_home[0] !== $home_url ) {
+			$this->parsed_home = array( $home_url, wp_parse_url( $home_url ) );
+		}
+		$home = $this->parsed_home[1];
 
 		if ( ! is_array( $target ) || ! is_array( $home ) ) {
 			return null;
@@ -69,6 +84,11 @@ final class InternalDestinationNormaliser {
 			|| strtolower( $target['host'] ) !== strtolower( $home['host'] )
 			|| ( $target['port'] ?? null ) !== ( $home['port'] ?? null )
 		) {
+			return null;
+		}
+
+		// Rebuilding the URL would silently drop credentials; leave it as entered.
+		if ( isset( $target['user'] ) ) {
 			return null;
 		}
 
@@ -84,8 +104,17 @@ final class InternalDestinationNormaliser {
 			$target_path = substr( $target_path, strlen( $home_path ) );
 		}
 
-		return ( '' === $target_path ? '/' : $target_path )
+		$path = ( '' === $target_path ? '/' : $target_path )
 			. ( isset( $target['query'] ) ? '?' . $target['query'] : '' )
 			. ( isset( $target['fragment'] ) ? '#' . $target['fragment'] : '' );
+
+		// A '//'-prefixed result is scheme-relative, not site-relative:
+		// DestinationUrl would reject it and collapsing the slashes would
+		// change the URL. Leave the destination as entered.
+		if ( str_starts_with( $path, '//' ) ) {
+			return null;
+		}
+
+		return $path;
 	}
 }

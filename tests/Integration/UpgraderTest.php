@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
@@ -246,6 +247,26 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertSame( 1, $result['normalised'] );
 		$this->assertSame( '/new-page?a=1', get_post( $post_id )->post_excerpt );
+
+		// The written value must survive the round trip back through the
+		// domain layer, or the redirect silently stops resolving.
+		$destination = DestinationUrl::from_string( get_post( $post_id )->post_excerpt );
+		$this->assertTrue( $destination->is_relative() );
+	}
+
+	/**
+	 * A double-slash path would be rejected as scheme-relative by the domain
+	 * layer, so it must be left as stored rather than corrupted.
+	 *
+	 * @return void
+	 */
+	public function test_double_slash_destination_is_not_normalised() {
+		$post_id = $this->create_legacy_redirect( '/old-page', home_url( '//foo' ) );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( home_url( '//foo' ), get_post( $post_id )->post_excerpt );
 	}
 
 	/**
