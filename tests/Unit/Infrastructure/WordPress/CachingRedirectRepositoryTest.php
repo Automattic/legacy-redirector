@@ -107,7 +107,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_add' )
 			->once()
-			->with( '1:' . $source->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $source->hash(), 123, CachingRedirectRepository::CACHE_GROUP, 0 )
 			->andReturn( true );
 
 		$this->inner
@@ -136,7 +136,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_add' )
 			->once()
-			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
 			->andReturn( true );
 
 		$this->inner
@@ -233,7 +233,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_set' )
 			->once()
-			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
 			->andReturn( true );
 
 		$this->inner
@@ -491,7 +491,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_set' )
 			->once()
-			->with( '1:' . $redirect->source()->hash(), 0, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $redirect->source()->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
 			->andReturn( true );
 
 		$this->inner
@@ -520,7 +520,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_set' )
 			->once()
-			->with( '1:' . $redirect->source()->hash(), 0, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $redirect->source()->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
 			->andReturn( true );
 
 		$this->inner
@@ -576,7 +576,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_add' )
 			->once()
-			->with( '1:' . $source->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $source->hash(), 123, CachingRedirectRepository::CACHE_GROUP, 0 )
 			->andReturn( true );
 
 		$this->inner
@@ -605,7 +605,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		Functions\expect( 'wp_cache_add' )
 			->once()
-			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP )
+			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
 			->andReturn( true );
 
 		$this->inner
