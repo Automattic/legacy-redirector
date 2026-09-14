@@ -20,7 +20,9 @@ interface RedirectRepositoryInterface {
 	/**
 	 * Find a redirect by its source URL.
 	 *
-	 * Only returns active (published) redirects by default.
+	 * Only returns published redirects: this is the front-end resolution
+	 * lookup. Management code that must see disabled redirects too should use
+	 * get_id_by_source() and find_by_id(), which ignore status.
 	 *
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found, null otherwise.

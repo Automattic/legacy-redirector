@@ -11,11 +11,13 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
 
 /**
  * Integration tests for ImportCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportCommand
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
@@ -93,6 +95,29 @@ final class ImportCommandTest extends CliTestCase {
 	 */
 	private function redirect_exists( string $from ): bool {
 		return $this->repository()->get_id_by_source( SourceUrl::from_string( $from ) ) > 0;
+	}
+
+	/**
+	 * Count the redirect posts stored for a source path, in any status.
+	 *
+	 * Queries by the stored hash directly, because a duplicate insert produces
+	 * two posts sharing one `post_name` and repository lookups only ever return
+	 * the first.
+	 *
+	 * @param string $from The source path.
+	 * @return int The number of matching posts.
+	 */
+	private function count_redirect_posts( string $from ): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Test assertion against uncached state.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM $wpdb->posts WHERE post_type = %s AND post_name = %s",
+				PostTypeRedirectRepository::POST_TYPE,
+				SourceUrl::from_string( $from )->hash()
+			)
+		);
 	}
 
 	/**
@@ -223,6 +248,57 @@ final class ImportCommandTest extends CliTestCase {
 
 		$this->assert_command_error();
 		$this->assert_stdout_contains( 'Missing destination' );
+	}
+
+	/**
+	 * Test upsert mode re-points a disabled redirect rather than duplicating it.
+	 *
+	 * @see https://linear.app/a8c/issue/VIPPLUG-133
+	 */
+	public function test_import_upsert_updates_disabled_redirect(): void {
+		$redirect_id = $this->create_redirect( '/import-upsert-disabled', 'https://example.com/original' );
+		$this->manager()->disable( $redirect_id );
+
+		$file = $this->create_csv( "/import-upsert-disabled,https://example.com/replacement\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array(
+				'mode'            => 'upsert',
+				'skip-validation' => true,
+			)
+		);
+
+		$this->assert_command_success();
+		$this->assertSame( 1, $this->count_redirect_posts( '/import-upsert-disabled' ) );
+
+		$redirect = $this->repository()->find_by_id( $redirect_id );
+		$this->assertSame( 'https://example.com/replacement', $redirect->destination()->as_url()->value() );
+		$this->assertFalse( $redirect->is_active(), 'Status should be preserved when the CSV omits it.' );
+	}
+
+	/**
+	 * Test re-running an upsert import is idempotent for disabled redirects.
+	 *
+	 * @see https://linear.app/a8c/issue/VIPPLUG-133
+	 */
+	public function test_import_upsert_is_idempotent_for_disabled_redirects(): void {
+		$file = $this->create_csv( "/import-upsert-twice,https://example.com/a,disabled\n" );
+
+		foreach ( array( 1, 2 ) as $unused ) {
+			$this->invoke_command(
+				$this->command,
+				array( $file ),
+				array(
+					'mode'            => 'upsert',
+					'skip-validation' => true,
+				)
+			);
+			$this->assert_command_success();
+		}
+
+		$this->assertSame( 1, $this->count_redirect_posts( '/import-upsert-twice' ) );
 	}
 
 	/**
