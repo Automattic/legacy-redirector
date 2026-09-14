@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Infrastructure\DI\Container;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\AdminBootstrapper;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
@@ -224,7 +225,7 @@ final class PluginBootstrapper {
 			new ValidateCommand(
 				$fetcher,
 				$this->container->query_repository(),
-				$this->container->validator(),
+				new RedirectAuditor(),
 				$manager
 			)
 		);
