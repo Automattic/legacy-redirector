@@ -261,12 +261,15 @@ final class UpgraderTest extends TestCase {
 	 * @return void
 	 */
 	public function test_double_slash_destination_is_not_normalised() {
-		$post_id = $this->create_legacy_redirect( '/old-page', home_url( '//foo' ) );
+		// Built by concatenation: home_url( '//foo' ) would collapse the
+		// double slash this test exists to preserve.
+		$destination = untrailingslashit( home_url() ) . '//foo';
+		$post_id     = $this->create_legacy_redirect( '/old-page', $destination );
 
 		$result = $this->upgrader->run_batch( 100 );
 
 		$this->assertSame( 0, $result['normalised'] );
-		$this->assertSame( home_url( '//foo' ), get_post( $post_id )->post_excerpt );
+		$this->assertSame( $destination, get_post( $post_id )->post_excerpt );
 	}
 
 	/**
