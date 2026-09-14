@@ -315,20 +315,61 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
-	 * Test a relative destination path that resolves to no post is accepted.
+	 * Test a destination path that returns 404 is rejected.
 	 *
-	 * Archives, rewrite endpoints, and non-WordPress URLs have no post to
-	 * find, so a lookup miss is indeterminate rather than an error.
-	 * Reachability feedback comes from the form's interactive HTTP check.
+	 * The slug lookup treats a miss as indeterminate, so the form asks the
+	 * site directly; an affirmative 404 rejects the save.
 	 */
-	public function test_unknown_destination_path_is_accepted(): void {
+	public function test_unknown_destination_path_redirects_with_error(): void {
 		$this->login_as_redirect_manager();
+
+		$respond_404 = static function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_404 );
+
 		$this->submit(
 			array(
 				'redirect_from' => '/form-unknown-path',
 				'redirect_to'   => '/no-such-page-anywhere',
 			)
 		);
+
+		remove_filter( 'pre_http_request', $respond_404 );
+
+		$location = $this->capture_redirect();
+
+		$this->assertStringContainsString( 'error=path_not_found', $location );
+	}
+
+	/**
+	 * Test a postless destination path that the site serves is accepted.
+	 *
+	 * Archives and rewrite endpoints resolve to no post, which previously
+	 * rejected them outright; a reachable path now saves.
+	 */
+	public function test_postless_destination_path_that_resolves_is_accepted(): void {
+		$this->login_as_redirect_manager();
+
+		$respond_200 = static function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_200 );
+
+		$this->submit(
+			array(
+				'redirect_from' => '/form-archive-source',
+				'redirect_to'   => '/category/news/',
+			)
+		);
+
+		remove_filter( 'pre_http_request', $respond_200 );
 
 		$location = $this->capture_redirect();
 

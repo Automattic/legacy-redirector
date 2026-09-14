@@ -328,6 +328,18 @@ final class RedirectFormPage {
 			$this->redirect_with_error( $redirect_id, $form_error, $redirect_from, $redirect_to, $redirect_status );
 		}
 
+		// Reachability check for URL destinations: a path with no post to
+		// find (an archive, a rewrite endpoint, a mistyped slug) passes the
+		// lookup above as indeterminate, so ask the site directly. Fails
+		// open - only an affirmative 404 rejects, so a transient network
+		// error never blocks a save.
+		if ( $destination->is_url() ) {
+			$http_validation = $this->validator->validate_destination_not_404( $destination );
+			if ( $http_validation->is_invalid() ) {
+				$this->redirect_with_error( $redirect_id, 'path_not_found', $redirect_from, $redirect_to, $redirect_status );
+			}
+		}
+
 		// Create source URL object.
 		try {
 			$source = SourceUrl::from_string( $redirect_from );
