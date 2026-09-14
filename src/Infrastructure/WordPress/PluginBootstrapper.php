@@ -136,7 +136,7 @@ final class PluginBootstrapper {
 	private function init_admin(): void {
 		// Initialize the main admin bootstrapper (AJAX handlers, list table, form pages).
 		$admin = new AdminBootstrapper(
-			$this->container->inner_repository(),
+			$this->container->repository(),
 			$this->container->manager(),
 			$this->container->validator()
 		);
@@ -170,7 +170,7 @@ final class PluginBootstrapper {
 		}
 
 		$manager = $this->container->manager();
-		$fetcher = new RedirectFetcher( $this->container->inner_repository() );
+		$fetcher = new RedirectFetcher( $this->container->repository() );
 
 		// Register parent command for help text.
 		\WP_CLI::add_command(
@@ -237,7 +237,7 @@ final class PluginBootstrapper {
 			'wpcom-legacy-redirector import-from-meta',
 			new ImportFromMetaCommand(
 				$manager,
-				$this->container->inner_repository()
+				$this->container->repository()
 			)
 		);
 

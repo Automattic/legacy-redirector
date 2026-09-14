@@ -106,4 +106,4 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Redirect loops**: When adding or modifying redirects, validate that the change does not create redirect loops (A→B→A). The `RedirectValidator` handles this — use it.
 - Behat tests are slow (~2 seconds per scenario, against real WordPress in Docker). Do not write Behat tests for edge cases — use integration tests instead.
 - The plugin has two PHPUnit config files. Make sure you run the correct one: `composer test:unit` uses `phpunit.xml.dist`, `composer test:integration` uses `phpunit-integration.xml.dist`.
-- Do not instantiate services with `new` — use the DI container.
+- In production code, wire services through the DI container rather than scattering `new` calls; the test suite deliberately constructs services directly (see tests/Integration/RedirectTestHelper.php).

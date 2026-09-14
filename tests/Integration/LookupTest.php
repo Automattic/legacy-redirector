@@ -269,7 +269,7 @@ final class LookupTest extends TestCase {
 		$expected_post_id = $this->create_redirect( $from_url, $to_url );
 		$this->assertIsInt( $expected_post_id );
 
-		$actual_post_id = $this->inner_repository()->get_id_by_source( SourceUrl::from_string( $from_url ) );
+		$actual_post_id = $this->repository()->get_id_by_source( SourceUrl::from_string( $from_url ) );
 
 		$this->assertEquals( $expected_post_id, $actual_post_id );
 	}
@@ -282,7 +282,7 @@ final class LookupTest extends TestCase {
 	public function test_get_id_by_source_returns_zero_for_nonexistent(): void {
 		$nonexistent_url = '/this-redirect-does-not-exist-' . wp_generate_uuid4();
 
-		$post_id = $this->inner_repository()->get_id_by_source( SourceUrl::from_string( $nonexistent_url ) );
+		$post_id = $this->repository()->get_id_by_source( SourceUrl::from_string( $nonexistent_url ) );
 
 		$this->assertEquals( 0, $post_id );
 	}

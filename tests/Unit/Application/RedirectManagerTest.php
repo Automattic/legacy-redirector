@@ -231,42 +231,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->assertSame( 'Database error', $result->error_message() );
 	}
 
-	/**
-	 * Test create_redirect invalidates cache on success.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
-	 */
-	public function test_create_redirect_invalidates_cache(): void {
-		$source      = SourceUrl::from_string( '/old-page' );
-		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
-
-		$this->validator
-			->shouldReceive( 'validate_for_creation' )
-			->andReturn( ValidationResult::valid() );
-
-		// Repository returns redirect with assigned ID.
-		$saved_redirect = Redirect::reconstitute( 123, $source, $destination, 'publish' );
-
-		$this->repository
-			->shouldReceive( 'save' )
-			->andReturn( $saved_redirect );
-
-		// Track cache delete calls.
-		$cache_deletes = array();
-		Functions\when( 'wp_cache_delete' )->alias(
-			function ( $key, $group ) use ( &$cache_deletes ) {
-				$cache_deletes[] = array( $key, $group );
-				return true;
-			}
-		);
-
-		$this->manager->create_redirect( $source, $destination );
-
-		// Should invalidate the source hash (with blog ID prefix).
-		$this->assertCount( 1, $cache_deletes );
-		$this->assertSame( '1:' . $source->hash(), $cache_deletes[0][0] );
-		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[0][1] );
-	}
 
 	// =========================================================================
 	// enable() / disable() tests
@@ -622,74 +586,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->assertFalse( $result );
 	}
 
-	/**
-	 * Test update_redirect invalidates both old and new cache keys.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
-	 */
-	public function test_update_redirect_invalidates_both_caches(): void {
-		$old_source      = SourceUrl::from_string( '/old-page' );
-		$redirect        = $this->create_test_redirect( 123, $old_source, 'publish' );
-		$new_destination = Destination::from_url( DestinationUrl::from_string( '/destination' ) );
 
-		$this->repository
-			->shouldReceive( 'find_by_id' )
-			->andReturn( $redirect );
-
-		$this->repository
-			->shouldReceive( 'save' )
-			->andReturn( $redirect );
-
-		// Track cache delete calls.
-		$cache_deletes = array();
-		Functions\when( 'wp_cache_delete' )->alias(
-			function ( $key, $group ) use ( &$cache_deletes ) {
-				$cache_deletes[] = array( $key, $group );
-				return true;
-			}
-		);
-
-		$this->manager->update_redirect( 123, '/new-page', $new_destination );
-
-		// Should invalidate both old and new source hashes (with blog ID prefix).
-		$this->assertCount( 2, $cache_deletes );
-		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[0][1] );
-		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[1][1] );
-	}
-
-	/**
-	 * Test update_redirect only invalidates once when source unchanged.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
-	 */
-	public function test_update_redirect_invalidates_once_when_source_unchanged(): void {
-		$source          = SourceUrl::from_string( '/same-page' );
-		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
-		$new_destination = Destination::from_url( DestinationUrl::from_string( '/new-destination' ) );
-
-		$this->repository
-			->shouldReceive( 'find_by_id' )
-			->andReturn( $redirect );
-
-		$this->repository
-			->shouldReceive( 'save' )
-			->andReturn( $redirect );
-
-		// Track cache delete calls.
-		$cache_deletes = array();
-		Functions\when( 'wp_cache_delete' )->alias(
-			function ( $key, $group ) use ( &$cache_deletes ) {
-				$cache_deletes[] = array( $key, $group );
-				return true;
-			}
-		);
-
-		$this->manager->update_redirect( 123, '/same-page', $new_destination );
-
-		// Should only be called once since source hash is the same (with blog ID prefix).
-		$this->assertCount( 1, $cache_deletes );
-		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[0][1] );
-	}
 
 	// =========================================================================
 	// Helper methods

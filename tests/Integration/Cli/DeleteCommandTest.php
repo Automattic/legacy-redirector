@@ -16,6 +16,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
  * Integration tests for DeleteCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -45,7 +46,7 @@ final class DeleteCommandTest extends CliTestCase {
 
 		$this->command = new DeleteCommand(
 			$this->manager(),
-			new RedirectFetcher( $this->inner_repository() )
+			new RedirectFetcher( $this->repository() )
 		);
 	}
 

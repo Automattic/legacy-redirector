@@ -17,6 +17,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * Integration tests for UpdateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -46,7 +47,7 @@ final class UpdateCommandTest extends CliTestCase {
 
 		$this->command = new UpdateCommand(
 			$this->manager(),
-			new RedirectFetcher( $this->inner_repository() )
+			new RedirectFetcher( $this->repository() )
 		);
 	}
 
@@ -57,7 +58,7 @@ final class UpdateCommandTest extends CliTestCase {
 	 * @return string|int The destination.
 	 */
 	private function get_destination( string $from ) { // phpcs:ignore NeutronStandard.Functions.TypeHint.NoReturnType -- Mixed return.
-		$repository = $this->inner_repository();
+		$repository = $this->repository();
 		$redirect   = $repository->find_by_id(
 			$repository->get_id_by_source( SourceUrl::from_string( $from ) )
 		);

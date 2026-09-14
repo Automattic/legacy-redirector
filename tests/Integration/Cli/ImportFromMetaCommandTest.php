@@ -29,6 +29,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaComma
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class ImportFromMetaCommandTest extends CliTestCase {
@@ -62,7 +63,7 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->meta_key = 'legacy-url-' . uniqid();
 		$this->command  = new ImportFromMetaCommand(
 			$this->manager(),
-			$this->inner_repository()
+			$this->repository()
 		);
 	}
 
@@ -86,7 +87,7 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	 * @return \Automattic\LegacyRedirector\Domain\Redirect|null The redirect, or null.
 	 */
 	private function find_redirect( string $source ) {
-		return $this->inner_repository()->find_by_source( SourceUrl::from_string( $source ) );
+		return $this->repository()->find_by_source( SourceUrl::from_string( $source ) );
 	}
 
 	// =========================================================================

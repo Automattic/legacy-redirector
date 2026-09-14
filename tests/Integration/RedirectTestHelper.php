@@ -37,21 +37,12 @@ trait RedirectTestHelper {
 	private array $services = array();
 
 	/**
-	 * Get the uncached redirect repository.
-	 *
-	 * @return PostTypeRedirectRepository The repository.
-	 */
-	protected function inner_repository(): PostTypeRedirectRepository {
-		return $this->services['inner_repository'] ??= new PostTypeRedirectRepository();
-	}
-
-	/**
 	 * Get the caching redirect repository.
 	 *
 	 * @return CachingRedirectRepository The caching repository.
 	 */
 	protected function repository(): CachingRedirectRepository {
-		return $this->services['repository'] ??= new CachingRedirectRepository( $this->inner_repository() );
+		return $this->services['repository'] ??= new CachingRedirectRepository( new PostTypeRedirectRepository() );
 	}
 
 	/**
@@ -60,7 +51,7 @@ trait RedirectTestHelper {
 	 * @return RedirectManager The manager.
 	 */
 	protected function manager(): RedirectManager {
-		return $this->services['manager'] ??= new RedirectManager( $this->inner_repository() );
+		return $this->services['manager'] ??= new RedirectManager( $this->repository() );
 	}
 
 	/**
@@ -69,7 +60,7 @@ trait RedirectTestHelper {
 	 * @return RedirectValidator The validator.
 	 */
 	protected function validator(): RedirectValidator {
-		return $this->services['validator'] ??= new RedirectValidator( $this->inner_repository() );
+		return $this->services['validator'] ??= new RedirectValidator( $this->repository() );
 	}
 
 	/**

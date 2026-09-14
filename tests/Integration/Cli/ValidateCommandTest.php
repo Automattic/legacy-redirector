@@ -16,6 +16,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * Integration tests for ValidateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -49,7 +50,7 @@ final class ValidateCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new ValidateCommand(
-			new RedirectFetcher( $this->inner_repository() ),
+			new RedirectFetcher( $this->repository() ),
 			$this->query_repository(),
 			$this->validator(),
 			$this->manager()

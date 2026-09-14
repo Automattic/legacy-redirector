@@ -26,6 +26,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class GetCommandTest extends CliTestCase {
@@ -46,7 +47,7 @@ final class GetCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new GetCommand(
-			new RedirectFetcher( $this->inner_repository() )
+			new RedirectFetcher( $this->repository() )
 		);
 	}
 

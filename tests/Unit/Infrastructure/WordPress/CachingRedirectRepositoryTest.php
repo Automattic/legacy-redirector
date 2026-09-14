@@ -418,6 +418,13 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		$redirect       = $this->create_redirect( 123 );
 		$saved_redirect = $this->create_redirect( 123 );
 
+		// Persisted redirect: save() checks the stored version for a source change.
+		$this->inner
+			->shouldReceive( 'find_by_id' )
+			->once()
+			->with( 123 )
+			->andReturn( $redirect );
+
 		Functions\expect( 'wp_cache_delete' )
 			->once()
 			->with( '1:' . $redirect->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
@@ -437,6 +444,51 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		$result = $this->repository->save( $redirect );
 
 		$this->assertSame( $saved_redirect, $result );
+	}
+
+	/**
+	 * Test save invalidates the old source when an update changes the source.
+	 *
+	 * Without this, the old source's positive cache entry would keep serving
+	 * the redirect indefinitely after an edit-screen source change.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::save
+	 */
+	public function test_save_invalidates_old_source_when_source_changes(): void {
+		$existing = $this->create_redirect( 123 );
+		$updated  = $existing->with_source( SourceUrl::from_string( '/renamed-source' ) );
+
+		$this->inner
+			->shouldReceive( 'find_by_id' )
+			->once()
+			->with( 123 )
+			->andReturn( $existing );
+
+		// Old source invalidated first, then the new source.
+		Functions\expect( 'wp_cache_delete' )
+			->once()
+			->with( '1:' . $existing->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
+			->andReturn( true );
+
+		Functions\expect( 'wp_cache_delete' )
+			->once()
+			->with( '1:' . $updated->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
+			->andReturn( true );
+
+		Functions\expect( 'wp_cache_set' )
+			->once()
+			->with( '1:' . $updated->source()->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->andReturn( true );
+
+		$this->inner
+			->shouldReceive( 'save' )
+			->once()
+			->with( $updated )
+			->andReturn( $updated );
+
+		$result = $this->repository->save( $updated );
+
+		$this->assertSame( $updated, $result );
 	}
 
 	/**

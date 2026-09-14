@@ -94,7 +94,7 @@ if ( null !== $redirect_data ) {
 }
 
 // Get the redirect's post ID
-$post_id = Container::instance()->inner_repository()->get_id_by_source( SourceUrl::from_string( '/old-page' ) );
+$post_id = Container::instance()->repository()->get_id_by_source( SourceUrl::from_string( '/old-page' ) );
 ```
 
 ### Removed WPCOM_Legacy_Redirector Methods
@@ -105,7 +105,7 @@ The following public methods are no longer available:
 |--------|-------------|
 | `WPCOM_Legacy_Redirector::insert_legacy_redirect()` | `Container::instance()->manager()->create_redirect()` |
 | `WPCOM_Legacy_Redirector::get_redirect_uri()` | `Container::instance()->resolver()->get_redirect_data($url)['url']` — returns `null` (not `false`) when no redirect exists |
-| `WPCOM_Legacy_Redirector::get_redirect_post_id()` | `Container::instance()->inner_repository()->get_id_by_source(SourceUrl::from_string($url))` |
+| `WPCOM_Legacy_Redirector::get_redirect_post_id()` | `Container::instance()->repository()->get_id_by_source(SourceUrl::from_string($url))` |
 | `WPCOM_Legacy_Redirector::start()` / `init()` / `maybe_do_redirect()` | Handled automatically by the plugin bootstrap |
 
 ### WP-CLI Changes
@@ -173,7 +173,7 @@ $resolver = Container::instance()->resolver();
 
 // Get the repository (for direct database access)
 $repository = Container::instance()->repository(); // With caching
-$repository = Container::instance()->inner_repository(); // Without caching
+$repository = Container::instance()->repository();
 
 // Get the validator
 $validator = Container::instance()->validator();
