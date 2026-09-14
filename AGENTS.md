@@ -104,6 +104,6 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Performance is critical**: The `RedirectExecutor` runs on every page load to check for redirects. Any performance regression here affects every request on the site. Always profile changes to the redirect resolution path.
 - Do not bypass the caching layer. Always access redirects through the repository interface, which includes caching.
 - **Redirect loops**: When adding or modifying redirects, validate that the change does not create redirect loops (A→B→A). The `RedirectValidator` handles this — use it.
-- Behat tests are slow (10-20 seconds per scenario). Do not write Behat tests for edge cases — use integration tests instead.
+- Behat tests are slow (~2 seconds per scenario, against real WordPress in Docker). Do not write Behat tests for edge cases — use integration tests instead.
 - The plugin has two PHPUnit config files. Make sure you run the correct one: `composer test:unit` uses `phpunit.xml.dist`, `composer test:integration` uses `phpunit-integration.xml.dist`.
 - Do not instantiate services with `new` — use the DI container.
