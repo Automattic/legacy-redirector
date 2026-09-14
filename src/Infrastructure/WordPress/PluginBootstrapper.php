@@ -15,6 +15,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\AdminBootstrapper
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\StatusChangeNotices;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\UpgradeNotice;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\TrashRedirectEnhancer;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand;
@@ -157,6 +158,10 @@ final class PluginBootstrapper {
 		// Register status change notices.
 		$status_notices = new StatusChangeNotices();
 		$status_notices->register();
+
+		// Register the migration-in-progress notice.
+		$upgrade_notice = new UpgradeNotice( $this->container->upgrader() );
+		$upgrade_notice->register();
 
 		// Register trash redirect enhancer.
 		$trash_enhancer = new TrashRedirectEnhancer();
