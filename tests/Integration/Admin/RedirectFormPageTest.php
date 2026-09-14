@@ -48,6 +48,13 @@ final class RedirectFormPageTest extends TestCase {
 	private RedirectFormPage $page;
 
 	/**
+	 * Default HTTP mock marking every destination reachable.
+	 *
+	 * @var callable
+	 */
+	private $http_ok;
+
+	/**
 	 * Set up test fixtures.
 	 *
 	 * @return void
@@ -61,6 +68,19 @@ final class RedirectFormPageTest extends TestCase {
 			$this->validator()
 		);
 
+		// The reachability check on save would otherwise make a real request
+		// to home_url(), which in wp-env serves a different install than the
+		// tests database and 404s everything. Default to reachable; tests
+		// exercising rejection add their own 404 filter, which runs later
+		// and wins.
+		$this->http_ok = static function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $this->http_ok );
+
 		$_POST = array();
 	}
 
@@ -70,6 +90,7 @@ final class RedirectFormPageTest extends TestCase {
 	 * @return void
 	 */
 	public function tear_down(): void {
+		remove_filter( 'pre_http_request', $this->http_ok );
 		$_POST = array();
 
 		parent::tear_down();
@@ -315,10 +336,22 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
-	 * Test a relative destination path that resolves to nothing is rejected.
+	 * Test a destination path that returns 404 is rejected.
+	 *
+	 * The slug lookup treats a miss as indeterminate, so the form asks the
+	 * site directly; an affirmative 404 rejects the save.
 	 */
 	public function test_unknown_destination_path_redirects_with_error(): void {
 		$this->login_as_redirect_manager();
+
+		$respond_404 = static function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_404 );
+
 		$this->submit(
 			array(
 				'redirect_from' => '/form-unknown-path',
@@ -328,7 +361,40 @@ final class RedirectFormPageTest extends TestCase {
 
 		$location = $this->capture_redirect();
 
+		remove_filter( 'pre_http_request', $respond_404 );
+
 		$this->assertStringContainsString( 'error=path_not_found', $location );
+	}
+
+	/**
+	 * Test a postless destination path that the site serves is accepted.
+	 *
+	 * Archives and rewrite endpoints resolve to no post, which previously
+	 * rejected them outright; a reachable path now saves.
+	 */
+	public function test_postless_destination_path_that_resolves_is_accepted(): void {
+		$this->login_as_redirect_manager();
+
+		$respond_200 = static function () {
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_200 );
+
+		$this->submit(
+			array(
+				'redirect_from' => '/form-archive-source',
+				'redirect_to'   => '/category/news/',
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		remove_filter( 'pre_http_request', $respond_200 );
+
+		$this->assertStringContainsString( 'message=created', $location );
 	}
 
 	/**
@@ -380,6 +446,16 @@ final class RedirectFormPageTest extends TestCase {
 	 */
 	public function test_error_redirect_preserves_submitted_values(): void {
 		$this->login_as_redirect_manager();
+
+		// Force the reachability check to reject so the error path runs.
+		$respond_404 = static function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_404 );
+
 		$this->submit(
 			array(
 				'redirect_from'   => '/form-preserved',
@@ -389,6 +465,8 @@ final class RedirectFormPageTest extends TestCase {
 		);
 
 		$location = $this->capture_redirect();
+
+		remove_filter( 'pre_http_request', $respond_404 );
 
 		$query = array();
 		parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );

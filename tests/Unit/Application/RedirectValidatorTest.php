@@ -163,7 +163,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	 */
 	public function test_validate_for_creation_validates_destination(): void {
 		$source      = $this->create_source( '/old-page' );
-		$destination = $this->create_url_destination( '/nonexistent-page' );
+		$destination = $this->create_url_destination( '/draft-page' );
 
 		$this->repository
 			->shouldReceive( 'exists' )
@@ -176,12 +176,12 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		Functions\expect( 'get_page_by_path' )
 			->once()
-			->andReturn( null );
+			->andReturn( $this->create_mock_post( 'draft' ) );
 
 		$result = $this->validator->validate_for_creation( $source, $destination );
 
 		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'invalid', $result->error_code() );
+		$this->assertSame( 'non-public', $result->error_code() );
 	}
 
 	/**
@@ -445,11 +445,16 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test validate_destination_url returns invalid for nonexistent relative path.
+	 * Test validate_destination_url treats a path with no post as indeterminate.
+	 *
+	 * Archives and rewrite endpoints have no post to find; the HTTP 404
+	 * check is the authority on reachability.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_destination_url
 	 */
-	public function test_validate_destination_url_returns_invalid_for_nonexistent_relative_path(): void {
+	public function test_validate_destination_url_accepts_relative_path_with_no_post(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
 		Functions\expect( 'get_post_types' )
 			->once()
 			->andReturn( array( 'post', 'page' ) );
@@ -458,10 +463,13 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->once()
 			->andReturn( null );
 
-		$result = $this->validator->validate_destination_url( '/nonexistent' );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
 
-		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'invalid', $result->error_code() );
+		$result = $this->validator->validate_destination_url( '/category/news/' );
+
+		$this->assertTrue( $result->is_valid() );
 	}
 
 	/**
@@ -511,24 +519,82 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	// =========================================================================
 
 	/**
-	 * Test validate_relative_path returns invalid when post does not exist.
+	 * Test validate_relative_path treats a path resolving to no post as indeterminate.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_relative_path
 	 */
-	public function test_validate_relative_path_returns_invalid_when_post_does_not_exist(): void {
+	public function test_validate_relative_path_returns_valid_when_no_post_found(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
 		Functions\expect( 'get_post_types' )
 			->once()
 			->andReturn( array( 'post', 'page' ) );
 
 		Functions\expect( 'get_page_by_path' )
 			->once()
-			->with( 'nonexistent-page', OBJECT, array( 'post', 'page' ) )
+			->with( 'category/news', OBJECT, array( 'post', 'page' ) )
 			->andReturn( null );
 
-		$result = $this->validator->validate_relative_path( '/nonexistent-page' );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$result = $this->validator->validate_relative_path( '/category/news' );
+
+		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * Test validate_relative_path falls back to url_to_postid for permalink structures.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_relative_path
+	 */
+	public function test_validate_relative_path_falls_back_to_url_to_postid(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		Functions\expect( 'get_post_types' )
+			->once()
+			->andReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 42 );
+
+		Functions\expect( 'get_post' )
+			->once()
+			->with( 42 )
+			->andReturn( $this->create_mock_post( 'draft' ) );
+
+		$result = $this->validator->validate_relative_path( '/2020/01/01/some-post/' );
 
 		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'invalid', $result->error_code() );
+		$this->assertSame( 'non-public', $result->error_code() );
+	}
+
+	/**
+	 * Test validate_relative_path strips query strings before the slug lookup.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_relative_path
+	 */
+	public function test_validate_relative_path_ignores_query_string_for_lookup(): void {
+		$post = $this->create_mock_post( 'publish' );
+
+		Functions\expect( 'get_post_types' )
+			->once()
+			->andReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->with( 'some-page', OBJECT, array( 'post', 'page' ) )
+			->andReturn( $post );
+
+		$result = $this->validator->validate_relative_path( '/some-page?utm_source=x' );
+
+		$this->assertTrue( $result->is_valid() );
 	}
 
 	/**
@@ -811,7 +877,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			$this->create_url_destination( '/old-destination' ),
 			'publish'
 		);
-		$new_destination = $this->create_url_destination( '/nonexistent-page' );
+		$new_destination = $this->create_url_destination( '/draft-page' );
 
 		Functions\expect( 'get_post_types' )
 			->once()
@@ -819,12 +885,12 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		Functions\expect( 'get_page_by_path' )
 			->once()
-			->andReturn( null );
+			->andReturn( $this->create_mock_post( 'draft' ) );
 
 		$result = $this->validator->validate_for_update( $existing, $new_destination );
 
 		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'invalid', $result->error_code() );
+		$this->assertSame( 'non-public', $result->error_code() );
 	}
 
 	/**

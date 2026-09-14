@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
@@ -233,5 +234,68 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( 1, $pending['to_publish'] );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+	/**
+	 * An absolute destination pointing at this site is rewritten to its relative form.
+	 *
+	 * @return void
+	 */
+	public function test_internal_absolute_destination_is_normalised() {
+		$post_id = $this->create_legacy_redirect( '/old-page', home_url( '/new-page?a=1' ) );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['normalised'] );
+		$this->assertSame( '/new-page?a=1', get_post( $post_id )->post_excerpt );
+
+		// The written value must survive the round trip back through the
+		// domain layer, or the redirect silently stops resolving.
+		$destination = DestinationUrl::from_string( get_post( $post_id )->post_excerpt );
+		$this->assertTrue( $destination->is_relative() );
+	}
+
+	/**
+	 * A double-slash path would be rejected as scheme-relative by the domain
+	 * layer, so it must be left as stored rather than corrupted.
+	 *
+	 * @return void
+	 */
+	public function test_double_slash_destination_is_not_normalised() {
+		// Built by concatenation: home_url( '//foo' ) would collapse the
+		// double slash this test exists to preserve.
+		$destination = untrailingslashit( home_url() ) . '//foo';
+		$post_id     = $this->create_legacy_redirect( '/old-page', $destination );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( $destination, get_post( $post_id )->post_excerpt );
+	}
+
+	/**
+	 * An external destination is left exactly as stored.
+	 *
+	 * @return void
+	 */
+	public function test_external_destination_is_not_normalised() {
+		$post_id = $this->create_legacy_redirect( '/old-page', 'https://external.example.net/x' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( 'https://external.example.net/x', get_post( $post_id )->post_excerpt );
+	}
+
+	/**
+	 * A dry run reports destinations due to be made relative.
+	 *
+	 * @return void
+	 */
+	public function test_count_pending_reports_normalisation() {
+		$this->create_legacy_redirect( '/old-page', home_url( '/new-page' ) );
+
+		$pending = $this->upgrader->count_pending();
+
+		$this->assertSame( 1, $pending['to_normalise'] );
 	}
 }

@@ -507,14 +507,14 @@ final class UITest extends TestCase {
 	public function test_external_filter_returns_only_external_urls(): void {
 		$this->delete_all_redirects();
 
-		// Create redirect to internal URL (same host as home_url).
-		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		// Create redirect to internal URL. Internal destinations are stored
+		// relative by construction (absolute forms are normalised on save).
 		self::factory()->post->create(
 			array(
 				'post_type'    => PostType::POST_TYPE,
 				'post_status'  => 'publish',
 				'post_title'   => '/redirect-internal',
-				'post_excerpt' => 'http://' . $home_host . '/internal-page',
+				'post_excerpt' => '/internal-page',
 			)
 		);
 
@@ -525,6 +525,18 @@ final class UITest extends TestCase {
 				'post_status'  => 'publish',
 				'post_title'   => '/redirect-external',
 				'post_excerpt' => 'https://external-domain.com/page',
+			)
+		);
+
+		// An external URL that merely mentions the home host must still count
+		// as external; the old NOT LIKE predicate misclassified it.
+		$home_host          = wp_parse_url( home_url(), PHP_URL_HOST );
+		$lookalike_redirect = self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-lookalike',
+				'post_excerpt' => 'https://external-domain.com/?ref=' . $home_host,
 			)
 		);
 
@@ -547,9 +559,11 @@ final class UITest extends TestCase {
 
 		remove_action( 'pre_get_posts', $set_filter_var, 1 );
 
-		// Should only return the external redirect.
-		$this->assertCount( 1, $query->posts );
-		$this->assertEquals( $external_redirect, $query->posts[0]->ID );
+		// Should return both external redirects and not the internal one.
+		$this->assertCount( 2, $query->posts );
+		$returned_ids = wp_list_pluck( $query->posts, 'ID' );
+		$this->assertContains( $external_redirect, $returned_ids );
+		$this->assertContains( $lookalike_redirect, $returned_ids );
 	}
 
 	/**
@@ -675,10 +689,9 @@ final class UITest extends TestCase {
 		$this->assertStringContainsString( 'post_excerpt LIKE', $result );
 		$this->assertStringContainsString( 'http', $result );
 
-		// Should exclude home host.
-		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
-		$this->assertStringContainsString( 'post_excerpt NOT LIKE', $result );
-		$this->assertStringContainsString( $home_host, $result );
+		// Internal destinations are stored relative by construction, so there
+		// is no host exclusion any more.
+		$this->assertStringNotContainsString( 'NOT LIKE', $result );
 	}
 
 	/**

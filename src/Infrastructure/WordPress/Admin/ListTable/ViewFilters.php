@@ -205,8 +205,6 @@ final class ViewFilters {
 	public function add_destination_type_where_clause( string $where, \WP_Query $query ): string {
 		global $wpdb;
 
-		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
-
 		if ( $query->get( 'wpcom_legacy_redirector_path_filter' ) ) {
 			// Internal paths: relative paths starting with /.
 			$where .= $wpdb->prepare(
@@ -216,10 +214,11 @@ final class ViewFilters {
 		}
 
 		if ( $query->get( 'wpcom_legacy_redirector_external_filter' ) ) {
+			// Internal absolute URLs are normalised to relative paths on save
+			// (and by the v3 migration), so anything stored absolute is external.
 			$where .= $wpdb->prepare(
-				" AND {$wpdb->posts}.post_excerpt LIKE %s AND {$wpdb->posts}.post_excerpt NOT LIKE %s",
-				'http%',
-				'%' . $wpdb->esc_like( $home_host ) . '%'
+				" AND {$wpdb->posts}.post_excerpt LIKE %s",
+				'http%'
 			);
 		}
 

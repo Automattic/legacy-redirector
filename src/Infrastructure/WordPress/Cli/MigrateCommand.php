@@ -88,10 +88,11 @@ final class MigrateCommand extends WP_CLI_Command {
 			WP_CLI::line( sprintf( 'Dry run - no changes will be made.' ) );
 			WP_CLI::line(
 				sprintf(
-					'%d redirect(s) would be inspected, of which %d would be published and %d would have their source path rewritten.',
+					'%d redirect(s) would be inspected, of which %d would be published, %d would have their source path rewritten, and %d would have their destination made relative.',
 					$pending['total'],
 					$pending['to_publish'],
-					$pending['to_repath']
+					$pending['to_repath'],
+					$pending['to_normalise']
 				)
 			);
 
@@ -105,18 +106,20 @@ final class MigrateCommand extends WP_CLI_Command {
 			return;
 		}
 
-		$published = 0;
-		$repathed  = 0;
-		$processed = 0;
-		$conflicts = array();
+		$published  = 0;
+		$repathed   = 0;
+		$normalised = 0;
+		$processed  = 0;
+		$conflicts  = array();
 
 		do {
 			$batch = $this->upgrader->run_batch( self::BATCH_SIZE );
 
-			$processed += $batch['processed'];
-			$published += $batch['published'];
-			$repathed  += $batch['repathed'];
-			$conflicts  = array_merge( $conflicts, $batch['conflicts'] );
+			$processed  += $batch['processed'];
+			$published  += $batch['published'];
+			$repathed   += $batch['repathed'];
+			$normalised += $batch['normalised'];
+			$conflicts   = array_merge( $conflicts, $batch['conflicts'] );
 
 			if ( $batch['processed'] > 0 ) {
 				WP_CLI::line( sprintf( 'Processed %d redirect(s)...', $processed ) );
@@ -133,10 +136,11 @@ final class MigrateCommand extends WP_CLI_Command {
 
 		WP_CLI::success(
 			sprintf(
-				'Migration complete. %d redirect(s) inspected, %d published, %d source path(s) rewritten.',
+				'Migration complete. %d redirect(s) inspected, %d published, %d source path(s) rewritten, %d destination(s) made relative.',
 				$processed,
 				$published,
-				$repathed
+				$repathed,
+				$normalised
 			)
 		);
 	}

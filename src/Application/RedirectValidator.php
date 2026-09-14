@@ -215,20 +215,35 @@ class RedirectValidator {
 	/**
 	 * Validate a relative path destination.
 	 *
-	 * Checks that the path resolves to a published post.
+	 * When the path resolves to a post, its status is checked. A path that
+	 * resolves to no post at all is indeterminate rather than invalid:
+	 * archives, rewrite endpoints, dated permalinks with structures the slug
+	 * walk cannot follow, and URLs served outside WordPress are all real
+	 * destinations with no post to find. Reporting those as broken would be
+	 * wrong far more often than it would be right; the HTTP 404 check
+	 * (validate_destination_not_404()) is the authority on reachability, and
+	 * both admin validation flows run it directly after this check.
 	 *
 	 * @param string $path The relative path.
 	 * @return ValidationResult The validation result.
 	 */
 	public function validate_relative_path( string $path ): ValidationResult {
+		// A query string or fragment can never be part of a slug match.
+		$slug_path = substr( $path, 0, strcspn( $path, '?#' ) );
+
 		$post_types = get_post_types();
-		$post       = get_page_by_path( ltrim( $path, '/' ), OBJECT, $post_types );
+		$post       = get_page_by_path( ltrim( $slug_path, '/' ), OBJECT, $post_types );
+
+		// get_page_by_path() only walks hierarchical slugs; url_to_postid()
+		// resolves anything matching the site's permalink structure, such as
+		// dated permalinks.
+		if ( null === $post ) {
+			$post_id = url_to_postid( home_url( $slug_path ) );
+			$post    = 0 !== $post_id ? get_post( $post_id ) : null;
+		}
 
 		if ( null === $post ) {
-			return ValidationResult::invalid(
-				'invalid',
-				__( 'You are trying to redirect to a URL that does not exist.', 'wpcom-legacy-redirector' )
-			);
+			return ValidationResult::valid();
 		}
 
 		if ( 'publish' !== $post->post_status ) {

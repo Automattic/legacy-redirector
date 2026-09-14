@@ -42,6 +42,13 @@ class RedirectManager {
 	private ?RedirectValidator $validator;
 
 	/**
+	 * The internal destination normaliser.
+	 *
+	 * @var InternalDestinationNormaliser
+	 */
+	private InternalDestinationNormaliser $normaliser;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository The redirect repository.
@@ -50,6 +57,7 @@ class RedirectManager {
 	public function __construct( RedirectRepositoryInterface $repository, ?RedirectValidator $validator = null ) {
 		$this->repository = $repository;
 		$this->validator  = $validator;
+		$this->normaliser = new InternalDestinationNormaliser();
 	}
 
 	/**
@@ -87,6 +95,11 @@ class RedirectManager {
 				return RedirectCreationResult::from_validation( $validation );
 			}
 		}
+
+		// Validation sees the destination as entered - an absolute URL is
+		// validated as a URL, not routed into the published-post check that
+		// relative paths get. Only the stored form is canonicalised.
+		$destination = $this->normaliser->normalise( $destination );
 
 		$redirect = Redirect::create( $source, $destination );
 
@@ -215,6 +228,8 @@ class RedirectManager {
 	 * @return bool True on success, false on failure.
 	 */
 	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null ): bool {
+		$destination = $this->normaliser->normalise( $destination );
+
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
 			return false;
@@ -241,6 +256,8 @@ class RedirectManager {
 	 * @return bool True on success, false on failure.
 	 */
 	public function update_redirect( int $redirect_id, string $new_source, Destination $destination, ?string $new_status = null ): bool {
+		$destination = $this->normaliser->normalise( $destination );
+
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
 			return false;
@@ -306,6 +323,8 @@ class RedirectManager {
 	 * @return bool True if updated, false if not found or update failed.
 	 */
 	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null ): bool {
+		$destination = $this->normaliser->normalise( $destination );
+
 		$redirect = $this->repository->find_by_source( $source );
 		if ( null === $redirect ) {
 			return false;

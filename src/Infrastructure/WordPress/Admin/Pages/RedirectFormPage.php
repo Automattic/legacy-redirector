@@ -322,7 +322,6 @@ final class RedirectFormPage {
 			$error_map  = array(
 				'empty-postid' => 'post_not_found',
 				'non-public'   => 'post_not_public',
-				'invalid'      => 'path_not_found',
 			);
 			$form_error = $error_map[ $error_code ] ?? 'invalid_destination';
 			$this->redirect_with_error( $redirect_id, $form_error, $redirect_from, $redirect_to, $redirect_status );
@@ -339,6 +338,20 @@ final class RedirectFormPage {
 		$existing = $this->repository->get_id_by_source( $source );
 		if ( $existing > 0 && $existing !== $redirect_id ) {
 			$this->redirect_with_error( $redirect_id, 'duplicate', $redirect_from, $redirect_to, $redirect_status );
+		}
+
+		// Reachability check for relative destinations only: a path with no
+		// post to find (an archive, a rewrite endpoint, a mistyped slug)
+		// passes the lookup above as indeterminate, so ask the site directly.
+		// External URLs keep their pure format check, and this runs after the
+		// local rejections above so a malformed or duplicate source never
+		// pays for a network round-trip. Fails open - only an affirmative
+		// 404 rejects, so a transient network error never blocks a save.
+		if ( $destination->is_url() && $destination->as_url()->is_relative() && $this->should_check_reachability() ) {
+			$http_validation = $this->validator->validate_destination_not_404( $destination );
+			if ( $http_validation->is_invalid() ) {
+				$this->redirect_with_error( $redirect_id, 'path_not_found', $redirect_from, $redirect_to, $redirect_status );
+			}
 		}
 
 		if ( $is_edit ) {
@@ -373,6 +386,24 @@ final class RedirectFormPage {
 			);
 			exit;
 		}
+	}
+
+	/**
+	 * Whether the save flow should verify destination reachability over HTTP.
+	 *
+	 * @return bool True to perform the HTTP check.
+	 */
+	private function should_check_reachability(): bool {
+		/**
+		 * Filters whether the form save verifies relative destinations over HTTP.
+		 *
+		 * The check rejects destinations the site serves with a 404. Disable
+		 * it on sites whose valid destinations 404 anonymously - members-only
+		 * content, geo-gated pages, or content staged for launch.
+		 *
+		 * @param bool $check Whether to perform the check. Default true.
+		 */
+		return (bool) apply_filters( 'wpcom_legacy_redirector_check_destination_reachability', true );
 	}
 
 	/**
