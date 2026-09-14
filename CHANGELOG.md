@@ -18,6 +18,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 ### Added
 
 - One-off migration of redirect data created by 1.x, covering both the draft post status 1.x left on every redirect and, on subdirectory multisites, the subsite prefix it baked into stored source paths. Runs automatically in batches, or in one pass via the new `wp wpcom-legacy-redirector migrate` command (`--dry-run` supported).
+- `wpcom_legacy_redirector_destination_url` filter, the counterpart to `wpcom_legacy_redirector_request_path`, for altering the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
 - Complete DDD (Domain-Driven Design) architecture with Domain, Application, and Infrastructure layers in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - Full multisite/network support with per-site redirect management in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - Comprehensive WP-CLI commands for redirect management: `create`, `get`, `list`, `update`, `delete`, `enable`, `disable`, `validate`, `import`. All commands accept a redirect ID or source path, and the write commands accept multiple redirects at once.

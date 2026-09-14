@@ -78,6 +78,22 @@ final class RedirectResolver {
 
 		// Resolve the destination URL.
 		$destination_url = $this->resolve_destination( $redirect, $preservable_params );
+
+		/**
+		 * Filter the resolved destination URL before the redirect is performed.
+		 *
+		 * The counterpart to `wpcom_legacy_redirector_request_path`: where that
+		 * filter alters the path going into the lookup, this one alters the URL
+		 * coming out of it. Returning an empty string cancels the redirect.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param string $destination_url The resolved destination URL.
+		 * @param string $path            The request path used for the lookup, after filtering.
+		 * @param string $url             The original, unfiltered request URL.
+		 */
+		$destination_url = (string) apply_filters( 'wpcom_legacy_redirector_destination_url', $destination_url, $path, $url );
+
 		if ( empty( $destination_url ) ) {
 			return null;
 		}
