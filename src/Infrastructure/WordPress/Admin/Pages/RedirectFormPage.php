@@ -463,14 +463,25 @@ final class RedirectFormPage {
 						},
 						success: function(response) {
 							if (response.success && response.data.posts.length > 0) {
-								var html = '';
+								// Build via DOM APIs, not string concatenation: titles and
+								// type labels are attacker-influenced and must be escaped
+								// in both attribute and text positions.
+								var $container = $('#redirect_to_suggestions').empty();
 								$.each(response.data.posts, function(i, post) {
-									html += '<div class="redirect-suggestion" data-id="' + post.id + '" data-title="' + $('<div>').text(post.title).html() + '" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;">';
-									html += '<strong>' + $('<div>').text(post.title).html() + '</strong><br>';
-									html += '<small style="color: #666;">' + post.type + ' (ID: ' + post.id + ')</small>';
-									html += '</div>';
+									$('<div>', {
+										'class': 'redirect-suggestion',
+										'data-id': post.id,
+										'data-title': post.title,
+										'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
+									})
+									.append(
+										$('<strong>').text(post.title),
+										'<br>',
+										$('<small>').css('color', '#666').text(post.type + ' (ID: ' + post.id + ')')
+									)
+									.appendTo($container);
 								});
-								$('#redirect_to_suggestions').html(html).show();
+								$container.show();
 								selectedIndex = -1; // Reset selection when new results appear.
 							} else {
 								$('#redirect_to_suggestions').hide();
