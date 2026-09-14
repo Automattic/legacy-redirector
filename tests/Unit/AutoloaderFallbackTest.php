@@ -136,7 +136,13 @@ final class AutoloaderFallbackTest extends TestCase {
 				continue;
 			}
 
-			$relative           = substr( $file->getPathname(), strlen( $src ) + 1 );
+			$relative = substr( $file->getPathname(), strlen( $src ) + 1 );
+
+			// View templates are include()d, not autoloaded, so they declare no class.
+			if ( str_contains( $relative, '/views/' ) ) {
+				continue;
+			}
+
 			$cases[ $relative ] = array( $relative );
 		}
 

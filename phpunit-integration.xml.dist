@@ -14,6 +14,10 @@
 		<include>
 			<directory suffix=".php">./src</directory>
 		</include>
+		<exclude>
+			<!-- View templates are include()d markup, not coverable classes; processUncoveredFiles would execute them. -->
+			<directory suffix=".php">./src/Infrastructure/WordPress/Admin/Pages/views</directory>
+		</exclude>
 	</coverage>
 	<testsuites>
 		<testsuite name="integration">
