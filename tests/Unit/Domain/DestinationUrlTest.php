@@ -293,6 +293,39 @@ final class DestinationUrlTest extends MonkeyStubs {
 		DestinationUrl::from_string( '//example.com/page' );
 	}
 
+	/**
+	 * Test single-slash scheme URLs are rejected.
+	 *
+	 * Browsers normalise `Location: https:/evil.com` to `https://evil.com`, so
+	 * these must not pass validation with a null host.
+	 *
+	 * @dataProvider data_single_slash_scheme_urls
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::from_string
+	 *
+	 * @param string $url URL to reject.
+	 */
+	public function test_single_slash_scheme_rejected( string $url ): void {
+		$this->expectException( InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Absolute destination URLs must include a host.' );
+
+		DestinationUrl::from_string( $url );
+	}
+
+	/**
+	 * Data provider for single-slash scheme URLs.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_single_slash_scheme_urls(): array {
+		return array(
+			'https single slash' => array( 'https:/evil.com' ),
+			'http single slash'  => array( 'http:/evil.com/path' ),
+			'scheme only'        => array( 'https:' ),
+			'no slashes'         => array( 'https:evil.com' ),
+		);
+	}
+
 	// =========================================================================
 	// Edge Cases: Query Parameter Handling
 	// =========================================================================

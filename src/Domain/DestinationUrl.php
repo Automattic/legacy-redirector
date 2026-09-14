@@ -62,12 +62,19 @@ final class DestinationUrl {
 		// Check if it's a relative path (starts with /).
 		$is_relative = str_starts_with( $url, '/' ) && ! str_starts_with( $url, '//' );
 
-		// Validate absolute URLs have a valid scheme.
+		// Validate absolute URLs have a valid scheme and a host.
 		if ( ! $is_relative ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
-			$scheme = parse_url( $url, PHP_URL_SCHEME );
-			if ( empty( $scheme ) || ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
+			$parts  = parse_url( $url );
+			$parts  = is_array( $parts ) ? $parts : array();
+			$scheme = $parts['scheme'] ?? '';
+			if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
 				throw new InvalidArgumentException( 'Absolute destination URLs must use http or https scheme.' );
+			}
+
+			// Reject malformed forms such as `https:/evil.com`, which browsers normalise to `https://evil.com`.
+			if ( empty( $parts['host'] ) ) {
+				throw new InvalidArgumentException( 'Absolute destination URLs must include a host.' );
 			}
 		}
 
