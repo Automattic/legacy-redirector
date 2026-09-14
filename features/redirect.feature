@@ -26,6 +26,10 @@ Feature: Front-end redirects
       """
     And STDOUT should contain:
       """
+      Cache-Control: max-age=86400
+      """
+    And STDOUT should contain:
+      """
       /http-destination
       """
 

@@ -39,6 +39,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - `--verbose` flag for `import` and `import-from-meta` commands.
 - `--skip-validation` flag for `create` (validation enabled by default, matching UI behaviour).
 - `--format` flag for `find-domains`, including a `count` format.
+- `Cache-Control: max-age` header on redirect responses, so browsers no longer cache 301s indefinitely. Defaults to one day for 301s and one minute otherwise, filterable via `wpcom_legacy_redirector_redirect_max_age` (return `0` to suppress the header).
 
 ### Changed
 

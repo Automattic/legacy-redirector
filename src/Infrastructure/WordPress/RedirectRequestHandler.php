@@ -87,8 +87,49 @@ final class RedirectRequestHandler {
 		// Allow redirects to external hosts by adding destination host to allowed list.
 		$this->allow_redirect_host( $url );
 
+		$this->send_cache_control_header( $url, $status_code );
+
 		wp_safe_redirect( $url, $status_code, $this->plugin_name );
 		exit;
+	}
+
+	/**
+	 * Send a Cache-Control header for the redirect response.
+	 *
+	 * Without explicit freshness information, browsers apply heuristic
+	 * caching to 301 responses, which can make a wrong redirect very
+	 * sticky. An explicit max-age bounds how long a redirect is cached.
+	 *
+	 * @param string $url         The destination URL.
+	 * @param int    $status_code The HTTP status code.
+	 * @return void
+	 */
+	private function send_cache_control_header( string $url, int $status_code ): void {
+		/**
+		 * Filter the Cache-Control max-age sent with redirect responses.
+		 *
+		 * Defaults to one day for 301 redirects and one minute otherwise.
+		 * Return zero or a negative number to suppress the header, e.g.
+		 * where an edge cache manages redirect caching instead.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @param int    $max_age     Max-age in seconds.
+		 * @param string $url         The destination URL.
+		 * @param int    $status_code The HTTP status code.
+		 */
+		$max_age = (int) apply_filters(
+			'wpcom_legacy_redirector_redirect_max_age',
+			301 === $status_code ? DAY_IN_SECONDS : MINUTE_IN_SECONDS,
+			$url,
+			$status_code
+		);
+
+		if ( $max_age <= 0 || headers_sent() ) {
+			return;
+		}
+
+		header( 'Cache-Control: max-age=' . $max_age, true );
 	}
 
 	/**
