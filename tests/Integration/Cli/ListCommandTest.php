@@ -318,4 +318,39 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_stdout_not_contains( '/enabled-post' );
 		$this->assert_stdout_not_contains( '/disabled-url' );
 	}
+
+	// =========================================================================
+	// Tests for fields option
+	// =========================================================================
+
+	/**
+	 * Test limiting output to selected fields.
+	 */
+	public function test_list_limited_fields(): void {
+		$this->create_redirect( '/fields-limited', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'fields' => 'from' )
+		);
+
+		$this->assert_stdout_contains( '/fields-limited' );
+		$this->assert_stdout_not_contains( 'https://example.com/dest' );
+	}
+
+	/**
+	 * Test error for invalid --fields value.
+	 */
+	public function test_list_invalid_fields(): void {
+		$this->create_redirect( '/fields-bad', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'fields' => 'from,bogus' )
+		);
+
+		$this->assert_error_contains( 'Invalid fields' );
+	}
 }

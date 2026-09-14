@@ -15,7 +15,7 @@ Feature: Import redirects from CSV
       /another-old-page,/destination-post
       """
 
-    When I run `wp wpcom-legacy-redirector import-from-csv --csv=/tmp/redirects.csv --skip-validation`
+    When I run `wp wpcom-legacy-redirector import /tmp/redirects.csv --skip-validation`
     Then STDOUT should contain:
       """
       Processed 2 redirects.

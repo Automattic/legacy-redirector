@@ -9,8 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
-use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -20,40 +19,34 @@ use WP_CLI_Command;
 final class GetCommand extends WP_CLI_Command {
 
 	/**
-	 * The redirect repository.
+	 * The redirect fetcher.
 	 *
-	 * @var RedirectRepositoryInterface
+	 * @var RedirectFetcher
 	 */
-	private RedirectRepositoryInterface $repository;
+	private RedirectFetcher $fetcher;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RedirectRepositoryInterface $repository The redirect repository.
+	 * @param RedirectFetcher $fetcher The redirect fetcher.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository ) {
-		$this->repository = $repository;
+	public function __construct( RedirectFetcher $fetcher ) {
+		$this->fetcher = $fetcher;
 	}
 
 	/**
-	 * Get details of a redirect by source path or ID.
+	 * Get details of a redirect.
 	 *
 	 * ## OPTIONS
 	 *
-	 * <source>
-	 * : The source path (e.g., /old-page) or redirect ID.
-	 *
-	 * [--by=<field>]
-	 * : How to look up the redirect.
-	 * ---
-	 * default: source
-	 * options:
-	 *   - source
-	 *   - id
-	 * ---
+	 * <redirect>
+	 * : The redirect ID or source path (e.g. /old-page).
 	 *
 	 * [--field=<field>]
 	 * : Return a single field value.
+	 *
+	 * [--fields=<fields>]
+	 * : Limit output to specific fields (comma-separated).
 	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
@@ -72,7 +65,7 @@ final class GetCommand extends WP_CLI_Command {
 	 *     $ wp wpcom-legacy-redirector get /old-page
 	 *
 	 *     # Get redirect by ID.
-	 *     $ wp wpcom-legacy-redirector get 123 --by=id
+	 *     $ wp wpcom-legacy-redirector get 123
 	 *
 	 *     # Get just the destination.
 	 *     $ wp wpcom-legacy-redirector get /old-page --field=to
@@ -80,46 +73,29 @@ final class GetCommand extends WP_CLI_Command {
 	 *     # Get redirect as JSON.
 	 *     $ wp wpcom-legacy-redirector get /old-page --format=json
 	 *
+	 * @when after_wp_load
+	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		$lookup = $args[0];
-		$by     = $assoc_args['by'] ?? 'source';
-		$field  = $assoc_args['field'] ?? null;
-		$format = $assoc_args['format'] ?? 'table';
+		$identifier = $args[0];
+		$field      = $assoc_args['field'] ?? null;
+		$format     = $assoc_args['format'] ?? 'table';
 
-		// Find the redirect (including disabled ones).
-		if ( 'id' === $by ) {
-			$redirect = $this->repository->find_by_id( (int) $lookup );
-		} else {
-			try {
-				$source      = SourceUrl::from_string( $lookup );
-				$redirect_id = $this->repository->get_id_by_source( $source );
-				$redirect    = $redirect_id > 0 ? $this->repository->find_by_id( $redirect_id ) : null;
-			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::error( sprintf( 'Invalid source path: %s', $e->getMessage() ) );
-				return;
-			}
-		}
-
-		if ( null === $redirect ) {
-			WP_CLI::error( sprintf( 'Redirect not found: %s', $lookup ) );
+		try {
+			$redirect = $this->fetcher->fetch( $identifier );
+		} catch ( \InvalidArgumentException $e ) {
+			WP_CLI::error( sprintf( 'Invalid source path: %s', $e->getMessage() ) );
 			return;
 		}
 
-		// Build output data.
-		$dest = $redirect->destination();
-		$data = array(
-			'ID'     => $redirect->id(),
-			'from'   => $redirect->source()->path(),
-			'to'     => $dest->is_post_id()
-				? $dest->as_post_id()->value()
-				: $dest->as_url()->value(),
-			'type'   => $dest->is_post_id() ? 'post' : 'url',
-			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
-			'hash'   => $redirect->source()->hash(),
-		);
+		if ( null === $redirect ) {
+			WP_CLI::error( sprintf( 'Redirect not found: %s', $identifier ) );
+			return;
+		}
+
+		$data = $this->redirect_to_array( $redirect );
 
 		// Return single field if requested.
 		if ( null !== $field ) {
@@ -129,6 +105,17 @@ final class GetCommand extends WP_CLI_Command {
 			}
 			WP_CLI::line( (string) $data[ $field ] );
 			return;
+		}
+
+		// Limit to requested fields.
+		if ( isset( $assoc_args['fields'] ) ) {
+			$requested = array_map( 'trim', explode( ',', $assoc_args['fields'] ) );
+			$invalid   = array_diff( $requested, array_keys( $data ) );
+			if ( ! empty( $invalid ) ) {
+				WP_CLI::error( sprintf( 'Invalid fields: %s. Available fields: %s', implode( ', ', $invalid ), implode( ', ', array_keys( $data ) ) ) );
+				return;
+			}
+			$data = array_intersect_key( $data, array_flip( $requested ) );
 		}
 
 		// Format as key-value pairs for table.
@@ -146,5 +133,26 @@ final class GetCommand extends WP_CLI_Command {
 
 		// Other formats.
 		\WP_CLI\Utils\format_items( $format, array( $data ), array_keys( $data ) );
+	}
+
+	/**
+	 * Convert a redirect to an output array.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return array<string, int|string|null> The output data.
+	 */
+	private function redirect_to_array( Redirect $redirect ): array {
+		$dest = $redirect->destination();
+
+		return array(
+			'ID'     => $redirect->id(),
+			'from'   => $redirect->source()->path(),
+			'to'     => $dest->is_post_id()
+				? $dest->as_post_id()->value()
+				: $dest->as_url()->value(),
+			'type'   => $dest->is_post_id() ? 'post' : 'url',
+			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
+			'hash'   => $redirect->source()->hash(),
+		);
 	}
 }

@@ -27,5 +27,5 @@ Feature: Validate redirects
     When I run `wp wpcom-legacy-redirector validate /validate-trashed`
     Then STDOUT should contain:
       """
-      has issue
+      broken redirect
       """

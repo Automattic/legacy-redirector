@@ -9,12 +9,14 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 
 /**
  * Integration tests for ValidateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
@@ -48,321 +50,233 @@ final class ValidateCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new ValidateCommand(
-			$this->container()->inner_repository(),
+			new RedirectFetcher( $this->container()->inner_repository() ),
 			$this->container()->query_repository(),
-			$this->container()->validator()
+			$this->container()->validator(),
+			$this->container()->manager()
 		);
 	}
 
 	// =========================================================================
-	// Tests for single redirect validation
-	// =========================================================================
-
-	/**
-	 * Test validating a valid redirect by source.
-	 */
-	public function test_validate_single_valid_redirect_by_source(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/valid-redirect', $post_id );
-
-		$this->invoke_command(
-			$this->command,
-			array( '/valid-redirect' ),
-			array( 'no-check-urls' => true )
-		);
-
-		$this->assert_success_contains( 'valid' );
-	}
-
-	/**
-	 * Test validating a redirect pointing to trashed post.
-	 */
-	public function test_validate_single_trashed_post_destination(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/trashed-dest', $post_id );
-
-		// Trash the destination post.
-		wp_trash_post( $post_id );
-
-		$this->invoke_command(
-			$this->command,
-			array( '/trashed-dest' ),
-			array( 'no-check-urls' => true )
-		);
-
-		$this->assertTrue( $this->output->had_warning() );
-		$this->assert_stdout_contains( 'trashed' );
-	}
-
-	/**
-	 * Test validating a redirect pointing to deleted post.
-	 */
-	public function test_validate_single_deleted_post_destination(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/deleted-dest', $post_id );
-
-		// Permanently delete the destination post.
-		wp_delete_post( $post_id, true );
-
-		$this->invoke_command(
-			$this->command,
-			array( '/deleted-dest' ),
-			array( 'no-check-urls' => true )
-		);
-
-		$this->assertTrue( $this->output->had_warning() );
-		$this->assert_stdout_contains( 'deleted' );
-	}
-
-	/**
-	 * Test validating a redirect pointing to draft post.
-	 */
-	public function test_validate_single_draft_post_destination(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'draft' ) );
-		$this->create_redirect( '/draft-dest', $post_id );
-
-		$this->invoke_command(
-			$this->command,
-			array( '/draft-dest' ),
-			array( 'no-check-urls' => true )
-		);
-
-		$this->assertTrue( $this->output->had_warning() );
-		$this->assert_stdout_contains( 'not published' );
-	}
-
-	/**
-	 * Test validating a redirect by ID.
-	 */
-	public function test_validate_single_by_id(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/by-id-validate', $post_id );
-
-		$this->invoke_command(
-			$this->command,
-			array( (string) $redirect_id ),
-			array(
-				'by'            => 'id',
-				'no-check-urls' => true,
-			)
-		);
-
-		$this->assert_success_contains( 'valid' );
-	}
-
-	/**
-	 * Test error when redirect not found.
-	 */
-	public function test_validate_single_not_found(): void {
-		$this->invoke_command(
-			$this->command,
-			array( '/nonexistent-redirect' ),
-			array()
-		);
-
-		$this->assert_error_contains( 'not found' );
-	}
-
-	/**
-	 * Test error for invalid source path.
-	 */
-	public function test_validate_single_invalid_source(): void {
-		$this->invoke_command(
-			$this->command,
-			array( '' ),
-			array()
-		);
-
-		$this->assert_error_contains( 'Invalid source path' );
-	}
-
-	// =========================================================================
-	// Tests for single redirect fix
-	// =========================================================================
-
-	/**
-	 * Test fixing a broken single redirect.
-	 */
-	public function test_validate_single_with_fix(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/fix-single', $post_id );
-
-		// Trash the destination.
-		wp_trash_post( $post_id );
-
-		$this->invoke_command(
-			$this->command,
-			array( '/fix-single' ),
-			array(
-				'fix'           => true,
-				'no-check-urls' => true,
-			)
-		);
-
-		$this->assert_success_contains( 'disabled' );
-
-		// Verify redirect was disabled.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'draft', $post->post_status );
-	}
-
-	// =========================================================================
-	// Tests for batch validation
+	// Batch mode (no positional arguments)
 	// =========================================================================
 
 	/**
 	 * Test batch validation with no issues.
 	 */
 	public function test_validate_batch_no_issues(): void {
-		$post1 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$post2 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/valid-one', $post_id );
+		$this->create_redirect( '/valid-two', $post_id );
 
-		$this->create_redirect( '/batch-one', $post1 );
-		$this->create_redirect( '/batch-two', $post2 );
+		$this->invoke_command( $this->command, array(), array() );
 
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array()
-		);
-
-		$this->assert_success_contains( 'No issues found' );
+		$this->assert_success_contains( 'No issues found.' );
 	}
 
 	/**
-	 * Test batch validation finding broken redirects.
+	 * Test batch validation finds a trashed post destination.
 	 */
-	public function test_validate_batch_finds_broken(): void {
-		$good_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$bad_post  = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+	public function test_validate_batch_finds_trashed_destination(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/broken-redirect', $post_id );
+		wp_trash_post( $post_id );
 
-		$this->create_redirect( '/batch-good', $good_post );
-		$this->create_redirect( '/batch-bad', $bad_post );
+		$this->invoke_command( $this->command, array(), array() );
 
-		// Delete the bad post.
-		wp_delete_post( $bad_post, true );
-
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array()
-		);
-
-		$this->assertTrue( $this->output->had_warning() );
-		$this->assert_stdout_contains( 'broken redirect' );
-		$this->assert_stdout_contains( '/batch-bad' );
+		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_stdout_contains( '/broken-redirect' );
+		$this->assert_stdout_contains( 'Post trashed' );
 	}
 
 	/**
-	 * Test batch validation with status filter.
+	 * Test batch validation finds a deleted post destination.
 	 */
-	public function test_validate_batch_status_filter(): void {
-		$post1 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$post2 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+	public function test_validate_batch_finds_deleted_destination(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/deleted-dest', $post_id );
+		wp_delete_post( $post_id, true );
 
-		$enabled_id  = $this->create_redirect( '/batch-enabled', $post1 );
-		$disabled_id = $this->create_redirect( '/batch-disabled', $post2 );
+		$this->invoke_command( $this->command, array(), array() );
 
+		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_stdout_contains( 'Post deleted' );
+	}
+
+	/**
+	 * Test count format outputs only the number of issues.
+	 */
+	public function test_validate_count_format(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/count-broken', $post_id );
+		wp_delete_post( $post_id, true );
+
+		$this->invoke_command( $this->command, array(), array( 'format' => 'count' ) );
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertSame( '1', trim( $this->get_stdout() ) );
+	}
+
+	/**
+	 * Test --fix disables broken redirects via the manager.
+	 */
+	public function test_validate_fix_disables_broken_redirects(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/fix-me', $post_id );
+		wp_delete_post( $post_id, true );
+
+		$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
+
+		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test disabled redirects are skipped by default (status defaults to enabled).
+	 */
+	public function test_validate_defaults_to_enabled_only(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/disabled-broken', $post_id );
 		wp_update_post(
 			array(
-				'ID'          => $disabled_id,
+				'ID'          => $redirect_id,
 				'post_status' => 'draft',
 			)
 		);
+		wp_delete_post( $post_id, true );
 
-		// Delete both destination posts.
-		wp_delete_post( $post1, true );
-		wp_delete_post( $post2, true );
+		$this->invoke_command( $this->command, array(), array() );
 
-		// Validate only enabled redirects.
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array( 'status' => 'enabled' )
-		);
-
-		$this->assert_stdout_contains( '/batch-enabled' );
-		$this->assert_stdout_not_contains( '/batch-disabled' );
+		$this->assert_success_contains( 'No issues found.' );
 	}
 
 	/**
-	 * Test batch validation count format.
+	 * Test --status=any includes disabled redirects.
 	 */
-	public function test_validate_batch_count_format(): void {
-		$post1 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$post2 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$post3 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-
-		$this->create_redirect( '/validate-count-one', $post1 );
-		$this->create_redirect( '/validate-count-two', $post2 );
-		$this->create_redirect( '/validate-count-three', $post3 );
-
-		// Delete two posts.
-		wp_delete_post( $post1, true );
-		wp_delete_post( $post2, true );
-
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array( 'format' => 'count' )
+	public function test_validate_status_any_includes_disabled(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/any-status-broken', $post_id );
+		wp_update_post(
+			array(
+				'ID'          => $redirect_id,
+				'post_status' => 'draft',
+			)
 		);
+		wp_delete_post( $post_id, true );
 
-		// Count format outputs "Checking..." line followed by the count.
-		// Get the last line which is the actual count.
-		$lines = explode( "\n", trim( $this->get_stdout() ) );
-		$count = end( $lines );
-		$this->assertEquals( '2', $count );
+		$this->invoke_command( $this->command, array(), array( 'status' => 'any' ) );
+
+		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
 	}
 
 	// =========================================================================
-	// Tests for batch fix
+	// Targeted mode (positional arguments)
 	// =========================================================================
 
 	/**
-	 * Test batch validation with fix option.
+	 * Test validating a single valid redirect by source.
 	 */
-	public function test_validate_batch_with_fix(): void {
-		$post1 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$post2 = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+	public function test_validate_single_valid_redirect(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/single-valid', $post_id );
 
-		$redirect1 = $this->create_redirect( '/fix-batch-one', $post1 );
-		$redirect2 = $this->create_redirect( '/fix-batch-two', $post2 );
+		$this->invoke_command( $this->command, array( '/single-valid' ), array() );
 
-		// Delete both destination posts.
-		wp_delete_post( $post1, true );
-		wp_delete_post( $post2, true );
-
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array( 'fix' => true )
-		);
-
-		$this->assert_success_contains( 'Disabled' );
-		$this->assert_stdout_contains( '2' ); // Should mention fixing 2 redirects.
-
-		// Verify both redirects were disabled.
-		$this->assertEquals( 'draft', get_post( $redirect1 )->post_status );
-		$this->assertEquals( 'draft', get_post( $redirect2 )->post_status );
+		$this->assert_success_contains( 'No issues found.' );
 	}
 
-	// =========================================================================
-	// Tests for URL redirects
-	// =========================================================================
+	/**
+	 * Test validating a single broken redirect by source.
+	 */
+	public function test_validate_single_broken_redirect(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/single-broken', $post_id );
+		wp_trash_post( $post_id );
+
+		$this->invoke_command( $this->command, array( '/single-broken' ), array() );
+
+		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_stdout_contains( 'Post trashed' );
+	}
 
 	/**
-	 * Test validating a redirect with URL destination (no URL check).
+	 * Test validating a single redirect by ID.
 	 */
-	public function test_validate_url_destination_without_check(): void {
-		$this->create_redirect( '/url-dest', 'https://example.com/destination' );
+	public function test_validate_single_by_id(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/single-by-id', $post_id );
 
-		$this->invoke_command(
-			$this->command,
-			array( '/url-dest' ),
-			array( 'no-check-urls' => true )
+		$this->invoke_command( $this->command, array( (string) $redirect_id ), array() );
+
+		$this->assert_success_contains( 'No issues found.' );
+	}
+
+	/**
+	 * Test validating a targeted disabled redirect works without --status.
+	 */
+	public function test_validate_single_includes_disabled(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/single-disabled', $post_id );
+		wp_update_post(
+			array(
+				'ID'          => $redirect_id,
+				'post_status' => 'draft',
+			)
 		);
+		wp_trash_post( $post_id );
 
-		// Without URL checking, URL destinations are always valid.
-		$this->assert_success_contains( 'valid' );
+		$this->invoke_command( $this->command, array( '/single-disabled' ), array() );
+
+		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+	}
+
+	/**
+	 * Test a relative-path destination whose post is trashed is reported
+	 * without needing --check-urls.
+	 *
+	 * Trashing renames the post's slug with a __trashed suffix, so a plain
+	 * path lookup misses it; the validator must check the renamed slug.
+	 */
+	public function test_validate_finds_trashed_relative_path_destination(): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'trashed-path-target',
+				'post_title'  => 'trashed-path-target',
+			)
+		);
+		$this->create_redirect( '/trashed-path-source', '/trashed-path-target' );
+
+		$post = get_page_by_path( 'trashed-path-target', OBJECT, array( 'post', 'page' ) );
+		wp_trash_post( $post->ID );
+
+		$this->invoke_command( $this->command, array( '/trashed-path-source' ), array() );
+
+		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_stdout_contains( 'Post trashed' );
+	}
+
+	/**
+	 * Test error when no given redirects can be resolved.
+	 */
+	public function test_validate_not_found(): void {
+		$this->invoke_command( $this->command, array( '/nonexistent' ), array() );
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+	}
+
+	/**
+	 * Test --fix on a targeted broken redirect.
+	 */
+	public function test_validate_single_fix(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/single-fix', $post_id );
+		wp_delete_post( $post_id, true );
+
+		$this->invoke_command( $this->command, array( '/single-fix' ), array( 'fix' => true ) );
+
+		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
 	}
 }

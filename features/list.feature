@@ -21,3 +21,14 @@ Feature: List redirects
       """
       /list-test-2
       """
+
+  # Contract test: CSV format is the supported export path.
+  Scenario: Export redirects as CSV
+    Given there is a published post with a slug of "csv-destination"
+    And there is a redirect from "/csv-test-1" to "/csv-destination"
+
+    When I run `wp wpcom-legacy-redirector list --format=csv`
+    Then STDOUT should contain:
+      """
+      /csv-test-1
+      """

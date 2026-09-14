@@ -10,12 +10,11 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
-use Automattic\LegacyRedirector\Domain\SourceUrl;
 use WP_CLI;
 use WP_CLI_Command;
 
 /**
- * Delete a single redirect.
+ * Delete one or more redirects.
  */
 final class DeleteCommand extends WP_CLI_Command {
 
@@ -27,30 +26,30 @@ final class DeleteCommand extends WP_CLI_Command {
 	private RedirectManager $manager;
 
 	/**
+	 * The redirect fetcher.
+	 *
+	 * @var RedirectFetcher
+	 */
+	private RedirectFetcher $fetcher;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
+	 * @param RedirectFetcher $fetcher The redirect fetcher.
 	 */
-	public function __construct( RedirectManager $manager ) {
+	public function __construct( RedirectManager $manager, RedirectFetcher $fetcher ) {
 		$this->manager = $manager;
+		$this->fetcher = $fetcher;
 	}
 
 	/**
-	 * Delete a redirect by source path or ID.
+	 * Delete one or more redirects.
 	 *
 	 * ## OPTIONS
 	 *
-	 * <source>
-	 * : The source path (e.g., /old-page) or redirect ID.
-	 *
-	 * [--by=<field>]
-	 * : How to look up the redirect.
-	 * ---
-	 * default: source
-	 * options:
-	 *   - source
-	 *   - id
-	 * ---
+	 * <redirect>...
+	 * : One or more redirect IDs or source paths (e.g. /old-page).
 	 *
 	 * [--yes]
 	 * : Skip confirmation prompt.
@@ -61,38 +60,61 @@ final class DeleteCommand extends WP_CLI_Command {
 	 *     $ wp wpcom-legacy-redirector delete /old-page
 	 *
 	 *     # Delete redirect by ID.
-	 *     $ wp wpcom-legacy-redirector delete 123 --by=id
+	 *     $ wp wpcom-legacy-redirector delete 123
 	 *
-	 *     # Delete without confirmation.
-	 *     $ wp wpcom-legacy-redirector delete /old-page --yes
+	 *     # Delete multiple redirects without confirmation.
+	 *     $ wp wpcom-legacy-redirector delete /old-page /other-page --yes
+	 *
+	 *     # Delete all disabled redirects.
+	 *     $ wp wpcom-legacy-redirector list --status=disabled --format=ids | xargs wp wpcom-legacy-redirector delete --yes
+	 *
+	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		$lookup = $args[0];
-		$by     = $assoc_args['by'] ?? 'source';
+		WP_CLI::confirm(
+			sprintf(
+				1 === count( $args )
+					? 'Are you sure you want to delete the redirect "%s"?'
+					: 'Are you sure you want to delete %2$d redirects?',
+				$args[0],
+				count( $args )
+			),
+			$assoc_args
+		);
 
-		// Confirm deletion.
-		WP_CLI::confirm( sprintf( 'Are you sure you want to delete the redirect "%s"?', $lookup ), $assoc_args );
+		$deleted = 0;
+		$failed  = 0;
 
-		// Delete the redirect.
-		if ( 'id' === $by ) {
-			$deleted = $this->manager->delete_by_id( (int) $lookup );
-		} else {
+		foreach ( $args as $identifier ) {
 			try {
-				$source  = SourceUrl::from_string( $lookup );
-				$deleted = $this->manager->delete_by_source( $source );
+				$redirect = $this->fetcher->fetch( $identifier );
 			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::error( sprintf( 'Invalid source path: %s', $e->getMessage() ) );
-				return;
+				WP_CLI::warning( sprintf( 'Invalid source path: %s (%s)', $identifier, $e->getMessage() ) );
+				++$failed;
+				continue;
 			}
+
+			if ( null === $redirect || ! $this->manager->delete_by_id( $redirect->id() ) ) {
+				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
+				++$failed;
+				continue;
+			}
+
+			++$deleted;
 		}
 
-		if ( $deleted ) {
-			WP_CLI::success( sprintf( 'Deleted redirect: %s', $lookup ) );
-		} else {
-			WP_CLI::error( sprintf( 'Redirect not found: %s', $lookup ) );
+		if ( $failed > 0 ) {
+			WP_CLI::error( sprintf( 'Only deleted %d of %d redirects.', $deleted, count( $args ) ) );
+			return;
 		}
+
+		WP_CLI::success(
+			1 === $deleted
+				? sprintf( 'Deleted redirect: %s', $args[0] )
+				: sprintf( 'Deleted %d redirects.', $deleted )
+		);
 	}
 }

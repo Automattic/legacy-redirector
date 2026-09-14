@@ -39,4 +39,20 @@ interface RedirectQueryRepositoryInterface {
 	 * @return int The total count of matching redirects.
 	 */
 	public function count_matching( RedirectCriteria $criteria ): int;
+
+	/**
+	 * Get destination URLs for redirects pointing at external (absolute) URLs.
+	 *
+	 * @param int $limit  Maximum number of URLs to return.
+	 * @param int $offset Number of URLs to skip.
+	 * @return string[] The destination URLs.
+	 */
+	public function get_external_destination_urls( int $limit, int $offset ): array;
+
+	/**
+	 * Count redirects pointing at external (absolute) URLs.
+	 *
+	 * @return int The total count.
+	 */
+	public function count_external_destinations(): int;
 }

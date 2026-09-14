@@ -11,12 +11,11 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
-use Automattic\LegacyRedirector\Domain\SourceUrl;
 use WP_CLI;
 use WP_CLI_Command;
 
 /**
- * Update a single redirect.
+ * Update one or more redirects.
  */
 final class UpdateCommand extends WP_CLI_Command {
 
@@ -28,27 +27,36 @@ final class UpdateCommand extends WP_CLI_Command {
 	private RedirectManager $manager;
 
 	/**
+	 * The redirect fetcher.
+	 *
+	 * @var RedirectFetcher
+	 */
+	private RedirectFetcher $fetcher;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
+	 * @param RedirectFetcher $fetcher The redirect fetcher.
 	 */
-	public function __construct( RedirectManager $manager ) {
+	public function __construct( RedirectManager $manager, RedirectFetcher $fetcher ) {
 		$this->manager = $manager;
+		$this->fetcher = $fetcher;
 	}
 
 	/**
-	 * Update a redirect's destination.
+	 * Update the destination and/or status of one or more redirects.
 	 *
 	 * ## OPTIONS
 	 *
-	 * <source>
-	 * : The source path to find (e.g., /old-page).
+	 * <redirect>...
+	 * : One or more redirect IDs or source paths (e.g. /old-page).
 	 *
-	 * <destination>
-	 * : The new destination. Can be a path, full URL, or post ID.
+	 * [--to=<destination>]
+	 * : The new destination. A path, a full URL, or a post ID.
 	 *
 	 * [--status=<status>]
-	 * : Optionally change the status.
+	 * : The new status.
 	 * ---
 	 * options:
 	 *   - enabled
@@ -57,53 +65,88 @@ final class UpdateCommand extends WP_CLI_Command {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     # Update redirect destination.
-	 *     $ wp wpcom-legacy-redirector update /old-page /new-page
+	 *     # Update a redirect's destination.
+	 *     $ wp wpcom-legacy-redirector update /old-page --to=/new-page
 	 *
-	 *     # Update redirect to point to a post.
-	 *     $ wp wpcom-legacy-redirector update /old-page 123
+	 *     # Point a redirect at a post.
+	 *     $ wp wpcom-legacy-redirector update /old-page --to=123
 	 *
-	 *     # Update redirect and disable it.
-	 *     $ wp wpcom-legacy-redirector update /old-page /new-page --status=disabled
+	 *     # Update the destination and disable the redirect.
+	 *     $ wp wpcom-legacy-redirector update /old-page --to=/new-page --status=disabled
+	 *
+	 *     # Point several redirects at the same destination.
+	 *     $ wp wpcom-legacy-redirector update /old-a /old-b --to=/new-page
+	 *
+	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		$source_path = $args[0];
-		$dest_value  = is_numeric( $args[1] ) ? (int) $args[1] : $args[1];
+		$to_value    = $assoc_args['to'] ?? null;
 		$status_flag = $assoc_args['status'] ?? null;
 
-		// Parse source.
-		try {
-			$source = SourceUrl::from_string( $source_path );
-		} catch ( \InvalidArgumentException $e ) {
-			WP_CLI::error( sprintf( 'Invalid source path: %s', $e->getMessage() ) );
+		if ( null === $to_value && null === $status_flag ) {
+			WP_CLI::error( 'Please specify at least one of --to or --status.' );
 			return;
 		}
 
-		// Parse destination.
-		try {
-			$destination = Destination::from_mixed( $dest_value );
-		} catch ( \InvalidArgumentException $e ) {
-			WP_CLI::error( sprintf( 'Invalid destination: %s', $e->getMessage() ) );
-			return;
+		// Parse the destination once.
+		$destination = null;
+		if ( null !== $to_value ) {
+			try {
+				$destination = Destination::from_mixed( ctype_digit( (string) $to_value ) ? (int) $to_value : $to_value );
+			} catch ( \InvalidArgumentException $e ) {
+				WP_CLI::error( sprintf( 'Invalid destination: %s', $e->getMessage() ) );
+				return;
+			}
 		}
 
-		// Convert status flag to post status.
 		$post_status = null;
 		if ( null !== $status_flag ) {
 			$post_status = 'disabled' === $status_flag ? 'draft' : 'publish';
 		}
 
-		// Attempt update.
-		$updated = $this->manager->update_by_source( $source, $destination, $post_status );
+		$updated = 0;
+		$failed  = 0;
 
-		if ( $updated ) {
-			$status_msg = null !== $status_flag ? " (status: $status_flag)" : '';
-			WP_CLI::success( sprintf( 'Updated %s -> %s%s', $source_path, $dest_value, $status_msg ) );
-		} else {
-			WP_CLI::error( sprintf( 'Redirect not found: %s', $source_path ) );
+		foreach ( $args as $identifier ) {
+			try {
+				$redirect = $this->fetcher->fetch( $identifier );
+			} catch ( \InvalidArgumentException $e ) {
+				WP_CLI::warning( sprintf( 'Invalid source path: %s (%s)', $identifier, $e->getMessage() ) );
+				++$failed;
+				continue;
+			}
+
+			if ( null === $redirect ) {
+				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
+				++$failed;
+				continue;
+			}
+
+			$result = null !== $destination
+				? $this->manager->update_destination( $redirect->id(), $destination, $post_status )
+				: $this->manager->change_status( $redirect->id(), $post_status );
+
+			if ( ! $result ) {
+				WP_CLI::warning( sprintf( 'Could not update redirect: %s', $identifier ) );
+				++$failed;
+				continue;
+			}
+
+			++$updated;
 		}
+
+		if ( $failed > 0 ) {
+			WP_CLI::error( sprintf( 'Only updated %d of %d redirects.', $updated, count( $args ) ) );
+			return;
+		}
+
+		WP_CLI::success(
+			1 === $updated
+				? sprintf( 'Updated redirect: %s', $args[0] )
+				: sprintf( 'Updated %d redirects.', $updated )
+		);
 	}
 }

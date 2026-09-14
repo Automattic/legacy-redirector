@@ -31,7 +31,7 @@ wpcom-legacy-redirector/
 │       ├── PostType/       # Custom post type for redirect storage
 │       ├── Repository/     # PostTypeRedirectRepository, CachingRedirectRepository
 │       ├── Admin/          # Admin UI (BulkActions, RowActions, ListTable, Ajax)
-│       └── CLI/            # WP-CLI commands (Validate, Import, Export, FindDomains, etc.)
+│       └── CLI/            # WP-CLI commands (Create, List, Validate, Import, FindDomains, etc.)
 ├── tests/
 │   ├── Unit/               # Unit tests (Brain Monkey)
 │   └── Integration/        # Integration tests (wp-env, separate phpunit config)
@@ -47,7 +47,7 @@ wpcom-legacy-redirector/
 
 - **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectStatus`, `RedirectCriteria`; `ValidationIssue`; repository interfaces
 - **Application**: `RedirectManager` (CRUD), `RedirectExecutor` (runtime resolution), `RedirectValidator` (rule validation), `ValidationResult`
-- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, admin UI components, 9+ WP-CLI commands (validate, import/export CSV, find domains, etc.)
+- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.)
 
 ### Dependencies
 

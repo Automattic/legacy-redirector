@@ -10,18 +10,24 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 
 /**
  * Integration tests for DisableCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\AbstractStatusCommand
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Infrastructure\DI\Container
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class DisableCommandTest extends CliTestCase {
@@ -43,77 +49,72 @@ final class DisableCommandTest extends CliTestCase {
 
 		$this->command = new DisableCommand(
 			$this->container()->manager(),
-			$this->container()->inner_repository()
+			new RedirectFetcher( $this->container()->inner_repository() )
 		);
 	}
-
-	// =========================================================================
-	// Tests for disable by source
-	// =========================================================================
 
 	/**
 	 * Test disabling an enabled redirect by source path.
 	 */
 	public function test_disable_enabled_redirect_by_source(): void {
-		$redirect_id = $this->create_redirect( '/enabled-page', 'https://example.com/dest' );
+		$redirect_id = $this->create_redirect( '/disable-me', 'https://example.com/dest' );
 
-		// Verify it's enabled.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'publish', $post->post_status );
-
-		// Disable it.
 		$this->invoke_command(
 			$this->command,
-			array( '/enabled-page' ),
+			array( '/disable-me' ),
 			array()
 		);
 
-		$this->assert_success_contains( 'Disabled redirect' );
-
-		// Verify it's now disabled.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'draft', $post->post_status );
+		$this->assert_success_contains( 'Disabled redirect: /disable-me' );
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
 	}
 
 	/**
-	 * Test disabling an already disabled redirect.
+	 * Test disabling a redirect by ID.
 	 */
-	public function test_disable_already_disabled_redirect(): void {
-		$redirect_id = $this->create_redirect( '/already-disabled', 'https://example.com/dest' );
-
-		// Disable it first.
-		wp_update_post(
-			array(
-				'ID'          => $redirect_id,
-				'post_status' => 'draft',
-			)
-		);
+	public function test_disable_by_id(): void {
+		$redirect_id = $this->create_redirect( '/disable-by-id', 'https://example.com/dest' );
 
 		$this->invoke_command(
 			$this->command,
-			array( '/already-disabled' ),
+			array( (string) $redirect_id ),
 			array()
 		);
 
-		// Should still succeed (idempotent operation).
-		$this->assert_success_contains( 'Disabled redirect' );
-
-		// Verify it's still disabled.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'draft', $post->post_status );
+		$this->assert_command_success();
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
 	}
 
 	/**
-	 * Test error when redirect not found by source.
+	 * Test disabling multiple redirects at once.
 	 */
-	public function test_disable_not_found_by_source(): void {
+	public function test_disable_multiple(): void {
+		$first  = $this->create_redirect( '/disable-multi-one', 'https://example.com/a' );
+		$second = $this->create_redirect( '/disable-multi-two', 'https://example.com/b' );
+
 		$this->invoke_command(
 			$this->command,
-			array( '/nonexistent-page' ),
+			array( '/disable-multi-one', (string) $second ),
 			array()
 		);
 
-		$this->assert_error_contains( 'not found' );
+		$this->assert_success_contains( 'Disabled 2 redirects.' );
+		$this->assertSame( 'draft', get_post_status( $first ) );
+		$this->assertSame( 'draft', get_post_status( $second ) );
+	}
+
+	/**
+	 * Test error when redirect not found.
+	 */
+	public function test_disable_not_found(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/nonexistent' ),
+			array()
+		);
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
 	}
 
 	/**
@@ -126,62 +127,7 @@ final class DisableCommandTest extends CliTestCase {
 			array()
 		);
 
-		$this->assert_error_contains( 'Invalid source path' );
-	}
-
-	// =========================================================================
-	// Tests for disable by ID
-	// =========================================================================
-
-	/**
-	 * Test disabling a redirect by ID.
-	 */
-	public function test_disable_by_id(): void {
-		$redirect_id = $this->create_redirect( '/disable-by-id', 'https://example.com/dest' );
-
-		$this->invoke_command(
-			$this->command,
-			array( (string) $redirect_id ),
-			array( 'by' => 'id' )
-		);
-
-		$this->assert_success_contains( 'Disabled redirect' );
-
-		// Verify it's disabled.
-		$post = get_post( $redirect_id );
-		$this->assertEquals( 'draft', $post->post_status );
-	}
-
-	/**
-	 * Test error when redirect not found by ID.
-	 */
-	public function test_disable_by_id_not_found(): void {
-		$this->invoke_command(
-			$this->command,
-			array( '999999' ),
-			array( 'by' => 'id' )
-		);
-
-		$this->assert_error_contains( 'Could not disable redirect' );
-	}
-
-	// =========================================================================
-	// Tests for default behavior
-	// =========================================================================
-
-	/**
-	 * Test that source lookup is the default.
-	 */
-	public function test_defaults_to_source_lookup(): void {
-		$this->create_redirect( '/default-disable', 'https://example.com/dest' );
-
-		// No --by argument.
-		$this->invoke_command(
-			$this->command,
-			array( '/default-disable' ),
-			array()
-		);
-
-		$this->assert_success_contains( 'Disabled redirect' );
+		$this->assert_command_error();
+		$this->assert_stdout_contains( 'Invalid source path' );
 	}
 }

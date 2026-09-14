@@ -64,6 +64,46 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	}
 
 	/**
+	 * Get destination URLs for redirects pointing at external (absolute) URLs.
+	 *
+	 * @param int $limit  Maximum number of URLs to return.
+	 * @param int $offset Number of URLs to skip.
+	 * @return string[] The destination URLs.
+	 */
+	public function get_external_destination_urls( int $limit, int $offset ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk query for CLI reporting; WP_Query cannot filter on post_excerpt.
+		return $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s ORDER BY ID ASC LIMIT %d, %d",
+				PostType::POST_TYPE,
+				'http%',
+				$offset,
+				$limit
+			)
+		);
+	}
+
+	/**
+	 * Count redirects pointing at external (absolute) URLs.
+	 *
+	 * @return int The total count.
+	 */
+	public function count_external_destinations(): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk query for CLI reporting; WP_Query cannot filter on post_excerpt.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT( ID ) FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s",
+				PostType::POST_TYPE,
+				'http%'
+			)
+		);
+	}
+
+	/**
 	 * Build WP_Query arguments from criteria.
 	 *
 	 * @param RedirectCriteria $criteria The query criteria.

@@ -39,16 +39,26 @@ A WordPress plugin for handling legacy redirects in a scalable manner. Designed 
 
 ```bash
 # Add a single redirect
-wp wpcom-legacy-redirector insert-redirect /old-page https://example.com/new-page
+wp wpcom-legacy-redirector create /old-page https://example.com/new-page
 
 # Redirect to an internal post by ID
-wp wpcom-legacy-redirector insert-redirect /old-page 123
+wp wpcom-legacy-redirector create /old-page 123
+
+# Inspect, list, and manage redirects (by source path or ID)
+wp wpcom-legacy-redirector get /old-page
+wp wpcom-legacy-redirector list --status=disabled
+wp wpcom-legacy-redirector update /old-page --to=/new-page
+wp wpcom-legacy-redirector disable /old-page
+wp wpcom-legacy-redirector delete /old-page
+
+# Find and disable broken redirects
+wp wpcom-legacy-redirector validate --fix
 
 # Import redirects from CSV
-wp wpcom-legacy-redirector import-from-csv /path/to/redirects.csv
+wp wpcom-legacy-redirector import /path/to/redirects.csv
 
 # Export redirects to CSV
-wp wpcom-legacy-redirector export-to-csv /path/to/export.csv
+wp wpcom-legacy-redirector list --limit=100000 --format=csv > /path/to/export.csv
 ```
 
 ### Programmatic Usage
@@ -96,10 +106,10 @@ The plugin works on WordPress multisite installations:
 
 ```bash
 # Add redirect on specific site
-wp wpcom-legacy-redirector insert-redirect /old /new --url=site2.example.com
+wp wpcom-legacy-redirector create /old /new --url=site2.example.com
 
 # Export redirects from specific site
-wp wpcom-legacy-redirector export-to-csv /path/to/export.csv --url=site2.example.com
+wp wpcom-legacy-redirector list --format=csv --url=site2.example.com > /path/to/export.csv
 ```
 
 ## How It Works
@@ -148,10 +158,15 @@ add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
 
 | Command | Description |
 |---------|-------------|
-| `insert-redirect` | Add a single redirect |
-| `import-from-csv` | Bulk import from CSV file |
+| `create` | Add a single redirect |
+| `get` | Show a single redirect |
+| `list` | List, filter, and export redirects |
+| `update` | Change a redirect's destination and/or status |
+| `delete` | Delete one or more redirects |
+| `enable` / `disable` | Toggle one or more redirects |
+| `validate` | Find (and optionally disable) broken redirects |
+| `import` | Bulk import from CSV file |
 | `import-from-meta` | Import from post meta |
-| `export-to-csv` | Export all redirects to CSV |
 | `find-domains` | List destination domains |
 
 For detailed command options, run `wp help wpcom-legacy-redirector`.

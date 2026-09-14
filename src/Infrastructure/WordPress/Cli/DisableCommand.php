@@ -9,58 +9,20 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
-use Automattic\LegacyRedirector\Application\RedirectManager;
-use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\SourceUrl;
-use WP_CLI;
-use WP_CLI_Command;
-
 /**
- * Disable a redirect.
+ * Disable one or more redirects.
  */
-final class DisableCommand extends WP_CLI_Command {
+final class DisableCommand extends AbstractStatusCommand {
 
 	/**
-	 * The redirect manager.
+	 * Disable one or more redirects.
 	 *
-	 * @var RedirectManager
-	 */
-	private RedirectManager $manager;
-
-	/**
-	 * The redirect repository.
-	 *
-	 * @var RedirectRepositoryInterface
-	 */
-	private RedirectRepositoryInterface $repository;
-
-	/**
-	 * Constructor.
-	 *
-	 * @param RedirectManager             $manager    The redirect manager.
-	 * @param RedirectRepositoryInterface $repository The redirect repository.
-	 */
-	public function __construct( RedirectManager $manager, RedirectRepositoryInterface $repository ) {
-		$this->manager    = $manager;
-		$this->repository = $repository;
-	}
-
-	/**
-	 * Disable a redirect by source path or ID.
+	 * Disabled redirects are kept in the database but do not redirect.
 	 *
 	 * ## OPTIONS
 	 *
-	 * <source>
-	 * : The source path (e.g., /old-page) or redirect ID.
-	 *
-	 * [--by=<field>]
-	 * : How to look up the redirect.
-	 * ---
-	 * default: source
-	 * options:
-	 *   - source
-	 *   - id
-	 * ---
+	 * <redirect>...
+	 * : One or more redirect IDs or source paths (e.g. /old-page).
 	 *
 	 * ## EXAMPLES
 	 *
@@ -68,38 +30,17 @@ final class DisableCommand extends WP_CLI_Command {
 	 *     $ wp wpcom-legacy-redirector disable /old-page
 	 *
 	 *     # Disable redirect by ID.
-	 *     $ wp wpcom-legacy-redirector disable 123 --by=id
+	 *     $ wp wpcom-legacy-redirector disable 123
+	 *
+	 *     # Disable multiple redirects.
+	 *     $ wp wpcom-legacy-redirector disable /old-page /other-page
+	 *
+	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		$lookup = $args[0];
-		$by     = $assoc_args['by'] ?? 'source';
-
-		// Find and disable the redirect (including already disabled ones).
-		if ( 'id' === $by ) {
-			$redirect_id = (int) $lookup;
-		} else {
-			try {
-				$source      = SourceUrl::from_string( $lookup );
-				$redirect_id = $this->repository->get_id_by_source( $source );
-				if ( 0 === $redirect_id ) {
-					WP_CLI::error( sprintf( 'Redirect not found: %s', $lookup ) );
-					return;
-				}
-			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::error( sprintf( 'Invalid source path: %s', $e->getMessage() ) );
-				return;
-			}
-		}
-
-		$disabled = $this->manager->disable( $redirect_id );
-
-		if ( $disabled ) {
-			WP_CLI::success( sprintf( 'Disabled redirect: %s', $lookup ) );
-		} else {
-			WP_CLI::error( sprintf( 'Could not disable redirect: %s', $lookup ) );
-		}
+		$this->change_status( $args, 'draft', 'Disabled' );
 	}
 }

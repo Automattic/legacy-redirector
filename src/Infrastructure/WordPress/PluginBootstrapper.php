@@ -15,17 +15,17 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandle
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\StatusChangeNotices;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\TrashRedirectEnhancer;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\EnableCommand;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ExportToCsvCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\FindDomainsCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\GetCommand;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromCsvCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaCommand;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\InsertRedirectCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectorCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
@@ -169,6 +169,9 @@ final class PluginBootstrapper {
 			return;
 		}
 
+		$manager = $this->container->manager();
+		$fetcher = new RedirectFetcher( $this->container->inner_repository() );
+
 		// Register parent command for help text.
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector',
@@ -176,8 +179,8 @@ final class PluginBootstrapper {
 		);
 
 		\WP_CLI::add_command(
-			'wpcom-legacy-redirector find-domains',
-			new FindDomainsCommand()
+			'wpcom-legacy-redirector create',
+			new CreateCommand( $manager )
 		);
 
 		\WP_CLI::add_command(
@@ -186,26 +189,8 @@ final class PluginBootstrapper {
 		);
 
 		\WP_CLI::add_command(
-			'wpcom-legacy-redirector insert-redirect',
-			new InsertRedirectCommand( $this->container->manager() )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector import-from-meta',
-			new ImportFromMetaCommand(
-				$this->container->manager(),
-				$this->container->inner_repository()
-			)
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector import-from-csv',
-			new ImportFromCsvCommand( $this->container->manager() )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector export-to-csv',
-			new ExportToCsvCommand()
+			'wpcom-legacy-redirector get',
+			new GetCommand( $fetcher )
 		);
 
 		\WP_CLI::add_command(
@@ -214,43 +199,51 @@ final class PluginBootstrapper {
 		);
 
 		\WP_CLI::add_command(
-			'wpcom-legacy-redirector get',
-			new GetCommand( $this->container->inner_repository() )
+			'wpcom-legacy-redirector update',
+			new UpdateCommand( $manager, $fetcher )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector delete',
-			new DeleteCommand( $this->container->manager() )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector update',
-			new UpdateCommand( $this->container->manager() )
+			new DeleteCommand( $manager, $fetcher )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector enable',
-			new EnableCommand(
-				$this->container->manager(),
-				$this->container->inner_repository()
-			)
+			new EnableCommand( $manager, $fetcher )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector disable',
-			new DisableCommand(
-				$this->container->manager(),
-				$this->container->inner_repository()
-			)
+			new DisableCommand( $manager, $fetcher )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector validate',
 			new ValidateCommand(
-				$this->container->inner_repository(),
+				$fetcher,
 				$this->container->query_repository(),
-				$this->container->validator()
+				$this->container->validator(),
+				$manager
 			)
+		);
+
+		\WP_CLI::add_command(
+			'wpcom-legacy-redirector import',
+			new ImportCommand( $manager )
+		);
+
+		\WP_CLI::add_command(
+			'wpcom-legacy-redirector import-from-meta',
+			new ImportFromMetaCommand(
+				$manager,
+				$this->container->inner_repository()
+			)
+		);
+
+		\WP_CLI::add_command(
+			'wpcom-legacy-redirector find-domains',
+			new FindDomainsCommand( $this->container->query_repository() )
 		);
 	}
 }
