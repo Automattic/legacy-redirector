@@ -21,6 +21,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActi
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\FormScreenSetup;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage;
 
 /**
@@ -138,6 +139,9 @@ final class AdminBootstrapper {
 	private function register_form_pages(): void {
 		$form_page = new RedirectFormPage( $this->repository, $this->manager, $this->validator );
 		$form_page->register();
+
+		$form_screen_setup = new FormScreenSetup();
+		$form_screen_setup->register();
 	}
 
 	/**
