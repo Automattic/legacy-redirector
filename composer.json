@@ -56,9 +56,9 @@
 		"test:behat": "behat --colors",
 		"test:behat-rerun": "behat --colors --rerun",
 		"test:unit": "@php ./vendor/bin/phpunit --testdox --no-coverage",
-		"test:integration": "wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist",
-		"test:integration-coverage": "wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'XDEBUG_MODE=coverage ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist --coverage-text=/dev/null'",
-		"test:integration-ms": "wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist'"
+		"test:integration": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist",
+		"test:integration-coverage": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'XDEBUG_MODE=coverage ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist --coverage-text=/dev/null'",
+		"test:integration-ms": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist'"
 	},
 	"scripts-descriptions": {
 		"coverage": "Run tests with code coverage reporting",
