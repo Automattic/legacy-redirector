@@ -13,14 +13,14 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 
 /**
  * Service responsible for managing redirects in admin context.
  *
  * Handles create, enable/disable, bulk operations, and redirect updates.
- * This service works with the repository to persist changes and
- * manages cache invalidation.
+ * Persistence and cache invalidation are the repository's concern: wire
+ * this service with CachingRedirectRepository so writes invalidate stale
+ * lookups.
  */
 class RedirectManager {
 
@@ -40,20 +40,6 @@ class RedirectManager {
 	 * @var RedirectValidator|null
 	 */
 	private ?RedirectValidator $validator;
-
-	/**
-	 * Cache group for redirect lookups.
-	 *
-	 * This service writes to the group owned by CachingRedirectRepository
-	 * rather than going through it: Container wires the manager to the
-	 * uncached repository, so nothing else invalidates these entries on the
-	 * admin and CLI write paths. The group name carries a version suffix for
-	 * cache busting, so it is referenced rather than repeated — a bump must
-	 * not leave this service clearing a group nobody reads.
-	 *
-	 * @var string
-	 */
-	private const CACHE_GROUP = CachingRedirectRepository::CACHE_GROUP;
 
 	/**
 	 * Constructor.
@@ -111,7 +97,6 @@ class RedirectManager {
 
 		try {
 			$saved = $this->repository->save( $redirect );
-			$this->invalidate_cache( $source->hash() );
 			return RedirectCreationResult::success( $saved->id() );
 		} catch ( \Exception $e ) {
 			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
@@ -181,7 +166,6 @@ class RedirectManager {
 
 		try {
 			$this->repository->save( $updated );
-			$this->invalidate_cache( $redirect->source()->hash() );
 			return true;
 		} catch ( \Exception $e ) {
 			return false;
@@ -249,7 +233,6 @@ class RedirectManager {
 
 		try {
 			$this->repository->save( $updated );
-			$this->invalidate_cache( $redirect->source()->hash() );
 			return true;
 		} catch ( \Exception $e ) {
 			return false;
@@ -273,9 +256,6 @@ class RedirectManager {
 			return false;
 		}
 
-		// Store old source hash for cache invalidation.
-		$old_hash = $redirect->source()->hash();
-
 		// Create new source URL.
 		try {
 			$source = SourceUrl::from_string( $new_source );
@@ -294,13 +274,6 @@ class RedirectManager {
 
 		try {
 			$this->repository->save( $updated );
-
-			// Invalidate both old and new source caches.
-			$this->invalidate_cache( $old_hash );
-			if ( $old_hash !== $source->hash() ) {
-				$this->invalidate_cache( $source->hash() );
-			}
-
 			return true;
 		} catch ( \Exception $e ) {
 			return false;
@@ -319,12 +292,7 @@ class RedirectManager {
 			return false;
 		}
 
-		$deleted = $this->repository->delete( $redirect );
-		if ( $deleted ) {
-			$this->invalidate_cache( $source->hash() );
-		}
-
-		return $deleted;
+		return $this->repository->delete( $redirect );
 	}
 
 	/**
@@ -339,12 +307,7 @@ class RedirectManager {
 			return false;
 		}
 
-		$deleted = $this->repository->delete( $redirect );
-		if ( $deleted ) {
-			$this->invalidate_cache( $redirect->source()->hash() );
-		}
-
-		return $deleted;
+		return $this->repository->delete( $redirect );
 	}
 
 	/**
@@ -372,22 +335,9 @@ class RedirectManager {
 
 		try {
 			$this->repository->save( $updated );
-			$this->invalidate_cache( $source->hash() );
 			return true;
 		} catch ( \Exception $e ) {
 			return false;
 		}
-	}
-
-	/**
-	 * Invalidate the cache for a redirect.
-	 *
-	 * Cache key includes blog ID prefix to ensure multisite isolation.
-	 *
-	 * @param string $url_hash The URL hash.
-	 */
-	private function invalidate_cache( string $url_hash ): void {
-		$cache_key = sprintf( '%d:%s', get_current_blog_id(), $url_hash );
-		wp_cache_delete( $cache_key, self::CACHE_GROUP );
 	}
 }

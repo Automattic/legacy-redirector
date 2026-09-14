@@ -81,27 +81,13 @@ final class Container {
 	}
 
 	/**
-	 * Get the inner repository without caching.
-	 *
-	 * Useful for admin operations where caching might cause issues.
-	 *
-	 * @return PostTypeRedirectRepository
-	 */
-	public function inner_repository(): PostTypeRedirectRepository {
-		if ( ! isset( $this->services['inner_repository'] ) ) {
-			$this->services['inner_repository'] = new PostTypeRedirectRepository();
-		}
-		return $this->services['inner_repository'];
-	}
-
-	/**
 	 * Get the redirect validator.
 	 *
 	 * @return RedirectValidator
 	 */
 	public function validator(): RedirectValidator {
 		if ( ! isset( $this->services['validator'] ) ) {
-			$this->services['validator'] = new RedirectValidator( $this->inner_repository() );
+			$this->services['validator'] = new RedirectValidator( $this->repository() );
 		}
 		return $this->services['validator'];
 	}
@@ -125,7 +111,7 @@ final class Container {
 	 */
 	public function manager(): RedirectManager {
 		if ( ! isset( $this->services['manager'] ) ) {
-			$this->services['manager'] = new RedirectManager( $this->inner_repository() );
+			$this->services['manager'] = new RedirectManager( $this->repository() );
 		}
 		return $this->services['manager'];
 	}

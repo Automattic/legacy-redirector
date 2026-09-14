@@ -20,6 +20,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  */
 final class UITest extends TestCase {
@@ -47,7 +48,7 @@ final class UITest extends TestCase {
 		$this->view_filters = new ViewFilters();
 
 		$this->notices = new ValidationNotices(
-			$this->inner_repository(),
+			$this->repository(),
 			$this->validator()
 		);
 

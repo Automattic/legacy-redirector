@@ -131,6 +131,16 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @return Redirect The saved redirect with ID populated.
 	 */
 	public function save( Redirect $redirect ): Redirect {
+		// On updates, invalidate the previously stored source too: if the
+		// source changed, its positive cache entry would otherwise keep
+		// serving the redirect indefinitely.
+		if ( $redirect->is_persisted() ) {
+			$existing = $this->inner->find_by_id( $redirect->id() );
+			if ( null !== $existing && ! $existing->source()->equals( $redirect->source() ) ) {
+				$this->invalidate_cache( $existing->source() );
+			}
+		}
+
 		$this->invalidate_cache( $redirect->source() );
 
 		$saved = $this->inner->save( $redirect );
