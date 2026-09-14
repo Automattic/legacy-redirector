@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 
@@ -20,7 +21,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
- * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
@@ -52,7 +53,7 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->command = new ValidateCommand(
 			new RedirectFetcher( $this->repository() ),
 			$this->query_repository(),
-			$this->validator(),
+			new RedirectAuditor(),
 			$this->manager()
 		);
 	}

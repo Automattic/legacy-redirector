@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
-use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
@@ -38,11 +38,11 @@ final class ValidateCommand extends WP_CLI_Command {
 	private RedirectQueryRepositoryInterface $query_repository;
 
 	/**
-	 * The redirect validator.
+	 * The redirect auditor.
 	 *
-	 * @var RedirectValidator
+	 * @var RedirectAuditor
 	 */
-	private RedirectValidator $validator;
+	private RedirectAuditor $auditor;
 
 	/**
 	 * The redirect manager.
@@ -56,18 +56,18 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *
 	 * @param RedirectFetcher                  $fetcher          The redirect fetcher.
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
-	 * @param RedirectValidator                $validator        The redirect validator.
+	 * @param RedirectAuditor                  $auditor          The redirect auditor.
 	 * @param RedirectManager                  $manager          The redirect manager.
 	 */
 	public function __construct(
 		RedirectFetcher $fetcher,
 		RedirectQueryRepositoryInterface $query_repository,
-		RedirectValidator $validator,
+		RedirectAuditor $auditor,
 		RedirectManager $manager
 	) {
 		$this->fetcher          = $fetcher;
 		$this->query_repository = $query_repository;
-		$this->validator        = $validator;
+		$this->auditor          = $auditor;
 		$this->manager          = $manager;
 	}
 
@@ -170,7 +170,7 @@ final class ValidateCommand extends WP_CLI_Command {
 		$total    = count( $redirects );
 		$progress = $is_table ? \WP_CLI\Utils\make_progress_bar( 'Validating redirects', $total ) : null;
 
-		$issues = $this->validator->validate_batch(
+		$issues = $this->auditor->validate_batch(
 			$redirects,
 			$check_urls,
 			function () use ( $progress ): void {

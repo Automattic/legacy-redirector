@@ -164,12 +164,7 @@ class RedirectManager {
 
 		$updated = $redirect->with_status( $new_status );
 
-		try {
-			$this->repository->save( $updated );
-			return true;
-		} catch ( \Exception $e ) {
-			return false;
-		}
+		return $this->persist( $updated );
 	}
 
 	/**
@@ -231,12 +226,7 @@ class RedirectManager {
 			$updated = $updated->with_status( $new_status );
 		}
 
-		try {
-			$this->repository->save( $updated );
-			return true;
-		} catch ( \Exception $e ) {
-			return false;
-		}
+		return $this->persist( $updated );
 	}
 
 	/**
@@ -272,12 +262,7 @@ class RedirectManager {
 			$updated = $updated->with_status( $new_status );
 		}
 
-		try {
-			$this->repository->save( $updated );
-			return true;
-		} catch ( \Exception $e ) {
-			return false;
-		}
+		return $this->persist( $updated );
 	}
 
 	/**
@@ -333,6 +318,16 @@ class RedirectManager {
 			$updated = $updated->with_status( $status );
 		}
 
+		return $this->persist( $updated );
+	}
+
+	/**
+	 * Persist an updated redirect, swallowing persistence failures.
+	 *
+	 * @param Redirect $updated The redirect to save.
+	 * @return bool True on success, false on failure.
+	 */
+	private function persist( Redirect $updated ): bool {
 		try {
 			$this->repository->save( $updated );
 			return true;
