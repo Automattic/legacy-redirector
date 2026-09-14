@@ -18,6 +18,7 @@ use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
 use Mockery;
@@ -264,7 +265,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		// Should invalidate the source hash (with blog ID prefix).
 		$this->assertCount( 1, $cache_deletes );
 		$this->assertSame( '1:' . $source->hash(), $cache_deletes[0][0] );
-		$this->assertSame( 'vip-legacy-redirect-3', $cache_deletes[0][1] );
+		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[0][1] );
 	}
 
 	// =========================================================================
@@ -652,8 +653,8 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		// Should invalidate both old and new source hashes (with blog ID prefix).
 		$this->assertCount( 2, $cache_deletes );
-		$this->assertSame( 'vip-legacy-redirect-3', $cache_deletes[0][1] );
-		$this->assertSame( 'vip-legacy-redirect-3', $cache_deletes[1][1] );
+		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[0][1] );
+		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[1][1] );
 	}
 
 	/**
@@ -687,7 +688,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		// Should only be called once since source hash is the same (with blog ID prefix).
 		$this->assertCount( 1, $cache_deletes );
-		$this->assertSame( 'vip-legacy-redirect-3', $cache_deletes[0][1] );
+		$this->assertSame( CachingRedirectRepository::CACHE_GROUP, $cache_deletes[0][1] );
 	}
 
 	// =========================================================================
