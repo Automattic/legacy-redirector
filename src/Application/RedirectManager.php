@@ -42,6 +42,13 @@ class RedirectManager {
 	private ?RedirectValidator $validator;
 
 	/**
+	 * The internal destination normaliser.
+	 *
+	 * @var InternalDestinationNormaliser|null
+	 */
+	private ?InternalDestinationNormaliser $normaliser = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository The redirect repository.
@@ -62,6 +69,15 @@ class RedirectManager {
 	}
 
 	/**
+	 * Get the internal destination normaliser, creating it on first use.
+	 *
+	 * @return InternalDestinationNormaliser The normaliser.
+	 */
+	private function normaliser(): InternalDestinationNormaliser {
+		return $this->normaliser ??= new InternalDestinationNormaliser();
+	}
+
+	/**
 	 * Create a new redirect.
 	 *
 	 * Validates the redirect before saving. Returns the validation result
@@ -74,6 +90,8 @@ class RedirectManager {
 	 * @return RedirectCreationResult The result containing either the redirect ID or validation error.
 	 */
 	public function create_redirect( SourceUrl $source, Destination $destination, bool $validate = true, ?string $status = null ): RedirectCreationResult {
+		$destination = $this->normaliser()->normalise( $destination );
+
 		if ( ! $this->insert_allowed() ) {
 			return RedirectCreationResult::error(
 				'insert-not-allowed',
@@ -215,6 +233,8 @@ class RedirectManager {
 	 * @return bool True on success, false on failure.
 	 */
 	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null ): bool {
+		$destination = $this->normaliser()->normalise( $destination );
+
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
 			return false;
@@ -241,6 +261,8 @@ class RedirectManager {
 	 * @return bool True on success, false on failure.
 	 */
 	public function update_redirect( int $redirect_id, string $new_source, Destination $destination, ?string $new_status = null ): bool {
+		$destination = $this->normaliser()->normalise( $destination );
+
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
 			return false;
@@ -306,6 +328,8 @@ class RedirectManager {
 	 * @return bool True if updated, false if not found or update failed.
 	 */
 	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null ): bool {
+		$destination = $this->normaliser()->normalise( $destination );
+
 		$redirect = $this->repository->find_by_source( $source );
 		if ( null === $redirect ) {
 			return false;

@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
+use Automattic\LegacyRedirector\Application\InternalDestinationNormaliser;
 use WP_Post;
 use WP_Query;
 
@@ -31,6 +32,12 @@ use WP_Query;
  * subsite ones still pointing at unreachable keys, which looks like success
  * and is not. Both are therefore handled in a single pass.
  *
+ * Version 3 adds destination normalisation: absolute destination URLs that
+ * point at this site (e.g. 'https://example.com/foo') are rewritten to the
+ * relative form ('/foo') that 2.0 stores canonically, so that anything left
+ * absolute is external by construction. All three migrations are idempotent
+ * per redirect, so a site already at version 2 safely re-walks the set.
+ *
  * The routine is version-gated so it runs exactly once, and processes in
  * batches so that a site with a very large redirect set completes over
  * several requests rather than timing out on one. `wp wpcom-legacy-redirector
@@ -40,9 +47,23 @@ use WP_Query;
 final class Upgrader {
 
 	/**
+	 * The internal destination normaliser.
+	 *
+	 * @var InternalDestinationNormaliser
+	 */
+	private InternalDestinationNormaliser $normaliser;
+
+	/**
+	 * Constructor.
+	 */
+	public function __construct() {
+		$this->normaliser = new InternalDestinationNormaliser();
+	}
+
+	/**
 	 * Current data schema version.
 	 */
-	public const DB_VERSION = 2;
+	public const DB_VERSION = 3;
 
 	/**
 	 * Option holding the site's current data schema version.
@@ -96,7 +117,7 @@ final class Upgrader {
 	 * Process one batch of redirects.
 	 *
 	 * @param int $size Maximum number of redirects to process.
-	 * @return array{processed: int, published: int, repathed: int, conflicts: string[], complete: bool}
+	 * @return array{processed: int, published: int, repathed: int, normalised: int, conflicts: string[], complete: bool}
 	 */
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
@@ -104,11 +125,12 @@ final class Upgrader {
 		$home_path = $this->home_path();
 
 		$result = array(
-			'processed' => 0,
-			'published' => 0,
-			'repathed'  => 0,
-			'conflicts' => array(),
-			'complete'  => false,
+			'processed'  => 0,
+			'published'  => 0,
+			'repathed'   => 0,
+			'normalised' => 0,
+			'conflicts'  => array(),
+			'complete'   => false,
 		);
 
 		$query = new WP_Query(
@@ -165,7 +187,7 @@ final class Upgrader {
 	 * Walks the whole redirect set, so it is proportional to the number of
 	 * redirects rather than constant time.
 	 *
-	 * @return array{total: int, to_publish: int, to_repath: int, conflicts: string[]}
+	 * @return array{total: int, to_publish: int, to_repath: int, to_normalise: int, conflicts: string[]}
 	 */
 	public function count_pending(): array {
 		$started   = $this->started_at( false );
@@ -173,10 +195,11 @@ final class Upgrader {
 		$paged     = 1;
 
 		$pending = array(
-			'total'      => 0,
-			'to_publish' => 0,
-			'to_repath'  => 0,
-			'conflicts'  => array(),
+			'total'        => 0,
+			'to_publish'   => 0,
+			'to_repath'    => 0,
+			'to_normalise' => 0,
+			'conflicts'    => array(),
 		);
 
 		do {
@@ -208,6 +231,10 @@ final class Upgrader {
 
 				if ( 'draft' === $post->post_status ) {
 					++$pending['to_publish'];
+				}
+
+				if ( null !== $this->normalised_excerpt( $post->post_excerpt ) ) {
+					++$pending['to_normalise'];
 				}
 
 				if ( '' === $home_path || ! $this->has_home_prefix( $post->post_title, $home_path ) ) {
@@ -280,6 +307,12 @@ final class Upgrader {
 			++$result['published'];
 		}
 
+		$normalised = $this->normalised_excerpt( $post->post_excerpt );
+		if ( null !== $normalised ) {
+			$update['post_excerpt'] = $normalised;
+			++$result['normalised'];
+		}
+
 		if ( array() === $update ) {
 			return $conflict;
 		}
@@ -342,6 +375,22 @@ final class Upgrader {
 		$stripped = substr( $path, strlen( $home_path ) );
 
 		return '' === $stripped ? '/' : $stripped;
+	}
+
+	/**
+	 * The relative form of an internal absolute destination, or null when no rewrite is due.
+	 *
+	 * @param string $excerpt The stored destination.
+	 * @return string|null The normalised destination, or null when already canonical.
+	 */
+	private function normalised_excerpt( string $excerpt ): ?string {
+		if ( ! str_starts_with( $excerpt, 'http' ) ) {
+			return null;
+		}
+
+		$path = $this->normaliser->to_internal_path( $excerpt );
+
+		return $path === $excerpt ? null : $path;
 	}
 
 	/**

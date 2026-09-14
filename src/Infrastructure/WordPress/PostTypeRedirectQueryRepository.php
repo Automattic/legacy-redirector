@@ -112,7 +112,6 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 		global $wpdb;
 
 		$post_type = PostType::POST_TYPE;
-		$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
 
 		// Count redirects to post IDs (post_parent > 0).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
@@ -133,14 +132,15 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 			)
 		);
 
-		// Count external redirects (URLs starting with http that don't contain the home host).
+		// Count external redirects. Internal absolute URLs are normalised to
+		// relative paths on save (and by the v3 migration), so anything stored
+		// absolute is external.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
 		$external_count = (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s AND post_excerpt NOT LIKE %s",
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s",
 				$post_type,
-				'http%',
-				'%' . $wpdb->esc_like( $home_host ) . '%'
+				'http%'
 			)
 		);
 
