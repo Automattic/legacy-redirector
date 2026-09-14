@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   integration-tests:
-    name: WP ${{ matrix.wordpress }} on PHP ${{ matrix.php }}${{ matrix.multisite && ' (MS)' || '' }}
+    name: WP ${{ matrix.wordpress }} on PHP ${{ matrix.php }}${{ matrix.multisite && ' (MS)' || '' }}${{ matrix.coverage && ' (strict coverage)' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -49,6 +49,11 @@ jobs:
           - wordpress: 'master'
             php: 'latest'
             multisite: true
+          # One coverage-enabled run: PHPUnit only enforces the strict
+          # covers-annotation settings when a coverage driver is active.
+          - wordpress: 'master'
+            php: 'latest'
+            coverage: true
 
     env:
       WP_ENV_CORE: WordPress/WordPress#${{ matrix.wordpress }}
@@ -81,11 +86,15 @@ jobs:
         uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
 
       - name: Start wp-env
-        run: wp-env start
+        run: wp-env start ${{ matrix.coverage && '--xdebug=coverage' || '' }}
 
       - name: Run integration tests (single site)
-        if: ${{ ! matrix.multisite }}
+        if: ${{ ! matrix.multisite && ! matrix.coverage }}
         run: composer test:integration
+
+      - name: Run integration tests with strict coverage
+        if: ${{ matrix.coverage }}
+        run: composer test:integration-coverage
 
       - name: Run integration tests (multisite)
         if: ${{ matrix.multisite }}
