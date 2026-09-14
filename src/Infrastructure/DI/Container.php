@@ -9,7 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\DI;
 
-use Automattic\LegacyRedirector\Application\RedirectExecutor;
+use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
@@ -107,18 +107,15 @@ final class Container {
 	}
 
 	/**
-	 * Get the redirect executor.
+	 * Get the redirect resolver.
 	 *
-	 * @return RedirectExecutor
+	 * @return RedirectResolver
 	 */
-	public function executor(): RedirectExecutor {
-		if ( ! isset( $this->services['executor'] ) ) {
-			$this->services['executor'] = new RedirectExecutor(
-				$this->repository(),
-				'WPCOM Legacy Redirector'
-			);
+	public function resolver(): RedirectResolver {
+		if ( ! isset( $this->services['resolver'] ) ) {
+			$this->services['resolver'] = new RedirectResolver( $this->repository() );
 		}
-		return $this->services['executor'];
+		return $this->services['resolver'];
 	}
 
 	/**

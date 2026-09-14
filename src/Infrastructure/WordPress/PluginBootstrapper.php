@@ -125,7 +125,7 @@ final class PluginBootstrapper {
 	 * @return void
 	 */
 	public function maybe_do_redirect(): void {
-		$this->container->executor()->maybe_redirect();
+		( new RedirectRequestHandler( $this->container->resolver() ) )->maybe_redirect();
 	}
 
 	/**

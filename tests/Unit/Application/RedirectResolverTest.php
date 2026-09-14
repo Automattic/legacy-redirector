@@ -1,6 +1,6 @@
 <?php
 /**
- * RedirectExecutor service unit tests.
+ * RedirectResolver service unit tests.
  *
  * @package Automattic\LegacyRedirector\Tests\Unit\Application
  */
@@ -9,7 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Application;
 
-use Automattic\LegacyRedirector\Application\RedirectExecutor;
+use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
@@ -22,16 +22,16 @@ use Brain\Monkey\Filters;
 use Mockery;
 
 /**
- * RedirectExecutorTest class.
+ * RedirectResolverTest class.
  *
- * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor
+ * @covers \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
-final class RedirectExecutorTest extends MonkeyStubs {
+final class RedirectResolverTest extends MonkeyStubs {
 
 	/**
 	 * The mock repository.
@@ -41,11 +41,11 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	private $repository;
 
 	/**
-	 * The executor under test.
+	 * The resolver under test.
 	 *
-	 * @var RedirectExecutor
+	 * @var RedirectResolver
 	 */
-	private RedirectExecutor $executor;
+	private RedirectResolver $resolver;
 
 	/**
 	 * Sets up test fixtures.
@@ -56,7 +56,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 		parent::set_up();
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
-		$this->executor   = new RedirectExecutor( $this->repository );
+		$this->resolver   = new RedirectResolver( $this->repository );
 	}
 
 	/**
@@ -125,7 +125,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data returns redirect data for valid URL.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_redirect_data_for_valid_url(): void {
 		$this->stub_home_url();
@@ -156,7 +156,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->with( 301, '/old-page' )
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( '/old-page' );
+		$result = $this->resolver->get_redirect_data( '/old-page' );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://example.com/new-page', $result['url'] );
@@ -166,7 +166,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data returns redirect data with post ID destination.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_redirect_data_for_post_id_destination(): void {
 		$this->stub_home_url();
@@ -200,7 +200,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( '/old-page' );
+		$result = $this->resolver->get_redirect_data( '/old-page' );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://example.com/destination-post', $result['url'] );
@@ -210,7 +210,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data with full URL input extracts path correctly.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_extracts_path_from_full_url(): void {
 		$this->stub_home_url();
@@ -234,7 +234,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( 'https://example.com/old-page' );
+		$result = $this->resolver->get_redirect_data( 'https://example.com/old-page' );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://example.com/new-page', $result['url'] );
@@ -247,7 +247,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_request_path filter.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_applies_request_path_filter(): void {
 		$this->stub_home_url();
@@ -274,7 +274,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( '/original-path' );
+		$result = $this->resolver->get_redirect_data( '/original-path' );
 
 		$this->assertIsArray( $result );
 	}
@@ -286,7 +286,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data preserves specified query parameters.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_preserves_specified_query_params(): void {
 		$this->stub_home_url();
@@ -327,7 +327,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( '/old-page?utm_source=test&other=value' );
+		$result = $this->resolver->get_redirect_data( '/old-page?utm_source=test&other=value' );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://example.com/new-page?utm_source=test', $result['url'] );
@@ -340,7 +340,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_redirect_status filter.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_applies_redirect_status_filter(): void {
 		$this->stub_home_url();
@@ -365,7 +365,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->with( 301, '/old-page' )
 			->andReturn( 302 );
 
-		$result = $this->executor->get_redirect_data( '/old-page' );
+		$result = $this->resolver->get_redirect_data( '/old-page' );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 302, $result['status_code'] );
@@ -378,7 +378,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data returns null for empty path.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_for_empty_path(): void {
 		$this->stub_home_url();
@@ -388,7 +388,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->with( '' )
 			->andReturn( '' );
 
-		$result = $this->executor->get_redirect_data( '' );
+		$result = $this->resolver->get_redirect_data( '' );
 
 		$this->assertNull( $result );
 	}
@@ -396,7 +396,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data returns null when filter empties path.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_when_filter_empties_path(): void {
 		$this->stub_home_url();
@@ -406,7 +406,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->with( '/some-path' )
 			->andReturn( '' );
 
-		$result = $this->executor->get_redirect_data( '/some-path' );
+		$result = $this->resolver->get_redirect_data( '/some-path' );
 
 		$this->assertNull( $result );
 	}
@@ -414,7 +414,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data returns null when redirect not found.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_when_redirect_not_found(): void {
 		$this->stub_home_url();
@@ -432,7 +432,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( null );
 
-		$result = $this->executor->get_redirect_data( '/nonexistent-page' );
+		$result = $this->resolver->get_redirect_data( '/nonexistent-page' );
 
 		$this->assertNull( $result );
 	}
@@ -448,7 +448,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	 * causes SourceUrl::from_string() to throw (e.g., a URL with only a scheme
 	 * that esc_url_raw accepts but has no path).
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_for_invalid_source_url(): void {
 		$this->stub_home_url();
@@ -473,7 +473,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 
 		// SourceUrl::from_string('http://example.com') should throw because
 		// after normalisation there's no path or query - just scheme and host.
-		$result = $this->executor->get_redirect_data( '/some-input' );
+		$result = $this->resolver->get_redirect_data( '/some-input' );
 
 		$this->assertNull( $result );
 	}
@@ -481,7 +481,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data returns null when get_permalink returns false.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_when_permalink_fails(): void {
 		$this->stub_home_url();
@@ -511,7 +511,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->with( 456 )
 			->andReturn( false );
 
-		$result = $this->executor->get_redirect_data( '/old-page' );
+		$result = $this->resolver->get_redirect_data( '/old-page' );
 
 		$this->assertNull( $result );
 	}
@@ -519,7 +519,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data handles URL-encoded characters.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_handles_encoded_characters(): void {
 		$this->stub_home_url();
@@ -545,7 +545,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( '/hello%20world' );
+		$result = $this->resolver->get_redirect_data( '/hello%20world' );
 
 		$this->assertIsArray( $result );
 	}
@@ -553,7 +553,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test get_redirect_data handles absolute destination URLs.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_handles_absolute_destination_url(): void {
 		$this->stub_home_url();
@@ -581,7 +581,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 301 );
 
-		$result = $this->executor->get_redirect_data( '/old-page' );
+		$result = $this->resolver->get_redirect_data( '/old-page' );
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://external.com/page', $result['url'] );
@@ -594,7 +594,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test find_redirect returns redirect entity when found.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::find_redirect
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::find_redirect
 	 */
 	public function test_find_redirect_returns_redirect_when_found(): void {
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
@@ -605,7 +605,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->with( Mockery::on( fn( $s ) => $s->path() === '/old-page' ) )
 			->andReturn( $redirect );
 
-		$result = $this->executor->find_redirect( '/old-page' );
+		$result = $this->resolver->find_redirect( '/old-page' );
 
 		$this->assertInstanceOf( Redirect::class, $result );
 		$this->assertSame( '/old-page', $result->source()->path() );
@@ -614,7 +614,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test find_redirect returns null when not found.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::find_redirect
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::find_redirect
 	 */
 	public function test_find_redirect_returns_null_when_not_found(): void {
 		$this->repository
@@ -622,7 +622,7 @@ final class RedirectExecutorTest extends MonkeyStubs {
 			->once()
 			->andReturn( null );
 
-		$result = $this->executor->find_redirect( '/nonexistent' );
+		$result = $this->resolver->find_redirect( '/nonexistent' );
 
 		$this->assertNull( $result );
 	}
@@ -630,175 +630,12 @@ final class RedirectExecutorTest extends MonkeyStubs {
 	/**
 	 * Test find_redirect returns null for invalid URL.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::find_redirect
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::find_redirect
 	 */
 	public function test_find_redirect_returns_null_for_invalid_url(): void {
 		// Invalid URL that throws InvalidArgumentException in SourceUrl::from_string().
-		$result = $this->executor->find_redirect( '' );
+		$result = $this->resolver->find_redirect( '' );
 
 		$this->assertNull( $result );
-	}
-
-	// =========================================================================
-	// Constructor tests
-	// =========================================================================
-
-	/**
-	 * Test constructor accepts custom plugin name.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::__construct
-	 */
-	public function test_constructor_accepts_custom_plugin_name(): void {
-		$executor = new RedirectExecutor( $this->repository, 'custom-plugin' );
-
-		// We can't directly test the plugin name is stored, but we can verify
-		// the executor is created successfully.
-		$this->assertInstanceOf( RedirectExecutor::class, $executor );
-	}
-
-	// =========================================================================
-	// maybe_redirect tests (limited - cannot test exit)
-	// =========================================================================
-
-	/**
-	 * Test maybe_redirect exits early when not 404.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::maybe_redirect
-	 */
-	public function test_maybe_redirect_exits_early_when_not_404(): void {
-		Functions\expect( 'is_404' )
-			->once()
-			->andReturn( false );
-
-		// Repository should NOT be called since we exit early.
-		$this->repository
-			->shouldNotReceive( 'find_by_source' );
-
-		$this->executor->maybe_redirect();
-
-		// If we get here without calling the repository, the test passes.
-		$this->assertTrue( true );
-	}
-
-	/**
-	 * Test maybe_redirect exits early when REQUEST_URI is empty.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::maybe_redirect
-	 */
-	public function test_maybe_redirect_exits_early_when_request_uri_empty(): void {
-		// Backup and clear REQUEST_URI.
-		$original_request_uri   = $_SERVER['REQUEST_URI'] ?? null;
-		$_SERVER['REQUEST_URI'] = '';
-
-		Functions\expect( 'is_404' )
-			->once()
-			->andReturn( true );
-
-		// Repository should NOT be called since REQUEST_URI is empty.
-		$this->repository
-			->shouldNotReceive( 'find_by_source' );
-
-		$this->executor->maybe_redirect();
-
-		// Restore REQUEST_URI.
-		if ( null !== $original_request_uri ) {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		} else {
-			unset( $_SERVER['REQUEST_URI'] );
-		}
-
-		$this->assertTrue( true );
-	}
-
-	/**
-	 * Test maybe_redirect exits early when no redirect found.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::maybe_redirect
-	 */
-	public function test_maybe_redirect_exits_early_when_no_redirect_found(): void {
-		$this->stub_home_url();
-
-		// Set REQUEST_URI.
-		$original_request_uri   = $_SERVER['REQUEST_URI'] ?? null;
-		$_SERVER['REQUEST_URI'] = '/nonexistent-page';
-
-		Functions\expect( 'is_404' )
-			->once()
-			->andReturn( true );
-
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( null );
-
-		// wp_safe_redirect should NOT be called.
-		Functions\expect( 'wp_safe_redirect' )
-			->never();
-
-		$this->executor->maybe_redirect();
-
-		// Restore REQUEST_URI.
-		if ( null !== $original_request_uri ) {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		} else {
-			unset( $_SERVER['REQUEST_URI'] );
-		}
-
-		$this->assertTrue( true );
-	}
-
-	// =========================================================================
-	// allow_redirect_host tests
-	// =========================================================================
-
-	/**
-	 * Test that the allowed_redirect_hosts filter callback adds the host correctly.
-	 *
-	 * This tests the closure logic directly by simulating what allow_redirect_host does.
-	 * The actual integration with wp_safe_redirect is tested in integration tests.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::allow_redirect_host
-	 */
-	public function test_allowed_redirect_hosts_filter_adds_host_to_array(): void {
-		// Simulate the closure that allow_redirect_host creates.
-		$host            = 'external-site.com';
-		$filter_callback = static function ( array $hosts ) use ( $host ): array {
-			$hosts[] = $host;
-			return $hosts;
-		};
-
-		$existing_hosts = array( 'example.com', 'another-site.com' );
-		$result         = $filter_callback( $existing_hosts );
-
-		$this->assertContains( 'external-site.com', $result );
-		$this->assertContains( 'example.com', $result );
-		$this->assertContains( 'another-site.com', $result );
-		$this->assertCount( 3, $result );
-	}
-
-	/**
-	 * Test that the filter callback works with empty initial hosts array.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::allow_redirect_host
-	 */
-	public function test_allowed_redirect_hosts_filter_works_with_empty_array(): void {
-		$host            = 'external-site.com';
-		$filter_callback = static function ( array $hosts ) use ( $host ): array {
-			$hosts[] = $host;
-			return $hosts;
-		};
-
-		$result = $filter_callback( array() );
-
-		$this->assertContains( 'external-site.com', $result );
-		$this->assertCount( 1, $result );
 	}
 }

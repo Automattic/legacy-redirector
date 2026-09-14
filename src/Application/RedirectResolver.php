@@ -1,6 +1,6 @@
 <?php
 /**
- * Redirect executor service.
+ * Redirect resolver service.
  *
  * @package Automattic\LegacyRedirector\Application
  */
@@ -14,13 +14,15 @@ use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 
 /**
- * Service responsible for finding and executing redirects.
+ * Service responsible for resolving request URLs to redirect destinations.
  *
- * This is the main entry point for redirect lookups during request handling.
- * It coordinates with the repository to find redirects and resolves
- * destinations to full URLs ready for the HTTP redirect.
+ * This is the query side of redirect handling: URL in, resolved destination
+ * and status code out. It coordinates with the repository to find redirects
+ * and resolves destinations to full URLs. Actually performing the HTTP
+ * redirect is the responsibility of the infrastructure layer (see
+ * RedirectRequestHandler).
  */
-final class RedirectExecutor {
+final class RedirectResolver {
 
 	/**
 	 * The redirect repository.
@@ -30,52 +32,12 @@ final class RedirectExecutor {
 	private RedirectRepositoryInterface $repository;
 
 	/**
-	 * Plugin name for the X-Redirect-By header.
-	 *
-	 * @var string
-	 */
-	private string $plugin_name;
-
-	/**
 	 * Constructor.
 	 *
-	 * @param RedirectRepositoryInterface $repository  The redirect repository.
-	 * @param string                      $plugin_name Plugin name for redirect headers.
+	 * @param RedirectRepositoryInterface $repository The redirect repository.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository, string $plugin_name = 'wpcom-legacy-redirector' ) {
-		$this->repository  = $repository;
-		$this->plugin_name = $plugin_name;
-	}
-
-	/**
-	 * Try to find and execute a redirect for the current request.
-	 *
-	 * This method is designed to be called from the template_redirect hook.
-	 * It only processes 404 pages to avoid overhead on normal requests.
-	 *
-	 * @return void
-	 */
-	public function maybe_redirect(): void {
-		// Only process 404 pages - avoids overhead on every pageload.
-		if ( ! is_404() ) {
-			return;
-		}
-
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitised in SourceUrl::from_string().
-		$request_uri = $_SERVER['REQUEST_URI'] ?? '';
-		if ( empty( $request_uri ) ) {
-			return;
-		}
-
-		$redirect_data = $this->get_redirect_data( $request_uri );
-		if ( null === $redirect_data ) {
-			return;
-		}
-
-		$this->perform_redirect(
-			$redirect_data['url'],
-			$redirect_data['status_code']
-		);
+	public function __construct( RedirectRepositoryInterface $repository ) {
+		$this->repository = $repository;
 	}
 
 	/**
@@ -266,49 +228,5 @@ final class RedirectExecutor {
 		}
 
 		return $url;
-	}
-
-	/**
-	 * Perform the actual HTTP redirect.
-	 *
-	 * @param string $url         The destination URL.
-	 * @param int    $status_code The HTTP status code.
-	 * @return never
-	 */
-	private function perform_redirect( string $url, int $status_code ): void {
-		// Allow redirects to external hosts by adding destination host to allowed list.
-		$this->allow_redirect_host( $url );
-
-		// WordPress 5.1+ supports the X-Redirect-By header via third argument.
-		if ( version_compare( get_bloginfo( 'version' ), '5.1.0', '>=' ) ) {
-			wp_safe_redirect( $url, $status_code, $this->plugin_name );
-		} else {
-			header( 'X-legacy-redirect: HIT' );
-			wp_safe_redirect( $url, $status_code );
-		}
-
-		exit;
-	}
-
-	/**
-	 * Add the destination URL's host to the allowed redirect hosts.
-	 *
-	 * @param string $url The destination URL.
-	 * @return void
-	 */
-	private function allow_redirect_host( string $url ): void {
-		$host = wp_parse_url( $url, PHP_URL_HOST );
-
-		if ( empty( $host ) ) {
-			return;
-		}
-
-		add_filter(
-			'allowed_redirect_hosts',
-			static function ( array $hosts ) use ( $host ): array {
-				$hosts[] = $host;
-				return $hosts;
-			}
-		);
 	}
 }

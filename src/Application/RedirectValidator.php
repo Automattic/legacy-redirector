@@ -210,7 +210,7 @@ class RedirectValidator {
 
 		// External URLs with valid http/https scheme are considered valid.
 		// The plugin automatically adds the destination host to the allowed_redirect_hosts
-		// filter at redirect time (see RedirectExecutor::allow_redirect_host).
+		// filter at redirect time (see RedirectRequestHandler::allow_redirect_host).
 		return ValidationResult::valid();
 	}
 

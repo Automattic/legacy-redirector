@@ -21,7 +21,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
- * @uses \Automattic\LegacyRedirector\Application\RedirectExecutor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
@@ -68,7 +68,7 @@ final class MultisiteTest extends TestCase {
 		$this->create_redirect( '/shared-path', '/destination-1' );
 
 		// Verify it exists.
-		$data = $this->executor()->get_redirect_data( '/shared-path' );
+		$data = $this->resolver()->get_redirect_data( '/shared-path' );
 		$this->assertNotNull( $data );
 		$this->assertStringContainsString( 'destination-1', $data['url'] );
 
@@ -76,13 +76,13 @@ final class MultisiteTest extends TestCase {
 		switch_to_blog( $this->site_2_id );
 
 		// Should NOT see site 1's redirect.
-		$data_site_2 = $this->executor()->get_redirect_data( '/shared-path' );
+		$data_site_2 = $this->resolver()->get_redirect_data( '/shared-path' );
 		$this->assertNull( $data_site_2 );
 
 		// Create different redirect on site 2.
 		$this->create_redirect( '/shared-path', '/destination-2' );
 
-		$data_site_2_after = $this->executor()->get_redirect_data( '/shared-path' );
+		$data_site_2_after = $this->resolver()->get_redirect_data( '/shared-path' );
 		$this->assertNotNull( $data_site_2_after );
 		$this->assertStringContainsString( 'destination-2', $data_site_2_after['url'] );
 
@@ -90,7 +90,7 @@ final class MultisiteTest extends TestCase {
 		restore_current_blog();
 
 		// Main site should still have its original redirect.
-		$data_main = $this->executor()->get_redirect_data( '/shared-path' );
+		$data_main = $this->resolver()->get_redirect_data( '/shared-path' );
 		$this->assertNotNull( $data_main );
 		$this->assertStringContainsString( 'destination-1', $data_main['url'] );
 	}

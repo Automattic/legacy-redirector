@@ -87,7 +87,7 @@ $destination = Destination::from_mixed( $post_id );
 $result      = $manager->create_redirect( $source, $destination );
 
 // Check if a redirect exists and get its data
-$redirect_data = container()->executor()->get_redirect_data( '/old-page' );
+$redirect_data = container()->resolver()->get_redirect_data( '/old-page' );
 if ( $redirect_data ) {
     $redirect_url    = $redirect_data['url'];
     $redirect_status = $redirect_data['status_code'];

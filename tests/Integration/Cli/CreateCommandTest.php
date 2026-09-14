@@ -84,7 +84,7 @@ final class CreateCommandTest extends CliTestCase {
 	/**
 	 * Test creating a redirect to a full URL on an external host.
 	 *
-	 * External hosts are accepted at creation time; the executor auto-allows
+	 * External hosts are accepted at creation time; RedirectRequestHandler auto-allows
 	 * the stored host at redirect time.
 	 */
 	public function test_create_redirect_to_external_url(): void {

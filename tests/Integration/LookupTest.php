@@ -17,9 +17,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectReposito
 /**
  * LookupTest class.
  *
- * Tests redirect lookup functionality via the RedirectExecutor and Repository.
+ * Tests redirect lookup functionality via the RedirectResolver and Repository.
  *
- * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor
+ * @covers \Automattic\LegacyRedirector\Application\RedirectResolver
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -35,7 +35,7 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test redirect data lookup.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @dataProvider get_protected_redirect_data
 	 *
 	 * @param string $from_url        Redirect From URL.
@@ -47,7 +47,7 @@ final class LookupTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertEquals( $to_url, $redirect_data['url'] );
 		$this->assertEquals( $redirect_status, $redirect_data['status_code'] );
@@ -81,13 +81,13 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test get_redirect_data returns null for URLs without a path.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @dataProvider get_urls_without_path_data
 	 *
 	 * @param string $url URL without a path component.
 	 */
 	public function test_get_redirect_data_returns_null_for_urls_without_path( $url ) {
-		$this->assertNull( $this->executor()->get_redirect_data( $url ) );
+		$this->assertNull( $this->resolver()->get_redirect_data( $url ) );
 	}
 
 	/**
@@ -107,7 +107,7 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test that trashed redirects do not redirect.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
 	 */
 	public function test_trashed_redirect_does_not_redirect() {
@@ -119,7 +119,7 @@ final class LookupTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Verify the redirect works initially.
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertIsArray( $redirect_data );
 		$this->assertEquals( $to_url, $redirect_data['url'] );
 
@@ -131,14 +131,14 @@ final class LookupTest extends TestCase {
 		wp_cache_delete( $url_hash, CachingRedirectRepository::CACHE_GROUP );
 
 		// Verify the redirect no longer works.
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertNull( $redirect_data );
 	}
 
 	/**
 	 * Test that draft redirects do not redirect.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
 	 */
 	public function test_draft_redirect_does_not_redirect() {
@@ -162,14 +162,14 @@ final class LookupTest extends TestCase {
 		wp_cache_delete( $url_hash, CachingRedirectRepository::CACHE_GROUP );
 
 		// Verify the redirect does not work.
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertNull( $redirect_data );
 	}
 
 	/**
 	 * Test redirect to internal post by ID.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_redirect_to_internal_post(): void {
 		// Create destination post.
@@ -186,7 +186,7 @@ final class LookupTest extends TestCase {
 		$post_id = $this->create_redirect( $from_url, $destination_post_id );
 		$this->assertIsInt( $post_id );
 
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertSame( get_permalink( $destination_post_id ), $redirect_data['url'] );
 	}
@@ -194,7 +194,7 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test redirect with relative path destination prepends home_url.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_redirect_with_relative_path_prepends_home_url(): void {
 		$from_url = '/relative-excerpt-test';
@@ -202,7 +202,7 @@ final class LookupTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertSame( home_url() . $to_url, $redirect_data['url'] );
 	}
@@ -219,7 +219,7 @@ final class LookupTest extends TestCase {
 		$this->create_redirect( $from_url, $to_url );
 
 		// First call should set cache.
-		$first_result = $this->executor()->get_redirect_data( $from_url );
+		$first_result = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $first_result['url'] );
 
 		// Check cache is set (key includes blog ID prefix for multisite safety).
@@ -228,7 +228,7 @@ final class LookupTest extends TestCase {
 		$this->assertNotFalse( $cached_id );
 
 		// Second call should return same result (from cache).
-		$second_result = $this->executor()->get_redirect_data( $from_url );
+		$second_result = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $second_result['url'] );
 	}
 
@@ -245,7 +245,7 @@ final class LookupTest extends TestCase {
 		$this->assertIsInt( $post_id );
 
 		// Prime the cache.
-		$result = $this->executor()->get_redirect_data( $from_url );
+		$result = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $result['url'] );
 
 		// Delete the post permanently.
@@ -253,7 +253,7 @@ final class LookupTest extends TestCase {
 
 		// The redirect should no longer work.
 		// Note: Cache still holds the post ID, but get_post() returns null.
-		$result_after_delete = $this->executor()->get_redirect_data( $from_url );
+		$result_after_delete = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertNull( $result_after_delete );
 	}
 
@@ -290,7 +290,7 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_request_path filter.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_applies_request_path_filter(): void {
 		$original_from = '/original-path';
@@ -312,7 +312,7 @@ final class LookupTest extends TestCase {
 		);
 
 		// Request with original path should be redirected via filtered path.
-		$redirect_data = $this->executor()->get_redirect_data( $original_from );
+		$redirect_data = $this->resolver()->get_redirect_data( $original_from );
 
 		$this->assertIsArray( $redirect_data );
 		$this->assertSame( $to_url, $redirect_data['url'] );
@@ -324,7 +324,7 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_redirect_status filter.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_applies_redirect_status_filter(): void {
 		$from_url = '/status-filter-test';
@@ -340,7 +340,7 @@ final class LookupTest extends TestCase {
 			}
 		);
 
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertSame( 302, $redirect_data['status_code'] );
 
@@ -351,7 +351,7 @@ final class LookupTest extends TestCase {
 	/**
 	 * Test get_redirect_data returns null when filter returns falsy path.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectExecutor::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_on_falsy_filter_path(): void {
 		$from_url = '/filter-blocks-test';
@@ -362,7 +362,7 @@ final class LookupTest extends TestCase {
 		// Add filter to return false (block the redirect).
 		add_filter( 'wpcom_legacy_redirector_request_path', '__return_false' );
 
-		$redirect_data = $this->executor()->get_redirect_data( $from_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertNull( $redirect_data );
 

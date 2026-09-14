@@ -468,7 +468,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	 * Test validate_destination_url accepts external URLs with valid http/https scheme.
 	 *
 	 * The plugin automatically adds the destination host to allowed_redirect_hosts
-	 * at redirect time (see RedirectExecutor::allow_redirect_host), so we only
+	 * at redirect time (see RedirectRequestHandler::allow_redirect_host), so we only
 	 * validate that the URL has a valid scheme here.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_destination_url
