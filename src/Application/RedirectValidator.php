@@ -229,7 +229,7 @@ class RedirectValidator {
 	 */
 	public function validate_relative_path( string $path ): ValidationResult {
 		// A query string or fragment can never be part of a slug match.
-		$slug_path = (string) strtok( $path, '?#' );
+		$slug_path = substr( $path, 0, strcspn( $path, '?#' ) );
 
 		$post_types = get_post_types();
 		$post       = get_page_by_path( ltrim( $slug_path, '/' ), OBJECT, $post_types );
