@@ -83,6 +83,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Security
 
+- Validation notices no longer disclose the title of arbitrary posts via the `ids` query parameter, and render only for users who can manage redirects.
 - Enforce TLS certificate verification on destination validation requests, which previously fell back to `'sslverify' => false`.
 
 ### Removed

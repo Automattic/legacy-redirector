@@ -54,6 +54,9 @@ final class UITest extends TestCase {
 		// Register capabilities for tests.
 		$capability = new Capability();
 		$capability->register();
+
+		// Validation notices are only rendered for users who manage redirects.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 	}
 
 	/**
@@ -63,6 +66,8 @@ final class UITest extends TestCase {
 		// Clean up superglobals.
 		$_POST = array();
 		$_GET  = array();
+
+		wp_set_current_user( 0 );
 
 		// Unregister capabilities.
 		( new Capability() )->unregister();
