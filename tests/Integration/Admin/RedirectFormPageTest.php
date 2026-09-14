@@ -315,9 +315,13 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
-	 * Test a relative destination path that resolves to nothing is rejected.
+	 * Test a relative destination path that resolves to no post is accepted.
+	 *
+	 * Archives, rewrite endpoints, and non-WordPress URLs have no post to
+	 * find, so a lookup miss is indeterminate rather than an error.
+	 * Reachability feedback comes from the form's interactive HTTP check.
 	 */
-	public function test_unknown_destination_path_redirects_with_error(): void {
+	public function test_unknown_destination_path_is_accepted(): void {
 		$this->login_as_redirect_manager();
 		$this->submit(
 			array(
@@ -328,7 +332,7 @@ final class RedirectFormPageTest extends TestCase {
 
 		$location = $this->capture_redirect();
 
-		$this->assertStringContainsString( 'error=path_not_found', $location );
+		$this->assertStringContainsString( 'message=created', $location );
 	}
 
 	/**
