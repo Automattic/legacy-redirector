@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 
 /**
  * Service responsible for managing redirects in admin context.
@@ -43,9 +44,16 @@ class RedirectManager {
 	/**
 	 * Cache group for redirect lookups.
 	 *
+	 * This service writes to the group owned by CachingRedirectRepository
+	 * rather than going through it: Container wires the manager to the
+	 * uncached repository, so nothing else invalidates these entries on the
+	 * admin and CLI write paths. The group name carries a version suffix for
+	 * cache busting, so it is referenced rather than repeated — a bump must
+	 * not leave this service clearing a group nobody reads.
+	 *
 	 * @var string
 	 */
-	private const CACHE_GROUP = 'vip-legacy-redirect-3';
+	private const CACHE_GROUP = CachingRedirectRepository::CACHE_GROUP;
 
 	/**
 	 * Constructor.
