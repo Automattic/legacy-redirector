@@ -593,7 +593,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->with( '/existing-page' )
 			->andReturn( 'https://example.com/existing-page' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->with( 'https://example.com/existing-page' )
 			->andReturn(
@@ -628,7 +628,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->with( '/nonexistent-page' )
 			->andReturn( 'https://example.com/nonexistent-page' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->with( 'https://example.com/nonexistent-page' )
 			->andReturn(
@@ -664,7 +664,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		$wp_error = Mockery::mock( 'WP_Error' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->andReturn( $wp_error );
 
@@ -901,7 +901,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	public function test_validate_destination_not_404_returns_valid_when_url_returns_200(): void {
 		$destination = $this->create_url_destination( 'https://example.com/existing-page' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->with( 'https://example.com/existing-page' )
 			->andReturn(
@@ -930,7 +930,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	public function test_validate_destination_not_404_returns_invalid_when_url_returns_404(): void {
 		$destination = $this->create_url_destination( 'https://example.com/nonexistent-page' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->with( 'https://example.com/nonexistent-page' )
 			->andReturn(
@@ -965,7 +965,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->with( '/relative-page' )
 			->andReturn( 'https://example.com/relative-page' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->with( 'https://example.com/relative-page' )
 			->andReturn(
@@ -999,7 +999,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->with( 123 )
 			->andReturn( 'https://example.com/post-123' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->with( 'https://example.com/post-123' )
 			->andReturn(
@@ -1051,7 +1051,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$destination = $this->create_url_destination( 'https://example.com/page' );
 		$wp_error    = Mockery::mock( 'WP_Error' );
 
-		Functions\expect( 'wp_remote_get' )
+		Functions\expect( 'wp_safe_remote_get' )
 			->once()
 			->andReturn( $wp_error );
 

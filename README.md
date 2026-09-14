@@ -154,6 +154,18 @@ add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
 } );
 ```
 
+### Validate Destinations on Internal Hosts
+
+Destination validation (the admin "Validate" action and `validate --check-urls`) uses WordPress's safe HTTP functions, which refuse to request loopback, private, and reserved IP addresses. The site's own host is always allowed. If your redirects legitimately point at other internal hosts (e.g. on an intranet or staging network), allow them with WordPress core's filter:
+
+```php
+add_filter( 'http_request_host_is_external', function( $external, $host ) {
+    return 'internal.example.test' === $host ? true : $external;
+}, 10, 2 );
+```
+
+Note: even with this filter, safe requests only use ports 80, 443, and 8080 (plus the site's own port). Destinations on other ports will report as failed in validation; the redirects themselves still work.
+
 ## WP-CLI Commands
 
 | Command | Description |

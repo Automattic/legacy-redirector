@@ -357,9 +357,9 @@ class RedirectValidator {
 	 */
 	protected function get_response_code( string $url ): int {
 		if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
-			$response = vip_safe_wp_remote_get( $url );
+			$response = vip_safe_wp_remote_get( $url, '', 3, 1, 20, array( 'reject_unsafe_urls' => true ) );
 		} else {
-			$response = wp_remote_get( $url );
+			$response = wp_safe_remote_get( $url );
 		}
 
 		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
@@ -495,7 +495,7 @@ class RedirectValidator {
 	 * @return ValidationIssue|null The issue if broken, null if valid.
 	 */
 	private function check_url_destination( Redirect $redirect, string $url ): ?ValidationIssue {
-		$response = wp_remote_head(
+		$response = wp_safe_remote_head(
 			$url,
 			array(
 				'timeout'     => 5,
