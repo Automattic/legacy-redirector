@@ -372,6 +372,81 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	// =========================================================================
+	// get_redirect_data tests - Destination URL Filter
+	// =========================================================================
+
+	/**
+	 * Test get_redirect_data applies wpcom_legacy_redirector_destination_url filter.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_applies_destination_url_filter(): void {
+		$this->stub_home_url();
+		$redirect = $this->create_redirect( '/old-page', '/new-page' );
+
+		// The request path filter strips the /amp suffix before lookup.
+		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+			->once()
+			->with( '/old-page/amp' )
+			->andReturn( '/old-page' );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+			->once()
+			->andReturn( array() );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->andReturn( $redirect );
+
+		// The destination filter receives the resolved URL, filtered path, and original URL.
+		Filters\expectApplied( 'wpcom_legacy_redirector_destination_url' )
+			->once()
+			->with( 'https://example.com/new-page', '/old-page', '/old-page/amp' )
+			->andReturn( 'https://example.com/new-page/amp' );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+			->once()
+			->andReturn( 301 );
+
+		$result = $this->resolver->get_redirect_data( '/old-page/amp' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'https://example.com/new-page/amp', $result['url'] );
+	}
+
+	/**
+	 * Test get_redirect_data returns null when the destination filter empties the URL.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_returns_null_when_destination_filter_empties_url(): void {
+		$this->stub_home_url();
+		$redirect = $this->create_redirect( '/old-page', '/new-page' );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+			->once()
+			->andReturnFirstArg();
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+			->once()
+			->andReturn( array() );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->andReturn( $redirect );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_destination_url' )
+			->once()
+			->andReturn( '' );
+
+		$result = $this->resolver->get_redirect_data( '/old-page' );
+
+		$this->assertNull( $result );
+	}
+
+	// =========================================================================
 	// get_redirect_data tests - Edge Cases
 	// =========================================================================
 

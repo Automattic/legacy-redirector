@@ -154,6 +154,25 @@ add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
 } );
 ```
 
+### Modify the Destination URL
+
+The counterpart to `wpcom_legacy_redirector_request_path`: alter the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
+
+This is mainly useful where a path suffix is stripped for lookup and needs re-adding to the destination, such as the legacy `/amp/` paired URL structure:
+
+```php
+// Match /old-path/amp against the stored /old-path redirect, then re-append /amp.
+add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
+    return preg_replace( '#/amp/?$#', '', $path );
+} );
+
+add_filter( 'wpcom_legacy_redirector_destination_url', function( $destination, $path, $url ) {
+    return preg_match( '#/amp/?$#', $url ) ? trailingslashit( $destination ) . 'amp/' : $destination;
+}, 10, 3 );
+```
+
+If your site uses the AMP plugin's default query parameter structure (`?amp=1`) rather than the path suffix, you don't need this filter — use `wpcom_legacy_redirector_preserve_query_params` with `'amp'` instead.
+
 ### Validate Destinations on Internal Hosts
 
 Destination validation (the admin "Validate" action and `validate --check-urls`) uses WordPress's safe HTTP functions, which refuse to request loopback, private, and reserved IP addresses. The site's own host is always allowed. If your redirects legitimately point at other internal hosts (e.g. on an intranet or staging network), allow them with WordPress core's filter:
