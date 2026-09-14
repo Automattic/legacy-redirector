@@ -338,9 +338,9 @@ final class RedirectFormPageTest extends TestCase {
 			)
 		);
 
-		remove_filter( 'pre_http_request', $respond_404 );
-
 		$location = $this->capture_redirect();
+
+		remove_filter( 'pre_http_request', $respond_404 );
 
 		$this->assertStringContainsString( 'error=path_not_found', $location );
 	}
@@ -369,9 +369,9 @@ final class RedirectFormPageTest extends TestCase {
 			)
 		);
 
-		remove_filter( 'pre_http_request', $respond_200 );
-
 		$location = $this->capture_redirect();
+
+		remove_filter( 'pre_http_request', $respond_200 );
 
 		$this->assertStringContainsString( 'message=created', $location );
 	}
@@ -425,6 +425,16 @@ final class RedirectFormPageTest extends TestCase {
 	 */
 	public function test_error_redirect_preserves_submitted_values(): void {
 		$this->login_as_redirect_manager();
+
+		// Force the reachability check to reject so the error path runs.
+		$respond_404 = static function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_404 );
+
 		$this->submit(
 			array(
 				'redirect_from'   => '/form-preserved',
@@ -434,6 +444,8 @@ final class RedirectFormPageTest extends TestCase {
 		);
 
 		$location = $this->capture_redirect();
+
+		remove_filter( 'pre_http_request', $respond_404 );
 
 		$query = array();
 		parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
