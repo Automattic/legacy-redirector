@@ -43,12 +43,10 @@ class RedirectAuditor {
 			return $this->check_post_destination( $redirect, $destination->as_post_id()->value() );
 		}
 
-		// Check URL destinations.
+		// Check URL destinations. DestinationUrl rejects empty strings, and a
+		// redirect row with no stored destination is read back as '/', so
+		// there is no empty case to check for here.
 		$url = $destination->as_url()->value();
-
-		if ( empty( $url ) ) {
-			return new ValidationIssue( $redirect, ValidationIssueType::EMPTY_DESTINATION );
-		}
 
 		// Relative paths.
 		if ( $this->is_relative_path( $url ) ) {

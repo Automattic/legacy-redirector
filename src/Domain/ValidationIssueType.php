@@ -48,16 +48,6 @@ enum ValidationIssueType: string {
 	case URL_REQUEST_FAILED = 'url_request_failed';
 
 	/**
-	 * The destination relative path does not resolve to a published page.
-	 */
-	case PATH_NOT_FOUND = 'path_not_found';
-
-	/**
-	 * The redirect has an empty destination.
-	 */
-	case EMPTY_DESTINATION = 'empty_destination';
-
-	/**
 	 * Get a human-readable label for this issue type.
 	 *
 	 * @return string
@@ -71,8 +61,6 @@ enum ValidationIssueType: string {
 			self::URL_NOT_FOUND    => 'Destination returns 404',
 			self::URL_SERVER_ERROR => 'Destination returns server error',
 			self::URL_REQUEST_FAILED => 'Request failed',
-			self::PATH_NOT_FOUND   => 'Path not found',
-			self::EMPTY_DESTINATION => 'Empty destination',
 		};
 	}
 
@@ -91,8 +79,6 @@ enum ValidationIssueType: string {
 			self::URL_NOT_FOUND    => 'The destination URL returns a 404 Not Found response',
 			self::URL_SERVER_ERROR => 'The destination URL returns a server error',
 			self::URL_REQUEST_FAILED => 'Failed to connect to the destination URL',
-			self::PATH_NOT_FOUND   => 'The destination path does not resolve to a published page',
-			self::EMPTY_DESTINATION => 'The redirect has no destination configured',
 		};
 
 		if ( null !== $extra_info && '' !== $extra_info ) {
