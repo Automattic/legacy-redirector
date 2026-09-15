@@ -89,19 +89,16 @@ class RedirectManager {
 			);
 		}
 
+		$redirect = Redirect::create( $source, $destination );
+
 		if ( $validate ) {
-			$validation = $this->validator()->validate_for_creation( $source, $destination );
+			$validation = $this->validator()->validate( $redirect );
 			if ( $validation->is_invalid() ) {
 				return RedirectCreationResult::from_validation( $validation );
 			}
 		}
 
-		// Validation sees the destination as entered - an absolute URL is
-		// validated as a URL, not routed into the published-post check that
-		// relative paths get. Only the stored form is canonicalised.
-		$destination = $this->normaliser->normalise( $destination );
-
-		$redirect = Redirect::create( $source, $destination );
+		$redirect = $this->with_normalised_destination( $redirect );
 
 		// Apply custom status if provided.
 		if ( null !== $status ) {
@@ -225,17 +222,22 @@ class RedirectManager {
 	 * @param int         $redirect_id The redirect ID.
 	 * @param Destination $destination The new destination.
 	 * @param string|null $new_status  Optional new status.
-	 * @return bool True on success, false on failure.
+	 * @param bool        $validate    Whether to validate the update (default true).
+	 * @return bool True on success, false on failure or when validation rejects the update.
 	 */
-	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null ): bool {
-		$destination = $this->normaliser->normalise( $destination );
-
+	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null, bool $validate = true ): bool {
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
 			return false;
 		}
 
 		$updated = $redirect->with_destination( $destination );
+
+		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
+			return false;
+		}
+
+		$updated = $this->with_normalised_destination( $updated );
 
 		if ( null !== $new_status ) {
 			$updated = $updated->with_status( $new_status );
@@ -253,11 +255,10 @@ class RedirectManager {
 	 * @param string      $new_source   The new source URL path.
 	 * @param Destination $destination  The new destination.
 	 * @param string|null $new_status   Optional new status.
-	 * @return bool True on success, false on failure.
+	 * @param bool        $validate     Whether to validate the update (default true).
+	 * @return bool True on success, false on failure or when validation rejects the update.
 	 */
-	public function update_redirect( int $redirect_id, string $new_source, Destination $destination, ?string $new_status = null ): bool {
-		$destination = $this->normaliser->normalise( $destination );
-
+	public function update_redirect( int $redirect_id, string $new_source, Destination $destination, ?string $new_status = null, bool $validate = true ): bool {
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
 			return false;
@@ -274,6 +275,12 @@ class RedirectManager {
 		$updated = $redirect
 			->with_source( $source )
 			->with_destination( $destination );
+
+		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
+			return false;
+		}
+
+		$updated = $this->with_normalised_destination( $updated );
 
 		if ( null !== $new_status ) {
 			$updated = $updated->with_status( $new_status );
@@ -325,17 +332,22 @@ class RedirectManager {
 	 * @param SourceUrl   $source      The source URL to find.
 	 * @param Destination $destination The new destination.
 	 * @param string|null $status      Optional new status ('publish' or 'draft'). If null, preserves existing.
-	 * @return bool True if updated, false if not found or update failed.
+	 * @param bool        $validate    Whether to validate the update (default true).
+	 * @return bool True if updated, false if not found, invalid, or the update failed.
 	 */
-	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null ): bool {
-		$destination = $this->normaliser->normalise( $destination );
-
+	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null, bool $validate = true ): bool {
 		$redirect = $this->find_any_by_source( $source );
 		if ( null === $redirect ) {
 			return false;
 		}
 
 		$updated = $redirect->with_destination( $destination );
+
+		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
+			return false;
+		}
+
+		$updated = $this->with_normalised_destination( $updated );
 
 		// Apply status change if provided.
 		if ( null !== $status ) {
@@ -360,6 +372,21 @@ class RedirectManager {
 		$redirect_id = $this->repository->get_id_by_source( $source );
 
 		return $redirect_id > 0 ? $this->repository->find_by_id( $redirect_id ) : null;
+	}
+
+	/**
+	 * Canonicalise a redirect's destination for storage.
+	 *
+	 * Validation runs against the destination as entered - an absolute URL is
+	 * validated as a URL, not routed into the published-post check that
+	 * relative paths get - so only the stored form is canonicalised, and only
+	 * after validation has had its say.
+	 *
+	 * @param Redirect $redirect The redirect to canonicalise.
+	 * @return Redirect The redirect with its destination in stored form.
+	 */
+	private function with_normalised_destination( Redirect $redirect ): Redirect {
+		return $redirect->with_destination( $this->normaliser->normalise( $redirect->destination() ) );
 	}
 
 	/**

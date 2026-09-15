@@ -27,6 +27,7 @@ use Mockery;
  * RedirectManagerTest class.
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -93,9 +94,9 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
 
 		$this->validator
-			->shouldReceive( 'validate_for_creation' )
+			->shouldReceive( 'validate' )
 			->once()
-			->with( $source, $destination )
+			->with( Mockery::on( fn( $r ) => $r->source()->path() === $source->path() ) )
 			->andReturn( ValidationResult::valid() );
 
 		// Repository returns redirect with assigned ID.
@@ -143,7 +144,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
 
 		$this->validator
-			->shouldReceive( 'validate_for_creation' )
+			->shouldReceive( 'validate' )
 			->once()
 			->andReturn( ValidationResult::valid() );
 
@@ -168,7 +169,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
 
 		$this->validator
-			->shouldReceive( 'validate_for_creation' )
+			->shouldReceive( 'validate' )
 			->once()
 			->andReturn( ValidationResult::invalid( 'duplicate-uri', 'Redirect already exists' ) );
 
@@ -216,7 +217,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
 
 		$this->validator
-			->shouldReceive( 'validate_for_creation' )
+			->shouldReceive( 'validate' )
 			->andReturn( ValidationResult::valid() );
 
 		$this->repository
@@ -467,6 +468,12 @@ final class RedirectManagerTest extends MonkeyStubs {
 			->with( 123 )
 			->andReturn( $redirect );
 
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->with( Mockery::on( fn( $r ) => $r->destination()->as_url()->value() === $new_destination->as_url()->value() ) )
+			->andReturn( ValidationResult::valid() );
+
 		$this->repository
 			->shouldReceive( 'save' )
 			->once()
@@ -508,6 +515,11 @@ final class RedirectManagerTest extends MonkeyStubs {
 			->shouldReceive( 'find_by_id' )
 			->andReturn( $redirect );
 
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::valid() );
+
 		$this->repository
 			->shouldReceive( 'save' )
 			->once()
@@ -536,6 +548,11 @@ final class RedirectManagerTest extends MonkeyStubs {
 			->shouldReceive( 'find_by_id' )
 			->with( 123 )
 			->andReturn( $redirect );
+
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::valid() );
 
 		$this->repository
 			->shouldReceive( 'save' )
@@ -587,6 +604,114 @@ final class RedirectManagerTest extends MonkeyStubs {
 	}
 
 
+
+	// =========================================================================
+	// update validation tests
+	// =========================================================================
+
+	/**
+	 * Test update_destination refuses an update the validator rejects.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_destination
+	 */
+	public function test_update_destination_returns_false_when_validation_fails(): void {
+		$source          = SourceUrl::from_string( '/old-page' );
+		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
+		$new_destination = Destination::from_url( DestinationUrl::from_string( '/old-page' ) );
+
+		$this->repository
+			->shouldReceive( 'find_by_id' )
+			->andReturn( $redirect );
+
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::invalid( 'invalid-values', 'Source and destination match.' ) );
+
+		$this->repository->shouldNotReceive( 'save' );
+
+		$this->assertFalse( $this->manager->update_destination( 123, $new_destination ) );
+	}
+
+	/**
+	 * Test update_redirect refuses an update the validator rejects.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
+	 */
+	public function test_update_redirect_returns_false_when_validation_fails(): void {
+		$source          = SourceUrl::from_string( '/old-page' );
+		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
+		$new_destination = Destination::from_url( DestinationUrl::from_string( '/new-source' ) );
+
+		$this->repository
+			->shouldReceive( 'find_by_id' )
+			->andReturn( $redirect );
+
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::invalid( 'invalid-values', 'Source and destination match.' ) );
+
+		$this->repository->shouldNotReceive( 'save' );
+
+		$this->assertFalse( $this->manager->update_redirect( 123, '/new-source', $new_destination ) );
+	}
+
+	/**
+	 * Test update_by_source refuses an update the validator rejects.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_by_source
+	 */
+	public function test_update_by_source_returns_false_when_validation_fails(): void {
+		$source          = SourceUrl::from_string( '/old-page' );
+		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
+		$new_destination = Destination::from_url( DestinationUrl::from_string( '/old-page' ) );
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->andReturn( 123 );
+
+		$this->repository
+			->shouldReceive( 'find_by_id' )
+			->andReturn( $redirect );
+
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::invalid( 'invalid-values', 'Source and destination match.' ) );
+
+		$this->repository->shouldNotReceive( 'save' );
+
+		$this->assertFalse( $this->manager->update_by_source( $source, $new_destination ) );
+	}
+
+	/**
+	 * Test passing $validate = false skips validation, for the CSV import.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_by_source
+	 */
+	public function test_update_by_source_can_skip_validation(): void {
+		$source          = SourceUrl::from_string( '/old-page' );
+		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
+		$new_destination = Destination::from_url( DestinationUrl::from_string( '/old-page' ) );
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->andReturn( 123 );
+
+		$this->repository
+			->shouldReceive( 'find_by_id' )
+			->andReturn( $redirect );
+
+		$this->validator->shouldNotReceive( 'validate' );
+
+		$this->repository
+			->shouldReceive( 'save' )
+			->once()
+			->andReturn( $redirect );
+
+		$this->assertTrue( $this->manager->update_by_source( $source, $new_destination, null, false ) );
+	}
 
 	// =========================================================================
 	// Helper methods
