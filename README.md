@@ -103,6 +103,23 @@ The plugin works on WordPress multisite installations:
 - **No cross-site leakage**: Redirects on Site A do not affect Site B
 - **WP-CLI support**: Use `--url=site.example.com` to manage specific sites
 
+### Source Paths Are Site-Relative
+
+A source path is always read relative to **that site's** home URL, never the domain root. On a subsite at `example.com/blog`, a source of `/old-page` means `example.com/blog/old-page`.
+
+This matters on subdirectory multisites, where the subsite prefix is not part of the stored path:
+
+```bash
+# On a subsite at example.com/blog, these are equivalent - both store /old-page
+wp wpcom-legacy-redirector create /old-page /new-page --url=example.com/blog
+wp wpcom-legacy-redirector create https://example.com/blog/old-page /new-page --url=example.com/blog
+
+# To redirect the real URL example.com/blog/blog/old-page, the source is /blog/old-page
+wp wpcom-legacy-redirector create /blog/old-page /new-page --url=example.com/blog
+```
+
+The Add/Edit Redirect screen shows the site's home URL next to the source field so the resolved URL is visible as you type.
+
 ### WP-CLI Multisite Examples
 
 ```bash
