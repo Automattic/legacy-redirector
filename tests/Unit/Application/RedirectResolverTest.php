@@ -663,6 +663,70 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	// =========================================================================
+	// get_redirect_data tests - Subdirectory home path
+	// =========================================================================
+
+	/**
+	 * Test the subsite prefix is stripped from a request inside the subsite.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_strips_subsite_prefix(): void {
+		$this->assert_lookup_path( 'https://example.com/blog', '/blog/old-page', '/old-page' );
+	}
+
+	/**
+	 * Test a path that merely shares the prefix's characters is left intact.
+	 *
+	 * Without a segment boundary, '/blogging-tips' would be stripped to
+	 * '/ging-tips': its own redirect could never fire, and an unrelated
+	 * redirect for '/ging-tips' would fire in its place.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_does_not_strip_partial_segment_match(): void {
+		$this->assert_lookup_path( 'https://example.com/blog', '/blogging-tips', '/blogging-tips' );
+	}
+
+	/**
+	 * Test a request for the subsite home itself looks up the root path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_maps_subsite_home_to_root(): void {
+		$this->assert_lookup_path( 'https://example.com/blog', '/blog', '/' );
+	}
+
+	/**
+	 * Assert which path a request URL is looked up under for a given home URL.
+	 *
+	 * @param string $home_url     The site's home URL.
+	 * @param string $request_url  The requested URL.
+	 * @param string $lookup_path  The path the repository should be queried with.
+	 * @return void
+	 */
+	private function assert_lookup_path( string $home_url, string $request_url, string $lookup_path ): void {
+		$this->stub_home_url( $home_url );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+			->once()
+			->with( $lookup_path )
+			->andReturnFirstArg();
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+			->once()
+			->andReturn( array() );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->with( Mockery::on( fn( $s ) => $s->path() === $lookup_path ) )
+			->andReturn( null );
+
+		$this->assertNull( $this->resolver->get_redirect_data( $request_url ) );
+	}
+
+	// =========================================================================
 	// find_redirect tests
 	// =========================================================================
 
