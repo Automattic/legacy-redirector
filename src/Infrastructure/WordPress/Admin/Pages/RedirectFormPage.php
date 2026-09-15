@@ -267,6 +267,12 @@ final class RedirectFormPage {
 		$post_id       = $is_edit ? $post->ID : 0;
 		$error_message = '' !== $error ? $this->get_error_message( $error ) : '';
 
+		// Sources are stored relative to this site's home URL, which on a
+		// subdirectory subsite is not the domain root. Showing the home URL
+		// against the field makes which root the path hangs off self-evident,
+		// and matches the "Test it" link, which is built the same way.
+		$home_prefix = trailingslashit( home_url() );
+
 		include __DIR__ . '/views/redirect-form.php';
 	}
 

@@ -141,6 +141,44 @@ final class MultisiteTest extends TestCase {
 	}
 
 	/**
+	 * A source given as a full URL is stored relative to the site it is saved on.
+	 *
+	 * Sources are stored relative to the site's own home URL, and the resolver
+	 * strips the subsite prefix from every incoming request before looking one
+	 * up. A full URL that kept its subsite prefix would therefore be saved
+	 * under a key no request can produce, and the redirect would never fire.
+	 *
+	 * @return void
+	 */
+	public function test_full_url_source_on_subsite_resolves_for_its_own_request(): void {
+		$path    = 'subdir' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $path . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$full_url = home_url( '/old-page' );
+		$this->create_redirect( $full_url, '/new-page' );
+
+		$this->assertSame(
+			'/old-page',
+			SourceUrl::from_string( $full_url )->path(),
+			'The site home path should not survive into the stored source.'
+		);
+
+		// The path a visitor hitting that same URL actually requests. On a
+		// subdirectory subsite it still carries the prefix; the resolver is
+		// what takes it back off.
+		$request_path = (string) wp_parse_url( $full_url, PHP_URL_PATH );
+
+		$data = $this->resolver()->get_redirect_data( $request_path );
+
+		$this->assertNotNull( $data, 'A full-URL source should resolve for the URL it was given as.' );
+		$this->assertStringContainsString( '/new-page', $data['url'] );
+
+		restore_current_blog();
+	}
+
+	/**
 	 * Test that repository exists() method respects blog context.
 	 */
 	public function test_repository_exists_respects_blog_context(): void {

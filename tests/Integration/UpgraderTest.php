@@ -113,6 +113,21 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A site at the previous data version still has work to do.
+	 *
+	 * The version constant is what makes a pass run in production at all:
+	 * needs_upgrade() short-circuits at DB_VERSION, so none of the migrations
+	 * below are ever reached on an already-current site.
+	 *
+	 * @return void
+	 */
+	public function test_site_at_the_previous_version_still_needs_upgrading() {
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
 	 * Once complete, the routine reports no further work.
 	 *
 	 * @return void

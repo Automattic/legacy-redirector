@@ -189,6 +189,56 @@ final class UpgraderMultisiteTest extends TestCase {
 	}
 
 	/**
+	 * A prefixed source written under 2.0 is never rewritten by a re-walk.
+	 *
+	 * On a subsite at /subsite1, a stored '/subsite1/old-page' created under
+	 * 2.0 is indistinguishable from a deliberate redirect for the real URL
+	 * /subsite1/subsite1/old-page, so the repath pass must leave it alone once
+	 * the site's data is past the 1.x boundary.
+	 *
+	 * @return void
+	 */
+	public function test_prefixed_source_written_under_2_0_is_not_rewritten() {
+		update_option( Upgrader::VERSION_OPTION, 2 );
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame(
+			'/' . $this->subsite . '/old-page',
+			get_post( $post_id )->post_title,
+			'A prefixed source under 2.0 may be a deliberate double-prefix redirect and must not be touched.'
+		);
+		$this->assertSame( 0, $result['repathed'] );
+	}
+
+	/**
+	 * Re-walking the set does not republish a redirect someone disabled.
+	 *
+	 * From 2.0 on, 'draft' means "deliberately disabled". The publish pass is
+	 * for 1.x data only, so a later version bump must leave those alone even
+	 * though it re-walks every redirect.
+	 *
+	 * @return void
+	 */
+	public function test_deliberately_disabled_redirect_survives_a_later_upgrade() {
+		update_option( Upgrader::VERSION_OPTION, 3 );
+
+		// Dated so that no redirect can be older than the run: the separate
+		// "touched since the upgrade began" guard is taken out of play, leaving
+		// the version gate as the only thing standing between this redirect and
+		// being republished.
+		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2100-01-01 00:00:00' );
+
+		$post_id = $this->create_relative_redirect( '/old-page' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'draft', get_post( $post_id )->post_status, 'A disabled redirect should stay disabled.' );
+		$this->assertSame( 0, $result['published'] );
+	}
+
+	/**
 	 * A rewrite that would collide is skipped and reported.
 	 *
 	 * @return void

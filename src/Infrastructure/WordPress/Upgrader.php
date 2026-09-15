@@ -38,6 +38,16 @@ use WP_Query;
  * absolute is external by construction. All three migrations are idempotent
  * per redirect, so a site already at version 2 safely re-walks the set.
  *
+ * The publish and repath passes only apply when the site is coming from a
+ * pre-2.0 data version. Both are 1.x-shape corrections that become unsafe
+ * once 2.0 has written data of its own: a 'draft' now means "deliberately
+ * disabled", and a source that starts with the site's own home path now has
+ * a legitimate reading (on a subsite at /subsite1, the stored '/subsite1/x'
+ * is how you redirect the real URL /subsite1/subsite1/x). A later version
+ * bump re-walks the whole set, so ungated passes would republish disabled
+ * redirects and rewrite those sources into something else. Destination
+ * normalisation has no such ambiguity and runs on every walk.
+ *
  * The routine is version-gated so it runs exactly once, and processes in
  * batches so that a site with a very large redirect set completes over
  * several requests rather than timing out on one. `wp wpcom-legacy-redirector
@@ -64,6 +74,15 @@ final class Upgrader {
 	 * Current data schema version.
 	 */
 	public const DB_VERSION = 3;
+
+	/**
+	 * The first data version written under 2.0's rules.
+	 *
+	 * At and above this version a 'draft' redirect was disabled on purpose and
+	 * a home-path-prefixed source can be a deliberate double-prefix redirect,
+	 * so neither the publish pass nor the repath pass may touch them.
+	 */
+	private const FIRST_2_0_VERSION = 2;
 
 	/**
 	 * Option holding the site's current data schema version.
@@ -122,7 +141,8 @@ final class Upgrader {
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
 		$cursor    = (int) get_option( self::CURSOR_OPTION, 0 );
-		$home_path = $this->home_path();
+		$publish   = $this->from_pre_2_0_data();
+		$home_path = $publish ? $this->home_path() : '';
 
 		$result = array(
 			'processed'  => 0,
@@ -164,7 +184,7 @@ final class Upgrader {
 				continue;
 			}
 
-			$conflict = $this->migrate_post( $post, $home_path, $result );
+			$conflict = $this->migrate_post( $post, $home_path, $publish, $result );
 			if ( null !== $conflict ) {
 				$result['conflicts'][] = $conflict;
 			}
@@ -191,7 +211,8 @@ final class Upgrader {
 	 */
 	public function count_pending(): array {
 		$started   = $this->started_at( false );
-		$home_path = $this->home_path();
+		$publish   = $this->from_pre_2_0_data();
+		$home_path = $publish ? $this->home_path() : '';
 		$paged     = 1;
 
 		$pending = array(
@@ -229,7 +250,7 @@ final class Upgrader {
 					continue;
 				}
 
-				if ( 'draft' === $post->post_status ) {
+				if ( $publish && 'draft' === $post->post_status ) {
 					++$pending['to_publish'];
 				}
 
@@ -270,10 +291,11 @@ final class Upgrader {
 	 *
 	 * @param WP_Post              $post      The redirect post.
 	 * @param string               $home_path The site's home path, or '' when not a subdirectory site.
+	 * @param bool                 $publish   Whether draft redirects should be published.
 	 * @param array<string, mixed> $result    Running totals, updated by reference.
 	 * @return string|null A description of the conflict, or null when there was none.
 	 */
-	private function migrate_post( WP_Post $post, string $home_path, array &$result ): ?string {
+	private function migrate_post( WP_Post $post, string $home_path, bool $publish, array &$result ): ?string {
 		$update      = array();
 		$old_hash    = $post->post_name;
 		$source_path = $post->post_title;
@@ -302,7 +324,7 @@ final class Upgrader {
 			}
 		}
 
-		if ( 'draft' === $post->post_status ) {
+		if ( $publish && 'draft' === $post->post_status ) {
 			$update['post_status'] = 'publish';
 			++$result['published'];
 		}
@@ -389,6 +411,19 @@ final class Upgrader {
 		}
 
 		return $this->normaliser->to_internal_path( $excerpt );
+	}
+
+	/**
+	 * Whether this site's redirect data predates 2.0.
+	 *
+	 * Gates the publish and repath passes: both correct 1.x shapes that are
+	 * legitimate shapes under 2.0, so on a re-walk of already-2.0 data they
+	 * would override deliberate choices rather than repair legacy residue.
+	 *
+	 * @return bool True when the 1.x-shape corrections should run.
+	 */
+	private function from_pre_2_0_data(): bool {
+		return (int) get_option( self::VERSION_OPTION, 0 ) < self::FIRST_2_0_VERSION;
 	}
 
 	/**
