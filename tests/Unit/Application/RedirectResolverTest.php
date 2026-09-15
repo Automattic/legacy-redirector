@@ -600,10 +600,10 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->stub_home_url();
 		$redirect = $this->create_redirect( '/hello world', '/new-page' );
 
-		// URL decoding should convert %20 to space.
+		// The path reaches the filter still encoded; SourceUrl owns decoding.
 		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
 			->once()
-			->with( '/hello world' )
+			->with( '/hello%20world' )
 			->andReturnFirstArg();
 
 		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
@@ -623,6 +623,61 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$result = $this->resolver->get_redirect_data( '/hello%20world' );
 
 		$this->assertIsArray( $result );
+	}
+
+	/**
+	 * A request must hash to the same SourceUrl as the stored source created
+	 * from the equivalent string.
+	 *
+	 * The lookup path used to urldecode() before parsing while creation decoded
+	 * once, so a source containing %25 could never be matched, and an encoded
+	 * %23 or %3F was parsed as a real fragment or query delimiter.
+	 *
+	 * @dataProvider data_request_and_stored_source
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 *
+	 * @param string $request_path  The raw request path, as a browser would send it.
+	 * @param string $stored_source The source string an admin would have saved.
+	 */
+	public function test_lookup_hash_matches_creation_hash( string $request_path, string $stored_source ): void {
+		$this->stub_home_url();
+
+		$expected = SourceUrl::from_string( $stored_source );
+		$redirect = Redirect::reconstitute( 123, $expected, $this->create_url_destination(), 'publish' );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )->once()->andReturnFirstArg();
+		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
+		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )->once()->andReturn( 301 );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->with( Mockery::on( fn( SourceUrl $s ) => $s->hash() === $expected->hash() ) )
+			->andReturn( $redirect );
+
+		$this->assertIsArray( $this->resolver->get_redirect_data( $request_path ) );
+	}
+
+	/**
+	 * Data provider of request paths and the stored source they must match.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_request_and_stored_source(): array {
+		return array(
+			'encoded percent'    => array( '/100%25-cotton', '/100%25-cotton' ),
+			'double encoded'     => array( '/a%2520b', '/a%2520b' ),
+			'encoded hash'       => array( '/page%23section', '/page%23section' ),
+			'encoded question'   => array( '/page%3Fnot-a-query', '/page%3Fnot-a-query' ),
+			'encoded space'      => array( '/hello%20world', '/hello world' ),
+			'plus'               => array( '/hello+world', '/hello+world' ),
+			'encoded slash'      => array( '/a%2Fb', '/a%2Fb' ),
+			'encoded ampersand'  => array( '/a%26b', '/a%26b' ),
+			'multibyte'          => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
+			'multibyte in query' => array( '/photos/?test=%D9%81%D9%88%D8%AA%D9%88', '/photos/?test=فوتو' ),
+			'query preserved'    => array( '/page?a=1&b=2', '/page?a=1&b=2' ),
+		);
 	}
 
 	/**

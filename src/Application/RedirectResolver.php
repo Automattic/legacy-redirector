@@ -50,9 +50,11 @@ final class RedirectResolver {
 		/**
 		 * Filter the request path before redirect lookup.
 		 *
+		 * The path is still percent-encoded; SourceUrl decodes it.
+		 *
 		 * @since 1.0.0
 		 *
-		 * @param string $path The request path.
+		 * @param string $path The request path, percent-encoded.
 		 */
 		$path = apply_filters( 'wpcom_legacy_redirector_request_path', $this->extract_path( $url ) );
 
@@ -135,13 +137,17 @@ final class RedirectResolver {
 	 * In subdirectory multisite, strips the subsite path prefix to get
 	 * the site-relative path that matches stored redirects.
 	 *
+	 * The URL is deliberately left percent-encoded here: SourceUrl is the
+	 * single owner of decoding and normalisation, so creation and lookup
+	 * stay symmetric. Decoding first would decode twice at lookup (and so
+	 * miss sources containing %25), and would turn an encoded %23 or %3F
+	 * into a real fragment or query delimiter before parsing.
+	 *
 	 * @param string $url The URL.
 	 * @return string The path with optional query string.
 	 */
 	private function extract_path( string $url ): string {
-		// Decode the URL to handle encoded characters.
-		$decoded  = urldecode( $url );
-		$url_info = wp_parse_url( $decoded );
+		$url_info = wp_parse_url( $url );
 
 		if ( ! is_array( $url_info ) || ! isset( $url_info['path'] ) ) {
 			return '';
