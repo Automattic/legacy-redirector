@@ -351,6 +351,43 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test validate_source_destination_different returns valid for an external host with the same path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 */
+	public function test_validate_source_destination_different_returns_valid_for_same_path_on_external_host(): void {
+		$source      = $this->create_source( '/contact' );
+		$destination = $this->create_url_destination( 'https://othersite.com/contact' );
+
+		Functions\expect( 'home_url' )
+			->once()
+			->andReturn( 'https://example.com' );
+
+		$result = $this->validator->validate_source_destination_different( $source, $destination );
+
+		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * Test validate_source_destination_different returns invalid for the own host with the same path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 */
+	public function test_validate_source_destination_different_returns_invalid_for_same_path_on_own_host(): void {
+		$source      = $this->create_source( '/contact' );
+		$destination = $this->create_url_destination( 'https://example.com/contact' );
+
+		Functions\expect( 'home_url' )
+			->once()
+			->andReturn( 'https://example.com' );
+
+		$result = $this->validator->validate_source_destination_different( $source, $destination );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
+	}
+
+	/**
 	 * Test validate_source_destination_different handles post ID destinations.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
