@@ -8,6 +8,7 @@
 	bootstrap="tests/Unit/bootstrap.php"
 	colors="true"
 	failOnRisky="true"
+	failOnWarning="true"
 	forceCoversAnnotation="true"
 	verbose="true"
 >
