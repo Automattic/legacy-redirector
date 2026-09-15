@@ -159,7 +159,7 @@ Return `0` to suppress the header, e.g. where an edge cache manages redirect cac
 
 ### Modify Request Path
 
-Alter the path before redirect lookup:
+Alter the path before redirect lookup. The path is still percent-encoded at this point, since decoding happens during lookup:
 
 ```php
 add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
