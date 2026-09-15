@@ -545,6 +545,22 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test validate_relative_path treats the home page as valid without a lookup.
+	 *
+	 * A lookup with an empty slug matches any post with an empty post_name,
+	 * so the home page must never be looked up by slug.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_relative_path
+	 */
+	public function test_validate_relative_path_returns_valid_for_home_without_lookup(): void {
+		Functions\expect( 'get_page_by_path' )->never();
+		Functions\expect( 'url_to_postid' )->never();
+
+		$this->assertTrue( $this->validator->validate_relative_path( '/' )->is_valid() );
+		$this->assertTrue( $this->validator->validate_relative_path( '/?utm_source=x' )->is_valid() );
+	}
+
+	/**
 	 * Test validate_relative_path falls back to url_to_postid for permalink structures.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_relative_path

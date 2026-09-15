@@ -234,6 +234,14 @@ class RedirectValidator {
 		// A query string or fragment can never be part of a slug match.
 		$slug_path = substr( $path, 0, strcspn( $path, '?#' ) );
 
+		// The home page has no slug to look up. get_page_by_path( '' ) matches
+		// any post with an empty post_name - every draft and pending post has
+		// one - so looking it up would judge this destination by an arbitrary,
+		// unrelated post's status.
+		if ( '' === trim( $slug_path, '/' ) ) {
+			return ValidationResult::valid();
+		}
+
 		$post_types = get_post_types();
 		$post       = get_page_by_path( ltrim( $slug_path, '/' ), OBJECT, $post_types );
 
@@ -289,8 +297,15 @@ class RedirectValidator {
 	 * @return ValidationResult The validation result.
 	 */
 	public function validate_source_not_private( SourceUrl $source ): ValidationResult {
+		$slug = trim( $source->path(), '/' );
+
+		// See validate_relative_path(): an empty slug matches an arbitrary post.
+		if ( '' === $slug ) {
+			return ValidationResult::valid();
+		}
+
 		$post_types = get_post_types();
-		$post       = get_page_by_path( ltrim( $source->path(), '/' ), OBJECT, $post_types );
+		$post       = get_page_by_path( $slug, OBJECT, $post_types );
 
 		if ( null !== $post && 'publish' !== get_post_status( $post ) ) {
 			return ValidationResult::invalid(

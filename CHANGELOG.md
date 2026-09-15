@@ -71,6 +71,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - Expire negative ("no redirect exists") object cache entries after 5 minutes, so 404 traffic can no longer fill the cache with permanent entries.
 - `validate --fix` now disables redirects through the redirect manager, invalidating the lookup cache, instead of writing the post status directly.
 - `validate` now detects trashed posts behind relative-path destinations without `--check-urls` (trashing renames the post slug, so the path lookup silently missed them).
+- `validate` no longer reports an unrelated post's status for redirects to `/`. The home page has no slug, and the slug lookup was matching any post with an empty `post_name` - which every draft and pending post has - so `validate --fix` could disable working redirects to the home page.
 - `import-from-meta` now reports rows that fail to import (failures were previously silently swallowed).
 - Resolve WP-CLI synopsis parsing warnings in ValidateCommand.
 - Prevent undefined array key warning in get_redirect_data() in https://github.com/Automattic/wpcom-legacy-redirector/pull/153

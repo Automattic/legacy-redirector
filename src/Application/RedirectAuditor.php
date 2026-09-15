@@ -109,13 +109,24 @@ class RedirectAuditor {
 	 * @return ValidationIssue|null The issue if broken, null if valid.
 	 */
 	private function check_relative_path_destination( Redirect $redirect, string $path, bool $check_urls ): ?ValidationIssue {
+		$slug = trim( $path, '/' );
+
+		// The home page has no slug to look up. get_page_by_path( '' ) matches
+		// any post with an empty post_name - every draft and pending post has
+		// one - so looking it up would report an arbitrary, unrelated post's
+		// status as this redirect's problem. Only an HTTP check can say
+		// anything about '/'.
+		if ( '' === $slug ) {
+			return $check_urls ? $this->check_url_destination( $redirect, home_url( $path ) ) : null;
+		}
+
 		// Try to find a post by path.
-		$post = get_page_by_path( ltrim( $path, '/' ), OBJECT, array( 'post', 'page' ) );
+		$post = get_page_by_path( $slug, OBJECT, array( 'post', 'page' ) );
 
 		// Trashing renames post_name with a __trashed suffix, so a direct
 		// lookup misses trashed destinations - check for the renamed slug.
 		if ( null === $post ) {
-			$trashed = get_page_by_path( ltrim( $path, '/' ) . '__trashed', OBJECT, array( 'post', 'page' ) );
+			$trashed = get_page_by_path( $slug . '__trashed', OBJECT, array( 'post', 'page' ) );
 			if ( null !== $trashed && 'trash' === $trashed->post_status ) {
 				return new ValidationIssue( $redirect, ValidationIssueType::POST_TRASHED );
 			}

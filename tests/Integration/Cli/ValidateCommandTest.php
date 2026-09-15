@@ -282,6 +282,26 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a destination of '/' is not judged by an unrelated post's status.
+	 *
+	 * The home page has no slug, and get_page_by_path( '' ) matches any post
+	 * with an empty post_name - which every draft and pending post has.
+	 */
+	public function test_validate_home_destination_ignores_empty_slug_posts(): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'pending',
+				'post_name'   => '',
+			)
+		);
+		$this->create_redirect( '/home-destination', '/' );
+
+		$this->invoke_command( $this->command, array( '/home-destination' ), array() );
+
+		$this->assert_success_contains( 'No issues found.' );
+	}
+
+	/**
 	 * Test error when no given redirects can be resolved.
 	 */
 	public function test_validate_not_found(): void {
