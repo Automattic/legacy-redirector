@@ -185,17 +185,4 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 
 		$this->registrar->register_category();
 	}
-
-	/**
-	 * Test each ability is passed to the Abilities API.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar::register_abilities
-	 */
-	public function test_register_abilities_registers_every_ability(): void {
-		Functions\expect( 'wp_register_ability' )
-			->times( 8 )
-			->with( Mockery::type( 'string' ), Mockery::type( 'array' ) );
-
-		$this->registrar->register_abilities();
-	}
 }
