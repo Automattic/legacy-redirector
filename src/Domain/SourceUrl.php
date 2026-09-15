@@ -66,6 +66,10 @@ final class SourceUrl {
 	 * Removes scheme and host from the URL, as redirects should be
 	 * independent of these. Validates the URL structure.
 	 *
+	 * On a subdirectory multisite the site's home path is also removed, so
+	 * that a source given as a full URL lands on the same subsite-relative
+	 * path an incoming request is looked up by. See strip_home_path().
+	 *
 	 * @param string $url URL to normalise.
 	 * @return string Normalised URL (path + query).
 	 *
@@ -97,11 +101,57 @@ final class SourceUrl {
 		// Build normalised URL from path and optional query.
 		$normalised = $components['path'] ?? '';
 
+		// A path that arrived with a host was written network-absolute, so on a
+		// subsite it still carries the subsite prefix. A bare request URI never
+		// does, so the guard keeps the request hot path untouched.
+		if ( isset( $components['host'] ) ) {
+			$normalised = self::strip_home_path( $normalised );
+		}
+
 		if ( ! empty( $components['query'] ) ) {
 			$normalised .= '?' . $components['query'];
 		}
 
 		return $normalised;
+	}
+
+	/**
+	 * Remove the site's home path from the front of a path.
+	 *
+	 * Sources are stored relative to the current site's home URL, not to the
+	 * domain root: on a subsite at /subsite1, the stored '/old-page' means
+	 * example.com/subsite1/old-page, and RedirectResolver::extract_path()
+	 * strips '/subsite1' from every incoming request to match. A full URL
+	 * pasted into the admin form, handed to `wp wpcom-legacy-redirector
+	 * create`, or read from a CSV import carries that prefix, so it has to
+	 * come off here or the redirect is saved under a key no request produces.
+	 *
+	 * The host is deliberately not checked against the site's own. Sources are
+	 * matched by path alone, so a stored path that keeps the prefix cannot
+	 * match anything whatever host it came from.
+	 *
+	 * No-op on single sites and subdomain multisites, where the home path is
+	 * '/' and there is nothing to remove.
+	 *
+	 * @param string $path The path component of a full URL.
+	 * @return string The path relative to this site's home URL.
+	 *
+	 * @throws InvalidArgumentException If the site's home URL cannot be parsed.
+	 */
+	private static function strip_home_path( string $path ): string {
+		$home_path = rtrim( (string) ( self::mb_parse_url( home_url() )['path'] ?? '' ), '/' );
+
+		if ( '' === $home_path ) {
+			return $path;
+		}
+
+		if ( $path !== $home_path && ! str_starts_with( $path, $home_path . '/' ) ) {
+			return $path;
+		}
+
+		$stripped = substr( $path, strlen( $home_path ) );
+
+		return '' === $stripped ? '/' : $stripped;
 	}
 
 	/**
