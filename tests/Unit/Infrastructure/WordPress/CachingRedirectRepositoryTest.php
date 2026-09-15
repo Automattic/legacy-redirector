@@ -111,9 +111,15 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 			->andReturn( true );
 
 		$this->inner
-			->shouldReceive( 'find_by_source' )
+			->shouldReceive( 'get_id_by_source' )
 			->once()
 			->with( Mockery::on( fn( $s ) => $s->hash() === $source->hash() ) )
+			->andReturn( 123 );
+
+		$this->inner
+			->shouldReceive( 'find_by_id' )
+			->once()
+			->with( 123 )
 			->andReturn( $redirect );
 
 		$result = $this->repository->find_by_source( $source );
@@ -140,13 +146,53 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 			->andReturn( true );
 
 		$this->inner
-			->shouldReceive( 'find_by_source' )
+			->shouldReceive( 'get_id_by_source' )
 			->once()
-			->andReturn( null );
+			->andReturn( 0 );
+
+		$this->inner->shouldNotReceive( 'find_by_id' );
 
 		$result = $this->repository->find_by_source( $source );
 
 		$this->assertNull( $result );
+	}
+
+	/**
+	 * Test find_by_source caches a disabled redirect's ID, not a zero.
+	 *
+	 * The cache entry answers "which post holds this source", so a management
+	 * lookup reading it afterwards must still see the disabled redirect. If the
+	 * publish-only filter were applied before caching, the entry would say "no
+	 * redirect" while the repository's duplicate guard still saw one.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 */
+	public function test_find_by_source_caches_id_of_disabled_redirect(): void {
+		$source   = $this->create_source();
+		$redirect = $this->create_redirect( 123, '/old-page', 'draft' );
+
+		Functions\expect( 'wp_cache_get' )
+			->once()
+			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
+			->andReturn( false );
+
+		Functions\expect( 'wp_cache_add' )
+			->once()
+			->with( '1:' . $source->hash(), 123, CachingRedirectRepository::CACHE_GROUP, 0 )
+			->andReturn( true );
+
+		$this->inner
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->andReturn( 123 );
+
+		$this->inner
+			->shouldReceive( 'find_by_id' )
+			->once()
+			->with( 123 )
+			->andReturn( $redirect );
+
+		$this->assertNull( $this->repository->find_by_source( $source ) );
 	}
 
 	/**

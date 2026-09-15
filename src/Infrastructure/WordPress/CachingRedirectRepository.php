@@ -19,6 +19,11 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * Uses WordPress object cache (wp_cache_*) to cache redirect post IDs.
  * The full Redirect entity is not cached, only the ID mapping.
  *
+ * A cache entry answers "which post holds this source", in any status, and 0
+ * means no post holds it at all. find_by_source() applies its publish-only
+ * filter to the loaded redirect, never to the cached ID, so the entry stays
+ * usable by management lookups that must see disabled redirects.
+ *
  * Cache invalidation:
  * - save() invalidates the cache for the source URL
  * - delete() invalidates the cache for the source URL
@@ -62,35 +67,29 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	/**
 	 * Find a redirect by its source URL.
 	 *
-	 * Uses cached post ID if available, otherwise delegates to inner repository.
+	 * Resolves the ID through get_id_by_source(), then applies the publish-only
+	 * filter to the loaded redirect. Filtering after the cache rather than
+	 * before it is deliberate: the cached ID is the answer to "which post holds
+	 * this source", which is status-agnostic and shared with get_id_by_source().
+	 * Caching the filtered result instead would store 0 for a disabled
+	 * redirect, and management lookups reading that entry would conclude no
+	 * redirect exists while the repository's own duplicate guard still saw one.
 	 *
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found and active, null otherwise.
 	 */
 	public function find_by_source( SourceUrl $source ): ?Redirect {
-		$cache_key = $this->get_cache_key( $source );
-		$post_id   = wp_cache_get( $cache_key, self::CACHE_GROUP );
+		$post_id = $this->get_id_by_source( $source );
 
-		if ( false === $post_id ) {
-			// Cache miss - get from inner repository.
-			$redirect = $this->inner->find_by_source( $source );
-			$post_id  = $redirect ? $redirect->id() : 0;
-			wp_cache_add( $cache_key, $post_id, self::CACHE_GROUP, 0 === $post_id ? self::NEGATIVE_CACHE_TTL : 0 );
-
-			return $redirect;
-		}
-
-		// Cache hit - 0 means "known to not exist".
-		if ( 0 === $post_id || 0 === (int) $post_id ) {
+		if ( 0 === $post_id ) {
 			return null;
 		}
 
-		// Load the full redirect by cached ID.
-		$redirect = $this->inner->find_by_id( (int) $post_id );
+		$redirect = $this->inner->find_by_id( $post_id );
 
 		if ( null === $redirect ) {
 			// Post no longer exists - update cache.
-			wp_cache_set( $cache_key, 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
+			wp_cache_set( $this->get_cache_key( $source ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
 			return null;
 		}
 
