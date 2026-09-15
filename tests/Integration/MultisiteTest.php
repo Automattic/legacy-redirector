@@ -96,6 +96,50 @@ final class MultisiteTest extends TestCase {
 	}
 
 	/**
+	 * Test that the subsite prefix is only stripped on a path-segment boundary.
+	 *
+	 * A subsite at '/blog' must not have that prefix taken off '/blogging-tips':
+	 * the redirect stored for '/blogging-tips' would never fire, and one stored
+	 * for '/ging-tips' would fire on the wrong URL in its place.
+	 */
+	public function test_subsite_prefix_is_stripped_only_on_a_path_boundary(): void {
+		// Unique per run: the Integration TestCase has no rollback transaction,
+		// so sites created here persist for the whole run.
+		$prefix  = 'blog' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $prefix . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$home_path     = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+		$expected_home = '/' . $prefix;
+
+		if ( $expected_home !== $home_path ) {
+			restore_current_blog();
+			wp_delete_site( $site_id );
+			$this->markTestSkipped( 'Subdirectory multisite required' );
+		}
+
+		$this->create_redirect( '/' . $prefix . 'ging-tips', '/right-destination' );
+		$this->create_redirect( '/ging-tips', '/wrong-destination' );
+		$this->create_redirect( '/old-page', '/stripped-destination' );
+
+		// Shares the prefix's characters, but not on a segment boundary.
+		$partial = $this->resolver()->get_redirect_data( '/' . $prefix . 'ging-tips' );
+
+		// A genuine in-subsite request, where the prefix should be stripped.
+		$in_subsite = $this->resolver()->get_redirect_data( '/' . $prefix . '/old-page' );
+
+		restore_current_blog();
+		wp_delete_site( $site_id );
+
+		$this->assertNotNull( $partial );
+		$this->assertStringContainsString( 'right-destination', $partial['url'] );
+
+		$this->assertNotNull( $in_subsite );
+		$this->assertStringContainsString( 'stripped-destination', $in_subsite['url'] );
+	}
+
+	/**
 	 * Test that repository exists() method respects blog context.
 	 */
 	public function test_repository_exists_respects_blog_context(): void {

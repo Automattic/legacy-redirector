@@ -151,11 +151,12 @@ final class RedirectResolver {
 
 		// In subdirectory multisite, strip the subsite path prefix.
 		// e.g., /site3/to-slug becomes /to-slug for site3.
-		$home_path = wp_parse_url( home_url(), PHP_URL_PATH );
-		if ( ! empty( $home_path ) && '/' !== $home_path && str_starts_with( $path, $home_path ) ) {
-			$path = substr( $path, strlen( rtrim( $home_path, '/' ) ) );
+		// The '/' boundary stops '/blog' matching '/blogging-tips'.
+		$home_path = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+		if ( '' !== $home_path && ( $path === $home_path || str_starts_with( $path, $home_path . '/' ) ) ) {
+			$path = substr( $path, strlen( $home_path ) );
 			// Ensure path starts with / after stripping.
-			if ( empty( $path ) ) {
+			if ( '' === $path ) {
 				$path = '/';
 			}
 		}
