@@ -274,7 +274,7 @@ final class ColumnsManager {
 			return false;
 		}
 
-		if ( 'publish' !== $parent_post->post_status ) {
+		if ( 'publish' !== get_post_status( $parent_post ) ) {
 			return 'private';
 		}
 

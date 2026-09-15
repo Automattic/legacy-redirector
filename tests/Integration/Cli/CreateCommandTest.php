@@ -177,6 +177,49 @@ final class CreateCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test that validation accepts an attachment destination.
+	 *
+	 * Attachments carry post_status 'inherit', never 'publish', so reading the
+	 * raw property rejects every media destination as unpublished. Both the
+	 * post ID and the attachment's slug path are exercised, as they take
+	 * separate routes through the validator.
+	 *
+	 * @dataProvider data_attachment_destinations
+	 *
+	 * @param string $source   The source path for the redirect.
+	 * @param bool   $use_slug Whether to pass the attachment's slug path rather than its ID.
+	 */
+	public function test_create_accepts_attachment_destination( string $source, bool $use_slug ): void {
+		$attachment_id = self::factory()->attachment->create_object(
+			array(
+				'file'           => 'brochure.pdf',
+				'post_mime_type' => 'application/pdf',
+				'post_title'     => 'Brochure',
+			)
+		);
+
+		$destination = $use_slug
+			? '/' . get_post_field( 'post_name', $attachment_id )
+			: (string) $attachment_id;
+
+		$this->invoke_command( $this->command, array( $source, $destination ), array() );
+
+		$this->assert_command_success();
+	}
+
+	/**
+	 * Data provider for attachment destination forms.
+	 *
+	 * @return array<string, array{0: string, 1: bool}>
+	 */
+	public function data_attachment_destinations(): array {
+		return array(
+			'post ID'   => array( '/attachment-by-id', false ),
+			'slug path' => array( '/attachment-by-path', true ),
+		);
+	}
+
+	/**
 	 * Test that --skip-validation bypasses destination validation.
 	 */
 	public function test_create_skip_validation(): void {

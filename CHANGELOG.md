@@ -65,6 +65,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Fixed
 
+- Attachment destinations are no longer treated as unpublished. Attachments carry the post status `inherit`, so creating, validating, or listing a redirect to a media item wrongly reported it as not published — and `validate --fix` disabled redirects that worked.
 - Expire negative ("no redirect exists") object cache entries after 5 minutes, so 404 traffic can no longer fill the cache with permanent entries.
 - `validate --fix` now disables redirects through the redirect manager, invalidating the lookup cache, instead of writing the post status directly.
 - `validate` now detects trashed posts behind relative-path destinations without `--check-urls` (trashing renames the post slug, so the path lookup silently missed them).

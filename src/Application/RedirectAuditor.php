@@ -77,15 +77,23 @@ class RedirectAuditor {
 			return new ValidationIssue( $redirect, ValidationIssueType::POST_DELETED );
 		}
 
+		// The raw property, so a trashed post is reported as trashed rather
+		// than resolved through get_post_status()'s attachment rules, which
+		// report an attachment of a trashed parent by its pre-trash status.
 		if ( 'trash' === $post->post_status ) {
 			return new ValidationIssue( $redirect, ValidationIssueType::POST_TRASHED );
 		}
 
-		if ( 'publish' !== $post->post_status ) {
+		// Attachments store 'inherit', never 'publish'; get_post_status()
+		// resolves that against the parent, so a redirect to a media item is
+		// not reported as unpublished.
+		$status = get_post_status( $post );
+
+		if ( 'publish' !== $status ) {
 			return new ValidationIssue(
 				$redirect,
 				ValidationIssueType::POST_UNPUBLISHED,
-				'status: ' . $post->post_status
+				'status: ' . $status
 			);
 		}
 
@@ -117,11 +125,12 @@ class RedirectAuditor {
 			if ( 'trash' === $post->post_status ) {
 				return new ValidationIssue( $redirect, ValidationIssueType::POST_TRASHED );
 			}
-			if ( 'publish' !== $post->post_status ) {
+			$status = get_post_status( $post );
+			if ( 'publish' !== $status ) {
 				return new ValidationIssue(
 					$redirect,
 					ValidationIssueType::POST_UNPUBLISHED,
-					'status: ' . $post->post_status
+					'status: ' . $status
 				);
 			}
 			return null;
