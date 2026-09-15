@@ -98,10 +98,16 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	/**
 	 * Save a redirect.
 	 *
+	 * Inserts are refused when a redirect already exists for the source, in any
+	 * status. `post_name` holds the source hash and is how every lookup finds a
+	 * redirect, but WordPress only uniquifies slugs for published posts, so a
+	 * second draft insert would silently shadow the first and leave which one
+	 * resolves up to a `LIMIT 1`.
+	 *
 	 * @param Redirect $redirect The redirect to save.
 	 * @return Redirect The saved redirect with ID populated.
 	 *
-	 * @throws RedirectPersistenceException If the save fails.
+	 * @throws RedirectPersistenceException If the save fails, or an insert would duplicate an existing source.
 	 */
 	public function save( Redirect $redirect ): Redirect {
 		$args = $this->map_redirect_to_post_args( $redirect );
@@ -110,6 +116,11 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 			$args['ID'] = $redirect->id();
 			$result     = wp_update_post( $args, true );
 		} else {
+			if ( $this->get_id_by_source( $redirect->source() ) > 0 ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+				throw RedirectPersistenceException::duplicate_source( $redirect->source() );
+			}
+
 			$result = wp_insert_post( $args, true );
 		}
 

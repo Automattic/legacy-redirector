@@ -29,6 +29,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class PostTypeRedirectRepositoryTest extends TestCase {
@@ -317,6 +318,26 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->assertSame( $source->path(), $post->post_title );
 		$this->assertSame( 'https://example.com/url-dest', $post->post_excerpt );
 		$this->assertSame( 0, $post->post_parent );
+	}
+
+	/**
+	 * Test save refuses to insert a second redirect for an existing source.
+	 *
+	 * WordPress only uniquifies slugs for published posts, so without this guard
+	 * a repeated draft insert silently creates two posts sharing one post_name.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 *
+	 * @see https://linear.app/a8c/issue/VIPPLUG-133
+	 */
+	public function test_save_rejects_duplicate_source_on_insert(): void {
+		$source      = SourceUrl::from_string( '/save-duplicate-source' );
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/first' ) );
+
+		$this->repository->save( Redirect::create( $source, $destination )->with_status( 'draft' ) );
+
+		$this->expectException( RedirectPersistenceException::class );
+		$this->repository->save( Redirect::create( $source, $destination )->with_status( 'draft' ) );
 	}
 
 	/**

@@ -285,11 +285,13 @@ class RedirectManager {
 	/**
 	 * Delete a redirect by its source URL.
 	 *
+	 * Matches redirects in any status, so a disabled redirect can be deleted.
+	 *
 	 * @param SourceUrl $source The source URL.
 	 * @return bool True if deleted, false if not found or deletion failed.
 	 */
 	public function delete_by_source( SourceUrl $source ): bool {
-		$redirect = $this->repository->find_by_source( $source );
+		$redirect = $this->find_any_by_source( $source );
 		if ( null === $redirect ) {
 			return false;
 		}
@@ -317,6 +319,9 @@ class RedirectManager {
 	 *
 	 * If the redirect exists, updates it. Used for bulk updates via CSV.
 	 *
+	 * Matches redirects in any status, so a disabled redirect can be re-pointed
+	 * rather than falling through to the create path and duplicating.
+	 *
 	 * @param SourceUrl   $source      The source URL to find.
 	 * @param Destination $destination The new destination.
 	 * @param string|null $status      Optional new status ('publish' or 'draft'). If null, preserves existing.
@@ -325,7 +330,7 @@ class RedirectManager {
 	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null ): bool {
 		$destination = $this->normaliser->normalise( $destination );
 
-		$redirect = $this->repository->find_by_source( $source );
+		$redirect = $this->find_any_by_source( $source );
 		if ( null === $redirect ) {
 			return false;
 		}
@@ -338,6 +343,23 @@ class RedirectManager {
 		}
 
 		return $this->persist( $updated );
+	}
+
+	/**
+	 * Find a redirect by source URL regardless of its status.
+	 *
+	 * `RedirectRepositoryInterface::find_by_source()` is publish-only, which is
+	 * what the front-end resolver wants but not what management operations do:
+	 * a disabled redirect is still a redirect you can edit or delete. Mirrors
+	 * the lookup RedirectFetcher uses for the same reason.
+	 *
+	 * @param SourceUrl $source The source URL.
+	 * @return Redirect|null The redirect in any status, or null if none exists.
+	 */
+	private function find_any_by_source( SourceUrl $source ): ?Redirect {
+		$redirect_id = $this->repository->get_id_by_source( $source );
+
+		return $redirect_id > 0 ? $this->repository->find_by_id( $redirect_id ) : null;
 	}
 
 	/**
