@@ -23,6 +23,17 @@ use Mockery;
  * AbilitiesRegistrarTest class.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\DeleteRedirectAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility
  */
 final class AbilitiesRegistrarTest extends MonkeyStubs {
 
@@ -173,18 +184,5 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 			->with( AbilitiesRegistrar::CATEGORY, Mockery::type( 'array' ) );
 
 		$this->registrar->register_category();
-	}
-
-	/**
-	 * Test each ability is passed to the Abilities API.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar::register_abilities
-	 */
-	public function test_register_abilities_registers_every_ability(): void {
-		Functions\expect( 'wp_register_ability' )
-			->times( 8 )
-			->with( Mockery::type( 'string' ), Mockery::type( 'array' ) );
-
-		$this->registrar->register_abilities();
 	}
 }

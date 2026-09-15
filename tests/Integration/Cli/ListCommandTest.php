@@ -15,6 +15,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
  * Integration tests for ListCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination

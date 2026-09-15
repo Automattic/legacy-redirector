@@ -26,6 +26,7 @@ use WPDieException;
  * call, so nothing observable is lost by never reaching the exit.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::handle_save
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
@@ -35,8 +36,8 @@ use WPDieException;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class RedirectFormPageTest extends TestCase {

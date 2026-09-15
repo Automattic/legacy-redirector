@@ -21,6 +21,11 @@ use WP_Error;
  * CreateRedirectAbilityTest class.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class CreateRedirectAbilityTest extends MonkeyStubs {
 

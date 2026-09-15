@@ -17,11 +17,11 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * Integration tests for ValidateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
- * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
- * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
@@ -30,6 +30,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */

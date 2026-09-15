@@ -20,6 +20,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaComma
  * the recorded error rather than on execution stopping.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaCommand
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator

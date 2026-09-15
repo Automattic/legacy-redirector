@@ -23,6 +23,12 @@ use Mockery;
  * RedirectBatchTest class.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class RedirectBatchTest extends MonkeyStubs {
 

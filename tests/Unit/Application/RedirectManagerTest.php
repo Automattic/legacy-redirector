@@ -191,7 +191,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$source      = SourceUrl::from_string( '/old-page' );
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
 
-		$this->validator->shouldNotReceive( 'validate_for_creation' );
+		$this->validator->shouldNotReceive( 'validate' );
 
 		// Repository returns redirect with assigned ID.
 		$saved_redirect = Redirect::reconstitute( 456, $source, $destination, 'publish' );
