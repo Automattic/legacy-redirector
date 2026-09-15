@@ -8,6 +8,7 @@
  * @var string   $title               Page title.
  * @var int      $post_id             Redirect post ID (0 on the Add page).
  * @var string   $redirect_from       Source path value.
+ * @var string   $home_prefix         This site's home URL, with a trailing slash, shown before the source field.
  * @var string   $redirect_status     'publish' or 'draft'.
  * @var string   $destination_value   Destination form value (path, URL, or post ID).
  * @var string   $destination_display Human-readable destination for the display field.
@@ -63,10 +64,18 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 					</th>
 					<td>
 						<div style="display: inline-flex; align-items: center;">
-							<span class="code" style="padding: 0 8px; background: #f0f0f1; border: 1px solid #8c8f94; border-right: 0; border-radius: 4px 0 0 4px; line-height: 28px; color: #50575e;">/</span>
+							<span class="code" style="padding: 0 8px; background: #f0f0f1; border: 1px solid #8c8f94; border-right: 0; border-radius: 4px 0 0 4px; line-height: 28px; color: #50575e;"><?php echo esc_html( $home_prefix ); ?></span>
 							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="border-radius: 0 4px 4px 0;" required placeholder="old-page" />
 						</div>
-						<p class="description"><?php esc_html_e( 'The source path that should redirect (e.g., old-page).', 'wpcom-legacy-redirector' ); ?></p>
+						<p class="description">
+							<?php
+							printf(
+								/* translators: %s: example of a full URL the entered path resolves to, e.g. https://example.com/blog/old-page. */
+								esc_html__( 'The source path that should redirect, always read relative to this site. Entering old-page matches %s.', 'wpcom-legacy-redirector' ),
+								'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>'
+							);
+							?>
+						</p>
 						<p id="redirect_from_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;"></p>
 					</td>
 				</tr>
