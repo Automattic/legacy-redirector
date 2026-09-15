@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDuplicateHandler;
@@ -314,19 +315,6 @@ final class RedirectFormPage {
 			$this->redirect_with_error( $redirect_id, 'invalid_destination', $redirect_from, $redirect_to, $redirect_status );
 		}
 
-		// Validate destination exists and is accessible.
-		$destination_validation = $this->validator->validate_destination( $destination );
-		if ( $destination_validation->is_invalid() ) {
-			$error_code = $destination_validation->error_code();
-			// Map validator error codes to form error codes.
-			$error_map  = array(
-				'empty-postid' => 'post_not_found',
-				'non-public'   => 'post_not_public',
-			);
-			$form_error = $error_map[ $error_code ] ?? 'invalid_destination';
-			$this->redirect_with_error( $redirect_id, $form_error, $redirect_from, $redirect_to, $redirect_status );
-		}
-
 		// Create source URL object.
 		try {
 			$source = SourceUrl::from_string( $redirect_from );
@@ -334,10 +322,25 @@ final class RedirectFormPage {
 			$this->redirect_with_error( $redirect_id, 'invalid_source', $redirect_from, $redirect_to, $redirect_status );
 		}
 
-		// Check for duplicates.
-		$existing = $this->repository->get_id_by_source( $source );
-		if ( $existing > 0 && $existing !== $redirect_id ) {
-			$this->redirect_with_error( $redirect_id, 'duplicate', $redirect_from, $redirect_to, $redirect_status );
+		// Apply the full rule set - duplicate source, self-redirect loop, and
+		// destination - up front, so the form can name what went wrong. The
+		// manager validates again on save; that is the backstop for the
+		// non-admin write paths, not this one.
+		if ( $is_edit ) {
+			$existing = $this->repository->find_by_id( $redirect_id );
+			if ( null === $existing ) {
+				$this->redirect_with_error( $redirect_id, 'save_failed', $redirect_from, $redirect_to, $redirect_status );
+			}
+
+			$proposed = $existing->with_source( $source )->with_destination( $destination );
+		} else {
+			$proposed = Redirect::create( $source, $destination );
+		}
+
+		$validation = $this->validator->validate( $proposed );
+
+		if ( $validation->is_invalid() ) {
+			$this->redirect_with_error( $redirect_id, self::form_error_for( $validation->error_code() ), $redirect_from, $redirect_to, $redirect_status );
 		}
 
 		// Reachability check for relative destinations only: a path with no
@@ -368,18 +371,13 @@ final class RedirectFormPage {
 			exit;
 		} else {
 			// Create new redirect using the manager service.
-			$result = $this->manager->create_redirect( $source, $destination, false );
+			$result = $this->manager->create_redirect( $source, $destination, true, $redirect_status );
 
 			if ( $result->is_error() ) {
-				$this->redirect_with_error( 0, 'save_failed', $redirect_from, $redirect_to, $redirect_status );
+				$this->redirect_with_error( 0, self::form_error_for( $result->error_code() ), $redirect_from, $redirect_to, $redirect_status );
 			}
 
 			$redirect_id = $result->redirect_id();
-
-			// Update status if not publish.
-			if ( 'publish' !== $redirect_status ) {
-				$this->manager->disable( $redirect_id );
-			}
 
 			wp_safe_redirect(
 				admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect_id . '&message=created' )
@@ -404,6 +402,25 @@ final class RedirectFormPage {
 		 * @param bool $check Whether to perform the check. Default true.
 		 */
 		return (bool) apply_filters( 'wpcom_legacy_redirector_check_destination_reachability', true );
+	}
+
+	/**
+	 * Translate an application error code into a form error code.
+	 *
+	 * @param string|null $error_code The validator or manager error code.
+	 * @return string The form error code.
+	 */
+	private static function form_error_for( ?string $error_code ): string {
+		$map = array(
+			'duplicate-redirect-uri' => 'duplicate',
+			'invalid-values'         => 'same_source_destination',
+			'empty-postid'           => 'post_not_found',
+			'non-public'             => 'post_not_public',
+			'insert-not-allowed'     => 'save_failed',
+			'save-failed'            => 'save_failed',
+		);
+
+		return $map[ (string) $error_code ] ?? 'invalid_destination';
 	}
 
 	/**
@@ -445,14 +462,15 @@ final class RedirectFormPage {
 	 */
 	private function get_error_message( string $error ): string {
 		$messages = array(
-			'empty_fields'        => __( 'Redirect From and Redirect To are required fields.', 'wpcom-legacy-redirector' ),
-			'invalid_destination' => __( 'The destination is not valid.', 'wpcom-legacy-redirector' ),
-			'invalid_source'      => __( 'The source URL is not valid.', 'wpcom-legacy-redirector' ),
-			'duplicate'           => __( 'A redirect already exists for this source URL.', 'wpcom-legacy-redirector' ),
-			'save_failed'         => __( 'Failed to save the redirect. Please try again.', 'wpcom-legacy-redirector' ),
-			'post_not_found'      => __( 'The destination post ID does not exist.', 'wpcom-legacy-redirector' ),
-			'post_not_public'     => __( 'The destination post is not published.', 'wpcom-legacy-redirector' ),
-			'path_not_found'      => __( 'The destination path does not exist.', 'wpcom-legacy-redirector' ),
+			'empty_fields'            => __( 'Redirect From and Redirect To are required fields.', 'wpcom-legacy-redirector' ),
+			'invalid_destination'     => __( 'The destination is not valid.', 'wpcom-legacy-redirector' ),
+			'invalid_source'          => __( 'The source URL is not valid.', 'wpcom-legacy-redirector' ),
+			'duplicate'               => __( 'A redirect already exists for this source URL.', 'wpcom-legacy-redirector' ),
+			'same_source_destination' => __( 'Redirect From and Redirect To must not be the same. This would create a redirect loop.', 'wpcom-legacy-redirector' ),
+			'save_failed'             => __( 'Failed to save the redirect. Please try again.', 'wpcom-legacy-redirector' ),
+			'post_not_found'          => __( 'The destination post ID does not exist.', 'wpcom-legacy-redirector' ),
+			'post_not_public'         => __( 'The destination post is not published.', 'wpcom-legacy-redirector' ),
+			'path_not_found'          => __( 'The destination path does not exist.', 'wpcom-legacy-redirector' ),
 		);
 
 		return $messages[ $error ] ?? __( 'An error occurred.', 'wpcom-legacy-redirector' );

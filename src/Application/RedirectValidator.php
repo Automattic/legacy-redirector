@@ -38,20 +38,28 @@ class RedirectValidator {
 	}
 
 	/**
-	 * Validate a redirect for creation.
+	 * Validate the redirect a write would leave behind.
 	 *
-	 * Performs all validation checks required before creating a new redirect:
-	 * - Source URL must not already have a redirect
-	 * - Destination must be valid (post exists and is published, or URL is allowed)
+	 * The rules are the same whether the row is being created or updated:
+	 * - The source must not already be taken by a different redirect
 	 * - Source and destination must be different
+	 * - Destination must be valid (post exists and is published, or URL is allowed)
 	 *
-	 * @param SourceUrl   $source      The source URL.
-	 * @param Destination $destination The destination.
+	 * There is no separate update rule set, for the same reason wp_update_post()
+	 * is wp_insert_post() with an ID: the only thing an update changes is that
+	 * the row it is updating is not a duplicate of itself. Callers pass the
+	 * redirect the write would produce, so a moved source is judged as the
+	 * source it is moving to.
+	 *
+	 * @param Redirect $redirect The redirect as it would be stored.
 	 * @return ValidationResult The validation result.
 	 */
-	public function validate_for_creation( SourceUrl $source, Destination $destination ): ValidationResult {
+	public function validate( Redirect $redirect ): ValidationResult {
+		$source = $redirect->source();
+
 		// Check for duplicate source URL.
-		if ( $this->repository->exists( $source ) ) {
+		$existing_id = $this->repository->get_id_by_source( $source );
+		if ( $existing_id > 0 && $existing_id !== $redirect->id() ) {
 			return ValidationResult::invalid(
 				'duplicate-redirect-uri',
 				__( 'A redirect for this URI already exists', 'wpcom-legacy-redirector' )
@@ -59,33 +67,13 @@ class RedirectValidator {
 		}
 
 		// Validate source and destination are different.
-		$same_result = $this->validate_source_destination_different( $source, $destination );
+		$same_result = $this->validate_source_destination_different( $source, $redirect->destination() );
 		if ( $same_result->is_invalid() ) {
 			return $same_result;
 		}
 
 		// Validate destination.
-		return $this->validate_destination( $destination );
-	}
-
-	/**
-	 * Validate a redirect for update.
-	 *
-	 * Performs validation checks required before updating an existing redirect.
-	 *
-	 * @param Redirect    $existing       The existing redirect.
-	 * @param Destination $new_destination The new destination.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_for_update( Redirect $existing, Destination $new_destination ): ValidationResult {
-		// Validate source and destination are different.
-		$same_result = $this->validate_source_destination_different( $existing->source(), $new_destination );
-		if ( $same_result->is_invalid() ) {
-			return $same_result;
-		}
-
-		// Validate destination.
-		return $this->validate_destination( $new_destination );
+		return $this->validate_destination( $redirect->destination() );
 	}
 
 	/**
@@ -117,6 +105,14 @@ class RedirectValidator {
 		$destination_url  = $destination->as_url()->value();
 		$parsed           = wp_parse_url( $destination_url );
 		$destination_path = $parsed['path'] ?? '';
+
+		// A destination on another host can never be a self-loop, whatever its path.
+		if ( ! empty( $parsed['host'] ) ) {
+			$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+			if ( 0 !== strcasecmp( $parsed['host'], (string) $home_host ) ) {
+				return ValidationResult::valid();
+			}
+		}
 
 		if ( $this->normalise_path( $source->path() ) === $this->normalise_path( $destination_path ) ) {
 			return ValidationResult::invalid(

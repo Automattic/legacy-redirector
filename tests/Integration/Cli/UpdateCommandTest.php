@@ -204,6 +204,22 @@ final class UpdateCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a redirect cannot be updated to point back at its own source.
+	 */
+	public function test_update_to_own_source_is_rejected(): void {
+		$this->create_redirect( '/update-loop', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-loop' ),
+			array( 'to' => '/update-loop' )
+		);
+
+		$this->assert_command_error();
+		$this->assertSame( 'https://example.com/dest', $this->get_destination( '/update-loop' ) );
+	}
+
+	/**
 	 * Test error for invalid destination.
 	 */
 	public function test_update_invalid_destination(): void {

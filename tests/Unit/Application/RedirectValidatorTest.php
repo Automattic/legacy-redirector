@@ -112,91 +112,47 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	}
 
 	// =========================================================================
-	// validate_for_creation tests
+	// validate() tests
 	// =========================================================================
 
 	/**
-	 * Test validate_for_creation returns duplicate error when redirect exists.
+	 * Test validate returns a duplicate error when the source is already taken.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
 	 */
-	public function test_validate_for_creation_returns_duplicate_error_when_redirect_exists(): void {
-		$source      = $this->create_source( '/existing-page' );
-		$destination = $this->create_url_destination( '/destination' );
+	public function test_validate_returns_duplicate_error_when_source_is_taken(): void {
+		$source   = $this->create_source( '/existing-page' );
+		$redirect = Redirect::create( $source, $this->create_url_destination( '/destination' ) );
 
 		$this->repository
-			->shouldReceive( 'exists' )
+			->shouldReceive( 'get_id_by_source' )
 			->once()
 			->with( Mockery::on( fn( $s ) => $s->path() === $source->path() ) )
-			->andReturn( true );
+			->andReturn( 456 );
 
-		$result = $this->validator->validate_for_creation( $source, $destination );
+		$result = $this->validator->validate( $redirect );
 
 		$this->assertTrue( $result->is_invalid() );
 		$this->assertSame( 'duplicate-redirect-uri', $result->error_code() );
 	}
 
 	/**
-	 * Test validate_for_creation validates source and destination are different.
+	 * Test a persisted redirect is not a duplicate of its own row.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
 	 */
-	public function test_validate_for_creation_validates_source_destination_different(): void {
-		$source      = $this->create_source( '/same-page' );
-		$destination = $this->create_url_destination( '/same-page' );
+	public function test_validate_does_not_treat_a_redirect_as_its_own_duplicate(): void {
+		$redirect = Redirect::reconstitute(
+			123,
+			$this->create_source( '/old-page' ),
+			$this->create_url_destination( '/new-destination' ),
+			'publish'
+		);
 
 		$this->repository
-			->shouldReceive( 'exists' )
+			->shouldReceive( 'get_id_by_source' )
 			->once()
-			->andReturn( false );
-
-		$result = $this->validator->validate_for_creation( $source, $destination );
-
-		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'invalid-values', $result->error_code() );
-	}
-
-	/**
-	 * Test validate_for_creation validates destination.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
-	 */
-	public function test_validate_for_creation_validates_destination(): void {
-		$source      = $this->create_source( '/old-page' );
-		$destination = $this->create_url_destination( '/draft-page' );
-
-		$this->repository
-			->shouldReceive( 'exists' )
-			->once()
-			->andReturn( false );
-
-		Functions\expect( 'get_post_types' )
-			->once()
-			->andReturn( array( 'post', 'page' ) );
-
-		Functions\expect( 'get_page_by_path' )
-			->once()
-			->andReturn( $this->create_mock_post( 'draft' ) );
-
-		$result = $this->validator->validate_for_creation( $source, $destination );
-
-		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'non-public', $result->error_code() );
-	}
-
-	/**
-	 * Test validate_for_creation returns valid for valid redirect.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
-	 */
-	public function test_validate_for_creation_returns_valid_for_valid_redirect(): void {
-		$source      = $this->create_source( '/old-page' );
-		$destination = $this->create_url_destination( '/new-page' );
-
-		$this->repository
-			->shouldReceive( 'exists' )
-			->once()
-			->andReturn( false );
+			->andReturn( 123 );
 
 		Functions\expect( 'get_post_types' )
 			->once()
@@ -206,7 +162,141 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->once()
 			->andReturn( $this->create_mock_post( 'publish' ) );
 
-		$result = $this->validator->validate_for_creation( $source, $destination );
+		$result = $this->validator->validate( $redirect );
+
+		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * Test a moved source is judged against the source it moves to.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_validate_judges_a_moved_source_against_its_new_value(): void {
+		$existing = Redirect::reconstitute(
+			123,
+			$this->create_source( '/old-page' ),
+			$this->create_url_destination( '/old-destination' ),
+			'publish'
+		);
+		$moved    = $existing->with_source( $this->create_source( '/taken-page' ) );
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->with( Mockery::on( fn( $s ) => '/taken-page' === $s->path() ) )
+			->andReturn( 456 );
+
+		$result = $this->validator->validate( $moved );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'duplicate-redirect-uri', $result->error_code() );
+	}
+
+	/**
+	 * Test validate rejects a redirect whose destination is its own source.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_validate_rejects_source_matching_destination(): void {
+		$redirect = Redirect::create(
+			$this->create_source( '/same-page' ),
+			$this->create_url_destination( '/same-page' )
+		);
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->andReturn( 0 );
+
+		$result = $this->validator->validate( $redirect );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
+	}
+
+	/**
+	 * Test a moved source is loop-checked against the source it moves to.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_validate_rejects_a_moved_source_matching_its_destination(): void {
+		$existing = Redirect::reconstitute(
+			123,
+			$this->create_source( '/old-page' ),
+			$this->create_url_destination( '/old-destination' ),
+			'publish'
+		);
+		$looping  = $existing
+			->with_source( $this->create_source( '/loop' ) )
+			->with_destination( $this->create_url_destination( '/loop' ) );
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->andReturn( 0 );
+
+		$result = $this->validator->validate( $looping );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
+	}
+
+	/**
+	 * Test validate rejects an unpublished destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_validate_rejects_an_unpublished_destination(): void {
+		$redirect = Redirect::create(
+			$this->create_source( '/old-page' ),
+			$this->create_url_destination( '/draft-page' )
+		);
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->andReturn( 0 );
+
+		Functions\expect( 'get_post_types' )
+			->once()
+			->andReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'draft' ) );
+
+		$result = $this->validator->validate( $redirect );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'non-public', $result->error_code() );
+	}
+
+	/**
+	 * Test validate accepts a valid new redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_validate_returns_valid_for_a_valid_redirect(): void {
+		$redirect = Redirect::create(
+			$this->create_source( '/old-page' ),
+			$this->create_url_destination( '/new-page' )
+		);
+
+		$this->repository
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->andReturn( 0 );
+
+		Functions\expect( 'get_post_types' )
+			->once()
+			->andReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$result = $this->validator->validate( $redirect );
 
 		$this->assertTrue( $result->is_valid() );
 	}
@@ -253,6 +343,43 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	public function test_validate_source_destination_different_is_case_insensitive(): void {
 		$source      = $this->create_source( '/Same-Path' );
 		$destination = $this->create_url_destination( '/same-path' );
+
+		$result = $this->validator->validate_source_destination_different( $source, $destination );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
+	}
+
+	/**
+	 * Test validate_source_destination_different returns valid for an external host with the same path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 */
+	public function test_validate_source_destination_different_returns_valid_for_same_path_on_external_host(): void {
+		$source      = $this->create_source( '/contact' );
+		$destination = $this->create_url_destination( 'https://othersite.com/contact' );
+
+		Functions\expect( 'home_url' )
+			->once()
+			->andReturn( 'https://example.com' );
+
+		$result = $this->validator->validate_source_destination_different( $source, $destination );
+
+		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * Test validate_source_destination_different returns invalid for the own host with the same path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 */
+	public function test_validate_source_destination_different_returns_invalid_for_same_path_on_own_host(): void {
+		$source      = $this->create_source( '/contact' );
+		$destination = $this->create_url_destination( 'https://example.com/contact' );
+
+		Functions\expect( 'home_url' )
+			->once()
+			->andReturn( 'https://example.com' );
 
 		$result = $this->validator->validate_source_destination_different( $source, $destination );
 
@@ -853,85 +980,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 			->andReturn( $post );
 
 		$result = $this->validator->validate_source_not_private( $source );
-
-		$this->assertTrue( $result->is_valid() );
-	}
-
-	// =========================================================================
-	// validate_for_update tests
-	// =========================================================================
-
-	/**
-	 * Test validate_for_update validates source and destination are different.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_update
-	 */
-	public function test_validate_for_update_validates_source_destination_different(): void {
-		$existing        = Redirect::reconstitute(
-			123,
-			$this->create_source( '/same-page' ),
-			$this->create_url_destination( '/old-destination' ),
-			'publish'
-		);
-		$new_destination = $this->create_url_destination( '/same-page' );
-
-		$result = $this->validator->validate_for_update( $existing, $new_destination );
-
-		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'invalid-values', $result->error_code() );
-	}
-
-	/**
-	 * Test validate_for_update validates destination.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_update
-	 */
-	public function test_validate_for_update_validates_destination(): void {
-		$existing        = Redirect::reconstitute(
-			123,
-			$this->create_source( '/old-page' ),
-			$this->create_url_destination( '/old-destination' ),
-			'publish'
-		);
-		$new_destination = $this->create_url_destination( '/draft-page' );
-
-		Functions\expect( 'get_post_types' )
-			->once()
-			->andReturn( array( 'post', 'page' ) );
-
-		Functions\expect( 'get_page_by_path' )
-			->once()
-			->andReturn( $this->create_mock_post( 'draft' ) );
-
-		$result = $this->validator->validate_for_update( $existing, $new_destination );
-
-		$this->assertTrue( $result->is_invalid() );
-		$this->assertSame( 'non-public', $result->error_code() );
-	}
-
-	/**
-	 * Test validate_for_update returns valid for valid update.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_update
-	 */
-	public function test_validate_for_update_returns_valid_for_valid_update(): void {
-		$existing        = Redirect::reconstitute(
-			123,
-			$this->create_source( '/old-page' ),
-			$this->create_url_destination( '/old-destination' ),
-			'publish'
-		);
-		$new_destination = $this->create_url_destination( '/new-destination' );
-
-		Functions\expect( 'get_post_types' )
-			->once()
-			->andReturn( array( 'post', 'page' ) );
-
-		Functions\expect( 'get_page_by_path' )
-			->once()
-			->andReturn( $this->create_mock_post( 'publish' ) );
-
-		$result = $this->validator->validate_for_update( $existing, $new_destination );
 
 		$this->assertTrue( $result->is_valid() );
 	}

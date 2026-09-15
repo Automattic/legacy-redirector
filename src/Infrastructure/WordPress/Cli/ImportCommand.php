@@ -201,7 +201,7 @@ final class ImportCommand extends WP_CLI_Command {
 		}
 
 		// In upsert mode, try updating an existing redirect first.
-		if ( 'upsert' === $mode && $this->manager->update_by_source( $source, $destination, $post_status ) ) {
+		if ( 'upsert' === $mode && $this->manager->update_by_source( $source, $destination, $post_status, $validate ) ) {
 			return $this->result_row( $redirect_from, $redirect_to, 'updated', 'Updated existing redirect' );
 		}
 

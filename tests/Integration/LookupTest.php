@@ -76,6 +76,23 @@ final class LookupTest extends TestCase {
 				'http://example.com/',
 				'301',
 			),
+			// The lookup path once decoded before parsing while creation
+			// decoded once, so these three never matched what was stored.
+			'redirect_encoded_percent'                     => array(
+				'/100%25-cotton',
+				'http://example.com/cotton',
+				'301',
+			),
+			'redirect_double_encoded_space'                => array(
+				'/a%2520b',
+				'http://example.com/a-b',
+				'301',
+			),
+			'redirect_encoded_hash'                        => array(
+				'/page%23section',
+				'http://example.com/section',
+				'301',
+			),
 		);
 	}
 

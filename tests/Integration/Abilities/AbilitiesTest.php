@@ -298,6 +298,29 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * Test a redirect cannot be updated to point back at its own source.
+	 *
+	 * @return void
+	 */
+	public function test_update_to_own_source_is_rejected(): void {
+		$this->create_redirect( '/loop-me', 'https://example.org/somewhere' );
+
+		$result = $this->ability( 'update-redirect' )->execute(
+			array(
+				'redirects' => array( '/loop-me' ),
+				'to'        => '/loop-me',
+			)
+		);
+
+		$this->assertSame( 0, $result['updated'] );
+		$this->assertCount( 1, $result['failed'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => '/loop-me' ) );
+
+		$this->assertSame( 'https://example.org/somewhere', $fetched['to'], 'The destination should be untouched.' );
+	}
+
+	/**
 	 * Test input that does not match the schema is rejected before execution.
 	 *
 	 * @return void

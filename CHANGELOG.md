@@ -65,6 +65,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Fixed
 
+- Redirect lookup no longer decodes the request URL twice. The resolver decoded the URL before parsing it and `SourceUrl` decoded it again, while redirects were created with a single decode. Sources containing a literal `%25` therefore never fired, and requests containing `%23` or `%3F` were parsed as though they held a real fragment or query string, matching the wrong redirect. `SourceUrl` is now the single owner of decoding, so the `wpcom_legacy_redirector_request_path` filter receives the path still percent-encoded.
 - Attachment destinations are no longer treated as unpublished. Attachments carry the post status `inherit`, so creating, validating, or listing a redirect to a media item wrongly reported it as not published — and `validate --fix` disabled redirects that worked.
 - `import --mode=upsert` now updates disabled redirects instead of falling through to the create path, where they were either rejected as duplicates or (with `--skip-validation`) inserted a second time under the same source.
 - Saving a redirect now refuses to insert a second one for a source that already has one, in any status.
