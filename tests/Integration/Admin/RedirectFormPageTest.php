@@ -569,6 +569,44 @@ final class RedirectFormPageTest extends TestCase {
 		$this->assertSame( 'publish', get_post( $redirect_id )->post_status );
 	}
 
+	/**
+	 * Test creating a redirect that points back at its own source is rejected.
+	 */
+	public function test_create_pointing_at_own_source_redirects_with_error(): void {
+		$this->login_as_redirect_manager();
+
+		$this->submit(
+			array(
+				'redirect_from' => '/form-loop',
+				'redirect_to'   => '/form-loop',
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		$this->assertStringContainsString( 'error=same_source_destination', $location );
+		$this->assertSame( 0, $this->redirect_id_for( '/form-loop' ) );
+	}
+
+	/**
+	 * Test an absolute destination on this site still counts as its own source.
+	 */
+	public function test_create_pointing_at_own_source_absolute_redirects_with_error(): void {
+		$this->login_as_redirect_manager();
+
+		$this->submit(
+			array(
+				'redirect_from' => '/form-loop-absolute',
+				'redirect_to'   => home_url( '/form-loop-absolute' ),
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		$this->assertStringContainsString( 'error=same_source_destination', $location );
+		$this->assertSame( 0, $this->redirect_id_for( '/form-loop-absolute' ) );
+	}
+
 	// =========================================================================
 	// Tests for editing
 	// =========================================================================
@@ -652,6 +690,31 @@ final class RedirectFormPageTest extends TestCase {
 
 		$this->assertStringContainsString( 'error=duplicate', $location );
 		$this->assertStringContainsString( 'redirect_id=' . $redirect_id, $location );
+	}
+
+	/**
+	 * Test editing a redirect to point back at its own source is rejected.
+	 */
+	public function test_edit_to_own_source_redirects_with_error(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-edit-loop', '/old-destination' );
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => '/form-edit-loop',
+				'redirect_to'     => '/form-edit-loop',
+				'redirect_status' => 'publish',
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		$this->assertStringContainsString( 'error=same_source_destination', $location );
+
+		$redirect = $this->find_redirect( '/form-edit-loop' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( '/old-destination', $redirect->destination()->as_url()->value() );
 	}
 
 	/**
