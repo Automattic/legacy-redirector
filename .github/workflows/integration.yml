@@ -45,12 +45,16 @@ jobs:
           # Check latest WP with the latest PHP.
           - wordpress: 'master'
             php: 'latest'
-          # Check multisite on latest WP with the latest PHP.
+          # Check multisite on latest WP with the latest PHP. The multisite-only
+          # tests skip elsewhere, so this is the only run that can check their
+          # covers annotations, hence coverage rather than a plain run.
           - wordpress: 'master'
             php: 'latest'
             multisite: true
-          # One coverage-enabled run: PHPUnit only enforces the strict
-          # covers-annotation settings when a coverage driver is active.
+            coverage: true
+          # One single-site coverage-enabled run: PHPUnit only enforces the
+          # strict covers-annotation settings when a coverage driver is active,
+          # and single site exercises different branches to multisite.
           - wordpress: 'master'
             php: 'latest'
             coverage: true
@@ -86,13 +90,13 @@ jobs:
         run: npx wp-env start ${{ matrix.coverage && '--xdebug=coverage' || '' }}
 
       - name: Run integration tests (single site)
-        if: ${{ ! matrix.multisite && ! matrix.coverage }}
+        if: ${{ ! matrix.coverage }}
         run: composer test:integration
 
-      - name: Run integration tests with strict coverage
-        if: ${{ matrix.coverage }}
+      - name: Run integration tests (single site) with strict coverage
+        if: ${{ matrix.coverage && ! matrix.multisite }}
         run: composer test:integration-coverage
 
-      - name: Run integration tests (multisite)
-        if: ${{ matrix.multisite }}
-        run: composer test:integration-ms
+      - name: Run integration tests (multisite) with strict coverage
+        if: ${{ matrix.coverage && matrix.multisite }}
+        run: composer test:integration-ms-coverage

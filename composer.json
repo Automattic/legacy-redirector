@@ -58,7 +58,8 @@
 		"test:unit": "@php ./vendor/bin/phpunit --testdox --no-coverage",
 		"test:integration": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist",
 		"test:integration-coverage": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'XDEBUG_MODE=coverage ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist --coverage-text=/dev/null'",
-		"test:integration-ms": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist'"
+		"test:integration-ms": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist'",
+		"test:integration-ms-coverage": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 XDEBUG_MODE=coverage ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist --coverage-text=/dev/null'"
 	},
 	"scripts-descriptions": {
 		"coverage": "Run tests with code coverage reporting",
@@ -74,6 +75,7 @@
 		"test:unit": "Run unit tests",
 		"test:integration": "Run integration tests",
 		"test:integration-coverage": "Run integration tests with a coverage driver so strict coverage annotations are enforced",
-		"test:integration-ms": "Run integration tests in multisite mode"
+		"test:integration-ms": "Run integration tests in multisite mode",
+		"test:integration-ms-coverage": "Run multisite integration tests with a coverage driver so strict coverage annotations are enforced"
 	}
 }
