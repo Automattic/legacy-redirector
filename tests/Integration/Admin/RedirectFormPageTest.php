@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Admin;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 use WPDieException;
 
@@ -528,10 +529,26 @@ final class RedirectFormPageTest extends TestCase {
 
 	/**
 	 * Test choosing the disabled status creates a draft redirect.
+	 *
+	 * The redirect must never pass through a published state on the way: a
+	 * create-then-disable pair would briefly serve traffic and pre-warm the
+	 * positive cache entry.
 	 */
 	public function test_create_with_draft_status(): void {
 		$this->login_as_redirect_manager();
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$statuses = array();
+		add_action(
+			'transition_post_status',
+			static function ( $new_status, $old_status, $post ) use ( &$statuses ): void {
+				if ( PostTypeRedirectRepository::POST_TYPE === $post->post_type ) {
+					$statuses[] = $new_status;
+				}
+			},
+			10,
+			3
+		);
 
 		$this->submit(
 			array(
@@ -546,6 +563,7 @@ final class RedirectFormPageTest extends TestCase {
 		$redirect_id = $this->redirect_id_for( '/form-created-draft' );
 		$this->assertGreaterThan( 0, $redirect_id );
 		$this->assertSame( 'draft', get_post( $redirect_id )->post_status );
+		$this->assertSame( array( 'draft' ), $statuses );
 	}
 
 	/**
