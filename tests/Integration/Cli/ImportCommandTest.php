@@ -279,6 +279,45 @@ final class ImportCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test upsert mode sees a disabled redirect a front-end lookup has cached.
+	 *
+	 * A cold cache is the interesting case: disabling pre-warms the entry with
+	 * the redirect's ID, so it takes an eviction for a visitor's request to be
+	 * the lookup that populates it. What that lookup stores must be which post
+	 * holds the source, not its publish-only verdict. Storing "no redirect"
+	 * would send this upsert down the create path, to fail on a duplicate the
+	 * cache had just told it did not exist.
+	 *
+	 * @see https://linear.app/a8c/issue/VIPPLUG-113
+	 */
+	public function test_import_upsert_updates_disabled_redirect_after_frontend_lookup(): void {
+		$redirect_id = $this->create_redirect( '/import-upsert-cached', 'https://example.com/original' );
+		$this->manager()->disable( $redirect_id );
+
+		wp_cache_flush();
+
+		// Prime the cache the way a visitor requesting the disabled source does.
+		$this->assertNull( $this->repository()->find_by_source( SourceUrl::from_string( '/import-upsert-cached' ) ) );
+
+		$file = $this->create_csv( "/import-upsert-cached,https://example.com/replacement\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array(
+				'mode'            => 'upsert',
+				'skip-validation' => true,
+			)
+		);
+
+		$this->assert_command_success();
+		$this->assertSame( 1, $this->count_redirect_posts( '/import-upsert-cached' ) );
+
+		$redirect = $this->repository()->find_by_id( $redirect_id );
+		$this->assertSame( 'https://example.com/replacement', $redirect->destination()->as_url()->value() );
+	}
+
+	/**
 	 * Test re-running an upsert import is idempotent for disabled redirects.
 	 *
 	 * @see https://linear.app/a8c/issue/VIPPLUG-133

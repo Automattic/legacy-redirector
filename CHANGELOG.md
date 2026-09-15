@@ -68,6 +68,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - Attachment destinations are no longer treated as unpublished. Attachments carry the post status `inherit`, so creating, validating, or listing a redirect to a media item wrongly reported it as not published — and `validate --fix` disabled redirects that worked.
 - `import --mode=upsert` now updates disabled redirects instead of falling through to the create path, where they were either rejected as duplicates or (with `--skip-validation`) inserted a second time under the same source.
 - Saving a redirect now refuses to insert a second one for a source that already has one, in any status.
+- A visitor's request for a disabled redirect's source no longer caches it as non-existent, which made the redirect unreachable by source for the next five minutes: `import --mode=upsert` failed on a duplicate it had just been told did not exist, and deleting by source reported nothing to delete.
 - Expire negative ("no redirect exists") object cache entries after 5 minutes, so 404 traffic can no longer fill the cache with permanent entries.
 - `validate --fix` now disables redirects through the redirect manager, invalidating the lookup cache, instead of writing the post status directly.
 - `validate` now detects trashed posts behind relative-path destinations without `--check-urls` (trashing renames the post slug, so the path lookup silently missed them).
