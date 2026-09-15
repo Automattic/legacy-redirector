@@ -17,7 +17,9 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\AbstractStatusCommand
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
@@ -27,7 +29,6 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class DisableCommandTest extends CliTestCase {

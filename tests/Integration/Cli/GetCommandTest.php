@@ -16,7 +16,8 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * Integration tests for GetCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\GetCommand
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectFetcher
+ * @covers \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator

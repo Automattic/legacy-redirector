@@ -19,6 +19,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * Covers the migration of redirect data created by version 1.x.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  */
 final class UpgraderTest extends TestCase {
 

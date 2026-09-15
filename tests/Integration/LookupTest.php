@@ -21,6 +21,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectReposito
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectResolver
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination

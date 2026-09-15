@@ -20,6 +20,9 @@ use Brain\Monkey\Functions;
  * InternalDestinationNormaliserTest class.
  *
  * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  */
 final class InternalDestinationNormaliserTest extends MonkeyStubs {
 

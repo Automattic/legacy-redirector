@@ -20,6 +20,7 @@ use Brain\Monkey\Functions;
  * UpgradeNoticeTest class.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\UpgradeNotice
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  */
 final class UpgradeNoticeTest extends MonkeyStubs {
 
