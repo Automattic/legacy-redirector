@@ -118,6 +118,14 @@ class RedirectValidator {
 		$parsed           = wp_parse_url( $destination_url );
 		$destination_path = $parsed['path'] ?? '';
 
+		// A destination on another host can never be a self-loop, whatever its path.
+		if ( ! empty( $parsed['host'] ) ) {
+			$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
+			if ( 0 !== strcasecmp( $parsed['host'], (string) $home_host ) ) {
+				return ValidationResult::valid();
+			}
+		}
+
 		if ( $this->normalise_path( $source->path() ) === $this->normalise_path( $destination_path ) ) {
 			return ValidationResult::invalid(
 				'invalid-values',
