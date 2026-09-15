@@ -85,7 +85,7 @@ class RedirectManager {
 		if ( ! $this->insert_allowed() ) {
 			return RedirectCreationResult::error(
 				'insert-not-allowed',
-				__( 'Redirect creation is only allowed via WP-CLI or the admin. Use the wpcom_legacy_redirector_allow_insert filter to allow it elsewhere.', 'wpcom-legacy-redirector' )
+				__( 'Redirect creation is only allowed from WP-CLI and for users who can manage redirects. Use the wpcom_legacy_redirector_allow_insert filter to allow it elsewhere.', 'wpcom-legacy-redirector' )
 			);
 		}
 
@@ -116,9 +116,16 @@ class RedirectManager {
 	/**
 	 * Whether redirect creation is allowed in the current context.
 	 *
-	 * Mirrors the 1.x `insert_legacy_redirect()` gate: creation is allowed
-	 * from WP-CLI and the admin; anywhere else (e.g. the front end) it must
-	 * be opted into via the `wpcom_legacy_redirector_allow_insert` filter.
+	 * Creation is allowed from WP-CLI (which runs with no user context) and
+	 * for any user with the capability to manage redirects, wherever the
+	 * request arrives from. Anywhere else (e.g. unauthenticated front-end
+	 * code) it must be opted into via the
+	 * `wpcom_legacy_redirector_allow_insert` filter.
+	 *
+	 * The 1.x gate allowed any admin-context request instead of checking the
+	 * capability; every admin entry point checks `manage_redirects` before
+	 * calling this service, so the capability is the honest form of the same
+	 * rule — and one a REST or Abilities caller can also satisfy.
 	 *
 	 * @return bool True if creation is allowed.
 	 */
@@ -127,7 +134,9 @@ class RedirectManager {
 			return true;
 		}
 
-		if ( is_admin() ) {
+		// Capability::MANAGE_REDIRECTS_CAPABILITY, not imported here so the
+		// Application layer does not depend on an Infrastructure class.
+		if ( current_user_can( 'manage_redirects' ) ) {
 			return true;
 		}
 

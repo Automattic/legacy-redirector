@@ -118,7 +118,9 @@ final class CreateRedirectAbility implements AbilityInterface {
 			);
 		}
 
-		$result = $this->create( $source, $destination, $status );
+		// The manager's creation gate admits users who can manage redirects,
+		// and the permission callback has already established that here.
+		$result = $this->manager->create_redirect( $source, $destination, true, $status );
 
 		if ( $result->is_error() ) {
 			return new WP_Error(
@@ -134,33 +136,5 @@ final class CreateRedirectAbility implements AbilityInterface {
 			'type'   => $destination->is_post_id() ? 'post' : 'url',
 			'status' => 'draft' === $status ? 'disabled' : 'enabled',
 		);
-	}
-
-	/**
-	 * Create the redirect, allowing insertion for the duration of the call.
-	 *
-	 * RedirectManager only allows creation from WP-CLI and the admin, so that a
-	 * stray front-end code path cannot write redirects. An ability runs in
-	 * neither context — typically it arrives over the REST API — but the
-	 * permission callback has already established that the current user may
-	 * manage redirects, which is the same bar the admin screens apply.
-	 *
-	 * @param SourceUrl   $source      The source URL.
-	 * @param Destination $destination The destination.
-	 * @param string      $status      The post status to create with.
-	 * @return \Automattic\LegacyRedirector\Application\RedirectCreationResult The creation result.
-	 */
-	private function create( SourceUrl $source, Destination $destination, string $status ) {
-		$allow_insert = static function (): bool {
-			return true;
-		};
-
-		add_filter( 'wpcom_legacy_redirector_allow_insert', $allow_insert );
-
-		$result = $this->manager->create_redirect( $source, $destination, true, $status );
-
-		remove_filter( 'wpcom_legacy_redirector_allow_insert', $allow_insert );
-
-		return $result;
 	}
 }

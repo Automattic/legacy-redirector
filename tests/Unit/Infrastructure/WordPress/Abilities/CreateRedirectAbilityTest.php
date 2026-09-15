@@ -63,9 +63,6 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_returns_the_created_redirect(): void {
-		Functions\expect( 'add_filter' )->once()->with( 'wpcom_legacy_redirector_allow_insert', Mockery::type( 'callable' ) );
-		Functions\expect( 'remove_filter' )->once()->with( 'wpcom_legacy_redirector_allow_insert', Mockery::type( 'callable' ) );
-
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->with( Mockery::any(), Mockery::any(), true, 'publish' )
@@ -96,9 +93,6 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_creates_a_disabled_redirect_as_a_draft(): void {
-		Functions\when( 'add_filter' )->justReturn( true );
-		Functions\when( 'remove_filter' )->justReturn( true );
-
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->with( Mockery::any(), Mockery::any(), true, 'draft' )
@@ -123,9 +117,6 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_returns_an_error_when_creation_fails(): void {
-		Functions\when( 'add_filter' )->justReturn( true );
-		Functions\when( 'remove_filter' )->justReturn( true );
-
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->andReturn( RedirectCreationResult::error( 'duplicate-redirect', 'Already exists.' ) );

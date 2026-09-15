@@ -46,6 +46,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Changed
 
+- Redirect creation is now allowed for any user with the `manage_redirects` capability, wherever the request arrives from — including the REST API and Abilities/MCP clients. Previously the gate allowed any admin-context request regardless of capability, and blocked everything else (including capable users) unless the `wpcom_legacy_redirector_allow_insert` filter opted in. The filter still governs creation from contexts with no capable user, such as unauthenticated front-end code.
 - Rename `verify` command to `validate` and use `from`/`to` terminology in CLI output for consistency with UI.
 - Validation enabled by default for the `create` CLI command (previously skipped).
 - External redirect destinations are accepted at creation time from all entry points; the destination host is automatically allowed at redirect time. Previously the CLI rejected hosts missing from the `allowed_redirect_hosts` filter while the admin UI accepted them.

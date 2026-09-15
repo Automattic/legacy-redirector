@@ -168,7 +168,7 @@ Destination validation (the admin "Validate" action and `wp wpcom-legacy-redirec
 The following APIs remain unchanged:
 
 - The `wpcom_legacy_redirector_request_path`, `wpcom_legacy_redirector_redirect_status`, and `wpcom_legacy_redirector_preserve_query_params` filters
-- The `wpcom_legacy_redirector_allow_insert` filter — creating redirects outside WP-CLI and the admin (e.g. from front-end code) is still blocked unless this filter returns true; in 2.0 the gate lives in `RedirectManager::create_redirect()`
+- The `wpcom_legacy_redirector_allow_insert` filter — creating redirects from code with no capable user (e.g. unauthenticated front-end code) is still blocked unless this filter returns true; in 2.0 the gate lives in `RedirectManager::create_redirect()`. Note the gate itself has changed: any user with the `manage_redirects` capability may now create redirects from any context without the filter, where 1.x keyed on being in the admin instead of on the capability (see CHANGELOG)
 - The `vip-legacy-redirect` post type and its stored data format (no migration needed)
 
 ## Using the Container
