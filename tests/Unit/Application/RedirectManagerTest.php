@@ -69,8 +69,9 @@ final class RedirectManagerTest extends MonkeyStubs {
 		Functions\when( 'get_current_blog_id' )->justReturn( 1 );
 
 		// Pass the create_redirect() context gate by default (WP_CLI is not
-		// defined in the unit harness, so the gate falls through to is_admin).
-		Functions\when( 'is_admin' )->justReturn( true );
+		// defined in the unit harness, so the gate falls through to the
+		// capability check).
+		Functions\when( 'current_user_can' )->justReturn( true );
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
 		$this->validator  = Mockery::mock( RedirectValidator::class );
@@ -119,7 +120,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
 	 */
 	public function test_create_redirect_blocked_on_front_end(): void {
-		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'current_user_can' )->justReturn( false );
 		Functions\when( '__' )->returnArg();
 
 		$source      = SourceUrl::from_string( '/old-page' );
@@ -137,8 +138,42 @@ final class RedirectManagerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
 	 */
 	public function test_create_redirect_allowed_on_front_end_via_filter(): void {
-		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'current_user_can' )->justReturn( false );
 		Functions\when( 'apply_filters' )->justReturn( true );
+
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::valid() );
+
+		$this->repository
+			->shouldReceive( 'save' )
+			->once()
+			->andReturn( Redirect::reconstitute( 123, $source, $destination, 'publish' ) );
+
+		$result = $this->manager->create_redirect( $source, $destination );
+
+		$this->assertFalse( $result->is_error() );
+		$this->assertSame( 123, $result->redirect_id() );
+	}
+
+	/**
+	 * Test a user who can manage redirects creates even when the filter says no.
+	 *
+	 * WordPress.com's wpcom-helper.php registers `__return_false` on
+	 * `wpcom_legacy_redirector_allow_insert` at priority 9999 to keep front-end
+	 * code from writing redirects. A capable user — such as one arriving via an
+	 * ability whose permission callback checked `manage_redirects` — must not
+	 * be caught by it, so the capability is consulted before the filter.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
+	 */
+	public function test_create_redirect_capability_beats_a_blocking_filter(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'apply_filters' )->justReturn( false );
 
 		$source      = SourceUrl::from_string( '/old-page' );
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
