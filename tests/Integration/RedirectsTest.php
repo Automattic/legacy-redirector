@@ -188,7 +188,7 @@ final class RedirectsTest extends TestCase {
 	 * Test redirect to a post ID works correctly (covers CLI use case).
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
 	 */
 	public function test_redirect_to_post_id_with_validation() {
 		// Create a published post to redirect to.
@@ -212,7 +212,7 @@ final class RedirectsTest extends TestCase {
 	 * Test redirect to non-existent post ID fails validation.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
 	 */
 	public function test_redirect_to_nonexistent_post_id_fails() {
 		// Use a very high post ID that doesn't exist.
@@ -226,7 +226,7 @@ final class RedirectsTest extends TestCase {
 	 * Test redirect to draft post ID fails validation.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
 	 */
 	public function test_redirect_to_draft_post_id_fails() {
 		// Create a draft post.
@@ -291,7 +291,7 @@ final class RedirectsTest extends TestCase {
 	/**
 	 * Test validation returns error for duplicate redirect.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_for_creation
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
 	 */
 	public function test_validation_returns_error_for_duplicate(): void {
 		$from_url = '/duplicate-validate-test-' . wp_generate_uuid4();
