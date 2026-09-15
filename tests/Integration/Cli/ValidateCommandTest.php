@@ -76,6 +76,30 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test an attachment destination is not reported as unpublished.
+	 *
+	 * Attachments carry post_status 'inherit', never 'publish', so reading the
+	 * raw property flags every media destination as broken - and --fix then
+	 * disables a redirect that resolves perfectly well.
+	 */
+	public function test_validate_accepts_attachment_destination(): void {
+		$attachment_id = self::factory()->attachment->create_object(
+			array(
+				'file'           => 'brochure.pdf',
+				'post_mime_type' => 'application/pdf',
+				'post_title'     => 'Brochure',
+			)
+		);
+		$this->create_redirect( '/attachment-dest', $attachment_id );
+
+		$this->assertSame( 'inherit', get_post( $attachment_id )->post_status );
+
+		$this->invoke_command( $this->command, array( '/attachment-dest' ), array() );
+
+		$this->assert_success_contains( 'No issues found.' );
+	}
+
+	/**
 	 * Test batch validation finds a trashed post destination.
 	 */
 	public function test_validate_batch_finds_trashed_destination(): void {

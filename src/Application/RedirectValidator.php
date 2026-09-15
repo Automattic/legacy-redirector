@@ -162,7 +162,10 @@ class RedirectValidator {
 			);
 		}
 
-		if ( 'publish' !== $post->post_status ) {
+		// Attachments store 'inherit', never 'publish'; get_post_status()
+		// resolves that against the parent, so a redirect to a media item is
+		// not rejected as unpublished.
+		if ( 'publish' !== get_post_status( $post ) ) {
 			return ValidationResult::invalid(
 				'non-public',
 				__( 'You are trying to redirect to a post that is not published.', 'wpcom-legacy-redirector' )
@@ -246,7 +249,7 @@ class RedirectValidator {
 			return ValidationResult::valid();
 		}
 
-		if ( 'publish' !== $post->post_status ) {
+		if ( 'publish' !== get_post_status( $post ) ) {
 			return ValidationResult::invalid(
 				'non-public',
 				__( 'You are trying to redirect to a URL that is currently not public.', 'wpcom-legacy-redirector' )
@@ -289,7 +292,7 @@ class RedirectValidator {
 		$post_types = get_post_types();
 		$post       = get_page_by_path( ltrim( $source->path(), '/' ), OBJECT, $post_types );
 
-		if ( null !== $post && 'publish' !== $post->post_status ) {
+		if ( null !== $post && 'publish' !== get_post_status( $post ) ) {
 			return ValidationResult::invalid(
 				'private-url',
 				__( 'You are trying to redirect from a URL that is currently private.', 'wpcom-legacy-redirector' )

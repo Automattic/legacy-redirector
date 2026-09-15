@@ -270,6 +270,32 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test render_column shows no warning for an attachment destination.
+	 *
+	 * Attachments carry post_status 'inherit', never 'publish', so reading the
+	 * raw property marks every media destination as private.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_posts_custom_column_shows_no_warning_for_attachment_destination(): void {
+		$attachment_id = self::factory()->attachment->create_object(
+			array(
+				'file'           => 'brochure.pdf',
+				'post_mime_type' => 'application/pdf',
+				'post_title'     => 'Brochure',
+			)
+		);
+
+		$post_id = $this->create_redirect( '/redirect-to-attachment', $attachment_id );
+
+		ob_start();
+		$this->columns_manager->render_column( 'to', $post_id );
+		$output = ob_get_clean();
+
+		$this->assertStringNotContainsString( 'not a public URL', $output );
+	}
+
+	/**
 	 * Test render_column shows error for nonexistent post parent.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
