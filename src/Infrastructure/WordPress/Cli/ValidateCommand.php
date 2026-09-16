@@ -24,6 +24,7 @@ use WP_CLI_Command;
  */
 final class ValidateCommand extends WP_CLI_Command {
 
+	use FormatsRedirectRows;
 	use ReportsBatchFailures;
 
 	/**
@@ -211,7 +212,7 @@ final class ValidateCommand extends WP_CLI_Command {
 
 		// Convert issues to array format for display.
 		$items = array_map(
-			fn( ValidationIssue $issue ) => $issue->to_array(),
+			fn( ValidationIssue $issue ) => $this->redirect_row( $issue->redirect() ) + array( 'issue' => $issue->label() ),
 			$issues
 		);
 

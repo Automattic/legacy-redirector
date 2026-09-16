@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
-use Automattic\LegacyRedirector\Domain\Redirect;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -18,6 +17,8 @@ use WP_CLI_Command;
  * Get details of a single redirect.
  */
 final class GetCommand extends WP_CLI_Command {
+
+	use FormatsRedirectRows;
 
 	/**
 	 * The redirect fetcher.
@@ -96,7 +97,7 @@ final class GetCommand extends WP_CLI_Command {
 			return;
 		}
 
-		$data = $this->redirect_to_array( $redirect );
+		$data = $this->redirect_row( $redirect ) + array( 'hash' => $redirect->source()->hash() );
 
 		// Return single field if requested.
 		if ( null !== $field ) {
@@ -134,28 +135,5 @@ final class GetCommand extends WP_CLI_Command {
 
 		// Other formats.
 		\WP_CLI\Utils\format_items( $format, array( $data ), array_keys( $data ) );
-	}
-
-	/**
-	 * Convert a redirect to an output array.
-	 *
-	 * @param Redirect $redirect The redirect.
-	 * @return array<string, int|string|null> The output data.
-	 */
-	private function redirect_to_array( Redirect $redirect ): array {
-		$dest = $redirect->destination();
-
-		return array(
-			'ID'     => $redirect->id(),
-			'from'   => $redirect->source()->path(),
-			'to'     => $dest->is_post_id()
-				? $dest->as_post_id()->value()
-				: $dest->as_url()->value(),
-			// 'corrupt' flags a row whose from/to are placeholders because the
-			// stored data is unreadable; `validate` reports the reason.
-			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $dest->is_post_id() ? 'post' : 'url' ),
-			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
-			'hash'   => $redirect->source()->hash(),
-		);
 	}
 }

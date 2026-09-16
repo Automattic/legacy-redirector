@@ -295,67 +295,6 @@ final class SourceUrl {
 	}
 
 	/**
-	 * Get the path without query string parameters.
-	 *
-	 * @return string The path component only.
-	 */
-	public function path_without_query(): string {
-		$pos = strpos( $this->path, '?' );
-		if ( false === $pos ) {
-			return $this->path;
-		}
-		return substr( $this->path, 0, $pos );
-	}
-
-	/**
-	 * Get the query string (without leading ?).
-	 *
-	 * @return string The query string, or empty string if none.
-	 */
-	public function query_string(): string {
-		$pos = strpos( $this->path, '?' );
-		if ( false === $pos ) {
-			return '';
-		}
-		return substr( $this->path, $pos + 1 );
-	}
-
-	/**
-	 * Create a new SourceUrl with specific query parameters removed.
-	 *
-	 * Used for stripping preservable query parameters before hash lookup.
-	 *
-	 * @param array<string> $keys Query parameter keys to remove.
-	 * @return self New SourceUrl instance without the specified parameters.
-	 */
-	public function without_query_params( array $keys ): self {
-		if ( empty( $keys ) ) {
-			return $this;
-		}
-
-		$query = $this->query_string();
-		if ( empty( $query ) ) {
-			return $this;
-		}
-
-		// Parse query string into array.
-		parse_str( $query, $params );
-
-		// Remove specified keys.
-		foreach ( $keys as $key ) {
-			unset( $params[ $key ] );
-		}
-
-		// Rebuild URL.
-		$base_path = $this->path_without_query();
-		if ( empty( $params ) ) {
-			return new self( $base_path );
-		}
-
-		return new self( $base_path . '?' . http_build_query( $params ) );
-	}
-
-	/**
 	 * Check equality with another SourceUrl.
 	 *
 	 * @param self $other The other SourceUrl to compare.

@@ -144,24 +144,6 @@ final class Destination {
 	}
 
 	/**
-	 * Check equality with another Destination.
-	 *
-	 * @param self $other The other Destination to compare.
-	 * @return bool True if the destinations are identical.
-	 */
-	public function equals( self $other ): bool {
-		if ( $this->is_url() !== $other->is_url() ) {
-			return false;
-		}
-
-		if ( $this->is_url() ) {
-			return $this->url->equals( $other->url );
-		}
-
-		return $this->post_id->equals( $other->post_id );
-	}
-
-	/**
 	 * String representation of the Destination.
 	 *
 	 * @return string The destination as a string.

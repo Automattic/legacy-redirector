@@ -174,66 +174,6 @@ final class DestinationTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test equals with same URL destinations.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Destination::equals
-	 */
-	public function test_equals_same_url(): void {
-		$destination1 = Destination::from_url( DestinationUrl::from_string( '/page' ) );
-		$destination2 = Destination::from_url( DestinationUrl::from_string( '/page' ) );
-
-		$this->assertTrue( $destination1->equals( $destination2 ) );
-	}
-
-	/**
-	 * Test equals with different URL destinations.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Destination::equals
-	 */
-	public function test_equals_different_url(): void {
-		$destination1 = Destination::from_url( DestinationUrl::from_string( '/page-one' ) );
-		$destination2 = Destination::from_url( DestinationUrl::from_string( '/page-two' ) );
-
-		$this->assertFalse( $destination1->equals( $destination2 ) );
-	}
-
-	/**
-	 * Test equals with same post ID destinations.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Destination::equals
-	 */
-	public function test_equals_same_post_id(): void {
-		$destination1 = Destination::from_post_id( DestinationPostId::from_int( 100 ) );
-		$destination2 = Destination::from_post_id( DestinationPostId::from_int( 100 ) );
-
-		$this->assertTrue( $destination1->equals( $destination2 ) );
-	}
-
-	/**
-	 * Test equals with different post ID destinations.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Destination::equals
-	 */
-	public function test_equals_different_post_id(): void {
-		$destination1 = Destination::from_post_id( DestinationPostId::from_int( 100 ) );
-		$destination2 = Destination::from_post_id( DestinationPostId::from_int( 200 ) );
-
-		$this->assertFalse( $destination1->equals( $destination2 ) );
-	}
-
-	/**
-	 * Test equals with different types.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Destination::equals
-	 */
-	public function test_equals_different_types(): void {
-		$destination1 = Destination::from_url( DestinationUrl::from_string( '/page' ) );
-		$destination2 = Destination::from_post_id( DestinationPostId::from_int( 123 ) );
-
-		$this->assertFalse( $destination1->equals( $destination2 ) );
-	}
-
-	/**
 	 * Test __toString for URL destination.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\Destination::__toString

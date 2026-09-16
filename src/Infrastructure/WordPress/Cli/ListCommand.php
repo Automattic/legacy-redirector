@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use WP_CLI;
@@ -18,6 +19,8 @@ use WP_CLI_Command;
  * List redirects with filtering options.
  */
 final class ListCommand extends WP_CLI_Command {
+
+	use FormatsRedirectRows;
 
 	/**
 	 * Default output fields.
@@ -144,7 +147,7 @@ final class ListCommand extends WP_CLI_Command {
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
 		$format   = $assoc_args['format'] ?? 'table';
-		$criteria = RedirectCriteria::from_args( $assoc_args );
+		$criteria = self::criteria_from_args( $assoc_args );
 
 		// Resolve output fields.
 		$fields = self::DEFAULT_FIELDS;
@@ -184,7 +187,7 @@ final class ListCommand extends WP_CLI_Command {
 
 		// Build output data.
 		$items = array_map(
-			fn( $redirect ) => $this->format_redirect_for_output( $redirect ),
+			fn( Redirect $redirect ) => $this->redirect_row( $redirect ),
 			$redirects
 		);
 
@@ -208,24 +211,23 @@ final class ListCommand extends WP_CLI_Command {
 	}
 
 	/**
-	 * Format a redirect for CLI output.
+	 * Build query criteria from the command's arguments.
 	 *
-	 * @param \Automattic\LegacyRedirector\Domain\Redirect $redirect The redirect.
-	 * @return array{ID: int|null, from: string, to: string|int, type: string, status: string}
+	 * @param array $assoc_args Key-value associative arguments.
+	 * @return RedirectCriteria The criteria to query with.
 	 */
-	private function format_redirect_for_output( $redirect ): array {
-		$dest        = $redirect->destination();
-		$is_post_id  = $dest->is_post_id();
-		$destination = $is_post_id ? $dest->as_post_id()->value() : $dest->as_url()->value();
+	private static function criteria_from_args( array $assoc_args ): RedirectCriteria {
+		$status = $assoc_args['status'] ?? null;
+		$type   = $assoc_args['destination-type'] ?? null;
 
-		return array(
-			'ID'     => $redirect->id(),
-			'from'   => $redirect->source()->path(),
-			'to'     => $destination,
-			// 'corrupt' flags a row whose from/to are placeholders because the
-			// stored data is unreadable; `validate` reports the reason.
-			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $is_post_id ? 'post' : 'url' ),
-			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
+		return new RedirectCriteria(
+			'any' === $status ? null : $status,
+			'any' === $type ? null : $type,
+			$assoc_args['search'] ?? null,
+			$assoc_args['orderby'] ?? 'date',
+			$assoc_args['order'] ?? 'DESC',
+			(int) ( $assoc_args['limit'] ?? 100 ),
+			(int) ( $assoc_args['offset'] ?? 0 )
 		);
 	}
 }

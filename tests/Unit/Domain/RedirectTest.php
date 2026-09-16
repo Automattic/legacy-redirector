@@ -158,23 +158,6 @@ final class RedirectTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test is_trashed returns true for trashed redirect.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::is_trashed
-	 */
-	public function test_is_trashed_for_trash_status(): void {
-		$redirect = Redirect::reconstitute(
-			1,
-			SourceUrl::from_string( '/old' ),
-			Destination::from_url( DestinationUrl::from_string( '/new' ) ),
-			'trash'
-		);
-
-		$this->assertTrue( $redirect->is_trashed() );
-		$this->assertFalse( $redirect->is_active() );
-	}
-
-	/**
 	 * Test with_id creates copy with new ID.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::with_id
@@ -264,44 +247,6 @@ final class RedirectTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test publish sets status to publish.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::publish
-	 */
-	public function test_publish_sets_publish_status(): void {
-		$redirect = Redirect::reconstitute(
-			1,
-			SourceUrl::from_string( '/old' ),
-			Destination::from_url( DestinationUrl::from_string( '/new' ) ),
-			'draft'
-		);
-
-		$published = $redirect->publish();
-
-		$this->assertSame( 'publish', $published->status() );
-		$this->assertTrue( $published->is_active() );
-	}
-
-	/**
-	 * Test trash sets status to trash.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::trash
-	 */
-	public function test_trash_sets_trash_status(): void {
-		$redirect = Redirect::reconstitute(
-			1,
-			SourceUrl::from_string( '/old' ),
-			Destination::from_url( DestinationUrl::from_string( '/new' ) ),
-			'publish'
-		);
-
-		$trashed = $redirect->trash();
-
-		$this->assertSame( 'trash', $trashed->status() );
-		$this->assertTrue( $trashed->is_trashed() );
-	}
-
-	/**
 	 * Test with_destination creates copy with new destination.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::with_destination
@@ -337,7 +282,7 @@ final class RedirectTest extends MonkeyStubs {
 			'publish'
 		);
 
-		$redirect->trash();
+		$redirect->with_status( 'trash' );
 		$redirect->with_id( 999 );
 
 		$this->assertSame( 1, $redirect->id() );

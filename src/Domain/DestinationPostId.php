@@ -80,16 +80,6 @@ final class DestinationPostId {
 	}
 
 	/**
-	 * Check equality with another DestinationPostId.
-	 *
-	 * @param self $other The other DestinationPostId to compare.
-	 * @return bool True if the post IDs are identical.
-	 */
-	public function equals( self $other ): bool {
-		return $this->post_id === $other->post_id;
-	}
-
-	/**
 	 * String representation of the DestinationPostId.
 	 *
 	 * @return string The post ID as a string.

@@ -96,36 +96,6 @@ final class RedirectCriteria {
 	}
 
 	/**
-	 * Create criteria from CLI arguments.
-	 *
-	 * Factory method that maps common CLI option names to criteria properties.
-	 *
-	 * @param array $args Associative array of arguments.
-	 * @return self
-	 */
-	public static function from_args( array $args ): self {
-		$status = $args['status'] ?? null;
-		if ( 'any' === $status ) {
-			$status = null;
-		}
-
-		$destination_type = $args['destination-type'] ?? $args['destination_type'] ?? null;
-		if ( 'any' === $destination_type ) {
-			$destination_type = null;
-		}
-
-		return new self(
-			$status,
-			$destination_type,
-			$args['search'] ?? null,
-			$args['orderby'] ?? $args['order_by'] ?? 'date',
-			$args['order'] ?? 'DESC',
-			(int) ( $args['limit'] ?? 100 ),
-			(int) ( $args['offset'] ?? 0 )
-		);
-	}
-
-	/**
 	 * Get status filter.
 	 *
 	 * @return string|null
@@ -189,83 +159,11 @@ final class RedirectCriteria {
 	}
 
 	/**
-	 * Check if filtering by enabled status.
-	 *
-	 * @return bool
-	 */
-	public function is_enabled_only(): bool {
-		return 'enabled' === $this->status;
-	}
-
-	/**
-	 * Check if filtering by disabled status.
-	 *
-	 * @return bool
-	 */
-	public function is_disabled_only(): bool {
-		return 'disabled' === $this->status;
-	}
-
-	/**
-	 * Check if filtering by post destination type.
-	 *
-	 * @return bool
-	 */
-	public function is_post_type_only(): bool {
-		return 'post' === $this->destination_type;
-	}
-
-	/**
-	 * Check if filtering by URL destination type.
-	 *
-	 * @return bool
-	 */
-	public function is_url_type_only(): bool {
-		return 'url' === $this->destination_type;
-	}
-
-	/**
 	 * Check if there's a search term.
 	 *
 	 * @return bool
 	 */
 	public function has_search(): bool {
 		return null !== $this->search && '' !== $this->search;
-	}
-
-	/**
-	 * Create a copy with modified limit.
-	 *
-	 * @param int $limit New limit.
-	 * @return self
-	 */
-	public function with_limit( int $limit ): self {
-		return new self(
-			$this->status,
-			$this->destination_type,
-			$this->search,
-			$this->order_by,
-			$this->order,
-			$limit,
-			$this->offset
-		);
-	}
-
-	/**
-	 * Create a copy with modified offset.
-	 *
-	 * @param int $offset New offset.
-	 * @return self
-	 */
-	public function with_offset( int $offset ): self {
-		return new self(
-			$this->status,
-			$this->destination_type,
-			$this->search,
-			$this->order_by,
-			$this->order,
-			$this->limit,
-			$offset
-		);
 	}
 }

@@ -94,13 +94,4 @@ enum ValidationIssueType: string {
 
 		return $base;
 	}
-
-	/**
-	 * Check if this issue type indicates the redirect should be disabled.
-	 *
-	 * @return bool True if the redirect is broken and should be disabled.
-	 */
-	public function is_broken(): bool {
-		return true; // All issue types indicate broken redirects.
-	}
 }

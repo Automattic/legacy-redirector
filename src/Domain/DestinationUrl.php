@@ -120,15 +120,6 @@ final class DestinationUrl {
 	}
 
 	/**
-	 * Check if this points to the home page.
-	 *
-	 * @return bool True if the destination is '/'.
-	 */
-	public function is_home(): bool {
-		return '/' === $this->url;
-	}
-
-	/**
 	 * Resolve the URL to an absolute URL.
 	 *
 	 * For relative paths, prepends the home URL.
@@ -143,33 +134,6 @@ final class DestinationUrl {
 		}
 
 		return rtrim( $home_url, '/' ) . $this->url;
-	}
-
-	/**
-	 * Append query parameters to the destination URL.
-	 *
-	 * @param array<string, string> $params Query parameters to append.
-	 * @return self New instance with appended parameters.
-	 */
-	public function with_query_params( array $params ): self {
-		if ( empty( $params ) ) {
-			return $this;
-		}
-
-		$separator = str_contains( $this->url, '?' ) ? '&' : '?';
-		$new_url   = $this->url . $separator . http_build_query( $params );
-
-		return new self( $new_url, $this->is_relative );
-	}
-
-	/**
-	 * Check equality with another DestinationUrl.
-	 *
-	 * @param self $other The other DestinationUrl to compare.
-	 * @return bool True if the URLs are identical.
-	 */
-	public function equals( self $other ): bool {
-		return $this->url === $other->url;
 	}
 
 	/**
