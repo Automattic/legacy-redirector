@@ -160,7 +160,6 @@ final class PostType {
 			'show_ui'            => true,
 			'rewrite'            => false,
 			'query_var'          => false,
-			'capability_type'    => 'post',
 			'hierarchical'       => false,
 			'menu_position'      => 100,
 			'show_in_nav_menus'  => false,
@@ -169,10 +168,24 @@ final class PostType {
 			'menu_icon'          => 'dashicons-randomize',
 			// No standard supports - we handle everything via custom admin pages.
 			'supports'           => array( '' ),
-			// Use custom capabilities to hide WordPress's auto-generated "Add New" submenu.
-			// We provide our own "Add Redirect" page via add_submenu_page().
+			// Map every primitive capability to manage_redirects so the list
+			// screen (and everything else) is limited to redirect managers.
+			// Authors/Contributors must not read the redirect map: it can leak
+			// unpublished slugs and internal structure. create_posts stays
+			// do_not_allow to hide WordPress's auto-generated "Add New" submenu;
+			// we provide our own "Add Redirect" page via add_submenu_page().
 			'capabilities'       => array(
-				'create_posts' => 'do_not_allow',
+				'edit_posts'             => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'edit_others_posts'      => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'edit_private_posts'     => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'edit_published_posts'   => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'publish_posts'          => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'read_private_posts'     => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'delete_posts'           => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'delete_others_posts'    => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'delete_private_posts'   => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'delete_published_posts' => Capability::MANAGE_REDIRECTS_CAPABILITY,
+				'create_posts'           => 'do_not_allow',
 			),
 		);
 	}
