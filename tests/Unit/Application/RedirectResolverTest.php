@@ -32,6 +32,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class RedirectResolverTest extends MonkeyStubs {
 
@@ -885,6 +886,51 @@ final class RedirectResolverTest extends MonkeyStubs {
 			'/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%9A%E3%83%BC%E3%82%B8',
 			'/日本語/ページ'
 		);
+	}
+
+	/**
+	 * Test a raw-multibyte request URI reaches the stored source's hash.
+	 *
+	 * Browsers percent-encode, so the ordinary path never exercises this. A
+	 * client that puts raw UTF-8 bytes on the request line does, and until the
+	 * resolver stopped parsing them with a bare wp_parse_url() the bytes were
+	 * rewritten to underscores on any host whose LC_CTYPE flags the C1 range
+	 * as control characters - so the request resolved to '/日_日_' and matched
+	 * nothing.
+	 *
+	 * The locale is forced because CI runs under the C locale, where the
+	 * unfixed code passes this test too.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_raw_multibyte_request_matches_the_stored_source(): void {
+		$previous = setlocale( LC_CTYPE, '0' );
+		$applied  = setlocale( LC_CTYPE, 'en_GB.UTF-8', 'en_US.UTF-8', 'C.UTF-8', 'UTF-8' );
+
+		if ( false === $applied ) {
+			$this->markTestSkipped( 'No UTF-8 locale available to force LC_CTYPE.' );
+		}
+
+		try {
+			$this->stub_home_url();
+
+			$expected = SourceUrl::from_string( '/日本' );
+			$redirect = Redirect::reconstitute( 123, $expected, $this->create_url_destination(), 'publish' );
+
+			Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )->once()->andReturnFirstArg();
+			Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
+			Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )->once()->andReturn( 301 );
+
+			$this->repository
+				->shouldReceive( 'find_by_source' )
+				->once()
+				->with( Mockery::on( fn( SourceUrl $s ) => $s->hash() === $expected->hash() ) )
+				->andReturn( $redirect );
+
+			$this->assertIsArray( $this->resolver->get_redirect_data( 'https://example.com/日本' ) );
+		} finally {
+			setlocale( LC_CTYPE, (string) $previous );
+		}
 	}
 
 	/**

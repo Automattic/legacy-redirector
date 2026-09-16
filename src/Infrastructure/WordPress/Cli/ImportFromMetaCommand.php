@@ -15,6 +15,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Domain\Url;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -158,8 +159,11 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 				++$i;
 				$progress->tick();
 
-				$from_path = wp_parse_url( $redirect->meta_value, PHP_URL_PATH );
-				if ( ! $from_path ) {
+				// A 1.x source out of postmeta can hold raw multibyte bytes, which
+				// a bare parse_url() corrupts on some hosts. The path stays
+				// percent-encoded; SourceUrl below does the only decode.
+				$from_path = Url::parse_encoded( (string) $redirect->meta_value )['path'] ?? '';
+				if ( '' === $from_path ) {
 					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Invalid source URL - no path found' );
 					continue;
 				}
