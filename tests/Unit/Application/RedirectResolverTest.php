@@ -120,10 +120,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 		);
 	}
 
-	// =========================================================================
-	// get_redirect_data tests - Happy Path
-	// =========================================================================
-
 	/**
 	 * Test get_redirect_data returns redirect data for valid URL.
 	 *
@@ -242,10 +238,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->assertSame( 'https://example.com/new-page', $result['url'] );
 	}
 
-	// =========================================================================
-	// get_redirect_data tests - Request Path Filter
-	// =========================================================================
-
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_request_path filter.
 	 *
@@ -280,10 +272,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		$this->assertIsArray( $result );
 	}
-
-	// =========================================================================
-	// get_redirect_data tests - Preserve Query Params
-	// =========================================================================
 
 	/**
 	 * Test get_redirect_data preserves specified query parameters.
@@ -334,10 +322,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://example.com/new-page?utm_source=test', $result['url'] );
 	}
-
-	// =========================================================================
-	// get_redirect_data tests - Redirect Status Filter
-	// =========================================================================
 
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_redirect_status filter.
@@ -406,10 +390,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->assertIsArray( $result );
 		$this->assertSame( 301, $result['status_code'] );
 	}
-
-	// =========================================================================
-	// get_redirect_data tests - Destination URL Filter
-	// =========================================================================
 
 	/**
 	 * Test get_redirect_data applies wpcom_legacy_redirector_destination_url filter.
@@ -481,10 +461,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		$this->assertNull( $result );
 	}
-
-	// =========================================================================
-	// get_redirect_data tests - Edge Cases
-	// =========================================================================
 
 	/**
 	 * Test get_redirect_data returns null for empty path.
@@ -712,6 +688,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 			'encoded ampersand'  => array( '/a%26b', '/a%26b' ),
 			'multibyte'          => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
 			'multibyte in query' => array( '/photos/?test=%D9%81%D9%88%D8%AA%D9%88', '/photos/?test=فوتو' ),
+			'cyrillic'           => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
+			'cyrillic in query'  => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
+			'emoji'              => array( '/%F0%9F%8E%89', '/🎉' ),
+			'emoji in query'     => array( '/page?mood=%F0%9F%8E%89', '/page?mood=🎉' ),
+			'japanese'           => array( '/JP%E7%B4%8D%E8%B1%86', '/JP納豆' ),
 			'query preserved'    => array( '/page?a=1&b=2', '/page?a=1&b=2' ),
 		);
 	}
@@ -753,10 +734,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->assertSame( 'https://external.com/page', $result['url'] );
 	}
 
-	// =========================================================================
-	// get_redirect_data tests - Subdirectory home path
-	// =========================================================================
-
 	/**
 	 * Test the subsite prefix is stripped from a request inside the subsite.
 	 *
@@ -789,19 +766,147 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test a unicode path under an ASCII subsite prefix is looked up correctly.
+	 *
+	 * Requests are asserted percent-encoded throughout this section because
+	 * that is what a browser sends, and because PHP's parse_url() replaces raw
+	 * bytes in the 0x80-0x9F range with '_' whenever LC_CTYPE is a UTF-8
+	 * locale (those bytes are C1 controls there), which would make any
+	 * raw-UTF-8 assertion pass or fail on the runner's locale rather than on
+	 * this plugin's behaviour. SourceUrl sidesteps that by percent-encoding
+	 * before it parses; extract_path() parses the request URL directly.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_strips_ascii_prefix_from_encoded_unicode_path(): void {
+		$this->assert_lookup_path(
+			'https://example.com/blog',
+			'https://example.com/blog/%E6%97%A5%E6%9C%AC%E8%AA%9E',
+			'/%E6%97%A5%E6%9C%AC%E8%AA%9E',
+			'/日本語'
+		);
+	}
+
+	/**
+	 * Test an emoji path under a subsite prefix survives to the lookup.
+	 *
+	 * Astral-plane characters percent-encode to four bytes rather than two or
+	 * three, so they exercise a different slice of the decode path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_strips_subsite_prefix_from_emoji_path(): void {
+		$this->assert_lookup_path(
+			'https://example.com/blog',
+			'https://example.com/blog/%F0%9F%8E%89',
+			'/%F0%9F%8E%89',
+			'/🎉'
+		);
+	}
+
+	/**
+	 * Test a unicode path outside the subsite prefix is left intact.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_leaves_unicode_path_outside_prefix_intact(): void {
+		$this->assert_lookup_path(
+			'https://example.com/blog',
+			'https://example.com/%E6%97%A5%E6%9C%AC%E8%AA%9E',
+			'/%E6%97%A5%E6%9C%AC%E8%AA%9E',
+			'/日本語'
+		);
+	}
+
+	/**
+	 * Test a unicode query string survives subsite prefix stripping.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_keeps_unicode_query_after_stripping_prefix(): void {
+		$this->assert_lookup_path(
+			'https://example.com/blog',
+			'https://example.com/blog/page?q=%D1%82%D0%B5%D1%81%D1%82',
+			'/page?q=%D1%82%D0%B5%D1%81%D1%82',
+			'/page?q=тест'
+		);
+	}
+
+	/**
+	 * Test a percent-encoded request is stripped of a unicode home path.
+	 *
+	 * The two sides reach this comparison in different encodings: extract_path()
+	 * deliberately leaves the request percent-encoded, because SourceUrl is the
+	 * single owner of decoding, while home_url() returns the home path decoded.
+	 * For an ASCII home path the two forms are identical and a byte comparison
+	 * holds; for '/日本' they are not. HomePath::make_relative() compares
+	 * segments decoded, so the two forms meet.
+	 *
+	 * Until they did, the prefix survived into the lookup and the source was
+	 * searched for under '/日本/ページ'. Creation strips it either way, because
+	 * SourceUrl decodes before stripping (see
+	 * SourceUrlTest::test_from_string_strips_unicode_home_path), so the two
+	 * halves disagreed and every redirect stored from a full URL on such a
+	 * site was unreachable.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_strips_unicode_home_path_from_encoded_request(): void {
+		$this->assert_lookup_path(
+			'https://example.com/日本',
+			'https://example.com/%E6%97%A5%E6%9C%AC/%E3%83%9A%E3%83%BC%E3%82%B8',
+			'/%E3%83%9A%E3%83%BC%E3%82%B8',
+			'/ページ'
+		);
+	}
+
+	/**
+	 * Test an encoded request for a unicode subsite home maps to the root.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_maps_encoded_unicode_subsite_home_to_root(): void {
+		$this->assert_lookup_path( 'https://example.com/日本', 'https://example.com/%E6%97%A5%E6%9C%AC', '/' );
+	}
+
+	/**
+	 * Test a unicode path outside a unicode home path is left intact.
+	 *
+	 * '/日本語' is not inside '/日本'. Comparing whole segments is what holds
+	 * that boundary; a byte-prefix match would cut it down to '語' and fire an
+	 * unrelated redirect in its place.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_does_not_strip_partial_unicode_segment_match(): void {
+		$this->assert_lookup_path(
+			'https://example.com/日本',
+			'https://example.com/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%9A%E3%83%BC%E3%82%B8',
+			'/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%9A%E3%83%BC%E3%82%B8',
+			'/日本語/ページ'
+		);
+	}
+
+	/**
 	 * Assert which path a request URL is looked up under for a given home URL.
 	 *
-	 * @param string $home_url     The site's home URL.
-	 * @param string $request_url  The requested URL.
-	 * @param string $lookup_path  The path the repository should be queried with.
+	 * @param string      $home_url      The site's home URL.
+	 * @param string      $request_url   The requested URL.
+	 * @param string      $extracted     The path handed to the request_path filter,
+	 *                                   still percent-encoded as the browser sent it.
+	 * @param string|null $source_path   The normalised path the repository is queried
+	 *                                   with, when decoding makes it differ from
+	 *                                   $extracted. Defaults to $extracted.
 	 * @return void
 	 */
-	private function assert_lookup_path( string $home_url, string $request_url, string $lookup_path ): void {
+	private function assert_lookup_path( string $home_url, string $request_url, string $extracted, ?string $source_path = null ): void {
+		$source_path = $source_path ?? $extracted;
+
 		$this->stub_home_url( $home_url );
 
 		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
 			->once()
-			->with( $lookup_path )
+			->with( $extracted )
 			->andReturnFirstArg();
 
 		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
@@ -811,15 +916,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->repository
 			->shouldReceive( 'find_by_source' )
 			->once()
-			->with( Mockery::on( fn( $s ) => $s->path() === $lookup_path ) )
+			->with( Mockery::on( fn( $s ) => $s->path() === $source_path ) )
 			->andReturn( null );
 
 		$this->assertNull( $this->resolver->get_redirect_data( $request_url ) );
 	}
-
-	// =========================================================================
-	// find_redirect tests
-	// =========================================================================
 
 	/**
 	 * Test find_redirect returns redirect entity when found.

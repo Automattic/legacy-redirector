@@ -66,6 +66,32 @@ final class RedirectsTest extends TestCase {
 				'http://example.com',
 			),
 
+			'redirect Cyrillic in path' => array(
+				'/привет-мир/',
+				'http://example.com',
+			),
+			'redirect Hebrew in path'   => array(
+				'/שלום-עולם',
+				'http://example.com',
+			),
+			'redirect emoji in path'    => array(
+				// Astral plane, so four UTF-8 bytes and utf8mb4-only in the DB.
+				'/party-🎉',
+				'http://example.com',
+			),
+			'redirect mixed scripts'    => array(
+				'/привет-納豆-🎉?тест=значение',
+				'http://example.com',
+			),
+			'redirect to unicode dest'  => array(
+				'/unicode-destination',
+				'http://example.com/привет-🎉',
+			),
+			'redirect unicode relative' => array(
+				'/unicode-relative-destination',
+				'/привет-мир',
+				home_url() . '/привет-мир',
+			),
 			'redirect_simple'           => array(
 				'/simple-redirect',
 				'http://example.com',

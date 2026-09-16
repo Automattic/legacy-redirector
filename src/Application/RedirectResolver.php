@@ -167,15 +167,8 @@ final class RedirectResolver {
 		// /blog/to-slug becomes /to-slug on a single site at example.com/blog.
 		// The test is whether home is the domain root, not whether this is
 		// multisite; a subdirectory single site needs the same treatment.
-		// The '/' boundary stops '/blog' matching '/blogging-tips'.
-		$home_path = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
-		if ( '' !== $home_path && ( $path === $home_path || str_starts_with( $path, $home_path . '/' ) ) ) {
-			$path = substr( $path, strlen( $home_path ) );
-			// Ensure path starts with / after stripping.
-			if ( '' === $path ) {
-				$path = '/';
-			}
-		}
+		// A path that is not under home is left exactly as it arrived.
+		$path = HomePath::make_relative( $path, HomePath::current() ) ?? $path;
 
 		if ( isset( $url_info['query'] ) ) {
 			$path .= '?' . $url_info['query'];

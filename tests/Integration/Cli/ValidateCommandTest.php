@@ -62,10 +62,6 @@ final class ValidateCommandTest extends CliTestCase {
 		);
 	}
 
-	// =========================================================================
-	// Batch mode (no positional arguments)
-	// =========================================================================
-
 	/**
 	 * Test batch validation with no issues.
 	 */
@@ -197,10 +193,6 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
 	}
-
-	// =========================================================================
-	// Targeted mode (positional arguments)
-	// =========================================================================
 
 	/**
 	 * Test validating a single valid redirect by source.

@@ -148,6 +148,65 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	}
 
 	/**
+	 * A unicode legacy source is repathed and stays reachable.
+	 *
+	 * Upgrader::strip_home_prefix() slices by byte offset, so a multibyte path
+	 * would be cut mid-sequence if the offset were ever computed in characters
+	 * - producing a post_title that is not valid UTF-8 and a hash no request
+	 * can match. The rehash has to agree with what SourceUrl produces from the
+	 * percent-encoded request a browser actually sends.
+	 *
+	 * @return void
+	 */
+	public function test_unicode_legacy_source_is_repathed_and_reachable(): void {
+		$path    = '/привет-🎉';
+		$post_id = $this->create_legacy_redirect( $path );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$post = get_post( $post_id );
+
+		$this->assertSame( $path, $post->post_title, 'The home path should have been stripped without damaging the unicode.' );
+		$this->assertSame( md5( $path ), $post->post_name, 'The source hash should match the rewritten unicode path.' );
+		$this->assertSame( 1, $result['repathed'] );
+
+		$redirect_data = $this->resolver()->get_redirect_data( '/' . self::SUBDIR . '/' . rawurlencode( 'привет-🎉' ) );
+
+		$this->assertNotEmpty( $redirect_data, 'The migrated unicode redirect should resolve for the encoded request path.' );
+		$this->assertSame( 'https://example.com/new', $redirect_data['url'] );
+	}
+
+	/**
+	 * A unicode path that only resembles the home prefix is left alone.
+	 *
+	 * The subdirectory is ASCII, but the byte-prefix test still has to hold a
+	 * segment boundary when the rest of the path is not.
+	 *
+	 * @return void
+	 */
+	public function test_unicode_path_outside_the_home_prefix_is_not_repathed(): void {
+		$prefixed = '/' . self::SUBDIR . 'ging/привет';
+
+		$post_id = (int) wp_insert_post(
+			array(
+				'post_name'    => md5( $prefixed ),
+				'post_title'   => $prefixed,
+				'post_excerpt' => 'https://example.com/new',
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'draft',
+			)
+		);
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$post = get_post( $post_id );
+
+		$this->assertSame( $prefixed, $post->post_title, 'A path outside the home prefix should keep its title.' );
+		$this->assertSame( md5( $prefixed ), $post->post_name );
+		$this->assertSame( 0, $result['repathed'] );
+	}
+
+	/**
 	 * The dry run reports the same work the real run would do.
 	 *
 	 * @return void

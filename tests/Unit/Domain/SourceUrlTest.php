@@ -319,10 +319,6 @@ final class SourceUrlTest extends YoastTestCase {
 		$this->assertSame( '/فوتوغرافيا/?test=فوتوغرافيا', $source->path() );
 	}
 
-	// =========================================================================
-	// Edge Cases: Query Parameter Handling
-	// =========================================================================
-
 	/**
 	 * Test without_query_params handles multiple params to remove.
 	 *
@@ -435,10 +431,6 @@ final class SourceUrlTest extends YoastTestCase {
 		SourceUrl::from_string( "/caf\xE9" );
 	}
 
-	// =========================================================================
-	// Sanitisation (previously delegated to esc_url_raw, now pure PHP)
-	// =========================================================================
-
 	/**
 	 * Test characters outside the URL-safe set are stripped.
 	 *
@@ -492,5 +484,228 @@ final class SourceUrlTest extends YoastTestCase {
 
 		$this->assertSame( $decoded->path(), $encoded->path() );
 		$this->assertSame( $decoded->hash(), $encoded->hash() );
+	}
+	/**
+	 * Test non-ASCII paths survive normalisation across scripts and planes.
+	 *
+	 * The sanitiser's character class keeps the \x80-\xff byte range, which is
+	 * the only reason any of this works; a narrowing of that class would strip
+	 * every source below to its ASCII skeleton and orphan the redirect.
+	 *
+	 * @dataProvider data_unicode_paths
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 *
+	 * @param string $path The unicode path.
+	 */
+	public function test_from_string_preserves_unicode_path( string $path ): void {
+		$source = SourceUrl::from_string( $path );
+
+		$this->assertSame( $path, $source->path() );
+	}
+
+	/**
+	 * Data provider of unicode paths that must round-trip unchanged.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_unicode_paths(): array {
+		return array(
+			'Arabic (RTL)'          => array( '/فوتوغرافيا/' ),
+			'Arabic with query'     => array( '/فوتوغرافيا/?test=فوتوغرافيا' ),
+			'Cyrillic'              => array( '/привет-мир/' ),
+			'Cyrillic with query'   => array( '/страница/?тест=значение' ),
+			'Japanese'              => array( '/JP納豆' ),
+			'Greek'                 => array( '/καλημέρα' ),
+			'Hebrew (RTL)'          => array( '/שלום-עולם' ),
+			'Latin with diacritics' => array( '/café-münchen' ),
+			'emoji (astral plane)'  => array( '/party-🎉' ),
+			'emoji only'            => array( '/🎉' ),
+			'emoji in query'        => array( '/page?mood=🎉' ),
+			'mixed scripts'         => array( '/привет-納豆-🎉' ),
+		);
+	}
+
+	/**
+	 * Test a percent-encoded unicode path hashes the same as its decoded form.
+	 *
+	 * A browser sends /%D0%BF..., an admin pastes /при... . Both must land on
+	 * the same md5 or the redirect created in the admin can never be matched
+	 * by a real request. Astral-plane characters are included because they
+	 * encode to four bytes, not two or three.
+	 *
+	 * @dataProvider data_encoded_and_decoded_unicode
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::hash
+	 *
+	 * @param string $encoded The percent-encoded form, as a browser sends it.
+	 * @param string $decoded The decoded form, as an admin would type it.
+	 */
+	public function test_unicode_encoded_and_decoded_forms_hash_identically( string $encoded, string $decoded ): void {
+		$from_request = SourceUrl::from_string( $encoded );
+		$from_admin   = SourceUrl::from_string( $decoded );
+
+		$this->assertSame( $from_admin->path(), $from_request->path() );
+		$this->assertSame( $from_admin->hash(), $from_request->hash() );
+	}
+
+	/**
+	 * Data provider of percent-encoded unicode paths and their decoded forms.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_encoded_and_decoded_unicode(): array {
+		return array(
+			'Arabic'            => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
+			'Cyrillic'          => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
+			'Japanese'          => array( '/%E7%B4%8D%E8%B1%86', '/納豆' ),
+			'emoji (4 bytes)'   => array( '/%F0%9F%8E%89', '/🎉' ),
+			'Cyrillic in query' => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
+			'emoji in query'    => array( '/page?q=%F0%9F%8E%89', '/page?q=🎉' ),
+		);
+	}
+
+	/**
+	 * Test the two Unicode normalisation forms of the same glyph do not match.
+	 *
+	 * The hash is an md5 of the raw bytes, so precomposed 'é' (U+00E9) and
+	 * decomposed 'e' + U+0301 render identically but store and look up under
+	 * different keys. macOS filesystems hand out NFD while nearly everything
+	 * else uses NFC, so a source pasted from a Mac Finder path can silently
+	 * fail to match the same-looking URL a browser requests.
+	 *
+	 * This pins the current behaviour rather than endorsing it: fixing it
+	 * would mean normalising to NFC before hashing, which rewrites every
+	 * stored hash and so belongs to a migration, not to this value object.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::hash
+	 */
+	public function test_nfc_and_nfd_forms_are_not_treated_as_equal(): void {
+		$nfc = SourceUrl::from_string( "/caf\xC3\xA9" );
+		$nfd = SourceUrl::from_string( "/cafe\xCC\x81" );
+
+		$this->assertNotSame( $nfc->path(), $nfd->path() );
+		$this->assertNotSame( $nfc->hash(), $nfd->hash() );
+		$this->assertFalse( $nfc->equals( $nfd ) );
+	}
+
+	/**
+	 * Test unicode survives without_query_params().
+	 *
+	 * Rebuilding uses http_build_query(), which re-encodes what it keeps, so
+	 * the path has to be reassembled from the untouched base path rather than
+	 * round-tripped.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
+	 */
+	public function test_without_query_params_preserves_unicode_path(): void {
+		$source = SourceUrl::from_string( '/привет-мир/?utm_source=x&тест=значение' );
+
+		$result = $source->without_query_params( array( 'utm_source' ) );
+
+		$this->assertSame( '/привет-мир/', $result->path_without_query() );
+		$this->assertSame( 'тест', rawurldecode( explode( '=', $result->query_string() )[0] ) );
+	}
+
+	/**
+	 * Test a unicode path under an ASCII subsite prefix is stripped correctly.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_ascii_home_path_from_unicode_path(): void {
+		$source = SourceUrl::from_string( 'https://example.com/subsite1/日本語', '/subsite1' );
+
+		$this->assertSame( '/日本語', $source->path() );
+	}
+
+	/**
+	 * Test a unicode home path is stripped from a unicode path.
+	 *
+	 * Stripping compares and slices bytes, not characters, so a
+	 * multibyte prefix only works because both sides have already been decoded
+	 * to the same UTF-8 bytes by mb_parse_url(). A substr() on a character
+	 * count here would cut a multibyte sequence in half.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_unicode_home_path(): void {
+		$source = SourceUrl::from_string( 'https://example.com/日本/ページ', '/日本' );
+
+		$this->assertSame( '/ページ', $source->path() );
+	}
+
+	/**
+	 * Test a percent-encoded full URL still matches a decoded unicode home path.
+	 *
+	 * The home path arrives decoded (home_url() is not percent-encoded) while
+	 * a copied browser URL arrives encoded. Stripping happens after
+	 * mb_parse_url() has decoded the path, so the two forms meet.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_unicode_home_path_from_encoded_url(): void {
+		$source = SourceUrl::from_string( 'https://example.com/%E6%97%A5%E6%9C%AC/%E3%83%9A%E3%83%BC%E3%82%B8', '/日本' );
+
+		$this->assertSame( '/ページ', $source->path() );
+	}
+
+	/**
+	 * Test a unicode subsite's own home URL normalises to '/'.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_unicode_subsite_home_url_becomes_root(): void {
+		$source = SourceUrl::from_string( 'https://example.com/日本/', '/日本' );
+
+		$this->assertSame( '/', $source->path() );
+	}
+
+	/**
+	 * Test a unicode path that merely shares a prefix is left alone.
+	 *
+	 * '/日本語' is not inside '/日本', so a byte-prefix match without the '/'
+	 * boundary would corrupt it into '語'.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_does_not_strip_partial_unicode_segment_match(): void {
+		$source = SourceUrl::from_string( 'https://example.com/日本語/ページ', '/日本' );
+
+		$this->assertSame( '/日本語/ページ', $source->path() );
+	}
+
+	/**
+	 * Test a unicode query string survives unicode home path stripping.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_unicode_home_path_and_keeps_unicode_query(): void {
+		$source = SourceUrl::from_string( 'https://example.com/日本/ページ?тест=да', '/日本' );
+
+		$this->assertSame( '/ページ?тест=да', $source->path() );
+	}
+
+	/**
+	 * Test the unicode home path is stripped once, not everywhere it appears.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_only_the_leading_unicode_home_path(): void {
+		$source = SourceUrl::from_string( 'https://example.com/日本/日本/ページ', '/日本' );
+
+		$this->assertSame( '/日本/ページ', $source->path() );
+	}
+
+	/**
+	 * Test a bare unicode request path is never stripped, whatever the home path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_leaves_hostless_unicode_path_untouched(): void {
+		$source = SourceUrl::from_string( '/日本/ページ', '/日本' );
+
+		$this->assertSame( '/日本/ページ', $source->path() );
 	}
 }

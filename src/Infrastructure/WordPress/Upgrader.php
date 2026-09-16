@@ -265,11 +265,12 @@ final class Upgrader {
 					++$pending['to_normalise'];
 				}
 
-				if ( '' === $home_path || ! $this->has_home_prefix( $post->post_title, $home_path ) ) {
+				$new_path = '' === $home_path ? null : HomePath::make_relative( $post->post_title, $home_path );
+
+				if ( null === $new_path ) {
 					continue;
 				}
 
-				$new_path = $this->strip_home_prefix( $post->post_title, $home_path );
 				$existing = $this->find_post_id_by_hash( md5( $new_path ) );
 
 				if ( 0 !== $existing && $existing !== $post->ID ) {
@@ -308,8 +309,9 @@ final class Upgrader {
 		$source_path = $post->post_title;
 		$conflict    = null;
 
-		if ( '' !== $home_path && $this->has_home_prefix( $source_path, $home_path ) ) {
-			$new_path = $this->strip_home_prefix( $source_path, $home_path );
+		$new_path = '' === $home_path ? null : HomePath::make_relative( $source_path, $home_path );
+
+		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
 			$existing = $this->find_post_id_by_hash( $new_hash );
@@ -380,30 +382,6 @@ final class Upgrader {
 		);
 
 		return isset( $query->posts[0] ) ? (int) $query->posts[0] : 0;
-	}
-
-	/**
-	 * Whether a stored path carries the site's home path prefix.
-	 *
-	 * @param string $path      The stored source path.
-	 * @param string $home_path The site's home path, without a trailing slash.
-	 * @return bool True when the prefix is present.
-	 */
-	private function has_home_prefix( string $path, string $home_path ): bool {
-		return $path === $home_path || str_starts_with( $path, $home_path . '/' );
-	}
-
-	/**
-	 * Remove the site's home path prefix from a stored path.
-	 *
-	 * @param string $path      The stored source path.
-	 * @param string $home_path The site's home path, without a trailing slash.
-	 * @return string The subsite-relative path.
-	 */
-	private function strip_home_prefix( string $path, string $home_path ): string {
-		$stripped = substr( $path, strlen( $home_path ) );
-
-		return '' === $stripped ? '/' : $stripped;
 	}
 
 	/**

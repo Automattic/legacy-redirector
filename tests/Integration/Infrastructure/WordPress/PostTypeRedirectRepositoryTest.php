@@ -49,10 +49,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->repository = new PostTypeRedirectRepository();
 	}
 
-	// =========================================================================
-	// find_by_source() tests
-	// =========================================================================
-
 	/**
 	 * Test find_by_source returns a redirect for a published redirect.
 	 *
@@ -131,10 +127,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->assertNull( $found );
 	}
 
-	// =========================================================================
-	// find_by_id() tests
-	// =========================================================================
-
 	/**
 	 * Test find_by_id returns redirect for valid ID.
 	 *
@@ -206,10 +198,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->assertInstanceOf( Redirect::class, $found );
 		$this->assertSame( 'trash', $found->status() );
 	}
-
-	// =========================================================================
-	// exists() tests
-	// =========================================================================
 
 	/**
 	 * Test exists returns true for an existing published redirect.
@@ -289,10 +277,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		$this->assertFalse( $exists );
 	}
-
-	// =========================================================================
-	// save() tests
-	// =========================================================================
 
 	/**
 	 * Test save creates a new redirect with URL destination.
@@ -414,10 +398,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->assertSame( 0, $post->post_parent );
 	}
 
-	// =========================================================================
-	// delete() tests
-	// =========================================================================
-
 	/**
 	 * Test delete permanently removes a redirect.
 	 *
@@ -459,10 +439,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		$this->assertFalse( $result );
 	}
-
-	// =========================================================================
-	// get_id_by_source() tests
-	// =========================================================================
 
 	/**
 	 * Test get_id_by_source returns correct ID.
@@ -517,10 +493,6 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		// get_id_by_source won't find trashed posts because post_name changes.
 		$this->assertSame( 0, $id );
 	}
-
-	// =========================================================================
-	// Mapping tests (reconstitution from database)
-	// =========================================================================
 
 	/**
 	 * Test redirect reconstituted from post has correct source.
@@ -620,17 +592,28 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->assertInstanceOf( \DateTimeImmutable::class, $found->created_at() );
 	}
 
-	// =========================================================================
-	// Edge cases
-	// =========================================================================
-
 	/**
-	 * Test saving redirect with Unicode in source path.
+	 * Test unicode source paths round-trip through the database.
+	 *
+	 * The source is stored twice: as an md5 in post_name (the lookup key) and
+	 * verbatim in post_title (what the admin sees). The md5 is ASCII whatever
+	 * the input, so a column or connection charset too narrow for the path
+	 * corrupts only the title - the redirect keeps working while the list
+	 * table shows mojibake. Asserting the path back off the entity catches
+	 * that; asserting only the ID, as this test used to, does not.
+	 *
+	 * Emoji are included deliberately: they need utf8mb4, so a table still on
+	 * three-byte utf8 fails here and nowhere else.
+	 *
+	 * @dataProvider data_unicode_source_paths
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 *
+	 * @param string $path The unicode source path.
 	 */
-	public function test_save_with_unicode_source_path(): void {
-		$source      = SourceUrl::from_string( '/unicode-test' );
+	public function test_save_with_unicode_source_path( string $path ): void {
+		$source      = SourceUrl::from_string( $path );
 		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
 		$redirect    = Redirect::create( $source, $destination );
 
@@ -640,6 +623,88 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		$this->assertInstanceOf( Redirect::class, $found );
 		$this->assertSame( $saved->id(), $found->id() );
+		$this->assertSame( $path, $found->source()->path(), 'The source path did not survive the round-trip.' );
+		$this->assertSame( $source->hash(), $found->source()->hash() );
+	}
+
+	/**
+	 * Data provider of unicode source paths.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function data_unicode_source_paths(): array {
+		return array(
+			'Arabic (RTL)'          => array( '/فوتوغرافيا/' ),
+			'Cyrillic'              => array( '/привет-мир/' ),
+			'Japanese'              => array( '/JP納豆' ),
+			'Hebrew (RTL)'          => array( '/שלום-עולם' ),
+			'Latin with diacritics' => array( '/café-münchen' ),
+			'emoji (needs utf8mb4)' => array( '/party-🎉' ),
+			'unicode in query'      => array( '/страница/?тест=значение' ),
+			'mixed scripts'         => array( '/привет-納豆-🎉' ),
+		);
+	}
+
+	/**
+	 * Test a unicode source is found from its percent-encoded form.
+	 *
+	 * The admin saves the decoded path; the browser requests the encoded one.
+	 * Both must resolve to the same stored row.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 */
+	public function test_unicode_source_is_found_from_its_encoded_form(): void {
+		$source      = SourceUrl::from_string( '/привет' );
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
+
+		$saved = $this->repository->save( Redirect::create( $source, $destination ) );
+
+		$found = $this->repository->find_by_source( SourceUrl::from_string( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82' ) );
+
+		$this->assertInstanceOf( Redirect::class, $found );
+		$this->assertSame( $saved->id(), $found->id() );
+	}
+
+	/**
+	 * Test two unicode sources differing only by script do not collide.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 */
+	public function test_distinct_unicode_sources_do_not_collide(): void {
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
+
+		$first  = SourceUrl::from_string( '/привет' );
+		$second = SourceUrl::from_string( '/приветствие' );
+
+		$saved_first  = $this->repository->save( Redirect::create( $first, $destination ) );
+		$saved_second = $this->repository->save( Redirect::create( $second, $destination ) );
+
+		$this->assertNotSame( $saved_first->id(), $saved_second->id() );
+		$this->assertSame( $saved_first->id(), $this->repository->find_by_source( $first )->id() );
+		$this->assertSame( $saved_second->id(), $this->repository->find_by_source( $second )->id() );
+	}
+
+	/**
+	 * Test a unicode destination round-trips through the database.
+	 *
+	 * The destination is stored in post_excerpt, a different column from the
+	 * source, so it needs its own charset check.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 */
+	public function test_save_with_unicode_destination(): void {
+		$source      = SourceUrl::from_string( '/unicode-destination' );
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/привет-🎉' ) );
+
+		$this->repository->save( Redirect::create( $source, $destination ) );
+
+		$found = $this->repository->find_by_source( $source );
+
+		$this->assertInstanceOf( Redirect::class, $found );
+		$this->assertSame( 'https://example.com/привет-🎉', $found->destination()->as_url()->value() );
 	}
 
 	/**
