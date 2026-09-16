@@ -172,8 +172,7 @@ final class LookupTest extends TestCase {
 		wp_trash_post( $post_id );
 
 		// Clear the cache to ensure we're testing the post_status check.
-		$url_hash = SourceUrl::from_string( $from_url )->hash();
-		wp_cache_delete( $url_hash, CachingRedirectRepository::CACHE_GROUP );
+		$this->clear_lookup_cache( $from_url );
 
 		// Verify the redirect no longer works.
 		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
@@ -203,8 +202,7 @@ final class LookupTest extends TestCase {
 		);
 
 		// Clear the cache.
-		$url_hash = SourceUrl::from_string( $from_url )->hash();
-		wp_cache_delete( $url_hash, CachingRedirectRepository::CACHE_GROUP );
+		$this->clear_lookup_cache( $from_url );
 
 		// Verify the redirect does not work.
 		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
@@ -267,9 +265,11 @@ final class LookupTest extends TestCase {
 		$first_result = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $first_result['url'] );
 
-		// Check cache is set (key includes blog ID prefix for multisite safety).
-		$url_hash  = get_current_blog_id() . ':' . SourceUrl::from_string( $from_url )->hash();
-		$cached_id = wp_cache_get( $url_hash, CachingRedirectRepository::CACHE_GROUP );
+		// Check cache is set.
+		$cached_id = wp_cache_get(
+			CachingRedirectRepository::cache_key( SourceUrl::from_string( $from_url )->hash() ),
+			CachingRedirectRepository::CACHE_GROUP
+		);
 		$this->assertNotFalse( $cached_id );
 
 		// Second call should return same result (from cache).

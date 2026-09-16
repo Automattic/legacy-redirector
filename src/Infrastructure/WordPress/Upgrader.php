@@ -433,7 +433,7 @@ final class Upgrader {
 	 */
 	private function invalidate( string $hash ): void {
 		wp_cache_delete(
-			sprintf( '%d:%s', get_current_blog_id(), $hash ),
+			CachingRedirectRepository::cache_key( $hash ),
 			CachingRedirectRepository::CACHE_GROUP
 		);
 	}

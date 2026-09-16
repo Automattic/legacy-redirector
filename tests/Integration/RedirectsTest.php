@@ -302,9 +302,12 @@ final class RedirectsTest extends TestCase {
 		$from_url = '/cache-clear-test-' . wp_generate_uuid4();
 		$to_url   = 'http://example.com/';
 
-		// Prime the cache with a "not found" state (key includes blog ID prefix).
-		$url_hash = get_current_blog_id() . ':' . SourceUrl::from_string( $from_url )->hash();
-		wp_cache_set( $url_hash, 0, CachingRedirectRepository::CACHE_GROUP );
+		// Prime the cache with a "not found" state.
+		wp_cache_set(
+			CachingRedirectRepository::cache_key( SourceUrl::from_string( $from_url )->hash() ),
+			0,
+			CachingRedirectRepository::CACHE_GROUP
+		);
 
 		// Insert should clear/update the cache.
 		$this->create_redirect( $from_url, $to_url );

@@ -90,7 +90,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 
 		if ( null === $redirect ) {
 			// Post no longer exists - update cache.
-			wp_cache_set( $this->get_cache_key( $source ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
+			wp_cache_set( self::cache_key( $source->hash() ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
 			return null;
 		}
 
@@ -146,7 +146,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 		$saved = $this->inner->save( $redirect );
 
 		// Pre-warm cache with the new ID.
-		wp_cache_set( $this->get_cache_key( $saved->source() ), $saved->id(), self::CACHE_GROUP );
+		wp_cache_set( self::cache_key( $saved->source()->hash() ), $saved->id(), self::CACHE_GROUP );
 
 		return $saved;
 	}
@@ -164,7 +164,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 
 		if ( $result ) {
 			// Mark as deleted in cache.
-			wp_cache_set( $this->get_cache_key( $redirect->source() ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
+			wp_cache_set( self::cache_key( $redirect->source()->hash() ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
 		}
 
 		return $result;
@@ -179,7 +179,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @return int The redirect ID, or 0 if not found.
 	 */
 	public function get_id_by_source( SourceUrl $source ): int {
-		$cache_key = $this->get_cache_key( $source );
+		$cache_key = self::cache_key( $source->hash() );
 		$post_id   = wp_cache_get( $cache_key, self::CACHE_GROUP );
 
 		if ( false !== $post_id ) {
@@ -198,18 +198,23 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL to invalidate.
 	 */
 	private function invalidate_cache( SourceUrl $source ): void {
-		wp_cache_delete( $this->get_cache_key( $source ), self::CACHE_GROUP );
+		wp_cache_delete( self::cache_key( $source->hash() ), self::CACHE_GROUP );
 	}
 
 	/**
-	 * Get the cache key for a source URL.
+	 * Get the cache key for a source hash.
 	 *
 	 * Includes blog ID prefix to prevent cross-site cache contamination in multisite.
 	 *
-	 * @param SourceUrl $source The source URL.
+	 * Public and static because the key format has to have exactly one owner:
+	 * anything that invalidates a lookup entry without holding a SourceUrl -
+	 * the upgrade routine works from stored post_name hashes - must build the
+	 * key the same way, or it silently deletes nothing.
+	 *
+	 * @param string $hash The MD5 hash of the normalised source path.
 	 * @return string The cache key.
 	 */
-	private function get_cache_key( SourceUrl $source ): string {
-		return sprintf( '%d:%s', get_current_blog_id(), $source->hash() );
+	public static function cache_key( string $hash ): string {
+		return sprintf( '%d:%s', get_current_blog_id(), $hash );
 	}
 }

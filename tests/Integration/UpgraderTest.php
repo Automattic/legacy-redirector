@@ -10,6 +10,8 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
@@ -22,6 +24,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class UpgraderTest extends TestCase {
 
@@ -111,6 +116,42 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
 		$this->assertSame( 1, $result['published'] );
 		$this->assertTrue( $result['complete'] );
+	}
+
+	/**
+	 * Publishing a 1.x draft drops the stale "nothing here" cache entry.
+	 *
+	 * A path requested while its redirect was still an unpublished 1.x draft
+	 * is cached as missing. If the upgrade publishes the redirect without
+	 * clearing that entry, the redirect stays dead for the life of the cache
+	 * entry despite being live in the database.
+	 *
+	 * The assertion is really about two owners agreeing on one key format: the
+	 * upgrade routine invalidates by stored post_name hash, the repository
+	 * caches by source URL, and a drift between them fails here rather than in
+	 * production.
+	 *
+	 * @return void
+	 */
+	public function test_publishing_a_draft_clears_the_stale_negative_cache_entry() {
+		$source  = '/cached-as-missing';
+		$post_id = $this->create_legacy_redirect( $source );
+
+		$cache_key = CachingRedirectRepository::cache_key( SourceUrl::from_string( $source )->hash() );
+		wp_cache_set( $cache_key, 0, CachingRedirectRepository::CACHE_GROUP );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertFalse(
+			wp_cache_get( $cache_key, CachingRedirectRepository::CACHE_GROUP ),
+			'The upgrade should have dropped the entry saying no redirect lives at this path.'
+		);
+		$this->assertSame(
+			$post_id,
+			$this->repository()->get_id_by_source( SourceUrl::from_string( $source ) ),
+			'The redirect should be findable once the upgrade has published it.'
+		);
 	}
 
 	/**
