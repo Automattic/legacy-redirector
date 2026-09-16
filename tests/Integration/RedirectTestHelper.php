@@ -173,4 +173,25 @@ trait RedirectTestHelper {
 
 		return $post_id;
 	}
+
+	/**
+	 * Drop the cached lookup entry for a source path.
+	 *
+	 * Goes through the repository's own key builder, because a key built by
+	 * hand deletes nothing when it misses the blog ID prefix, and a test whose
+	 * cache clear silently did nothing still passes - for the wrong reason.
+	 *
+	 * No home path is passed, mirroring the resolver's hot path: what it
+	 * caches is keyed on a bare request path, so stripping here would build a
+	 * key for an entry that was never written.
+	 *
+	 * @param string $from The source path.
+	 * @return void
+	 */
+	protected function clear_lookup_cache( string $from ): void {
+		wp_cache_delete(
+			CachingRedirectRepository::cache_key( SourceUrl::from_string( $from )->hash() ),
+			CachingRedirectRepository::CACHE_GROUP
+		);
+	}
 }
