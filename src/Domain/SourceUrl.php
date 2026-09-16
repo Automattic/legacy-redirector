@@ -180,6 +180,12 @@ final class SourceUrl {
 			$url
 		);
 
+		// The /u modifier makes preg_replace_callback() return null for a
+		// subject that is not valid UTF-8 (or that blows the backtrack limit).
+		if ( null === $encoded_url ) {
+			throw new InvalidArgumentException( 'The URL is not valid UTF-8.' );
+		}
+
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
 		$parts = parse_url( $encoded_url );
 
