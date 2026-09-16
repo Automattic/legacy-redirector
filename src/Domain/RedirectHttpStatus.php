@@ -1,6 +1,6 @@
 <?php
 /**
- * RedirectStatus enum.
+ * RedirectHttpStatus enum.
  *
  * @package Automattic\LegacyRedirector\Domain
  */
@@ -20,7 +20,7 @@ namespace Automattic\LegacyRedirector\Domain;
  *
  * phpcs:disable PHPCompatibility.Variables.ForbiddenThisUseContexts.OutsideObjectContext -- Enum methods can use $this.
  */
-enum RedirectStatus: int {
+enum RedirectHttpStatus: int {
 
 	/**
 	 * 301 Moved Permanently - The resource has been permanently moved.

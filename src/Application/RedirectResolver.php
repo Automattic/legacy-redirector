@@ -11,7 +11,7 @@ namespace Automattic\LegacyRedirector\Application;
 
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\RedirectStatus;
+use Automattic\LegacyRedirector\Domain\RedirectHttpStatus;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 
 /**
@@ -114,8 +114,8 @@ final class RedirectResolver {
 		 * @param int    $status_code The HTTP status code (default 301).
 		 * @param string $url         The original request URL.
 		 */
-		$status_code = apply_filters( 'wpcom_legacy_redirector_redirect_status', RedirectStatus::get_default()->value, $url );
-		$status      = RedirectStatus::tryFrom( (int) $status_code ) ?? RedirectStatus::get_default();
+		$status_code = apply_filters( 'wpcom_legacy_redirector_redirect_status', RedirectHttpStatus::get_default()->value, $url );
+		$status      = RedirectHttpStatus::tryFrom( (int) $status_code ) ?? RedirectHttpStatus::get_default();
 
 		return array(
 			'url'         => $destination_url,
