@@ -48,6 +48,11 @@ enum ValidationIssueType: string {
 	case URL_REQUEST_FAILED = 'url_request_failed';
 
 	/**
+	 * The stored row cannot be read as a valid redirect (corrupt data).
+	 */
+	case CORRUPT_DATA = 'corrupt_data';
+
+	/**
 	 * Get a human-readable label for this issue type.
 	 *
 	 * @return string
@@ -61,6 +66,7 @@ enum ValidationIssueType: string {
 			self::URL_NOT_FOUND    => 'Destination returns 404',
 			self::URL_SERVER_ERROR => 'Destination returns server error',
 			self::URL_REQUEST_FAILED => 'Request failed',
+			self::CORRUPT_DATA     => 'Corrupt stored data',
 		};
 	}
 
@@ -79,6 +85,7 @@ enum ValidationIssueType: string {
 			self::URL_NOT_FOUND    => 'The destination URL returns a 404 Not Found response',
 			self::URL_SERVER_ERROR => 'The destination URL returns a server error',
 			self::URL_REQUEST_FAILED => 'Failed to connect to the destination URL',
+			self::CORRUPT_DATA     => 'The stored row cannot be read as a valid redirect; delete it, or update it with a new source and destination',
 		};
 
 		if ( null !== $extra_info && '' !== $extra_info ) {

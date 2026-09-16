@@ -284,14 +284,30 @@ final class ValidateCommand extends WP_CLI_Command {
 	 */
 	private function fix_issues( array $issues ): void {
 		WP_CLI::line( '' );
-		$fixed = 0;
+		$fixed   = 0;
+		$corrupt = 0;
 
 		foreach ( $issues as $issue ) {
+			// A corrupt row cannot be re-saved, so it cannot be auto-disabled.
+			if ( $issue->redirect()->is_corrupt() ) {
+				++$corrupt;
+				continue;
+			}
+
 			if ( $issue->redirect()->is_active() && $this->manager->disable( $issue->redirect_id() ) ) {
 				++$fixed;
 			}
 		}
 
 		WP_CLI::success( sprintf( 'Disabled %d broken redirect(s).', $fixed ) );
+
+		if ( $corrupt > 0 ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d redirect(s) hold corrupt stored data and cannot be auto-disabled. Delete them, or update them with a new source and destination.',
+					$corrupt
+				)
+			);
+		}
 	}
 }

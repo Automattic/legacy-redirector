@@ -40,8 +40,8 @@ final class RedirectSchema {
 			),
 			'type'   => array(
 				'type'        => 'string',
-				'enum'        => array( 'post', 'url' ),
-				'description' => __( 'Whether the destination is a post ID or a URL.', 'wpcom-legacy-redirector' ),
+				'enum'        => array( 'post', 'url', 'corrupt' ),
+				'description' => __( 'Whether the destination is a post ID or a URL. "corrupt" marks a row whose stored data is unreadable; its from/to values are placeholders.', 'wpcom-legacy-redirector' ),
 			),
 			'status' => array(
 				'type'        => 'string',
@@ -79,7 +79,7 @@ final class RedirectSchema {
 			'id'     => $redirect->id(),
 			'from'   => $redirect->source()->path(),
 			'to'     => $is_post_id ? $destination->as_post_id()->value() : $destination->as_url()->value(),
-			'type'   => $is_post_id ? 'post' : 'url',
+			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $is_post_id ? 'post' : 'url' ),
 			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
 		);
 	}

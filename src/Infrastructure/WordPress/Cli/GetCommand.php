@@ -151,7 +151,9 @@ final class GetCommand extends WP_CLI_Command {
 			'to'     => $dest->is_post_id()
 				? $dest->as_post_id()->value()
 				: $dest->as_url()->value(),
-			'type'   => $dest->is_post_id() ? 'post' : 'url',
+			// 'corrupt' flags a row whose from/to are placeholders because the
+			// stored data is unreadable; `validate` reports the reason.
+			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $dest->is_post_id() ? 'post' : 'url' ),
 			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
 			'hash'   => $redirect->source()->hash(),
 		);

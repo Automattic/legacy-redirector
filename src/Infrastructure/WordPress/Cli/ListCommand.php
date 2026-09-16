@@ -222,7 +222,9 @@ final class ListCommand extends WP_CLI_Command {
 			'ID'     => $redirect->id(),
 			'from'   => $redirect->source()->path(),
 			'to'     => $destination,
-			'type'   => $is_post_id ? 'post' : 'url',
+			// 'corrupt' flags a row whose from/to are placeholders because the
+			// stored data is unreadable; `validate` reports the reason.
+			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $is_post_id ? 'post' : 'url' ),
 			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
 		);
 	}

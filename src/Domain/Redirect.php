@@ -56,6 +56,17 @@ final class Redirect {
 	private ?DateTimeImmutable $created_at;
 
 	/**
+	 * Why the stored row could not be read as a valid redirect, or null if healthy.
+	 *
+	 * A corrupt redirect carries placeholder source/destination values so it
+	 * can still be listed, reported, and deleted, but it must never be served
+	 * to visitors or re-saved as-is.
+	 *
+	 * @var string|null
+	 */
+	private ?string $corruption;
+
+	/**
 	 * Private constructor - use named constructors.
 	 *
 	 * @param int|null               $id          The redirect ID.
@@ -63,19 +74,22 @@ final class Redirect {
 	 * @param Destination            $destination The destination.
 	 * @param string                 $status      The status.
 	 * @param DateTimeImmutable|null $created_at  When created.
+	 * @param string|null            $corruption  Why the stored row is unreadable, or null if healthy.
 	 */
 	private function __construct(
 		?int $id,
 		SourceUrl $source,
 		Destination $destination,
 		string $status,
-		?DateTimeImmutable $created_at
+		?DateTimeImmutable $created_at,
+		?string $corruption = null
 	) {
 		$this->id          = $id;
 		$this->source      = $source;
 		$this->destination = $destination;
 		$this->status      = $status;
 		$this->created_at  = $created_at;
+		$this->corruption  = $corruption;
 	}
 
 	/**
@@ -105,6 +119,8 @@ final class Redirect {
 	 * @param Destination            $destination The destination.
 	 * @param string                 $status      The status.
 	 * @param DateTimeImmutable|null $created_at  When created.
+	 * @param string|null            $corruption  Why the stored row is unreadable, or null if healthy.
+	 *                                            When set, $source and $destination may be placeholders.
 	 * @return self
 	 */
 	public static function reconstitute(
@@ -112,9 +128,10 @@ final class Redirect {
 		SourceUrl $source,
 		Destination $destination,
 		string $status,
-		?DateTimeImmutable $created_at = null
+		?DateTimeImmutable $created_at = null,
+		?string $corruption = null
 	): self {
-		return new self( $id, $source, $destination, $status, $created_at );
+		return new self( $id, $source, $destination, $status, $created_at, $corruption );
 	}
 
 	/**
@@ -190,6 +207,28 @@ final class Redirect {
 	}
 
 	/**
+	 * Check whether the stored row could not be read as a valid redirect.
+	 *
+	 * A corrupt redirect carries placeholder source/destination values: it
+	 * must never be served to visitors or re-saved, but it can be listed,
+	 * reported, deleted, or fully replaced.
+	 *
+	 * @return bool True if the redirect holds corrupt stored data.
+	 */
+	public function is_corrupt(): bool {
+		return null !== $this->corruption;
+	}
+
+	/**
+	 * Get the reason the stored row is unreadable.
+	 *
+	 * @return string|null The corruption reason, or null if healthy.
+	 */
+	public function corruption(): ?string {
+		return $this->corruption;
+	}
+
+	/**
 	 * Create a copy with a new ID (used after persisting).
 	 *
 	 * @param int $id The new ID.
@@ -201,7 +240,8 @@ final class Redirect {
 			$this->source,
 			$this->destination,
 			$this->status,
-			$this->created_at
+			$this->created_at,
+			$this->corruption
 		);
 	}
 
@@ -217,7 +257,8 @@ final class Redirect {
 			$this->source,
 			$this->destination,
 			$status,
-			$this->created_at
+			$this->created_at,
+			$this->corruption
 		);
 	}
 
@@ -251,7 +292,8 @@ final class Redirect {
 			$this->source,
 			$destination,
 			$this->status,
-			$this->created_at
+			$this->created_at,
+			$this->corruption
 		);
 	}
 
@@ -270,7 +312,8 @@ final class Redirect {
 			$source,
 			$this->destination,
 			$this->status,
-			$this->created_at
+			$this->created_at,
+			$this->corruption
 		);
 	}
 }

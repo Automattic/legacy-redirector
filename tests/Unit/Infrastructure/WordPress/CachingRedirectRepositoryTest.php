@@ -92,7 +92,10 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	// =========================================================================
 
 	/**
-	 * Test find_by_source delegates to inner repository on cache miss.
+	 * Test find_by_source resolves and caches the true row ID on cache miss.
+	 *
+	 * The miss path routes through the shared get_id_by_source() lookup, so
+	 * the cached entry always holds the actual ID, never a mapped-entity 0.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
 	 */
@@ -128,7 +131,7 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test find_by_source caches null result as 0 on cache miss.
+	 * Test find_by_source caches 0 on cache miss when no row exists.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
 	 */
@@ -151,6 +154,53 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 			->andReturn( 0 );
 
 		$this->inner->shouldNotReceive( 'find_by_id' );
+
+		$result = $this->repository->find_by_source( $source );
+
+		$this->assertNull( $result );
+	}
+
+	/**
+	 * Test find_by_source returns null for a corrupt row without caching 0.
+	 *
+	 * The row exists, so the shared cache entry must hold its true ID, not a
+	 * "no redirect" marker that would mislead duplicate checks for 300s.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 */
+	public function test_find_by_source_corrupt_row_returns_null_but_caches_true_id(): void {
+		$source  = $this->create_source();
+		$corrupt = Redirect::reconstitute(
+			123,
+			SourceUrl::from_string( '/__corrupt__/123' ),
+			Destination::from_url( DestinationUrl::home() ),
+			'publish',
+			null,
+			'Invalid source: The URL does not validate.'
+		);
+
+		Functions\expect( 'wp_cache_get' )
+			->once()
+			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
+			->andReturn( false );
+
+		Functions\expect( 'wp_cache_add' )
+			->once()
+			->with( '1:' . $source->hash(), 123, CachingRedirectRepository::CACHE_GROUP, 0 )
+			->andReturn( true );
+
+		Functions\expect( 'wp_cache_set' )->never();
+
+		$this->inner
+			->shouldReceive( 'get_id_by_source' )
+			->once()
+			->andReturn( 123 );
+
+		$this->inner
+			->shouldReceive( 'find_by_id' )
+			->once()
+			->with( 123 )
+			->andReturn( $corrupt );
 
 		$result = $this->repository->find_by_source( $source );
 

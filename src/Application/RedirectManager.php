@@ -171,13 +171,17 @@ class RedirectManager {
 	/**
 	 * Change the status of a redirect.
 	 *
+	 * Refused for corrupt redirects: re-saving one would overwrite the
+	 * stored row with its placeholder values. Delete it, or update it with
+	 * a full new source and destination.
+	 *
 	 * @param int    $redirect_id The redirect ID.
 	 * @param string $new_status  The new status ('publish' or 'draft').
 	 * @return bool True on success, false on failure.
 	 */
 	public function change_status( int $redirect_id, string $new_status ): bool {
 		$redirect = $this->repository->find_by_id( $redirect_id );
-		if ( null === $redirect ) {
+		if ( null === $redirect || $redirect->is_corrupt() ) {
 			return false;
 		}
 
@@ -236,7 +240,9 @@ class RedirectManager {
 	 */
 	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null, bool $validate = true ): bool {
 		$redirect = $this->repository->find_by_id( $redirect_id );
-		if ( null === $redirect ) {
+		// Refused for corrupt redirects: the stored source is unreadable, so
+		// there is nothing trustworthy to keep. Use update_redirect() instead.
+		if ( null === $redirect || $redirect->is_corrupt() ) {
 			return false;
 		}
 
@@ -258,7 +264,8 @@ class RedirectManager {
 	/**
 	 * Update a redirect's source, destination, and status.
 	 *
-	 * This is the full update method used by the edit screen.
+	 * This is the full update method used by the edit screen. Because every
+	 * stored field is replaced, it also repairs a corrupt redirect.
 	 *
 	 * @param int         $redirect_id  The redirect ID.
 	 * @param string      $new_source   The new source URL path.
@@ -281,9 +288,7 @@ class RedirectManager {
 		}
 
 		// Build updated redirect.
-		$updated = $redirect
-			->with_source( $source )
-			->with_destination( $destination );
+		$updated = $this->with_new_mapping( $redirect, $source, $destination );
 
 		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
 			return false;
@@ -350,7 +355,10 @@ class RedirectManager {
 			return false;
 		}
 
-		$updated = $redirect->with_destination( $destination );
+		// The caller supplies both source and destination, so this also
+		// repairs a corrupt row - re-importing source data is the documented
+		// recovery for a botched migration.
+		$updated = $this->with_new_mapping( $redirect, $source, $destination );
 
 		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
 			return false;
@@ -396,6 +404,35 @@ class RedirectManager {
 	 */
 	private function with_normalised_destination( Redirect $redirect ): Redirect {
 		return $redirect->with_destination( $this->normaliser->normalise( $redirect->destination() ) );
+	}
+
+	/**
+	 * Apply a new source and destination to an existing redirect.
+	 *
+	 * For a corrupt redirect, every stored field is being replaced, so the
+	 * entity is rebuilt from scratch rather than copied: this is the repair
+	 * path, and it must not carry the corrupt placeholders (or the corruption
+	 * flag, which save() refuses) into the new row.
+	 *
+	 * @param Redirect    $redirect    The existing redirect.
+	 * @param SourceUrl   $source      The new source URL.
+	 * @param Destination $destination The new destination.
+	 * @return Redirect The redirect with the new mapping applied.
+	 */
+	private function with_new_mapping( Redirect $redirect, SourceUrl $source, Destination $destination ): Redirect {
+		if ( $redirect->is_corrupt() ) {
+			return Redirect::reconstitute(
+				(int) $redirect->id(),
+				$source,
+				$destination,
+				$redirect->status(),
+				$redirect->created_at()
+			);
+		}
+
+		return $redirect
+			->with_source( $source )
+			->with_destination( $destination );
 	}
 
 	/**

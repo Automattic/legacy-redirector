@@ -446,4 +446,17 @@ final class SourceUrlTest extends MonkeyStubs {
 		$this->assertSame( '/', $source->path_without_query() );
 		$this->assertSame( 'foo=bar', $source->query_string() );
 	}
+
+	/**
+	 * Test invalid UTF-8 input throws instead of silently parsing to an empty path.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_rejects_invalid_utf8(): void {
+		$this->expectException( InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'The URL is not valid UTF-8.' );
+
+		// Latin-1 bytes, not valid UTF-8.
+		SourceUrl::from_string( "/caf\xE9" );
+	}
 }
