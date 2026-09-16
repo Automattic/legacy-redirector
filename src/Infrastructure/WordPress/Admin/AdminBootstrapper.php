@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
@@ -58,23 +59,33 @@ final class AdminBootstrapper {
 	private RedirectQueryRepositoryInterface $query_repository;
 
 	/**
+	 * Redirect auditor.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface      $repository       Redirect repository.
 	 * @param RedirectManager                  $manager          Redirect manager.
 	 * @param RedirectValidator                $validator        Redirect validator.
 	 * @param RedirectQueryRepositoryInterface $query_repository Redirect query repository.
+	 * @param RedirectAuditor                  $auditor          Redirect auditor.
 	 */
 	public function __construct(
 		RedirectRepositoryInterface $repository,
 		RedirectManager $manager,
 		RedirectValidator $validator,
-		RedirectQueryRepositoryInterface $query_repository
+		RedirectQueryRepositoryInterface $query_repository,
+		RedirectAuditor $auditor
 	) {
 		$this->repository       = $repository;
 		$this->manager          = $manager;
 		$this->validator        = $validator;
 		$this->query_repository = $query_repository;
+		$this->auditor          = $auditor;
 	}
 
 	/**
@@ -118,7 +129,7 @@ final class AdminBootstrapper {
 	 * @return void
 	 */
 	private function register_list_table_components(): void {
-		$columns = new ColumnsManager();
+		$columns = new ColumnsManager( $this->repository, $this->auditor );
 		$columns->register();
 
 		$row_actions = new RowActionsManager();

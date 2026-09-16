@@ -9,12 +9,41 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Domain\ValidationIssueType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
  * Handles column definitions, content rendering, and sorting for the redirects list table.
  */
 final class ColumnsManager {
+
+	/**
+	 * Redirect repository.
+	 *
+	 * @var RedirectRepositoryInterface
+	 */
+	private RedirectRepositoryInterface $repository;
+
+	/**
+	 * Redirect auditor, the single owner of destination-health rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectRepositoryInterface $repository Redirect repository.
+	 * @param RedirectAuditor             $auditor    Redirect auditor.
+	 */
+	public function __construct( RedirectRepositoryInterface $repository, RedirectAuditor $auditor ) {
+		$this->repository = $repository;
+		$this->auditor    = $auditor;
+	}
 
 	/**
 	 * Register hooks.
@@ -104,20 +133,20 @@ final class ColumnsManager {
 	 * @return void
 	 */
 	public function render_column( string $column, int $post_id ): void {
-		$post = get_post( $post_id );
-		if ( ! $post ) {
+		$redirect = $this->repository->find_by_id( $post_id );
+		if ( null === $redirect ) {
 			return;
 		}
 
 		switch ( $column ) {
 			case 'from':
-				$this->render_from_column( $post );
+				$this->render_from_column( $redirect );
 				break;
 			case 'to':
-				$this->render_to_column( $post );
+				$this->render_to_column( $redirect );
 				break;
 			case 'status':
-				$this->render_status_column( $post );
+				$this->render_status_column( $redirect );
 				break;
 		}
 	}
@@ -125,59 +154,64 @@ final class ColumnsManager {
 	/**
 	 * Render the "from" column.
 	 *
-	 * @param \WP_Post $post The post object.
+	 * @param Redirect $redirect The redirect.
 	 * @return void
 	 */
-	private function render_from_column( \WP_Post $post ): void {
-		$edit_link = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $post->ID );
+	private function render_from_column( Redirect $redirect ): void {
+		$source    = $redirect->source()->path();
+		$edit_link = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect->id() );
 		printf(
 			'<strong><a class="row-title" href="%1$s" aria-label="%2$s">%3$s</a></strong>',
 			esc_url( $edit_link ),
 			/* translators: %s: redirect source path */
-			esc_attr( sprintf( __( 'Edit redirect from &#8220;%s&#8221;', 'wpcom-legacy-redirector' ), get_the_title( $post->ID ) ) ),
-			esc_html( get_the_title( $post->ID ) )
+			esc_attr( sprintf( __( 'Edit redirect from &#8220;%s&#8221;', 'wpcom-legacy-redirector' ), $source ) ),
+			esc_html( $source )
 		);
 	}
 
 	/**
 	 * Render the "to" column.
 	 *
-	 * @param \WP_Post $post The post object.
-	 * @return void
-	 */
-	private function render_to_column( \WP_Post $post ): void {
-		$excerpt     = get_the_excerpt( $post->ID );
-		$parent_post = $post->post_parent > 0 ? get_post( $post->post_parent ) : null;
-
-		if ( ! empty( $excerpt ) ) {
-			$this->render_excerpt_destination( $excerpt );
-		} else {
-			$this->render_post_id_destination( $post, $parent_post );
-		}
-	}
-
-	/**
-	 * Render destination when stored as excerpt (URL/path).
+	 * Destination-health warnings come from the auditor, so this column and
+	 * the `validate` CLI command report the same problems.
 	 *
-	 * @param string $excerpt The excerpt value.
+	 * @param Redirect $redirect The redirect.
 	 * @return void
 	 */
-	private function render_excerpt_destination( string $excerpt ): void {
-		// Check if it's the Home URL.
-		if ( $this->is_home_path( $excerpt ) ) {
-			$this->render_relative_path_with_prefix( $excerpt );
-		} elseif ( str_starts_with( $excerpt, 'http' ) ) {
+	private function render_to_column( Redirect $redirect ): void {
+		$issue      = $this->auditor->validate_redirect_destination( $redirect );
+		$issue_type = null !== $issue ? $issue->type() : null;
+
+		if ( ValidationIssueType::CORRUPT_DATA === $issue_type ) {
+			echo '<em>' . esc_html( (string) $redirect->corruption() ) . '</em>';
+			return;
+		}
+
+		if ( ValidationIssueType::POST_DELETED === $issue_type ) {
+			echo '<em>' . esc_html__( 'Redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ) . '</em>';
+			return;
+		}
+
+		$destination = $redirect->destination();
+
+		if ( $destination->is_post_id() ) {
+			$permalink     = get_permalink( $destination->as_post_id()->value() );
+			$relative_path = is_string( $permalink ) ? str_replace( home_url(), '', $permalink ) : '';
+			$this->render_relative_path_with_prefix( $relative_path );
+		} elseif ( $destination->as_url()->is_absolute() ) {
+			$url = $destination->as_url()->value();
 			// On multisite, use bold for consistency with relative paths.
 			if ( is_multisite() ) {
-				printf( '<strong>%s</strong>', esc_url( $excerpt ) );
+				printf( '<strong>%s</strong>', esc_url( $url ) );
 			} else {
-				echo esc_url( $excerpt );
+				echo esc_url( $url );
 			}
-		} elseif ( 'private' === $this->check_path_publicity( $excerpt ) ) {
-			$this->render_relative_path_with_prefix( $excerpt );
-			echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'wpcom-legacy-redirector' ) . '</em>';
 		} else {
-			$this->render_relative_path_with_prefix( $excerpt );
+			$this->render_relative_path_with_prefix( $destination->as_url()->value() );
+		}
+
+		if ( ValidationIssueType::POST_TRASHED === $issue_type || ValidationIssueType::POST_UNPUBLISHED === $issue_type ) {
+			echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'wpcom-legacy-redirector' ) . '</em>';
 		}
 	}
 
@@ -208,87 +242,13 @@ final class ColumnsManager {
 	}
 
 	/**
-	 * Render destination when stored as post_parent (post ID).
-	 *
-	 * @param \WP_Post      $post   The redirect post.
-	 * @param \WP_Post|null $parent_post The parent post if exists.
-	 * @return void
-	 */
-	private function render_post_id_destination( \WP_Post $post, ?\WP_Post $parent_post ): void {
-		$status = $this->get_parent_status( $post );
-
-		switch ( $status ) {
-			case false:
-				echo '<em>' . esc_html__( 'Redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ) . '</em>';
-				break;
-			case 'private':
-				$permalink     = $parent_post ? get_permalink( $parent_post ) : '';
-				$relative_path = str_replace( home_url(), '', $permalink );
-				$this->render_relative_path_with_prefix( $relative_path );
-				echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'wpcom-legacy-redirector' ) . '</em>';
-				break;
-			default:
-				$permalink     = $parent_post ? get_permalink( $parent_post ) : '';
-				$relative_path = str_replace( home_url(), '', $permalink );
-				$this->render_relative_path_with_prefix( $relative_path );
-		}
-	}
-
-	/**
-	 * Check if the excerpt path is the home URL.
-	 *
-	 * @param string $excerpt The excerpt value (path or URL).
-	 * @return bool True if the excerpt represents the home URL.
-	 */
-	private function is_home_path( string $excerpt ): bool {
-		return '/' === $excerpt || home_url() === $excerpt;
-	}
-
-	/**
-	 * Check if a path points to a public post.
-	 *
-	 * @param string $excerpt The path to check.
-	 * @return string|null 'private' if the post exists but isn't published, null otherwise.
-	 */
-	private function check_path_publicity( string $excerpt ): ?string {
-		$post_types = get_post_types();
-		$post_obj   = get_page_by_path( $excerpt, OBJECT, $post_types );
-
-		if ( null !== $post_obj && 'publish' !== get_post_status( $post_obj->ID ) ) {
-			return 'private';
-		}
-
-		return null;
-	}
-
-	/**
-	 * Get the status of a redirect's parent (destination) post.
-	 *
-	 * @param \WP_Post $post The redirect post.
-	 * @return string|false Parent post slug if valid, 'private' if not published, false if not found.
-	 */
-	private function get_parent_status( \WP_Post $post ) {
-		$parent_post = get_post( $post->post_parent );
-
-		if ( ! $parent_post instanceof \WP_Post ) {
-			return false;
-		}
-
-		if ( 'publish' !== get_post_status( $parent_post ) ) {
-			return 'private';
-		}
-
-		return $parent_post->post_name;
-	}
-
-	/**
 	 * Render the "status" column.
 	 *
-	 * @param \WP_Post $post The post object.
+	 * @param Redirect $redirect The redirect.
 	 * @return void
 	 */
-	private function render_status_column( \WP_Post $post ): void {
-		if ( 'publish' === $post->post_status ) {
+	private function render_status_column( Redirect $redirect ): void {
+		if ( $redirect->is_active() ) {
 			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" title="' . esc_attr__( 'Enabled', 'wpcom-legacy-redirector' ) . '"></span> ';
 			echo esc_html__( 'Enabled', 'wpcom-legacy-redirector' );
 		} else {

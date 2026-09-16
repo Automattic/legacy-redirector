@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
@@ -22,6 +23,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -29,6 +31,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
+ * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -54,7 +58,7 @@ final class ListRedirectsTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
-		$this->columns_manager     = new ColumnsManager();
+		$this->columns_manager     = new ColumnsManager( $this->repository(), new RedirectAuditor() );
 		$this->row_actions_manager = new RowActionsManager();
 	}
 
@@ -440,7 +444,7 @@ final class ListRedirectsTest extends TestCase {
 		remove_all_actions( 'manage_vip-legacy-redirect_posts_custom_column' );
 		remove_all_filters( 'post_row_actions' );
 
-		$columns_manager     = new ColumnsManager();
+		$columns_manager     = new ColumnsManager( $this->repository(), new RedirectAuditor() );
 		$row_actions_manager = new RowActionsManager();
 		$columns_manager->register();
 		$row_actions_manager->register();
