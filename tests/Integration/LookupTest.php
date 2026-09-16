@@ -90,6 +90,31 @@ final class LookupTest extends TestCase {
 				'http://example.com/a-b',
 				'301',
 			),
+			'redirect_cyrillic'                            => array(
+				'/привет-мир/',
+				'http://example.com/cyrillic',
+				'301',
+			),
+			'redirect_emoji'                               => array(
+				'/party-🎉',
+				'http://example.com/emoji',
+				'301',
+			),
+			'redirect_hebrew'                              => array(
+				'/שלום-עולם',
+				'http://example.com/hebrew',
+				'301',
+			),
+			'redirect_mixed_scripts_with_query'            => array(
+				'/привет-納豆-🎉?тест=значение',
+				'http://example.com/mixed',
+				'301',
+			),
+			'redirect_unicode_destination'                 => array(
+				'/unicode-destination',
+				'http://example.com/привет-🎉',
+				'301',
+			),
 			'redirect_encoded_hash'                        => array(
 				'/page%23section',
 				'http://example.com/section',

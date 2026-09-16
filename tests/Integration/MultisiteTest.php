@@ -182,6 +182,71 @@ final class MultisiteTest extends TestCase {
 	}
 
 	/**
+	 * A unicode source on a subsite resolves for the request a browser sends.
+	 *
+	 * Combines the two things tested separately elsewhere: subsite-relative
+	 * storage, and percent-encoded lookup of a non-ASCII path. The subsite
+	 * prefix itself stays ASCII because multisite will not accept anything
+	 * else as a site path.
+	 *
+	 * @return void
+	 */
+	public function test_unicode_source_on_subsite_resolves_for_its_own_request(): void {
+		$path    = 'subdir' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $path . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$full_url = home_url( '/привет-🎉' );
+		$this->create_redirect( $full_url, '/new-page' );
+
+		$this->assertSame(
+			'/привет-🎉',
+			SourceUrl::from_string( $full_url, HomePath::current() )->path(),
+			'The site home path should not survive into the stored unicode source.'
+		);
+
+		// What a browser actually sends: the prefix in ASCII, the rest
+		// percent-encoded.
+		$request_path = '/' . $path . '/' . rawurlencode( 'привет-🎉' );
+
+		$data = $this->resolver()->get_redirect_data( $request_path );
+
+		restore_current_blog();
+
+		$this->assertNotNull( $data, 'A unicode source on a subsite should resolve for the encoded request.' );
+		$this->assertStringContainsString( '/new-page', $data['url'] );
+	}
+
+	/**
+	 * Test unicode sources stay isolated between sites.
+	 *
+	 * The lookup key is an md5 of the path, so a charset problem that
+	 * flattened non-ASCII bytes would make two different subsites' unicode
+	 * redirects collide.
+	 *
+	 * @return void
+	 */
+	public function test_unicode_redirects_are_independent_per_site(): void {
+		$source = SourceUrl::from_string( '/привет-мир' );
+		$this->create_redirect( '/привет-мир', '/site-1-destination' );
+
+		switch_to_blog( $this->site_2_id );
+		$this->assertNull( $this->repository()->find_by_source( $source ) );
+
+		$this->create_redirect( '/привет-мир', '/site-2-destination' );
+		$site_2 = $this->repository()->find_by_source( $source );
+
+		restore_current_blog();
+		$site_1 = $this->repository()->find_by_source( $source );
+
+		$this->assertNotNull( $site_1 );
+		$this->assertNotNull( $site_2 );
+		$this->assertSame( '/site-1-destination', $site_1->destination()->as_url()->value() );
+		$this->assertSame( '/site-2-destination', $site_2->destination()->as_url()->value() );
+	}
+
+	/**
 	 * Test that repository exists() method respects blog context.
 	 */
 	public function test_repository_exists_respects_blog_context(): void {

@@ -326,10 +326,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 		);
 	}
 
-	// =========================================================================
-	// Edge Cases: Query Parameter Handling
-	// =========================================================================
-
 	/**
 	 * Test with_query_params handles multiple params.
 	 *
@@ -383,5 +379,150 @@ final class DestinationUrlTest extends MonkeyStubs {
 		$destination = DestinationUrl::from_string( '/page?foo=bar' );
 
 		$this->assertSame( 'https://example.com/page?foo=bar', $destination->resolve( 'https://example.com' ) );
+	}
+	/**
+	 * Test unicode destinations round-trip unchanged.
+	 *
+	 * Unlike SourceUrl, DestinationUrl does not sanitise: the value is stored
+	 * and later emitted in a Location header verbatim, so anything lost here
+	 * is lost from the redirect itself.
+	 *
+	 * @dataProvider data_unicode_destinations
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::from_string
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::value
+	 *
+	 * @param string $url The unicode destination.
+	 */
+	public function test_from_string_preserves_unicode( string $url ): void {
+		$destination = DestinationUrl::from_string( $url );
+
+		$this->assertSame( $url, $destination->value() );
+		$this->assertSame( $url, (string) $destination );
+	}
+
+	/**
+	 * Data provider of unicode destinations.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_unicode_destinations(): array {
+		return array(
+			'relative Arabic'     => array( '/فوتوغرافيا/' ),
+			'relative Cyrillic'   => array( '/привет-мир/' ),
+			'relative Japanese'   => array( '/納豆' ),
+			'relative emoji'      => array( '/party-🎉' ),
+			'relative with query' => array( '/страница?тест=значение' ),
+			'absolute Cyrillic'   => array( 'https://example.com/привет' ),
+			'absolute emoji'      => array( 'https://example.com/🎉' ),
+			'percent-encoded'     => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82' ),
+		);
+	}
+
+	/**
+	 * Test a unicode relative path is still recognised as relative.
+	 *
+	 * The leading-slash test is a byte comparison, so a multibyte first
+	 * character must not confuse it into treating the path as absolute (which
+	 * would skip the home URL and emit a hostless Location header).
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::is_relative
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::is_absolute
+	 */
+	public function test_unicode_relative_path_is_relative(): void {
+		$destination = DestinationUrl::from_string( '/日本語' );
+
+		$this->assertTrue( $destination->is_relative() );
+		$this->assertFalse( $destination->is_absolute() );
+	}
+
+	/**
+	 * Test a unicode relative path resolves against the home URL.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::resolve
+	 */
+	public function test_resolve_unicode_relative_path(): void {
+		$destination = DestinationUrl::from_string( '/привет-мир/' );
+
+		$this->assertSame( 'https://example.com/привет-мир/', $destination->resolve( 'https://example.com/' ) );
+	}
+
+	/**
+	 * Test a unicode home URL is joined without losing or doubling the slash.
+	 *
+	 * The join rtrim()s on bytes; a multibyte final character must survive it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::resolve
+	 */
+	public function test_resolve_against_unicode_home_url(): void {
+		$destination = DestinationUrl::from_string( '/ページ' );
+
+		$this->assertSame( 'https://example.com/日本/ページ', $destination->resolve( 'https://example.com/日本/' ) );
+	}
+
+	/**
+	 * Test a unicode absolute URL resolves to itself.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::resolve
+	 */
+	public function test_resolve_unicode_absolute_url(): void {
+		$destination = DestinationUrl::from_string( 'https://example.com/🎉' );
+
+		$this->assertSame( 'https://example.com/🎉', $destination->resolve( 'https://other.test' ) );
+	}
+
+	/**
+	 * Test appended query params percent-encode unicode without touching the path.
+	 *
+	 * Appending uses http_build_query(), which encodes what it is given; the
+	 * existing path must pass through untouched so a unicode destination is not
+	 * double-encoded.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
+	 */
+	public function test_with_query_params_on_unicode_path(): void {
+		$destination = DestinationUrl::from_string( '/日本語' );
+
+		$result = $destination->with_query_params( array( 'q' => 'тест' ) );
+
+		$this->assertSame( '/日本語?q=%D1%82%D0%B5%D1%81%D1%82', $result->value() );
+		$this->assertTrue( $result->is_relative() );
+	}
+
+	/**
+	 * Test unicode equality is byte-exact.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::equals
+	 */
+	public function test_equals_compares_unicode_byte_exactly(): void {
+		$nfc = DestinationUrl::from_string( "/caf\xC3\xA9" );
+		$nfd = DestinationUrl::from_string( "/cafe\xCC\x81" );
+
+		$this->assertTrue( $nfc->equals( DestinationUrl::from_string( "/caf\xC3\xA9" ) ) );
+		$this->assertFalse( $nfc->equals( $nfd ) );
+	}
+
+	/**
+	 * Test a unicode path is not mistaken for the home page.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::is_home
+	 */
+	public function test_unicode_path_is_not_home(): void {
+		$this->assertFalse( DestinationUrl::from_string( '/日本語' )->is_home() );
+	}
+
+	/**
+	 * Test a unicode string without a scheme is still rejected.
+	 *
+	 * Non-ASCII must not become a way past the scheme check, or a destination
+	 * could be stored that no browser will follow.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::from_string
+	 */
+	public function test_from_string_rejects_unicode_without_scheme(): void {
+		$this->expectException( InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'Absolute destination URLs must use http or https scheme.' );
+
+		DestinationUrl::from_string( 'привет-мир' );
 	}
 }
