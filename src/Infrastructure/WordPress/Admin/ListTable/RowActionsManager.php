@@ -137,7 +137,9 @@ final class RowActionsManager {
 			esc_html__( 'Validate', 'wpcom-legacy-redirector' )
 		);
 
-		// Follow link - use home_url() to include subsite path in subdirectory multisite.
+		// Follow link - use home_url() so the stored home-relative path is
+		// resolved against the site's base URL, which is not the domain root
+		// on a subsite or on a single site installed at example.com/blog.
 		$actions['follow'] = sprintf(
 			'<a href="%1$s" target="_blank">%2$s</a>',
 			esc_url( home_url( $redirect->source()->path() ) ),

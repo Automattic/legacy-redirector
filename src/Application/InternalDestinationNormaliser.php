@@ -95,8 +95,9 @@ final class InternalDestinationNormaliser {
 		$home_path   = rtrim( $home['path'] ?? '', '/' );
 		$target_path = $target['path'] ?? '/';
 
-		// On a subdirectory multisite the destination must sit inside this
-		// subsite; the '/' boundary stops '/sub1' matching '/sub10/foo'.
+		// Where home is not the domain root the destination must sit inside
+		// this site, whether that is a subsite or a single site installed at
+		// example.com/blog; the '/' boundary stops '/sub1' matching '/sub10/foo'.
 		if ( '' !== $home_path ) {
 			if ( $target_path !== $home_path && ! str_starts_with( $target_path, $home_path . '/' ) ) {
 				return null;

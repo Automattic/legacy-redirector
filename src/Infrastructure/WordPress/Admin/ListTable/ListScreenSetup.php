@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -70,12 +71,27 @@ final class ListScreenSetup {
 			)
 		);
 
+		// Two separate questions, deliberately gated separately. Per-site
+		// independence is a multisite fact. The base URL prefix is a home-path
+		// one: it shows wherever home is not the domain root, which includes a
+		// plain single site installed at example.com/blog and excludes the
+		// root site of a network.
 		if ( is_multisite() ) {
 			$screen->add_help_tab(
 				array(
 					'id'      => 'multisite',
 					'title'   => __( 'Multisite', 'wpcom-legacy-redirector' ),
 					'content' => $this->get_multisite_help(),
+				)
+			);
+		}
+
+		if ( '' !== HomePath::current() ) {
+			$screen->add_help_tab(
+				array(
+					'id'      => 'base-url',
+					'title'   => __( 'Base URL', 'wpcom-legacy-redirector' ),
+					'content' => $this->get_base_url_help(),
 				)
 			);
 		}
@@ -149,12 +165,33 @@ final class ListScreenSetup {
 	/**
 	 * Get the multisite help content.
 	 *
+	 * Per-site independence only. The base URL prefix is explained separately,
+	 * because it depends on where home sits rather than on multisite.
+	 *
 	 * @return string Help content HTML.
 	 */
 	private function get_multisite_help(): string {
-		return '<p>' . __( 'On multisite installations, each site manages its own redirects independently. Redirects created on one site do not affect other sites in the network.', 'wpcom-legacy-redirector' ) . '</p>' .
-			'<p>' . __( 'In the Redirect To column, relative paths are shown with a grey prefix indicating the site\'s base URL. This helps clarify that a path like <code>/hello-world</code> resolves to the current site, not the network root.', 'wpcom-legacy-redirector' ) . '</p>' .
-			'<p>' . __( 'For example, on a subsite at <code>example.com/site2</code>, the destination <code>/page</code> redirects to <code>example.com/site2/page</code>.', 'wpcom-legacy-redirector' ) . '</p>';
+		return '<p>' . __( 'On multisite installations, each site manages its own redirects independently. Redirects created on one site do not affect other sites in the network.', 'wpcom-legacy-redirector' ) . '</p>';
+	}
+
+	/**
+	 * Get the base URL help content.
+	 *
+	 * Only shown where home is not the domain root, which is exactly where the
+	 * grey prefix appears and where a bare path would otherwise be ambiguous.
+	 *
+	 * @return string Help content HTML.
+	 */
+	private function get_base_url_help(): string {
+		return '<p>' . __( 'This site is installed below the domain root, so redirect paths are stored relative to the site\'s base URL rather than to the domain.', 'wpcom-legacy-redirector' ) . '</p>' .
+			'<p>' . __( 'In the Redirect From and Redirect To columns, paths are shown with a grey prefix giving that base URL. This makes clear that a path like <code>/hello-world</code> resolves against the site, not the domain root.', 'wpcom-legacy-redirector' ) . '</p>' .
+			'<p>' . sprintf(
+				/* translators: 1: example base URL, 2: example path, 3: example resulting URL */
+				esc_html__( 'For example, on a site at %1$s, the path %2$s refers to %3$s.', 'wpcom-legacy-redirector' ),
+				'<code>' . esc_html( untrailingslashit( home_url() ) ) . '</code>',
+				'<code>/page</code>',
+				'<code>' . esc_html( untrailingslashit( home_url() ) . '/page' ) . '</code>'
+			) . '</p>';
 	}
 
 	/**

@@ -52,11 +52,12 @@ final class SourceUrl {
 	 *
 	 * @param string $url       The URL or path to create a SourceUrl from.
 	 * @param string $home_path The current site's home path without a trailing
-	 *                          slash (e.g. '/subsite1'), used to strip the
-	 *                          subsite prefix from full URLs on subdirectory
-	 *                          multisites. '' means home is at the domain root
-	 *                          and nothing is stripped. Callers with WordPress
-	 *                          available should pass HomePath::current().
+	 *                          slash (e.g. '/subsite1' or '/blog'), used to
+	 *                          strip that prefix from full URLs wherever home
+	 *                          is not the domain root. '' means home is at the
+	 *                          domain root and nothing is stripped. Callers
+	 *                          with WordPress available should pass
+	 *                          HomePath::current().
 	 * @return self
 	 *
 	 * @throws InvalidArgumentException If the URL is empty, invalid, or cannot be parsed.
@@ -72,8 +73,8 @@ final class SourceUrl {
 	 * Removes scheme and host from the URL, as redirects should be
 	 * independent of these. Validates the URL structure.
 	 *
-	 * On a subdirectory multisite the site's home path is also removed, so
-	 * that a source given as a full URL lands on the same subsite-relative
+	 * Where home is not the domain root, the site's home path is also removed,
+	 * so that a source given as a full URL lands on the same home-relative
 	 * path an incoming request is looked up by. See strip_home_path().
 	 *
 	 * @param string $url       URL to normalise.
@@ -108,9 +109,9 @@ final class SourceUrl {
 		// Build normalised URL from path and optional query.
 		$normalised = $components['path'] ?? '';
 
-		// A path that arrived with a host was written network-absolute, so on a
-		// subsite it still carries the subsite prefix. A bare request URI never
-		// does, so the guard keeps the request hot path untouched.
+		// A path that arrived with a host was written from the domain root, so
+		// it still carries the home path wherever home is not the root. A bare
+		// request URI never does, so the guard keeps the hot path untouched.
 		if ( isset( $components['host'] ) ) {
 			$normalised = self::strip_home_path( $normalised, $home_path );
 		}
@@ -219,8 +220,10 @@ final class SourceUrl {
 	 * matched by path alone, so a stored path that keeps the prefix cannot
 	 * match anything whatever host it came from.
 	 *
-	 * No-op on single sites and subdomain multisites, where the home path is
-	 * '' and there is nothing to remove.
+	 * No-op wherever home is the domain root and the home path is '', so there
+	 * is nothing to remove. That is most single sites and every subdomain
+	 * multisite, but not a single site installed at example.com/blog, which
+	 * needs stripping exactly as a subsite does.
 	 *
 	 * @param string $path      The path component of a full URL.
 	 * @param string $home_path The site's home path, injected by the caller
