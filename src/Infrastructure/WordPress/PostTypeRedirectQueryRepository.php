@@ -26,6 +26,44 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	use RedirectPostMapper;
 
 	/**
+	 * LIKE pattern matching internal relative-path destinations.
+	 */
+	private const PATH_LIKE = '/%';
+
+	/**
+	 * LIKE pattern matching external (absolute URL) destinations.
+	 *
+	 * Internal absolute URLs are normalised to relative paths on save (and by
+	 * the v3 migration), so anything stored absolute is external.
+	 */
+	private const EXTERNAL_LIKE = 'http%';
+
+	/**
+	 * Build the SQL WHERE fragment classifying redirects by destination kind.
+	 *
+	 * The single owner of the storage-level classification rule: post-ID
+	 * destinations live in post_parent, URL destinations in post_excerpt.
+	 * Used here for counting and by the admin list table's view filters.
+	 *
+	 * @param string $type Destination kind: 'post_id', 'path', or 'external'.
+	 * @return string SQL fragment starting with ' AND ', or '' for an unknown kind.
+	 */
+	public static function destination_type_where( string $type ): string {
+		global $wpdb;
+
+		switch ( $type ) {
+			case 'post_id':
+				return " AND {$wpdb->posts}.post_parent > 0";
+			case 'path':
+				return $wpdb->prepare( " AND {$wpdb->posts}.post_excerpt LIKE %s", self::PATH_LIKE );
+			case 'external':
+				return $wpdb->prepare( " AND {$wpdb->posts}.post_excerpt LIKE %s", self::EXTERNAL_LIKE );
+			default:
+				return '';
+		}
+	}
+
+	/**
 	 * Find redirects matching the given criteria.
 	 *
 	 * Unreadable rows are included as corrupt Redirects (see
@@ -78,7 +116,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 			$wpdb->prepare(
 				"SELECT post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s ORDER BY ID ASC LIMIT %d, %d",
 				PostType::POST_TYPE,
-				'http%',
+				self::EXTERNAL_LIKE,
 				$offset,
 				$limit
 			)
@@ -98,7 +136,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 			$wpdb->prepare(
 				"SELECT COUNT( ID ) FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s",
 				PostType::POST_TYPE,
-				'http%'
+				self::EXTERNAL_LIKE
 			)
 		);
 	}
@@ -109,45 +147,28 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * @return array{post_id: int, path: int, external: int} Counts by kind.
 	 */
 	public function count_by_destination_type(): array {
+		return array(
+			'post_id'  => $this->count_destination_type( 'post_id' ),
+			'path'     => $this->count_destination_type( 'path' ),
+			'external' => $this->count_destination_type( 'external' ),
+		);
+	}
+
+	/**
+	 * Count active (publish or draft) redirects of one destination kind.
+	 *
+	 * @param string $type Destination kind: 'post_id', 'path', or 'external'.
+	 * @return int The count.
+	 */
+	private function count_destination_type( string $type ): int {
 		global $wpdb;
 
-		$post_type = PostType::POST_TYPE;
-
-		// Count redirects to post IDs (post_parent > 0).
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
-		$post_id_count = (int) $wpdb->get_var(
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Custom count query; the appended fragment is prepared in destination_type_where().
+		return (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_parent > 0",
-				$post_type
-			)
-		);
-
-		// Count internal path redirects (relative paths starting with /).
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
-		$path_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s",
-				$post_type,
-				'/%'
-			)
-		);
-
-		// Count external redirects. Internal absolute URLs are normalised to
-		// relative paths on save (and by the v3 migration), so anything stored
-		// absolute is external.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Custom count query.
-		$external_count = (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s",
-				$post_type,
-				'http%'
-			)
-		);
-
-		return array(
-			'post_id'  => $post_id_count,
-			'path'     => $path_count,
-			'external' => $external_count,
+				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft')",
+				PostType::POST_TYPE
+			) . self::destination_type_where( $type )
 		);
 	}
 
