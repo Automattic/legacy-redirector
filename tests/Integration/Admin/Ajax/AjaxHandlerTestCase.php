@@ -39,7 +39,7 @@ abstract class AjaxHandlerTestCase extends WP_Ajax_UnitTestCase {
 		// that land in the AJAX output buffer and corrupt the captured JSON.
 		// The parent already drops E_WARNING for the same reason, and its
 		// tear_down() restores the original level.
-		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_error_reporting
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.prevent_path_disclosure_error_reporting, WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_error_reporting -- Test-only, mirroring the parent class; nothing is disclosed.
 		error_reporting( error_reporting() & ~E_DEPRECATED );
 
 		$_POST = array();
