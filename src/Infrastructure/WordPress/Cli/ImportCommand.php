@@ -200,9 +200,19 @@ final class ImportCommand extends WP_CLI_Command {
 			return $this->result_row( $redirect_from, $redirect_to, $action, 'Dry run - no change made' );
 		}
 
-		// In upsert mode, try updating an existing redirect first.
-		if ( 'upsert' === $mode && $this->manager->update_by_source( $source, $destination, $post_status, $validate ) ) {
-			return $this->result_row( $redirect_from, $redirect_to, 'updated', 'Updated existing redirect' );
+		// In upsert mode, try updating an existing redirect first. Only a
+		// not-found error falls through to the create path; any other failure
+		// (validation, save) is reported against the update.
+		if ( 'upsert' === $mode ) {
+			$update = $this->manager->update_by_source( $source, $destination, $post_status, $validate );
+
+			if ( $update->is_success() ) {
+				return $this->result_row( $redirect_from, $redirect_to, 'updated', 'Updated existing redirect' );
+			}
+
+			if ( 'not-found' !== $update->error_code() ) {
+				return $this->result_row( $redirect_from, $redirect_to, 'error', $update->error_message() ?? 'Could not update redirect' );
+			}
 		}
 
 		$result = $this->manager->create_redirect( $source, $destination, $validate, $post_status );

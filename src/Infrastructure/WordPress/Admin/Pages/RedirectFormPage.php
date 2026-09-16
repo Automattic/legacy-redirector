@@ -365,10 +365,10 @@ final class RedirectFormPage {
 
 		if ( $is_edit ) {
 			// Update existing redirect.
-			$success = $this->manager->update_redirect( $redirect_id, $redirect_from, $destination, $redirect_status );
+			$result = $this->manager->update_redirect( $redirect_id, $redirect_from, $destination, $redirect_status );
 
-			if ( ! $success ) {
-				$this->redirect_with_error( $redirect_id, 'save_failed', $redirect_from, $redirect_to, $redirect_status );
+			if ( $result->is_error() ) {
+				$this->redirect_with_error( $redirect_id, self::form_error_for( $result->error_code() ), $redirect_from, $redirect_to, $redirect_status );
 			}
 
 			wp_safe_redirect(
@@ -424,6 +424,8 @@ final class RedirectFormPage {
 			'non-public'             => 'post_not_public',
 			'insert-not-allowed'     => 'save_failed',
 			'save-failed'            => 'save_failed',
+			'not-found'              => 'save_failed',
+			'invalid-source'         => 'invalid_source',
 		);
 
 		return $map[ (string) $error_code ] ?? 'invalid_destination';

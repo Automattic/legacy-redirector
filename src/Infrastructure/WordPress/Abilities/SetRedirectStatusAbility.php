@@ -119,7 +119,7 @@ final class SetRedirectStatusAbility implements AbilityInterface {
 
 		$result = $this->batch->apply(
 			$input['redirects'] ?? array(),
-			fn( Redirect $redirect ): bool => $this->manager->change_status( (int) $redirect->id(), $post_status ),
+			fn( Redirect $redirect ) => $this->manager->change_status( (int) $redirect->id(), $post_status ),
 			__( 'The redirect status could not be changed.', 'wpcom-legacy-redirector' )
 		);
 

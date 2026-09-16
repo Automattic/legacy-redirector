@@ -67,6 +67,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 		parent::set_up();
 
 		Functions\when( 'get_current_blog_id' )->justReturn( 1 );
+		Functions\when( '__' )->returnArg();
 
 		// Pass the create_redirect() context gate by default (WP_CLI is not
 		// defined in the unit harness, so the gate falls through to the
@@ -516,15 +517,16 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$result = $this->manager->update_destination( 123, $new_destination );
 
-		$this->assertTrue( $result );
+		$this->assertTrue( $result->is_success() );
+		$this->assertSame( 123, $result->redirect_id() );
 	}
 
 	/**
-	 * Test update_destination returns false for non-existent redirect.
+	 * Test update_destination returns a not-found error for non-existent redirect.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_destination
 	 */
-	public function test_update_destination_returns_false_for_nonexistent(): void {
+	public function test_update_destination_returns_error_for_nonexistent(): void {
 		$this->repository
 			->shouldReceive( 'find_by_id' )
 			->with( 999 )
@@ -533,7 +535,8 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$new_destination = Destination::from_url( DestinationUrl::from_string( '/updated' ) );
 		$result          = $this->manager->update_destination( 999, $new_destination );
 
-		$this->assertFalse( $result );
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'not-found', $result->error_code() );
 	}
 
 	/**
@@ -562,7 +565,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$result = $this->manager->update_destination( 123, $new_destination, 'publish' );
 
-		$this->assertTrue( $result );
+		$this->assertTrue( $result->is_success() );
 	}
 
 	// =========================================================================
@@ -596,15 +599,15 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$result = $this->manager->update_redirect( 123, '/new-source', $new_destination );
 
-		$this->assertTrue( $result );
+		$this->assertTrue( $result->is_success() );
 	}
 
 	/**
-	 * Test update_redirect returns false for non-existent redirect.
+	 * Test update_redirect returns a not-found error for non-existent redirect.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
 	 */
-	public function test_update_redirect_returns_false_for_nonexistent(): void {
+	public function test_update_redirect_returns_error_for_nonexistent(): void {
 		$this->repository
 			->shouldReceive( 'find_by_id' )
 			->with( 999 )
@@ -613,15 +616,16 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$new_destination = Destination::from_url( DestinationUrl::from_string( '/new' ) );
 		$result          = $this->manager->update_redirect( 999, '/new-source', $new_destination );
 
-		$this->assertFalse( $result );
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'not-found', $result->error_code() );
 	}
 
 	/**
-	 * Test update_redirect returns false for invalid source URL.
+	 * Test update_redirect returns an error for invalid source URL.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
 	 */
-	public function test_update_redirect_returns_false_for_invalid_source(): void {
+	public function test_update_redirect_returns_error_for_invalid_source(): void {
 		$source   = SourceUrl::from_string( '/old-page' );
 		$redirect = $this->create_test_redirect( 123, $source, 'publish' );
 
@@ -635,7 +639,8 @@ final class RedirectManagerTest extends MonkeyStubs {
 		// Empty string should fail SourceUrl validation.
 		$result = $this->manager->update_redirect( 123, '', $new_destination );
 
-		$this->assertFalse( $result );
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'invalid-source', $result->error_code() );
 	}
 
 
@@ -665,7 +670,10 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$this->repository->shouldNotReceive( 'save' );
 
-		$this->assertFalse( $this->manager->update_destination( 123, $new_destination ) );
+		$result = $this->manager->update_destination( 123, $new_destination );
+
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
 	}
 
 	/**
@@ -689,7 +697,10 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$this->repository->shouldNotReceive( 'save' );
 
-		$this->assertFalse( $this->manager->update_redirect( 123, '/new-source', $new_destination ) );
+		$result = $this->manager->update_redirect( 123, '/new-source', $new_destination );
+
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
 	}
 
 	/**
@@ -717,7 +728,10 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$this->repository->shouldNotReceive( 'save' );
 
-		$this->assertFalse( $this->manager->update_by_source( $source, $new_destination ) );
+		$result = $this->manager->update_by_source( $source, $new_destination );
+
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'invalid-values', $result->error_code() );
 	}
 
 	/**
@@ -745,7 +759,31 @@ final class RedirectManagerTest extends MonkeyStubs {
 			->once()
 			->andReturn( $redirect );
 
-		$this->assertTrue( $this->manager->update_by_source( $source, $new_destination, null, false ) );
+		$this->assertTrue( $this->manager->update_by_source( $source, $new_destination, null, false )->is_success() );
+	}
+
+	/**
+	 * Test change_status preserves the repository failure message.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::change_status
+	 */
+	public function test_change_status_reports_save_failure_message(): void {
+		$source   = SourceUrl::from_string( '/old-page' );
+		$redirect = $this->create_test_redirect( 123, $source, 'draft' );
+
+		$this->repository
+			->shouldReceive( 'find_by_id' )
+			->andReturn( $redirect );
+
+		$this->repository
+			->shouldReceive( 'save' )
+			->andThrow( new \Exception( 'Database error' ) );
+
+		$result = $this->manager->change_status( 123, 'publish' );
+
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'save-failed', $result->error_code() );
+		$this->assertSame( 'Database error', $result->error_message() );
 	}
 
 	// =========================================================================
