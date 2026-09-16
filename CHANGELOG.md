@@ -61,7 +61,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 - `insert-redirect` CLI command; use `create` instead.
 - `import-from-csv` CLI command; use `import <file>` instead. Its `--delete` mode is replaced by piping `list --format=ids` into `delete`.
-- `export-to-csv` CLI command and the `--by=<field>` flag. Neither appeared in a tagged 1.x release, but both existed on `develop`: use `list --format=csv` (or `validate --format=csv` for broken redirects), and let `get`, `delete`, `enable`, `disable`, and `validate` infer whether a redirect is identified by ID or source path.
+- `export-to-csv` CLI command. It never appeared in a tagged 1.x release, but has been on `develop` since 2019: use `list --format=csv` instead, or `validate --format=csv` for broken redirects.
 - Obsolete Travis CI configuration in https://github.com/Automattic/wpcom-legacy-redirector/pull/156
 - Drop support for PHP 5.3-8.1.
 - Drop support for WordPress < 6.4.

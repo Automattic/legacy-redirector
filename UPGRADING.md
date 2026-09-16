@@ -108,12 +108,6 @@ The following public methods are no longer available:
 | `WPCOM_Legacy_Redirector::get_redirect_post_id()` | `Container::instance()->repository()->get_id_by_source(SourceUrl::from_string($url))` |
 | `WPCOM_Legacy_Redirector::start()` / `init()` / `maybe_do_redirect()` | Handled automatically by the plugin bootstrap |
 
-### WP-CLI Changes
-
-- `insert-redirect` now validates the redirect by default, matching the admin UI. Pass `--skip-validation` to restore the 1.x behaviour of inserting without validation.
-- `import-from-meta` flags are now kebab-case: `--dry_run` is now `--dry-run`, and `--skip_dupes=<bool>` is now the boolean flag `--skip-dupes` (pass it to skip duplicates, omit it otherwise).
-- `import-from-csv` accepts the same arguments as before. New commands (`list`, `get`, `update`, `delete`, `enable`, `disable`, `validate`, `export-to-csv`, `find-domains`) are additions, not replacements.
-
 ### Using RedirectCreationResult
 
 The new `create_redirect()` method returns a `RedirectCreationResult` object instead of mixed types:
@@ -135,23 +129,28 @@ $id = $result->redirect_id();
 
 The WP-CLI command set has been redesigned. There are no backwards-compatible aliases, so any scripts, runbooks, or cron jobs calling the old commands must be updated:
 
+Version 1.3.0 shipped three commands. All three change:
+
 | 1.x command | 2.0 replacement |
 |-------------|-----------------|
-| `insert-redirect <from> <to>` | `create <from> <to>` (add `--porcelain` to capture the new ID) |
-| `import-from-csv --csv=<file>` | `import <file>` (`-` reads from STDIN) |
-| `import-from-csv --csv=<file> --update` | `import <file> --mode=upsert` |
-| `import-from-csv --csv=<file> --delete` | `list --format=ids ... \| xargs wp wpcom-legacy-redirector delete --yes` |
-| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>` |
-| `export-to-csv --broken-only [--check-urls]` | `validate [--check-urls] --format=csv > <file>` |
-| `<command> <id> --by=id` | `<command> <id>` (ID or source path is inferred) |
-| `update <source> <destination>` | `update <redirect> --to=<destination>` |
-| `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` |
+| `insert-redirect <from> <to>` | `create <from> <to>` — validates the destination by default, so pass `--skip-validation` for the 1.x behaviour, and `--porcelain` to capture the new ID |
+| `import-from-csv --csv=<file>` | `import <file>` — `-` reads from STDIN, and `--mode=upsert` updates redirects that already exist |
+| `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` — flags are now kebab-case, and `--skip_dupes=<bool>` is now the plain flag `--skip-dupes` |
+
+#### Upgrading from a `develop` snapshot
+
+If you have been running the plugin from the `develop` branch rather than the 1.3.0 tag, one further command changes. It never appeared in a tagged release:
+
+| `develop` command | 2.0 replacement |
+|-------------------|-----------------|
+| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>`, or `validate --format=csv > <file>` to export only broken redirects |
+
+`find-domains` keeps its name and gains a `--format` flag, including a `count` format.
 
 Other behaviour changes to be aware of:
 
-- `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp wpcom-legacy-redirector delete /a /b /c --yes`.
-- `validate` no longer checks destination URLs over HTTP by default when given a single redirect; pass `--check-urls` explicitly (this now behaves the same in batch and targeted modes).
-- `create` no longer rejects external destinations whose host is missing from the `allowed_redirect_hosts` filter. This matches the admin UI: the destination host is automatically allowed at redirect time.
+- `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp wpcom-legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
+- External destinations now work end to end. The destination host is automatically allowed at redirect time, where 1.x passed everything through `wp_safe_redirect()` and silently dropped redirects to hosts outside the `allowed_redirect_hosts` filter.
 
 ### Destination Validation Uses Safe HTTP Requests
 
