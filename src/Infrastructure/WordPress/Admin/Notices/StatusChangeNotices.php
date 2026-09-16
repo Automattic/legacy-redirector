@@ -17,6 +17,20 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 final class StatusChangeNotices {
 
 	/**
+	 * Notice arguments shared by every status change notice.
+	 *
+	 * The `message` ID is the identifier core's list tables have always used
+	 * for this slot, so it is kept for anything styling or scripting against it.
+	 *
+	 * @var array<string, bool|string>
+	 */
+	private const NOTICE_ARGS = array(
+		'type'        => 'success',
+		'id'          => 'message',
+		'dismissible' => true,
+	);
+
+	/**
 	 * Register hooks.
 	 *
 	 * @return void
@@ -76,16 +90,17 @@ final class StatusChangeNotices {
 	 * @return void
 	 */
 	private function display_single_enabled_notice( string $redirect_source ): void {
-		if ( $redirect_source ) {
-			$message = sprintf(
-				/* translators: %s: redirect source path */
-				__( 'Redirect from %s enabled.', 'wpcom-legacy-redirector' ),
-				'<code>' . esc_html( $redirect_source ) . '</code>'
-			);
-			echo '<div id="message" class="updated notice is-dismissible"><p>' . wp_kses( $message, array( 'code' => array() ) ) . '</p></div>';
-		} else {
-			echo '<div id="message" class="updated notice is-dismissible"><p>' . esc_html__( 'Redirect enabled.', 'wpcom-legacy-redirector' ) . '</p></div>';
+		if ( '' === $redirect_source ) {
+			wp_admin_notice( esc_html__( 'Redirect enabled.', 'wpcom-legacy-redirector' ), self::NOTICE_ARGS );
+			return;
 		}
+
+		$message = sprintf(
+			/* translators: %s: redirect source path */
+			__( 'Redirect from %s enabled.', 'wpcom-legacy-redirector' ),
+			'<code>' . esc_html( $redirect_source ) . '</code>'
+		);
+		wp_admin_notice( wp_kses( $message, array( 'code' => array() ) ), self::NOTICE_ARGS );
 	}
 
 	/**
@@ -95,16 +110,17 @@ final class StatusChangeNotices {
 	 * @return void
 	 */
 	private function display_single_disabled_notice( string $redirect_source ): void {
-		if ( $redirect_source ) {
-			$message = sprintf(
-				/* translators: %s: redirect source path */
-				__( 'Redirect from %s disabled.', 'wpcom-legacy-redirector' ),
-				'<code>' . esc_html( $redirect_source ) . '</code>'
-			);
-			echo '<div id="message" class="updated notice is-dismissible"><p>' . wp_kses( $message, array( 'code' => array() ) ) . '</p></div>';
-		} else {
-			echo '<div id="message" class="updated notice is-dismissible"><p>' . esc_html__( 'Redirect disabled.', 'wpcom-legacy-redirector' ) . '</p></div>';
+		if ( '' === $redirect_source ) {
+			wp_admin_notice( esc_html__( 'Redirect disabled.', 'wpcom-legacy-redirector' ), self::NOTICE_ARGS );
+			return;
 		}
+
+		$message = sprintf(
+			/* translators: %s: redirect source path */
+			__( 'Redirect from %s disabled.', 'wpcom-legacy-redirector' ),
+			'<code>' . esc_html( $redirect_source ) . '</code>'
+		);
+		wp_admin_notice( wp_kses( $message, array( 'code' => array() ) ), self::NOTICE_ARGS );
 	}
 
 	/**
@@ -114,14 +130,16 @@ final class StatusChangeNotices {
 	 * @return void
 	 */
 	private function display_bulk_enabled_notice( int $count ): void {
-		echo '<div id="message" class="updated notice is-dismissible"><p>' .
+		wp_admin_notice(
 			esc_html(
 				sprintf(
 					/* translators: %d: number of redirects enabled */
 					_n( '%d redirect enabled.', '%d redirects enabled.', $count, 'wpcom-legacy-redirector' ),
 					$count
 				)
-			) . '</p></div>';
+			),
+			self::NOTICE_ARGS
+		);
 	}
 
 	/**
@@ -131,13 +149,15 @@ final class StatusChangeNotices {
 	 * @return void
 	 */
 	private function display_bulk_disabled_notice( int $count ): void {
-		echo '<div id="message" class="updated notice is-dismissible"><p>' .
+		wp_admin_notice(
 			esc_html(
 				sprintf(
 					/* translators: %d: number of redirects disabled */
 					_n( '%d redirect disabled.', '%d redirects disabled.', $count, 'wpcom-legacy-redirector' ),
 					$count
 				)
-			) . '</p></div>';
+			),
+			self::NOTICE_ARGS
+		);
 	}
 }

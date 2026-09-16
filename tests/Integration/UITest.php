@@ -132,7 +132,7 @@ final class UITest extends TestCase {
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'error', $output );
+		$this->assertStringContainsString( 'notice-error', $output );
 		$this->assertStringContainsString( 'not valid', $output );
 		$this->assertStringContainsString( 'allowed_redirect_hosts', $output );
 	}
@@ -149,7 +149,7 @@ final class UITest extends TestCase {
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'error', $output );
+		$this->assertStringContainsString( 'notice-error', $output );
 		$this->assertStringContainsString( '404', $output );
 	}
 
@@ -165,7 +165,7 @@ final class UITest extends TestCase {
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'updated', $output );
+		$this->assertStringContainsString( 'notice-success', $output );
 		$this->assertStringContainsString( 'valid', $output );
 	}
 
@@ -181,7 +181,7 @@ final class UITest extends TestCase {
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'error', $output );
+		$this->assertStringContainsString( 'notice-error', $output );
 		$this->assertStringContainsString( 'not publicly accessible', $output );
 	}
 
@@ -197,7 +197,7 @@ final class UITest extends TestCase {
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'error', $output );
+		$this->assertStringContainsString( 'notice-error', $output );
 		$this->assertStringContainsString( 'does not exist', $output );
 	}
 

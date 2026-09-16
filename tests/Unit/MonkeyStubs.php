@@ -35,6 +35,21 @@ class MonkeyStubs extends YoastTestCase {
 				'get_post_status' => static function ( $post ) {
 					return is_object( $post ) ? $post->post_status : false;
 				},
+				// Mirrors the class assembly of core's wp_get_admin_notice() so
+				// tests can assert on the rendered notice markup. Core does not
+				// escape the message either; callers do.
+				'wp_admin_notice' => static function ( $message, $args = array() ) {
+					$classes = 'notice';
+					if ( ! empty( $args['type'] ) ) {
+						$classes .= ' notice-' . $args['type'];
+					}
+					if ( ! empty( $args['dismissible'] ) ) {
+						$classes .= ' is-dismissible';
+					}
+					$id = empty( $args['id'] ) ? '' : 'id="' . $args['id'] . '" ';
+
+					echo '<div ' . $id . 'class="' . $classes . '"><p>' . $message . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Test double for a core function that does not escape.
+				},
 			)
 		);
 	}

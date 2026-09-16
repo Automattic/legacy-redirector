@@ -20,6 +20,31 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 final class ValidationNotices {
 
 	/**
+	 * Notice arguments for a failed validation.
+	 *
+	 * The `message` ID is the identifier core's list tables have always used
+	 * for this slot, so it is kept for anything styling or scripting against it.
+	 *
+	 * @var array<string, bool|string>
+	 */
+	private const ERROR_NOTICE_ARGS = array(
+		'type'        => 'error',
+		'id'          => 'message',
+		'dismissible' => true,
+	);
+
+	/**
+	 * Notice arguments for a successful validation.
+	 *
+	 * @var array<string, bool|string>
+	 */
+	private const SUCCESS_NOTICE_ARGS = array(
+		'type'        => 'success',
+		'id'          => 'message',
+		'dismissible' => true,
+	);
+
+	/**
 	 * Redirect repository.
 	 *
 	 * @var RedirectRepositoryInterface
@@ -103,21 +128,21 @@ final class ValidationNotices {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		switch ( $_GET['validate'] ) {
 			case 'invalid':
-				echo '<div id="message" class="error notice is-dismissible"><p>' . esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'If you are doing an external redirect, make sure you safelist the domain using the "allowed_redirect_hosts" filter.', 'wpcom-legacy-redirector' ) . '</p></div>';
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'If you are doing an external redirect, make sure you safelist the domain using the "allowed_redirect_hosts" filter.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case '404':
-				echo '<div id="message" class="error notice is-dismissible"><p>' . esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'Redirect is pointing to a page with the HTTP status of 404.', 'wpcom-legacy-redirector' ) . '</p></div>';
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'Redirect is pointing to a page with the HTTP status of 404.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case 'valid':
 				/* translators: %s: context showing which redirect (e.g. "for /old-page") */
 				$message = sprintf( __( 'Redirect is valid%s.', 'wpcom-legacy-redirector' ), $redirect_context );
-				echo '<div id="message" class="updated notice is-dismissible"><p>' . wp_kses_post( $message ) . '</p></div>';
+				wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
 				break;
 			case 'private':
-				echo '<div id="message" class="error notice is-dismissible"><p>' . esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to content that is not publicly accessible.', 'wpcom-legacy-redirector' ) . '</p></div>';
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to content that is not publicly accessible.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case 'null':
-				echo '<div id="message" class="error notice is-dismissible"><p>' . esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ) . '</p></div>';
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 		}
 	}

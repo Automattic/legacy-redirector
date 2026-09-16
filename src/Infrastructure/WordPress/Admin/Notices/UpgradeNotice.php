@@ -75,6 +75,12 @@ final class UpgradeNotice {
 			__( 'Redirect data migration is in progress and completes automatically in the background. Older redirects may not work or display consistently until it finishes. To finish it now, run: %s', 'wpcom-legacy-redirector' ),
 			'<code>wp wpcom-legacy-redirector migrate</code>'
 		);
-		echo '<div class="notice notice-info is-dismissible"><p>' . wp_kses( $message, array( 'code' => array() ) ) . '</p></div>';
+		wp_admin_notice(
+			wp_kses( $message, array( 'code' => array() ) ),
+			array(
+				'type'        => 'info',
+				'dismissible' => true,
+			)
+		);
 	}
 }
