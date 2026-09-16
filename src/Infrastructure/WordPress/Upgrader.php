@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\InternalDestinationNormaliser;
 use WP_Post;
 use WP_Query;
@@ -23,14 +24,20 @@ use WP_Query;
  *    every redirect as a draft. 2.0 only serves redirects with the 'publish'
  *    status, so every 1.x redirect is silently inert after an upgrade.
  *
- * 2. On a subdirectory multisite, 1.x stored source paths network-absolute
- *    ('/subsite1/old-page'), because it prefixed home_url() before saving.
- *    2.0 strips the subsite prefix before looking a request up, so it
+ * 2. Wherever home is not the domain root, 1.x stored source paths including
+ *    the home path ('/subsite1/old-page', or '/blog/old-page' on a single
+ *    site installed at example.com/blog). 1.x never called home_url(); it
+ *    read the raw REQUEST_URI path for both storage and matching, so the two
+ *    agreed. 2.0 strips the home path before looking a request up, so it
  *    searches for '/old-page' and never matches what 1.x wrote.
  *
- * Running only the first migration would publish the redirects but leave
- * subsite ones still pointing at unreachable keys, which looks like success
- * and is not. Both are therefore handled in a single pass.
+ *    Note this is a home-path question, not a multisite one. A subdirectory
+ *    single site is affected exactly as a subsite is, and on such a site
+ *    example.com/old-page never reaches WordPress at all.
+ *
+ * Running only the first migration would publish the redirects but leave the
+ * prefixed ones pointing at unreachable keys, which looks like success and is
+ * not. Both are therefore handled in a single pass.
  *
  * Version 3 adds destination normalisation: absolute destination URLs that
  * point at this site (e.g. 'https://example.com/foo') are rewritten to the
@@ -429,17 +436,15 @@ final class Upgrader {
 	/**
 	 * The current site's home path, without a trailing slash.
 	 *
-	 * Empty for single sites and for subdomain multisites, where there is no
-	 * prefix for 1.x to have baked in.
+	 * Empty wherever home is the domain root and there is no prefix for 1.x
+	 * to have baked in. What decides that is the home path, not multisite: a
+	 * single site installed at example.com/blog carries '/blog' in its 1.x
+	 * data exactly as a subsite carries '/subsite1'.
 	 *
 	 * @return string The home path, or '' when there is none.
 	 */
 	private function home_path(): string {
-		if ( ! is_multisite() ) {
-			return '';
-		}
-
-		return rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+		return HomePath::current();
 	}
 
 	/**
