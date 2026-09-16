@@ -9,15 +9,9 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
-use Automattic\LegacyRedirector\Domain\Destination;
-use Automattic\LegacyRedirector\Domain\DestinationPostId;
-use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\SourceUrl;
-use DateTimeImmutable;
-use WP_Post;
 use WP_Query;
 
 /**
@@ -29,8 +23,14 @@ use WP_Query;
  */
 final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryInterface {
 
+	use RedirectPostMapper;
+
 	/**
 	 * Find redirects matching the given criteria.
+	 *
+	 * Unreadable rows are included as corrupt Redirects (see
+	 * Redirect::is_corrupt()), so the result count agrees with
+	 * count_matching() and corrupt rows stay visible to listings and audits.
 	 *
 	 * @param RedirectCriteria $criteria The query criteria.
 	 * @return Redirect[] Array of matching redirects.
@@ -200,67 +200,5 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 
 		// Return both publish and draft for 'any' or null.
 		return array( 'publish', 'draft' );
-	}
-
-	/**
-	 * Map a WP_Post to a Redirect entity.
-	 *
-	 * @param WP_Post $post The post to map.
-	 * @return Redirect The redirect entity.
-	 */
-	private function map_post_to_redirect( WP_Post $post ): Redirect {
-		$source      = SourceUrl::from_string( $post->post_title );
-		$destination = $this->extract_destination_from_post( $post );
-		$created_at  = $this->parse_date( $post->post_date_gmt );
-
-		return Redirect::reconstitute(
-			$post->ID,
-			$source,
-			$destination,
-			$post->post_status,
-			$created_at
-		);
-	}
-
-	/**
-	 * Extract the destination from a post.
-	 *
-	 * @param WP_Post $post The redirect post.
-	 * @return Destination The destination.
-	 */
-	private function extract_destination_from_post( WP_Post $post ): Destination {
-		// Check for internal redirect (post_parent).
-		if ( $post->post_parent > 0 ) {
-			return Destination::from_post_id(
-				DestinationPostId::from_int( $post->post_parent )
-			);
-		}
-
-		// External or relative URL (post_excerpt).
-		$excerpt = trim( $post->post_excerpt );
-		if ( ! empty( $excerpt ) ) {
-			return Destination::from_url(
-				DestinationUrl::from_string( $excerpt )
-			);
-		}
-
-		// Fallback to home if no destination found.
-		return Destination::from_url( DestinationUrl::home() );
-	}
-
-	/**
-	 * Parse a date string to DateTimeImmutable.
-	 *
-	 * @param string $date_string The date string (MySQL format).
-	 * @return DateTimeImmutable|null The parsed date, or null if invalid.
-	 */
-	private function parse_date( string $date_string ): ?DateTimeImmutable {
-		if ( empty( $date_string ) || '0000-00-00 00:00:00' === $date_string ) {
-			return null;
-		}
-
-		$date = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $date_string );
-
-		return $date instanceof DateTimeImmutable ? $date : null;
 	}
 }

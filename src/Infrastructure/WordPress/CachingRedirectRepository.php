@@ -71,9 +71,10 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * filter to the loaded redirect. Filtering after the cache rather than
 	 * before it is deliberate: the cached ID is the answer to "which post holds
 	 * this source", which is status-agnostic and shared with get_id_by_source().
-	 * Caching the filtered result instead would store 0 for a disabled
-	 * redirect, and management lookups reading that entry would conclude no
-	 * redirect exists while the repository's own duplicate guard still saw one.
+	 * Caching the filtered result instead would store 0 for a disabled or
+	 * corrupt redirect, and management lookups reading that entry would
+	 * conclude no redirect exists while the repository's own duplicate guard
+	 * still saw one.
 	 *
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found and active, null otherwise.
@@ -93,8 +94,8 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 			return null;
 		}
 
-		// Only return if active (published).
-		if ( ! $redirect->is_active() ) {
+		// Only return if active (published) and readable.
+		if ( ! $redirect->is_active() || $redirect->is_corrupt() ) {
 			return null;
 		}
 

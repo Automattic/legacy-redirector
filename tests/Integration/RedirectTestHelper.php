@@ -139,4 +139,37 @@ trait RedirectTestHelper {
 
 		return $manager->create_redirect( $source, $destination, $validate );
 	}
+
+	/**
+	 * Insert a redirect row directly, bypassing all plugin validation.
+	 *
+	 * For corrupt-row fixtures that the plugin itself would refuse to create
+	 * (hand-edited rows, partial 1.x imports).
+	 *
+	 * @param array<string, mixed> $args Overrides for the wp_insert_post args.
+	 * @return int The post ID.
+	 *
+	 * @throws \RuntimeException If the insert fails, so a bad fixture cannot pass a test vacuously.
+	 */
+	protected function insert_redirect_post( array $args = array() ): int {
+		$post_id = wp_insert_post(
+			array_merge(
+				array(
+					'post_type'    => \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::POST_TYPE,
+					'post_status'  => 'publish',
+					'post_title'   => '',
+					'post_excerpt' => 'https://example.com/destination',
+				),
+				$args
+			),
+			true
+		);
+
+		if ( is_wp_error( $post_id ) || 0 === $post_id ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message is not output to browser.
+			throw new \RuntimeException( 'Failed to insert redirect post fixture.' );
+		}
+
+		return $post_id;
+	}
 }

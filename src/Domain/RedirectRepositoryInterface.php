@@ -22,7 +22,8 @@ interface RedirectRepositoryInterface {
 	 *
 	 * Only returns published redirects: this is the front-end resolution
 	 * lookup. Management code that must see disabled redirects too should use
-	 * get_id_by_source() and find_by_id(), which ignore status.
+	 * get_id_by_source() and find_by_id(), which ignore status. A corrupt row
+	 * (see Redirect::is_corrupt()) is treated as no redirect.
 	 *
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found, null otherwise.
@@ -31,6 +32,10 @@ interface RedirectRepositoryInterface {
 
 	/**
 	 * Find a redirect by its ID.
+	 *
+	 * An unreadable row is returned as a corrupt Redirect (see
+	 * Redirect::is_corrupt()) so management surfaces can report and delete
+	 * it; save() refuses such an entity.
 	 *
 	 * @param int $id The redirect ID.
 	 * @return Redirect|null The redirect if found, null otherwise.
@@ -56,7 +61,7 @@ interface RedirectRepositoryInterface {
 	 * @param Redirect $redirect The redirect to save.
 	 * @return Redirect The saved redirect (with ID populated if new).
 	 *
-	 * @throws RedirectPersistenceException If the save fails.
+	 * @throws RedirectPersistenceException If the save fails or the redirect is corrupt.
 	 */
 	public function save( Redirect $redirect ): Redirect;
 

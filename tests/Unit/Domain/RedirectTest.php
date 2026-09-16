@@ -289,4 +289,67 @@ final class RedirectTest extends MonkeyStubs {
 		$this->assertSame( 1, $redirect->id() );
 		$this->assertSame( 'publish', $redirect->status() );
 	}
+
+	/**
+	 * Test redirects are healthy by default.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::is_corrupt
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::corruption
+	 */
+	public function test_redirects_are_healthy_by_default(): void {
+		$redirect = Redirect::create(
+			SourceUrl::from_string( '/old' ),
+			Destination::from_url( DestinationUrl::from_string( '/new' ) )
+		);
+
+		$this->assertFalse( $redirect->is_corrupt() );
+		$this->assertNull( $redirect->corruption() );
+	}
+
+	/**
+	 * Test reconstitute with a corruption reason flags the redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::reconstitute
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::is_corrupt
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::corruption
+	 */
+	public function test_reconstitute_with_corruption_reason(): void {
+		$redirect = Redirect::reconstitute(
+			1,
+			SourceUrl::from_string( '/__corrupt__/1' ),
+			Destination::from_url( DestinationUrl::home() ),
+			'publish',
+			null,
+			'Invalid source: The URL does not validate.'
+		);
+
+		$this->assertTrue( $redirect->is_corrupt() );
+		$this->assertSame( 'Invalid source: The URL does not validate.', $redirect->corruption() );
+	}
+
+	/**
+	 * Test with_* copies preserve the corruption flag.
+	 *
+	 * A status or destination change alone does not repair a corrupt row;
+	 * only a full source-and-destination rebuild does.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::with_status
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::with_destination
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::is_corrupt
+	 */
+	public function test_with_copies_preserve_corruption(): void {
+		$redirect = Redirect::reconstitute(
+			1,
+			SourceUrl::from_string( '/__corrupt__/1' ),
+			Destination::from_url( DestinationUrl::home() ),
+			'publish',
+			null,
+			'Invalid destination: Absolute destination URLs must use http or https scheme.'
+		);
+
+		$this->assertTrue( $redirect->with_status( 'draft' )->is_corrupt() );
+		$this->assertTrue(
+			$redirect->with_destination( Destination::from_url( DestinationUrl::from_string( '/ok' ) ) )->is_corrupt()
+		);
+	}
 }

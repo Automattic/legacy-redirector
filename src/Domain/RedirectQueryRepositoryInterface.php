@@ -25,6 +25,10 @@ interface RedirectQueryRepositoryInterface {
 	/**
 	 * Find redirects matching the given criteria.
 	 *
+	 * Unreadable rows are included as corrupt Redirects (see
+	 * Redirect::is_corrupt()), so the result count agrees with
+	 * count_matching().
+	 *
 	 * @param RedirectCriteria $criteria The query criteria.
 	 * @return Redirect[] Array of matching redirects.
 	 */

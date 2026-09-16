@@ -9,14 +9,10 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
-use Automattic\LegacyRedirector\Domain\Destination;
-use Automattic\LegacyRedirector\Domain\DestinationPostId;
-use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectPersistenceException;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use DateTimeImmutable;
 use WP_Post;
 
 /**
@@ -30,15 +26,19 @@ use WP_Post;
  */
 final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 
+	use RedirectPostMapper;
+
 	/**
 	 * The custom post type slug.
 	 */
-	public const POST_TYPE = 'vip-legacy-redirect';
+	public const POST_TYPE = PostType::POST_TYPE;
 
 	/**
 	 * Find a redirect by its source URL.
 	 *
-	 * Only returns active (published) redirects.
+	 * Only returns active (published) redirects. A corrupt row (see
+	 * Redirect::is_corrupt()) is treated as no redirect: its placeholder
+	 * values must never be served to a visitor.
 	 *
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found and active, null otherwise.
@@ -60,11 +60,17 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 			return null;
 		}
 
-		return $this->map_post_to_redirect( $post );
+		$redirect = $this->map_post_to_redirect( $post );
+
+		return $redirect->is_corrupt() ? null : $redirect;
 	}
 
 	/**
 	 * Find a redirect by its ID.
+	 *
+	 * Unlike find_by_source(), an unreadable row is returned as a corrupt
+	 * Redirect (see Redirect::is_corrupt()) so management surfaces can
+	 * report and delete it.
 	 *
 	 * @param int $id The redirect ID.
 	 * @return Redirect|null The redirect if found, null otherwise.
@@ -107,9 +113,16 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param Redirect $redirect The redirect to save.
 	 * @return Redirect The saved redirect with ID populated.
 	 *
-	 * @throws RedirectPersistenceException If the save fails, or an insert would duplicate an existing source.
+	 * @throws RedirectPersistenceException If the save fails, an insert would duplicate an existing source, or the redirect is corrupt.
 	 */
 	public function save( Redirect $redirect ): Redirect {
+		// A corrupt redirect holds placeholder values; saving it would
+		// overwrite the stored row with those placeholders.
+		if ( $redirect->is_corrupt() ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw RedirectPersistenceException::corrupt_redirect( $redirect->id() );
+		}
+
 		$args = $this->map_redirect_to_post_args( $redirect );
 
 		if ( $redirect->is_persisted() ) {
@@ -176,52 +189,6 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	}
 
 	/**
-	 * Map a WP_Post to a Redirect entity.
-	 *
-	 * @param WP_Post $post The post to map.
-	 * @return Redirect The redirect entity.
-	 */
-	private function map_post_to_redirect( WP_Post $post ): Redirect {
-		$source      = SourceUrl::from_string( $post->post_title );
-		$destination = $this->extract_destination_from_post( $post );
-		$created_at  = $this->parse_date( $post->post_date_gmt );
-
-		return Redirect::reconstitute(
-			$post->ID,
-			$source,
-			$destination,
-			$post->post_status,
-			$created_at
-		);
-	}
-
-	/**
-	 * Extract the destination from a post.
-	 *
-	 * @param WP_Post $post The redirect post.
-	 * @return Destination The destination.
-	 */
-	private function extract_destination_from_post( WP_Post $post ): Destination {
-		// Check for internal redirect (post_parent).
-		if ( $post->post_parent > 0 ) {
-			return Destination::from_post_id(
-				DestinationPostId::from_int( $post->post_parent )
-			);
-		}
-
-		// External or relative URL (post_excerpt).
-		$excerpt = trim( $post->post_excerpt );
-		if ( ! empty( $excerpt ) ) {
-			return Destination::from_url(
-				DestinationUrl::from_string( $excerpt )
-			);
-		}
-
-		// Fallback to home if no destination found.
-		return Destination::from_url( DestinationUrl::home() );
-	}
-
-	/**
 	 * Map a Redirect entity to post args for wp_insert_post/wp_update_post.
 	 *
 	 * @param Redirect $redirect The redirect to map.
@@ -246,21 +213,5 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 		}
 
 		return $args;
-	}
-
-	/**
-	 * Parse a date string to DateTimeImmutable.
-	 *
-	 * @param string $date_string The date string (MySQL format).
-	 * @return DateTimeImmutable|null The parsed date, or null if invalid.
-	 */
-	private function parse_date( string $date_string ): ?DateTimeImmutable {
-		if ( empty( $date_string ) || '0000-00-00 00:00:00' === $date_string ) {
-			return null;
-		}
-
-		$date = DateTimeImmutable::createFromFormat( 'Y-m-d H:i:s', $date_string );
-
-		return $date instanceof DateTimeImmutable ? $date : null;
 	}
 }

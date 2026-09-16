@@ -47,4 +47,22 @@ final class RedirectPersistenceException extends RuntimeException {
 			)
 		);
 	}
+
+	/**
+	 * Create an exception for an attempt to save a corrupt redirect.
+	 *
+	 * A corrupt redirect carries placeholder values; saving it would replace
+	 * the stored row with those placeholders.
+	 *
+	 * @param int|null $id The redirect ID.
+	 * @return self
+	 */
+	public static function corrupt_redirect( ?int $id ): self {
+		return new self(
+			sprintf(
+				'Redirect %d holds corrupt stored data and cannot be re-saved; delete it, or update it with a new source and destination.',
+				(int) $id
+			)
+		);
+	}
 }

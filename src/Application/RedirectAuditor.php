@@ -36,6 +36,12 @@ class RedirectAuditor {
 	 * @return ValidationIssue|null The issue if broken, null if valid.
 	 */
 	public function validate_redirect_destination( Redirect $redirect, bool $check_urls = false ): ?ValidationIssue {
+		// A corrupt row carries placeholder values; checking them would report
+		// nonsense. Report the corruption itself.
+		if ( $redirect->is_corrupt() ) {
+			return new ValidationIssue( $redirect, ValidationIssueType::CORRUPT_DATA, $redirect->corruption() );
+		}
+
 		$destination = $redirect->destination();
 
 		// Check post ID destinations.
