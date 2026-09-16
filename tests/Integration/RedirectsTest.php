@@ -31,6 +31,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository

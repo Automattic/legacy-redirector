@@ -37,6 +37,7 @@ use WPDieException;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository

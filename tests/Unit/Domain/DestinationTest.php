@@ -21,6 +21,7 @@ use LogicException;
  * @covers \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class DestinationTest extends MonkeyStubs {
 

@@ -64,9 +64,11 @@ final class DestinationUrl {
 
 		// Validate absolute URLs have a valid scheme and a host.
 		if ( ! $is_relative ) {
-			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
-			$parts  = parse_url( $url );
-			$parts  = is_array( $parts ) ? $parts : array();
+			// Url::parse_encoded() rather than a bare parse_url(), which
+			// corrupts raw multibyte bytes on some hosts. Only the scheme and
+			// host are read, so leaving the rest encoded costs nothing, and an
+			// unparseable URL falls through to the scheme error below.
+			$parts  = Url::parse_encoded( $url ) ?? array();
 			$scheme = $parts['scheme'] ?? '';
 			if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
 				throw new InvalidArgumentException( 'Absolute destination URLs must use http or https scheme.' );

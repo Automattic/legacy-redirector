@@ -31,6 +31,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class PostTypeRedirectRepositoryTest extends TestCase {
 

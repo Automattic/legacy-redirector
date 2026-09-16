@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectHttpStatus;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Domain\Url;
 
 /**
  * Service responsible for resolving request URLs to redirect destinations.
@@ -154,9 +155,12 @@ final class RedirectResolver {
 	 * @return string The path with optional query string.
 	 */
 	private function extract_path( string $url ): string {
-		$url_info = wp_parse_url( $url );
+		// parse_encoded() rather than wp_parse_url(): a bare parse_url()
+		// corrupts raw multibyte bytes on some hosts, and the components must
+		// come back still percent-encoded so SourceUrl does the only decode.
+		$url_info = Url::parse_encoded( $url );
 
-		if ( ! is_array( $url_info ) || ! isset( $url_info['path'] ) ) {
+		if ( null === $url_info || ! isset( $url_info['path'] ) ) {
 			return '';
 		}
 
@@ -200,9 +204,11 @@ final class RedirectResolver {
 			return array();
 		}
 
-		// Extract query string.
-		$query_string = wp_parse_url( $url, PHP_URL_QUERY );
-		if ( empty( $query_string ) ) {
+		// Extract query string, still percent-encoded: parse_str() below does
+		// the decoding, and decoding twice would corrupt a preserved value
+		// containing a literal '%25' or '+'.
+		$query_string = Url::parse_encoded( $url )['query'] ?? '';
+		if ( '' === $query_string ) {
 			return array();
 		}
 

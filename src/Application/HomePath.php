@@ -9,6 +9,8 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Application;
 
+use Automattic\LegacyRedirector\Domain\Url;
+
 /**
  * Supplies the current site's home path for SourceUrl normalisation.
  *
@@ -34,27 +36,13 @@ final class HomePath {
 	 * @return string The home path.
 	 */
 	public static function current(): string {
-		$home_url = home_url();
+		// Url::parse() rather than wp_parse_url(), because a home path of
+		// '/日本' comes back as '/日_日_' from a bare parse_url() on hosts
+		// whose LC_CTYPE flags the C1 range as control characters. A home URL
+		// that will not parse at all leaves no path to strip.
+		$parts = Url::parse( home_url() );
 
-		// parse_url() replaces every byte iscntrl() calls a control with '_',
-		// and under a UTF-8 LC_CTYPE that includes 0x80-0x9F - the C1 range
-		// there, but ordinary continuation-byte territory in UTF-8. A home
-		// path of '/日本' would come back as '/日_日_', so percent-encode it
-		// out of reach first and decode what comes back. SourceUrl::
-		// mb_parse_url() does the same thing for the same reason.
-		$encoded = preg_replace_callback(
-			'|[^!*\'();:@&=+$,\/?%#\[\]]+|usD',
-			static function ( array $matches ): string {
-				return rawurlencode( $matches[0] );
-			},
-			$home_url
-		);
-
-		// null means the home URL is not valid UTF-8, which leaves nothing
-		// better to do than parse it as it stands.
-		$path = (string) wp_parse_url( $encoded ?? $home_url, PHP_URL_PATH );
-
-		return rtrim( rawurldecode( $path ), '/' );
+		return rtrim( $parts['path'] ?? '', '/' );
 	}
 
 	/**

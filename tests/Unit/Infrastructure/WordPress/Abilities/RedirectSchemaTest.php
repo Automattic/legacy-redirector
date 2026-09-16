@@ -25,6 +25,7 @@ use Brain\Monkey\Functions;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class RedirectSchemaTest extends MonkeyStubs {
 

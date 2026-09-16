@@ -17,6 +17,7 @@ use Brain\Monkey\Functions;
  * HomePathTest class.
  *
  * @covers \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class HomePathTest extends MonkeyStubs {
 

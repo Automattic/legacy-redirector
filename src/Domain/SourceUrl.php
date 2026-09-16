@@ -247,46 +247,27 @@ final class SourceUrl {
 	}
 
 	/**
-	 * UTF-8 aware parse_url().
+	 * Parse a URL into decoded components, or explain why it cannot be.
 	 *
-	 * Percent-encodes multibyte characters (except reserved URL characters)
-	 * before parsing, then decodes the resulting components, so URLs such as
-	 * /فوتوغرافيا/?test=فوتوغرافيا parse correctly.
-	 *
-	 * Deliberately uses PHP's parse_url() rather than wp_parse_url() so the
-	 * domain layer stays free of WordPress dependencies; on PHP >= 5.4.7 the
-	 * two are equivalent for the path and full-URL inputs this receives.
+	 * Url::parse() is UTF-8 safe where a bare parse_url() is not, so URLs such
+	 * as /فوتوغرافيا/?test=فوتوغرافيا survive. It reports failure by returning
+	 * null; this value object's contract is to throw, so the two reasons it
+	 * can fail are told apart here.
 	 *
 	 * @param string $url The URL to parse.
-	 * @return array<string, string|int> The URL components.
+	 * @return array<string, string> The URL components.
 	 *
 	 * @throws InvalidArgumentException If the URL is malformed.
 	 */
 	private static function mb_parse_url( string $url ): array {
-		$encoded_url = preg_replace_callback(
-			'|[^!*\'();:@&=+$,\/?%#\[\]]+|usD',
-			static function ( array $matches ): string {
-				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.urlencode_urlencode -- Required for proper percent-encoding of UTF-8 chars.
-				return urlencode( $matches[0] );
-			},
-			$url
-		);
+		$parts = Url::parse( $url );
 
-		// The /u modifier makes preg_replace_callback() return null for a
-		// subject that is not valid UTF-8 (or that blows the backtrack limit).
-		if ( null === $encoded_url ) {
-			throw new InvalidArgumentException( 'The URL is not valid UTF-8.' );
-		}
-
-		// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
-		$parts = parse_url( $encoded_url );
-
-		if ( false === $parts ) {
-			throw new InvalidArgumentException( 'The URL could not be parsed.' );
-		}
-
-		foreach ( $parts as $name => $value ) {
-			$parts[ $name ] = urldecode( (string) $value );
+		if ( null === $parts ) {
+			throw new InvalidArgumentException(
+				Url::is_valid_utf8( $url )
+					? 'The URL could not be parsed.'
+					: 'The URL is not valid UTF-8.'
+			);
 		}
 
 		return $parts;

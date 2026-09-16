@@ -32,6 +32,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class MultisiteTest extends TestCase {
 

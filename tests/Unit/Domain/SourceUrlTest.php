@@ -20,6 +20,7 @@ use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
  * the subsite home path is passed in rather than read from home_url().
  *
  * @covers \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class SourceUrlTest extends YoastTestCase {
 

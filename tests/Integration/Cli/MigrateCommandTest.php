@@ -25,6 +25,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class MigrateCommandTest extends CliTestCase {
 

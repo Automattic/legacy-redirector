@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Domain\Url;
 
 /**
  * Service for validating redirects before persistence.
@@ -90,7 +91,10 @@ class RedirectValidator {
 		if ( $destination->is_post_id() ) {
 			$post_permalink = get_permalink( $destination->as_post_id()->value() );
 			if ( false !== $post_permalink ) {
-				$destination_path = wp_parse_url( $post_permalink, PHP_URL_PATH );
+				// Url::parse() so the comparison below is like for like: the
+				// source path arrives decoded from SourceUrl, and a bare
+				// parse_url() would also corrupt a multibyte permalink.
+				$destination_path = Url::parse( (string) $post_permalink )['path'] ?? '';
 				if ( $destination_path && $this->normalise_path( $source->path() ) === $this->normalise_path( $destination_path ) ) {
 					return ValidationResult::invalid(
 						'invalid-values',
@@ -103,7 +107,7 @@ class RedirectValidator {
 
 		// Compare source path with destination URL path.
 		$destination_url  = $destination->as_url()->value();
-		$parsed           = wp_parse_url( $destination_url );
+		$parsed           = Url::parse( $destination_url ) ?? array();
 		$destination_path = $parsed['path'] ?? '';
 
 		// A destination on another host can never be a self-loop, whatever its path.
