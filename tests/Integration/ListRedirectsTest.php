@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
@@ -132,8 +133,9 @@ final class ListRedirectsTest extends TestCase {
 		$this->columns_manager->render_column( 'to', $post_id );
 		$output = ob_get_clean();
 
-		// External URLs are bolded on multisite for consistency with relative paths.
-		$expected = is_multisite() ? '<strong>' . $to_url . '</strong>' : $to_url;
+		// External URLs are bolded for consistency with the prefixed relative
+		// paths they sit alongside, so they follow the same predicate.
+		$expected = '' !== HomePath::current() ? '<strong>' . $to_url . '</strong>' : $to_url;
 		$this->assertSame( $expected, $output );
 	}
 
@@ -197,14 +199,17 @@ final class ListRedirectsTest extends TestCase {
 	/**
 	 * Expected 'to' column output for a relative path.
 	 *
-	 * On multisite the column prefixes the path with the site's home URL in
-	 * grey; on single site the path is rendered as-is.
+	 * Where home is not the domain root the column prefixes the path with the
+	 * site's home URL in grey; where home is the root the path is rendered
+	 * as-is. Note this is not the same as "multisite": the network's root site
+	 * has home at the domain root and so takes no prefix, while a single site
+	 * installed at example.com/blog does.
 	 *
 	 * @param string $path The relative path.
 	 * @return string Expected rendered output.
 	 */
 	private function expected_relative_path_output( string $path ): string {
-		if ( ! is_multisite() ) {
+		if ( '' === HomePath::current() ) {
 			return $path;
 		}
 
