@@ -22,9 +22,11 @@ final class HomePath {
 	/**
 	 * The current site's home path, without a trailing slash.
 	 *
-	 * '' on single sites and subdomain multisites, where home is at the
-	 * domain root and there is nothing to strip; '/subsite1' on a
-	 * subdirectory multisite subsite.
+	 * '' wherever home is at the domain root and there is nothing to strip,
+	 * which covers most single sites and every subdomain multisite. Non-empty
+	 * wherever it is not: '/subsite1' on a subdirectory multisite subsite,
+	 * and equally '/blog' on a plain single site installed at
+	 * example.com/blog. Multisite is not the deciding factor.
 	 *
 	 * @return string The home path.
 	 */

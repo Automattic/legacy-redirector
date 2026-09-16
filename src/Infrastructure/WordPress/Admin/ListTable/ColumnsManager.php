@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
@@ -154,12 +155,17 @@ final class ColumnsManager {
 	/**
 	 * Render the "from" column.
 	 *
+	 * The source path is site-relative, so it gets the same grey home URL
+	 * prefix as the "to" column. The prefix sits outside the anchor so the
+	 * clickable row title stays the path itself.
+	 *
 	 * @param Redirect $redirect The redirect.
 	 * @return void
 	 */
 	private function render_from_column( Redirect $redirect ): void {
 		$source    = $redirect->source()->path();
 		$edit_link = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect->id() );
+		$this->render_home_url_prefix( $source );
 		printf(
 			'<strong><a class="row-title" href="%1$s" aria-label="%2$s">%3$s</a></strong>',
 			esc_url( $edit_link ),
@@ -200,8 +206,8 @@ final class ColumnsManager {
 			$this->render_relative_path_with_prefix( $relative_path );
 		} elseif ( $destination->as_url()->is_absolute() ) {
 			$url = $destination->as_url()->value();
-			// On multisite, use bold for consistency with relative paths.
-			if ( is_multisite() ) {
+			// Bold for consistency with the prefixed relative paths alongside it.
+			if ( '' !== $this->home_url_prefix() ) {
 				printf( '<strong>%s</strong>', esc_url( $url ) );
 			} else {
 				echo esc_url( $url );
@@ -218,27 +224,64 @@ final class ColumnsManager {
 	/**
 	 * Render a relative path with the site's base URL as a grey prefix.
 	 *
-	 * On multisite, this helps clarify that /path resolves to the current site's
-	 * base URL, not the network root. Shows the home_url prefix in grey followed
-	 * by the path in bold.
-	 *
-	 * On single site, displays the path as plain text (no prefix or bold needed).
+	 * Where home is not the domain root, this clarifies that /path resolves
+	 * against the site's base URL. Shows the prefix in grey followed by the
+	 * path in bold; where home is the root, the path is plain text, because
+	 * there is nothing to disambiguate.
 	 *
 	 * @param string $path The relative path (e.g., "/hello-world").
 	 * @return void
 	 */
 	private function render_relative_path_with_prefix( string $path ): void {
-		if ( ! is_multisite() || ! str_starts_with( $path, '/' ) ) {
+		if ( '' === $this->home_url_prefix() || ! str_starts_with( $path, '/' ) ) {
 			echo esc_html( $path );
 			return;
 		}
 
-		$home_url = untrailingslashit( home_url() );
-		printf(
-			'<span style="color: #888;">%s</span><strong>%s</strong>',
-			esc_html( $home_url ),
-			esc_html( $path )
-		);
+		$this->render_home_url_prefix( $path );
+		printf( '<strong>%s</strong>', esc_html( $path ) );
+	}
+
+	/**
+	 * Render this site's base URL as a grey prefix ahead of a relative path.
+	 *
+	 * Prints nothing where home is the domain root, and nothing for anything
+	 * that is not a site-relative path.
+	 *
+	 * @param string $path The relative path (e.g., "/hello-world").
+	 * @return void
+	 */
+	private function render_home_url_prefix( string $path ): void {
+		$prefix = $this->home_url_prefix();
+
+		if ( '' === $prefix || ! str_starts_with( $path, '/' ) ) {
+			return;
+		}
+
+		printf( '<span style="color: #888;">%s</span>', esc_html( $prefix ) );
+	}
+
+	/**
+	 * This site's base URL, when stored paths hang off something other than
+	 * the domain root.
+	 *
+	 * Sources are stored relative to home, and RedirectResolver strips the
+	 * home path on every lookup regardless of multisite, so the question the
+	 * display has to answer is "is home the domain root?", not "is this
+	 * multisite?". A single site installed at example.com/blog is every bit
+	 * as ambiguous as a subsite at example.com/subsite1, and on such a site
+	 * example.com/old-page never reaches WordPress at all, so a bare
+	 * /old-page in the UI points at the one reading that cannot work.
+	 *
+	 * @return string The base URL without a trailing slash, or '' when home
+	 *                is the domain root and no prefix is warranted.
+	 */
+	private function home_url_prefix(): string {
+		if ( '' === HomePath::current() ) {
+			return '';
+		}
+
+		return untrailingslashit( home_url() );
 	}
 
 	/**

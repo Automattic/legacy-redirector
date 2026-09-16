@@ -162,8 +162,11 @@ final class RedirectResolver {
 
 		$path = $url_info['path'];
 
-		// In subdirectory multisite, strip the subsite path prefix.
-		// e.g., /site3/to-slug becomes /to-slug for site3.
+		// Strip the home path, so lookups are home-relative the same way
+		// storage is. e.g. /site3/to-slug becomes /to-slug for site3, and
+		// /blog/to-slug becomes /to-slug on a single site at example.com/blog.
+		// The test is whether home is the domain root, not whether this is
+		// multisite; a subdirectory single site needs the same treatment.
 		// The '/' boundary stops '/blog' matching '/blogging-tips'.
 		$home_path = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
 		if ( '' !== $home_path && ( $path === $home_path || str_starts_with( $path, $home_path . '/' ) ) ) {
