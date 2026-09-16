@@ -22,6 +22,7 @@ use WPDieException;
  * to throw before the exit is reached, mirroring RedirectFormPageTest.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager

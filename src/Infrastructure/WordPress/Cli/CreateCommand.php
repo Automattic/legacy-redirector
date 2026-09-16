@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
@@ -92,7 +93,7 @@ final class CreateCommand extends WP_CLI_Command {
 		$porcelain   = isset( $assoc_args['porcelain'] );
 
 		try {
-			$source      = SourceUrl::from_string( $from_url );
+			$source      = SourceUrl::from_string( $from_url, HomePath::current() );
 			$destination = Destination::from_mixed( $to_value );
 		} catch ( \InvalidArgumentException $e ) {
 			WP_CLI::error( sprintf( "Couldn't create %s -> %s (%s)", $from_url, $to_value, $e->getMessage() ) );

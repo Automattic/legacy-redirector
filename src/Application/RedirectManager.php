@@ -293,7 +293,7 @@ class RedirectManager {
 
 		// Create new source URL.
 		try {
-			$source = SourceUrl::from_string( $new_source );
+			$source = SourceUrl::from_string( $new_source, HomePath::current() );
 		} catch ( \InvalidArgumentException $e ) {
 			return RedirectCreationResult::error( 'invalid-source', $e->getMessage() );
 		}

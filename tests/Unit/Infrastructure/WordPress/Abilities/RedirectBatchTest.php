@@ -93,6 +93,7 @@ final class RedirectBatchTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch::resolve
 	 */
 	public function test_resolve_accepts_a_source_path(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$redirect = Redirect::reconstitute(
 			7,
 			SourceUrl::from_string( '/old-page' ),
@@ -151,11 +152,10 @@ final class RedirectBatchTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch::resolve
 	 */
 	public function test_resolve_reports_an_invalid_identifier(): void {
-		Functions\when( 'esc_url_raw' )->justReturn( '' );
-
-		$result = $this->batch->resolve( array( 'not a path' ) );
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$result = $this->batch->resolve( array( 'http://example.com' ) );
 
 		$this->assertSame( array(), $result['resolved'] );
-		$this->assertSame( 'not a path', $result['failures'][0]['redirect'] );
+		$this->assertSame( 'http://example.com', $result['failures'][0]['redirect'] );
 	}
 }

@@ -791,6 +791,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::find_redirect
 	 */
 	public function test_find_redirect_returns_redirect_when_found(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
 		$this->repository
@@ -811,6 +812,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::find_redirect
 	 */
 	public function test_find_redirect_returns_null_when_not_found(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$this->repository
 			->shouldReceive( 'find_by_source' )
 			->once()
@@ -827,6 +829,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::find_redirect
 	 */
 	public function test_find_redirect_returns_null_for_invalid_url(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		// Invalid URL that throws InvalidArgumentException in SourceUrl::from_string().
 		$result = $this->resolver->find_redirect( '' );
 

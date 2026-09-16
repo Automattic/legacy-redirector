@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -323,7 +324,7 @@ final class RedirectFormPage {
 
 		// Create source URL object.
 		try {
-			$source = SourceUrl::from_string( $redirect_from );
+			$source = SourceUrl::from_string( $redirect_from, HomePath::current() );
 		} catch ( \InvalidArgumentException $e ) {
 			$this->redirect_with_error( $redirect_id, 'invalid_source', $redirect_from, $redirect_to, $redirect_status );
 		}

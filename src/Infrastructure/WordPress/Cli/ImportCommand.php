@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
@@ -177,7 +178,7 @@ final class ImportCommand extends WP_CLI_Command {
 	 */
 	private function process_row( string $redirect_from, string $redirect_to, ?string $status, string $mode, bool $validate, bool $dry_run ): array {
 		try {
-			$source = SourceUrl::from_string( $redirect_from );
+			$source = SourceUrl::from_string( $redirect_from, HomePath::current() );
 		} catch ( \InvalidArgumentException $e ) {
 			return $this->result_row( $redirect_from, $redirect_to, 'error', 'Invalid source: ' . $e->getMessage() );
 		}

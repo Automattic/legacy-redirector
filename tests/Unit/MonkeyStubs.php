@@ -35,7 +35,6 @@ class MonkeyStubs extends YoastTestCase {
 				'get_post_status' => static function ( $post ) {
 					return is_object( $post ) ? $post->post_status : false;
 				},
-				'esc_url_raw', // Return 1st param unchanged.
 			)
 		);
 	}

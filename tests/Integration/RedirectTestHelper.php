@@ -11,6 +11,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
@@ -93,7 +94,7 @@ trait RedirectTestHelper {
 	 */
 	protected function create_redirect( string $from, $to, bool $validate = false ): int {
 		$manager     = $this->manager();
-		$source      = SourceUrl::from_string( $from );
+		$source      = SourceUrl::from_string( $from, HomePath::current() );
 		$destination = Destination::from_mixed( $to );
 		$result      = $manager->create_redirect( $source, $destination, $validate );
 
@@ -134,7 +135,7 @@ trait RedirectTestHelper {
 	 */
 	protected function create_redirect_result( string $from, $to, bool $validate = false ) {
 		$manager     = $this->manager();
-		$source      = SourceUrl::from_string( $from );
+		$source      = SourceUrl::from_string( $from, HomePath::current() );
 		$destination = Destination::from_mixed( $to );
 
 		return $manager->create_redirect( $source, $destination, $validate );

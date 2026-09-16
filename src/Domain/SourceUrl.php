@@ -50,13 +50,19 @@ final class SourceUrl {
 	 * Accepts full URLs (with scheme/host) or paths. The URL is normalised
 	 * to just the path and query string components.
 	 *
-	 * @param string $url The URL or path to create a SourceUrl from.
+	 * @param string $url       The URL or path to create a SourceUrl from.
+	 * @param string $home_path The current site's home path without a trailing
+	 *                          slash (e.g. '/subsite1'), used to strip the
+	 *                          subsite prefix from full URLs on subdirectory
+	 *                          multisites. '' means home is at the domain root
+	 *                          and nothing is stripped. Callers with WordPress
+	 *                          available should pass HomePath::current().
 	 * @return self
 	 *
 	 * @throws InvalidArgumentException If the URL is empty, invalid, or cannot be parsed.
 	 */
-	public static function from_string( string $url ): self {
-		$normalised = self::normalise( $url );
+	public static function from_string( string $url, string $home_path = '' ): self {
+		$normalised = self::normalise( $url, $home_path );
 		return new self( $normalised );
 	}
 
@@ -70,14 +76,15 @@ final class SourceUrl {
 	 * that a source given as a full URL lands on the same subsite-relative
 	 * path an incoming request is looked up by. See strip_home_path().
 	 *
-	 * @param string $url URL to normalise.
+	 * @param string $url       URL to normalise.
+	 * @param string $home_path The site's home path ('' when at the domain root).
 	 * @return string Normalised URL (path + query).
 	 *
 	 * @throws InvalidArgumentException If the URL is invalid or cannot be parsed.
 	 */
-	private static function normalise( string $url ): string {
-		// Ensure path starts with / before sanitisation.
-		// Without this, esc_url_raw('path') becomes 'http://path' (treated as domain).
+	private static function normalise( string $url, string $home_path ): string {
+		// Ensure path starts with / before sanitisation, so a bare 'path' is
+		// treated as a path rather than a schemeless domain.
 		// REQUEST_URI always starts with /, so source paths must too.
 		// Full URLs (http/https) are allowed - the path will be extracted below.
 		$url = ltrim( $url );
@@ -86,7 +93,7 @@ final class SourceUrl {
 		}
 
 		// Sanitise the URL.
-		$url = esc_url_raw( $url );
+		$url = self::sanitise_url( $url );
 		if ( empty( $url ) ) {
 			throw new InvalidArgumentException( 'The URL does not validate.' );
 		}
@@ -105,7 +112,7 @@ final class SourceUrl {
 		// subsite it still carries the subsite prefix. A bare request URI never
 		// does, so the guard keeps the request hot path untouched.
 		if ( isset( $components['host'] ) ) {
-			$normalised = self::strip_home_path( $normalised );
+			$normalised = self::strip_home_path( $normalised, $home_path );
 		}
 
 		if ( ! empty( $components['query'] ) ) {
@@ -113,6 +120,88 @@ final class SourceUrl {
 		}
 
 		return $normalised;
+	}
+
+	/**
+	 * Sanitise a URL for storage, in pure PHP.
+	 *
+	 * A recreation of WordPress's esc_url_raw() - esc_url( $url, null, 'db' )
+	 * - specialised to the inputs this value object produces: a non-empty
+	 * input here always starts with '/' or 'http' (see normalise()).
+	 *
+	 * Output must stay byte-identical to esc_url_raw() for stored sources:
+	 * the md5 of the normalised path is the persisted lookup key
+	 * (post_name), so any drift here orphans existing redirects.
+	 *
+	 * Deliberate differences from core, none of which change the output for
+	 * an input core would accept:
+	 * - the `clean_url` filter is not applied;
+	 * - non-http(s) schemes are rejected outright rather than laundered
+	 *   through wp_kses_bad_protocol();
+	 * - a colonless non-path input is rejected instead of gaining an
+	 *   'http://' prefix (normalise() has already prefixed '/' onto any
+	 *   input that could take that branch);
+	 * - the mailto: exemption from CRLF stripping is dropped (a source can
+	 *   never be a mailto: link).
+	 *
+	 * @param string $url The URL to sanitise (already ltrimmed).
+	 * @return string The sanitised URL, or '' if nothing usable remains.
+	 */
+	private static function sanitise_url( string $url ): string {
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$url = str_replace( ' ', '%20', $url );
+		$url = (string) preg_replace( '|[^a-z0-9-~+_.?#=!&;,/:%@$\|*\'()\[\]\x80-\xff]|i', '', $url );
+
+		if ( '' === $url ) {
+			return '';
+		}
+
+		// Strip percent-encoded line breaks until none remain, as core's
+		// _deep_replace() does, so '%0%0dd' cannot reassemble into one.
+		$count = 1;
+		while ( $count > 0 ) {
+			$url = str_replace( array( '%0d', '%0a', '%0D', '%0A' ), '', $url, $count );
+		}
+
+		$url = str_replace( ';//', '://', $url );
+
+		// Square brackets are only valid in the authority (IPv6 hosts), so
+		// core percent-encodes any appearing after it.
+		if ( str_contains( $url, '[' ) || str_contains( $url, ']' ) ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- Pure PHP keeps the domain layer WordPress-free.
+			$parts = parse_url( $url );
+			$parts = false === $parts ? array() : $parts;
+
+			$front = isset( $parts['scheme'] ) ? $parts['scheme'] . '://' : ( str_starts_with( $url, '/' ) ? '//' : '' );
+			if ( isset( $parts['user'] ) ) {
+				$front .= $parts['user'];
+			}
+			if ( isset( $parts['pass'] ) ) {
+				$front .= ':' . $parts['pass'];
+			}
+			if ( isset( $parts['user'] ) || isset( $parts['pass'] ) ) {
+				$front .= '@';
+			}
+			$front .= ( $parts['host'] ?? '' ) . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' );
+
+			$end_dirty = str_replace( $front, '', $url );
+			$end_clean = str_replace( array( '[', ']' ), array( '%5B', '%5D' ), $end_dirty );
+			$url       = str_replace( $end_dirty, $end_clean, $url );
+		}
+
+		if ( str_starts_with( $url, '/' ) ) {
+			return $url;
+		}
+
+		// Core's wp_kses_bad_protocol() also lowercases the scheme.
+		if ( 1 !== preg_match( '#^(https?)://#i', $url, $matches ) ) {
+			return '';
+		}
+
+		return strtolower( $matches[1] ) . substr( $url, strlen( $matches[1] ) );
 	}
 
 	/**
@@ -131,15 +220,15 @@ final class SourceUrl {
 	 * match anything whatever host it came from.
 	 *
 	 * No-op on single sites and subdomain multisites, where the home path is
-	 * '/' and there is nothing to remove.
+	 * '' and there is nothing to remove.
 	 *
-	 * @param string $path The path component of a full URL.
+	 * @param string $path      The path component of a full URL.
+	 * @param string $home_path The site's home path, injected by the caller
+	 *                          because the domain layer cannot ask WordPress.
 	 * @return string The path relative to this site's home URL.
-	 *
-	 * @throws InvalidArgumentException If the site's home URL cannot be parsed.
 	 */
-	private static function strip_home_path( string $path ): string {
-		$home_path = rtrim( (string) ( self::mb_parse_url( home_url() )['path'] ?? '' ), '/' );
+	private static function strip_home_path( string $path, string $home_path ): string {
+		$home_path = rtrim( $home_path, '/' );
 
 		if ( '' === $home_path ) {
 			return $path;

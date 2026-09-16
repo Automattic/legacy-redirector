@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
@@ -103,7 +104,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 		$status = 'disabled' === ( $input['status'] ?? 'enabled' ) ? 'draft' : 'publish';
 
 		try {
-			$source      = SourceUrl::from_string( $from );
+			$source      = SourceUrl::from_string( $from, HomePath::current() );
 			$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
 		} catch ( \InvalidArgumentException $e ) {
 			return new WP_Error(

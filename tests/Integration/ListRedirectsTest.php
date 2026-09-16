@@ -20,6 +20,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager

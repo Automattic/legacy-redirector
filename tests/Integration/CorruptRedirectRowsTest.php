@@ -30,6 +30,7 @@ use Automattic\LegacyRedirector\Domain\ValidationIssueType;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
