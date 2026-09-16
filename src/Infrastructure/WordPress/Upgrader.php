@@ -80,7 +80,7 @@ final class Upgrader {
 	/**
 	 * Current data schema version.
 	 */
-	public const DB_VERSION = 3;
+	public const int DB_VERSION = 3;
 
 	/**
 	 * The first data version written under 2.0's rules.
@@ -89,22 +89,22 @@ final class Upgrader {
 	 * a home-path-prefixed source can be a deliberate double-prefix redirect,
 	 * so neither the publish pass nor the repath pass may touch them.
 	 */
-	private const FIRST_2_0_VERSION = 2;
+	private const int FIRST_2_0_VERSION = 2;
 
 	/**
 	 * Option holding the site's current data schema version.
 	 */
-	public const VERSION_OPTION = 'wpcom_legacy_redirector_db_version';
+	public const string VERSION_OPTION = 'wpcom_legacy_redirector_db_version';
 
 	/**
 	 * Option holding the GMT timestamp at which the upgrade began.
 	 */
-	private const STARTED_OPTION = 'wpcom_legacy_redirector_upgrade_started_gmt';
+	private const string STARTED_OPTION = 'wpcom_legacy_redirector_upgrade_started_gmt';
 
 	/**
 	 * Option holding how far through the redirect set the upgrade has reached.
 	 */
-	private const CURSOR_OPTION = 'wpcom_legacy_redirector_upgrade_cursor';
+	private const string CURSOR_OPTION = 'wpcom_legacy_redirector_upgrade_cursor';
 
 	/**
 	 * Redirects processed per batch when running on a web request.
@@ -112,7 +112,7 @@ final class Upgrader {
 	 * Deliberately modest: this runs on `init`, so the cost lands on whichever
 	 * visitor happens to trigger it.
 	 */
-	public const BATCH_SIZE = 100;
+	public const int BATCH_SIZE = 100;
 
 	/**
 	 * Whether this site still has upgrade work outstanding.

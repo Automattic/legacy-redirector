@@ -23,7 +23,7 @@ final class PostType {
 	/**
 	 * The redirect custom post type slug.
 	 */
-	public const POST_TYPE = 'vip-legacy-redirect';
+	public const string POST_TYPE = 'vip-legacy-redirect';
 
 	/**
 	 * Register the post type.

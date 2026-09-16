@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
  */
 final class SearchPostsHandler {
 
-	private const ACTION = 'search_posts_for_redirect';
+	private const string ACTION = 'search_posts_for_redirect';
 
 	/**
 	 * Register the AJAX action.

@@ -31,7 +31,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	/**
 	 * The custom post type slug.
 	 */
-	public const POST_TYPE = PostType::POST_TYPE;
+	public const string POST_TYPE = PostType::POST_TYPE;
 
 	/**
 	 * Find a redirect by its source URL.

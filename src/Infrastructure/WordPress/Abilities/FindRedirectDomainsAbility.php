@@ -22,7 +22,7 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	 *
 	 * @var int
 	 */
-	private const PAGE_SIZE = 500;
+	private const int PAGE_SIZE = 500;
 
 	/**
 	 * The query repository.

@@ -25,7 +25,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	 *
 	 * @var int
 	 */
-	private const MAX_LIMIT = 1000;
+	private const int MAX_LIMIT = 1000;
 
 	/**
 	 * The query repository.

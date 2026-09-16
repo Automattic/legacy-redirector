@@ -24,7 +24,7 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * Larger than the web-request batch size: WP-CLI has no request timeout to
 	 * worry about, and the round trips dominate on big redirect sets.
 	 */
-	private const BATCH_SIZE = 500;
+	private const int BATCH_SIZE = 500;
 
 	/**
 	 * The upgrade routine.

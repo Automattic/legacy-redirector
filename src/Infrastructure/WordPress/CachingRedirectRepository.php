@@ -35,7 +35,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 *
 	 * Version suffix allows cache busting when schema changes.
 	 */
-	public const CACHE_GROUP = 'vip-legacy-redirect-3';
+	public const string CACHE_GROUP = 'vip-legacy-redirect-3';
 
 	/**
 	 * Expiry, in seconds, for negative ("no redirect exists") cache entries.
@@ -46,7 +46,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * instead. Without this, arbitrary 404 traffic would fill the object cache
 	 * permanently and evict useful entries.
 	 */
-	public const NEGATIVE_CACHE_TTL = 300;
+	public const int NEGATIVE_CACHE_TTL = 300;
 
 	/**
 	 * The inner repository to delegate to.

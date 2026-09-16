@@ -28,7 +28,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	/**
 	 * LIKE pattern matching internal relative-path destinations.
 	 */
-	private const PATH_LIKE = '/%';
+	private const string PATH_LIKE = '/%';
 
 	/**
 	 * LIKE pattern matching external (absolute URL) destinations.
@@ -36,7 +36,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * Internal absolute URLs are normalised to relative paths on save (and by
 	 * the v3 migration), so anything stored absolute is external.
 	 */
-	private const EXTERNAL_LIKE = 'http%';
+	private const string EXTERNAL_LIKE = 'http%';
 
 	/**
 	 * Build the SQL WHERE fragment classifying redirects by destination kind.

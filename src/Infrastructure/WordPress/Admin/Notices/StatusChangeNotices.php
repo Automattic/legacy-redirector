@@ -24,7 +24,7 @@ final class StatusChangeNotices {
 	 *
 	 * @var array<string, bool|string>
 	 */
-	private const NOTICE_ARGS = array(
+	private const array NOTICE_ARGS = array(
 		'type'        => 'success',
 		'id'          => 'message',
 		'dismissible' => true,

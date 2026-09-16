@@ -23,7 +23,7 @@ final class ListRedirectsAbility implements AbilityInterface {
 	 *
 	 * @var int
 	 */
-	private const MAX_LIMIT = 200;
+	private const int MAX_LIMIT = 200;
 
 	/**
 	 * The query repository.

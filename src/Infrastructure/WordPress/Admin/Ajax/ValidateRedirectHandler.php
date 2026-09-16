@@ -18,7 +18,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
  */
 final class ValidateRedirectHandler {
 
-	private const ACTION = 'validate_redirect';
+	private const string ACTION = 'validate_redirect';
 
 	/**
 	 * Repository for redirect lookups.

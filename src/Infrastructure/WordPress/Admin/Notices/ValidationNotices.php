@@ -27,7 +27,7 @@ final class ValidationNotices {
 	 *
 	 * @var array<string, bool|string>
 	 */
-	private const ERROR_NOTICE_ARGS = array(
+	private const array ERROR_NOTICE_ARGS = array(
 		'type'        => 'error',
 		'id'          => 'message',
 		'dismissible' => true,
@@ -38,7 +38,7 @@ final class ValidationNotices {
 	 *
 	 * @var array<string, bool|string>
 	 */
-	private const SUCCESS_NOTICE_ARGS = array(
+	private const array SUCCESS_NOTICE_ARGS = array(
 		'type'        => 'success',
 		'id'          => 'message',
 		'dismissible' => true,
