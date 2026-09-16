@@ -150,7 +150,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 
 		$result = $this->batch->apply(
 			$input['redirects'] ?? array(),
-			function ( Redirect $redirect ) use ( $destination, $status ): bool {
+			function ( Redirect $redirect ) use ( $destination, $status ) {
 				$redirect_id = (int) $redirect->id();
 
 				return null !== $destination

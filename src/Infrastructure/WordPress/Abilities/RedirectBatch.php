@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 
 /**
@@ -87,8 +88,8 @@ final class RedirectBatch {
 	 * Resolve identifiers and act on each redirect that resolves.
 	 *
 	 * @param array<int, string|int> $identifiers    Redirect IDs or source paths.
-	 * @param callable               $action         Receives a Redirect, returns true when the change was made.
-	 * @param string                 $failure_reason Reason to report when the action does not succeed.
+	 * @param callable               $action         Receives a Redirect, returns true or a successful RedirectCreationResult when the change was made.
+	 * @param string                 $failure_reason Reason to report when the action fails without a message of its own.
 	 * @return array{changed: int, failures: array<int, array{redirect: string, reason: string}>}
 	 */
 	public function apply( array $identifiers, callable $action, string $failure_reason ): array {
@@ -97,10 +98,14 @@ final class RedirectBatch {
 		$changed  = 0;
 
 		foreach ( $batch['resolved'] as $item ) {
-			if ( ! $action( $item['redirect'] ) ) {
+			$outcome = $action( $item['redirect'] );
+			$success = $outcome instanceof RedirectCreationResult ? $outcome->is_success() : (bool) $outcome;
+
+			if ( ! $success ) {
+				$reason     = $outcome instanceof RedirectCreationResult ? $outcome->error_message() : null;
 				$failures[] = array(
 					'redirect' => $item['identifier'],
-					'reason'   => $failure_reason,
+					'reason'   => $reason ?? $failure_reason,
 				);
 				continue;
 			}

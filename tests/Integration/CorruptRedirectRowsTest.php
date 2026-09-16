@@ -156,12 +156,13 @@ final class CorruptRedirectRowsTest extends TestCase {
 		$post_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
 
 		$this->assertFalse( $this->manager()->disable( $post_id ) );
-		$this->assertFalse(
-			$this->manager()->update_destination(
-				$post_id,
-				Destination::from_url( DestinationUrl::from_string( '/somewhere' ) )
-			)
+
+		$result = $this->manager()->update_destination(
+			$post_id,
+			Destination::from_url( DestinationUrl::from_string( '/somewhere' ) )
 		);
+		$this->assertTrue( $result->is_error() );
+		$this->assertSame( 'corrupt-redirect', $result->error_code() );
 
 		// The stored row is untouched.
 		$post = get_post( $post_id );
@@ -194,7 +195,7 @@ final class CorruptRedirectRowsTest extends TestCase {
 			Destination::from_url( DestinationUrl::from_string( '/repaired-destination' ) )
 		);
 
-		$this->assertTrue( $updated );
+		$this->assertTrue( $updated->is_success() );
 
 		$repaired = $this->repository()->find_by_id( $post_id );
 		$this->assertFalse( $repaired->is_corrupt() );
@@ -225,7 +226,7 @@ final class CorruptRedirectRowsTest extends TestCase {
 			Destination::from_url( DestinationUrl::from_string( 'https://example.com/reimported' ) )
 		);
 
-		$this->assertTrue( $updated );
+		$this->assertTrue( $updated->is_success() );
 
 		$repaired = $this->repository()->find_by_id( $post_id );
 		$this->assertFalse( $repaired->is_corrupt() );

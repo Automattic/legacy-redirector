@@ -10,9 +10,9 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Application;
 
 /**
- * Result object for redirect creation operations.
+ * Result object for redirect creation and update operations.
  *
- * Encapsulates either a successful creation (with redirect ID) or
+ * Encapsulates either a successful write (with redirect ID) or
  * a validation/error failure with details.
  */
 final class RedirectCreationResult {

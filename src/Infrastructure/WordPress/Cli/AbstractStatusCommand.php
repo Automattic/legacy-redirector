@@ -64,8 +64,15 @@ abstract class AbstractStatusCommand extends WP_CLI_Command {
 				continue;
 			}
 
-			if ( null === $redirect || ! $this->manager->change_status( $redirect->id(), $post_status ) ) {
+			if ( null === $redirect ) {
 				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
+				++$failed;
+				continue;
+			}
+
+			$result = $this->manager->change_status( $redirect->id(), $post_status );
+			if ( $result->is_error() ) {
+				WP_CLI::warning( sprintf( 'Could not update redirect: %s (%s)', $identifier, $result->error_message() ) );
 				++$failed;
 				continue;
 			}

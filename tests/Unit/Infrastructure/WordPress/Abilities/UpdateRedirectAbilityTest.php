@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -113,7 +114,7 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 	public function test_execute_changes_status_without_a_destination(): void {
 		$this->given_redirect( 4 );
 
-		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'draft' )->andReturn( true );
+		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'draft' )->andReturn( RedirectCreationResult::success( 1 ) );
 		$this->manager->shouldNotReceive( 'update_destination' );
 
 		$result = $this->ability->execute(
@@ -138,7 +139,7 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		$this->manager->shouldReceive( 'update_destination' )
 			->once()
 			->with( 4, Mockery::type( Destination::class ), 'publish' )
-			->andReturn( true );
+			->andReturn( RedirectCreationResult::success( 1 ) );
 
 		$result = $this->ability->execute(
 			array(
@@ -160,7 +161,7 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		$this->given_redirect( 4 );
 		$this->repository->shouldReceive( 'find_by_id' )->with( 9 )->andReturn( null );
 
-		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'publish' )->andReturn( false );
+		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'publish' )->andReturn( RedirectCreationResult::error( 'save-failed', 'Could not save.' ) );
 
 		$result = $this->ability->execute(
 			array(

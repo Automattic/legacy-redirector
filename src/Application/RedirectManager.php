@@ -155,7 +155,7 @@ class RedirectManager {
 	 * @return bool True on success, false on failure.
 	 */
 	public function enable( int $redirect_id ): bool {
-		return $this->change_status( $redirect_id, 'publish' );
+		return $this->change_status( $redirect_id, 'publish' )->is_success();
 	}
 
 	/**
@@ -165,7 +165,7 @@ class RedirectManager {
 	 * @return bool True on success, false on failure.
 	 */
 	public function disable( int $redirect_id ): bool {
-		return $this->change_status( $redirect_id, 'draft' );
+		return $this->change_status( $redirect_id, 'draft' )->is_success();
 	}
 
 	/**
@@ -177,12 +177,16 @@ class RedirectManager {
 	 *
 	 * @param int    $redirect_id The redirect ID.
 	 * @param string $new_status  The new status ('publish' or 'draft').
-	 * @return bool True on success, false on failure.
+	 * @return RedirectCreationResult The result carrying the redirect ID or the failure details.
 	 */
-	public function change_status( int $redirect_id, string $new_status ): bool {
+	public function change_status( int $redirect_id, string $new_status ): RedirectCreationResult {
 		$redirect = $this->repository->find_by_id( $redirect_id );
-		if ( null === $redirect || $redirect->is_corrupt() ) {
-			return false;
+		if ( null === $redirect ) {
+			return $this->not_found( $redirect_id );
+		}
+
+		if ( $redirect->is_corrupt() ) {
+			return $this->corrupt( $redirect_id );
 		}
 
 		$updated = $redirect->with_status( $new_status );
@@ -221,7 +225,7 @@ class RedirectManager {
 		$updated = 0;
 
 		foreach ( $redirect_ids as $redirect_id ) {
-			if ( $this->change_status( (int) $redirect_id, $new_status ) ) {
+			if ( $this->change_status( (int) $redirect_id, $new_status )->is_success() ) {
 				++$updated;
 			}
 		}
@@ -236,20 +240,27 @@ class RedirectManager {
 	 * @param Destination $destination The new destination.
 	 * @param string|null $new_status  Optional new status.
 	 * @param bool        $validate    Whether to validate the update (default true).
-	 * @return bool True on success, false on failure or when validation rejects the update.
+	 * @return RedirectCreationResult The result carrying the redirect ID or the failure details.
 	 */
-	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null, bool $validate = true ): bool {
+	public function update_destination( int $redirect_id, Destination $destination, ?string $new_status = null, bool $validate = true ): RedirectCreationResult {
 		$redirect = $this->repository->find_by_id( $redirect_id );
+		if ( null === $redirect ) {
+			return $this->not_found( $redirect_id );
+		}
+
 		// Refused for corrupt redirects: the stored source is unreadable, so
 		// there is nothing trustworthy to keep. Use update_redirect() instead.
-		if ( null === $redirect || $redirect->is_corrupt() ) {
-			return false;
+		if ( $redirect->is_corrupt() ) {
+			return $this->corrupt( $redirect_id );
 		}
 
 		$updated = $redirect->with_destination( $destination );
 
-		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
-			return false;
+		if ( $validate ) {
+			$validation = $this->validator()->validate( $updated );
+			if ( $validation->is_invalid() ) {
+				return RedirectCreationResult::from_validation( $validation );
+			}
 		}
 
 		$updated = $this->with_normalised_destination( $updated );
@@ -272,26 +283,29 @@ class RedirectManager {
 	 * @param Destination $destination  The new destination.
 	 * @param string|null $new_status   Optional new status.
 	 * @param bool        $validate     Whether to validate the update (default true).
-	 * @return bool True on success, false on failure or when validation rejects the update.
+	 * @return RedirectCreationResult The result carrying the redirect ID or the failure details.
 	 */
-	public function update_redirect( int $redirect_id, string $new_source, Destination $destination, ?string $new_status = null, bool $validate = true ): bool {
+	public function update_redirect( int $redirect_id, string $new_source, Destination $destination, ?string $new_status = null, bool $validate = true ): RedirectCreationResult {
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
-			return false;
+			return $this->not_found( $redirect_id );
 		}
 
 		// Create new source URL.
 		try {
 			$source = SourceUrl::from_string( $new_source );
 		} catch ( \InvalidArgumentException $e ) {
-			return false;
+			return RedirectCreationResult::error( 'invalid-source', $e->getMessage() );
 		}
 
 		// Build updated redirect.
 		$updated = $this->with_new_mapping( $redirect, $source, $destination );
 
-		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
-			return false;
+		if ( $validate ) {
+			$validation = $this->validator()->validate( $updated );
+			if ( $validation->is_invalid() ) {
+				return RedirectCreationResult::from_validation( $validation );
+			}
 		}
 
 		$updated = $this->with_normalised_destination( $updated );
@@ -347,12 +361,19 @@ class RedirectManager {
 	 * @param Destination $destination The new destination.
 	 * @param string|null $status      Optional new status ('publish' or 'draft'). If null, preserves existing.
 	 * @param bool        $validate    Whether to validate the update (default true).
-	 * @return bool True if updated, false if not found, invalid, or the update failed.
+	 * @return RedirectCreationResult The result carrying the redirect ID or the failure details.
 	 */
-	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null, bool $validate = true ): bool {
+	public function update_by_source( SourceUrl $source, Destination $destination, ?string $status = null, bool $validate = true ): RedirectCreationResult {
 		$redirect = $this->find_any_by_source( $source );
 		if ( null === $redirect ) {
-			return false;
+			return RedirectCreationResult::error(
+				'not-found',
+				sprintf(
+					/* translators: %s: source path. */
+					__( 'No redirect found for source: %s', 'wpcom-legacy-redirector' ),
+					$source->path()
+				)
+			);
 		}
 
 		// The caller supplies both source and destination, so this also
@@ -360,8 +381,11 @@ class RedirectManager {
 		// recovery for a botched migration.
 		$updated = $this->with_new_mapping( $redirect, $source, $destination );
 
-		if ( $validate && $this->validator()->validate( $updated )->is_invalid() ) {
-			return false;
+		if ( $validate ) {
+			$validation = $this->validator()->validate( $updated );
+			if ( $validation->is_invalid() ) {
+				return RedirectCreationResult::from_validation( $validation );
+			}
 		}
 
 		$updated = $this->with_normalised_destination( $updated );
@@ -436,17 +460,51 @@ class RedirectManager {
 	}
 
 	/**
-	 * Persist an updated redirect, swallowing persistence failures.
+	 * Persist an updated redirect.
 	 *
 	 * @param Redirect $updated The redirect to save.
-	 * @return bool True on success, false on failure.
+	 * @return RedirectCreationResult The result carrying the redirect ID or the failure details.
 	 */
-	private function persist( Redirect $updated ): bool {
+	private function persist( Redirect $updated ): RedirectCreationResult {
 		try {
-			$this->repository->save( $updated );
-			return true;
+			$saved = $this->repository->save( $updated );
+			return RedirectCreationResult::success( (int) $saved->id() );
 		} catch ( \Exception $e ) {
-			return false;
+			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
 		}
+	}
+
+	/**
+	 * Build a not-found error result for a redirect ID.
+	 *
+	 * @param int $redirect_id The redirect ID that did not resolve.
+	 * @return RedirectCreationResult The error result.
+	 */
+	private function not_found( int $redirect_id ): RedirectCreationResult {
+		return RedirectCreationResult::error(
+			'not-found',
+			sprintf(
+				/* translators: %d: redirect ID. */
+				__( 'No redirect found with ID %d.', 'wpcom-legacy-redirector' ),
+				$redirect_id
+			)
+		);
+	}
+
+	/**
+	 * Build a corrupt-redirect error result for a redirect ID.
+	 *
+	 * @param int $redirect_id The corrupt redirect's ID.
+	 * @return RedirectCreationResult The error result.
+	 */
+	private function corrupt( int $redirect_id ): RedirectCreationResult {
+		return RedirectCreationResult::error(
+			'corrupt-redirect',
+			sprintf(
+				/* translators: %d: redirect ID. */
+				__( 'Redirect %d is corrupt and cannot be re-saved. Delete it, or update it with a full new source and destination.', 'wpcom-legacy-redirector' ),
+				$redirect_id
+			)
+		);
 	}
 }

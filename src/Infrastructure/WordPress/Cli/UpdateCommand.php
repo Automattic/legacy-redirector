@@ -130,8 +130,8 @@ final class UpdateCommand extends WP_CLI_Command {
 				? $this->manager->update_destination( $redirect->id(), $destination, $post_status )
 				: $this->manager->change_status( $redirect->id(), $post_status );
 
-			if ( ! $result ) {
-				WP_CLI::warning( sprintf( 'Could not update redirect: %s', $identifier ) );
+			if ( $result->is_error() ) {
+				WP_CLI::warning( sprintf( 'Could not update redirect: %s (%s)', $identifier, $result->error_message() ) );
 				++$failed;
 				continue;
 			}
