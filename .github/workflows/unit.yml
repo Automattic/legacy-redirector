@@ -34,9 +34,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - php: '8.2'
-            allowed_failure: false
-            coverage: none
           - php: '8.3'
             allowed_failure: false
             coverage: none

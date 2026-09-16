@@ -11,8 +11,8 @@ Handles redirects for legacy WordPress.com URLs.
 | **Namespace** | `Automattic\LegacyRedirector` |
 | **Source directory** | `src/` |
 | **Version** | 2.0.0-alpha |
-| **Requires PHP** | 8.2+ |
-| **Requires WP** | 6.4+ |
+| **Requires PHP** | 8.3+ |
+| **Requires WP** | 6.8+ |
 
 ### Directory Structure
 
