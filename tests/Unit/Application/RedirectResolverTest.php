@@ -29,6 +29,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class RedirectResolverTest extends MonkeyStubs {
@@ -369,6 +370,40 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 302, $result['status_code'] );
+	}
+
+	/**
+	 * Test get_redirect_data normalises an invalid filtered status code to the default.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_normalises_invalid_status_code(): void {
+		$this->stub_home_url();
+		$redirect = $this->create_redirect( '/old-page', '/new-page' );
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+			->once()
+			->andReturnFirstArg();
+
+		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+			->once()
+			->andReturn( array() );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->andReturn( $redirect );
+
+		// Filter returns a non-redirect status code.
+		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+			->once()
+			->with( 301, '/old-page' )
+			->andReturn( 200 );
+
+		$result = $this->resolver->get_redirect_data( '/old-page' );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 301, $result['status_code'] );
 	}
 
 	// =========================================================================

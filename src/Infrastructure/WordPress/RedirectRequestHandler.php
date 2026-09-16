@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
 use Automattic\LegacyRedirector\Application\RedirectResolver;
+use Automattic\LegacyRedirector\Domain\RedirectStatus;
 
 /**
  * Performs HTTP redirects for the current front-end request.
@@ -108,7 +109,8 @@ final class RedirectRequestHandler {
 		/**
 		 * Filter the Cache-Control max-age sent with redirect responses.
 		 *
-		 * Defaults to one day for 301 redirects and one minute otherwise.
+		 * Defaults to one day for permanent redirects (301, 308) and one
+		 * minute otherwise.
 		 * Return zero or a negative number to suppress the header, e.g.
 		 * where an edge cache manages redirect caching instead.
 		 *
@@ -120,7 +122,7 @@ final class RedirectRequestHandler {
 		 */
 		$max_age = (int) apply_filters(
 			'wpcom_legacy_redirector_redirect_max_age',
-			301 === $status_code ? DAY_IN_SECONDS : MINUTE_IN_SECONDS,
+			RedirectStatus::from( $status_code )->is_permanent() ? DAY_IN_SECONDS : MINUTE_IN_SECONDS,
 			$url,
 			$status_code
 		);

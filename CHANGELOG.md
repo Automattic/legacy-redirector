@@ -46,6 +46,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Changed
 
+- The `wpcom_legacy_redirector_redirect_status` filter now validates its result: values that are not a valid HTTP redirect status code (301, 302, 303, 307, 308) are replaced with the default 301 instead of being passed to `wp_safe_redirect()`. The Cache-Control max-age default also now treats 308 as permanent (one day), not just 301.
 - Redirect creation is now allowed for any user with the `manage_redirects` capability, wherever the request arrives from — including the REST API and Abilities/MCP clients. Previously the gate allowed any admin-context request regardless of capability, and blocked everything else (including capable users) unless the `wpcom_legacy_redirector_allow_insert` filter opted in. The filter still governs creation from contexts with no capable user, such as unauthenticated front-end code.
 - Rename `verify` command to `validate` and use `from`/`to` terminology in CLI output for consistency with UI.
 - Validation enabled by default for the `create` CLI command (previously skipped).
