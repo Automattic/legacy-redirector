@@ -9,9 +9,10 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
-use Automattic\LegacyRedirector\Application\RedirectFetcher;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -19,6 +20,8 @@ use WP_CLI_Command;
  * Update one or more redirects.
  */
 final class UpdateCommand extends WP_CLI_Command {
+
+	use ReportsBatchFailures;
 
 	/**
 	 * The redirect manager.
@@ -28,21 +31,21 @@ final class UpdateCommand extends WP_CLI_Command {
 	private RedirectManager $manager;
 
 	/**
-	 * The redirect fetcher.
+	 * The batch resolver.
 	 *
-	 * @var RedirectFetcher
+	 * @var RedirectBatch
 	 */
-	private RedirectFetcher $fetcher;
+	private RedirectBatch $batch;
 
 	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
-	 * @param RedirectFetcher $fetcher The redirect fetcher.
+	 * @param RedirectBatch   $batch   The batch resolver.
 	 */
-	public function __construct( RedirectManager $manager, RedirectFetcher $fetcher ) {
+	public function __construct( RedirectManager $manager, RedirectBatch $batch ) {
 		$this->manager = $manager;
-		$this->fetcher = $fetcher;
+		$this->batch   = $batch;
 	}
 
 	/**
@@ -108,36 +111,15 @@ final class UpdateCommand extends WP_CLI_Command {
 			$post_status = 'disabled' === $status_flag ? 'draft' : 'publish';
 		}
 
-		$updated = 0;
-		$failed  = 0;
-
-		foreach ( $args as $identifier ) {
-			try {
-				$redirect = $this->fetcher->fetch( $identifier );
-			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::warning( sprintf( 'Invalid source path: %s (%s)', $identifier, $e->getMessage() ) );
-				++$failed;
-				continue;
-			}
-
-			if ( null === $redirect ) {
-				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
-				++$failed;
-				continue;
-			}
-
-			$result = null !== $destination
+		$items = $this->batch->apply(
+			$args,
+			fn( Redirect $redirect ) => null !== $destination
 				? $this->manager->update_destination( $redirect->id(), $destination, $post_status )
-				: $this->manager->change_status( $redirect->id(), $post_status );
+				: $this->manager->change_status( $redirect->id(), $post_status )
+		);
 
-			if ( $result->is_error() ) {
-				WP_CLI::warning( sprintf( 'Could not update redirect: %s (%s)', $identifier, $result->error_message() ) );
-				++$failed;
-				continue;
-			}
-
-			++$updated;
-		}
+		$updated = $this->report_batch_failures( $items, 'update' );
+		$failed  = count( $items ) - $updated;
 
 		if ( $failed > 0 ) {
 			WP_CLI::error( sprintf( 'Only updated %d of %d redirects.', $updated, count( $args ) ) );

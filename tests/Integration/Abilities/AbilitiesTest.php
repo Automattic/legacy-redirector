@@ -22,12 +22,12 @@ use WP_Ability;
  * permission callbacks are enforced.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\DeleteRedirectAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
@@ -35,6 +35,7 @@ use WP_Ability;
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager

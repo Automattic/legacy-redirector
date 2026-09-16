@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\EnableCommand;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 
 /**
@@ -19,6 +20,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\AbstractStatusCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -51,7 +53,7 @@ final class EnableCommandTest extends CliTestCase {
 
 		$this->command = new EnableCommand(
 			$this->manager(),
-			new RedirectFetcher( $this->repository() )
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) )
 		);
 	}
 

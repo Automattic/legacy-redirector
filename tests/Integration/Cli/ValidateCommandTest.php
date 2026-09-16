@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 
@@ -20,6 +21,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -53,7 +55,7 @@ final class ValidateCommandTest extends CliTestCase {
 		parent::set_up();
 
 		$this->command = new ValidateCommand(
-			new RedirectFetcher( $this->repository() ),
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
 			$this->query_repository(),
 			new RedirectAuditor(),
 			$this->manager()

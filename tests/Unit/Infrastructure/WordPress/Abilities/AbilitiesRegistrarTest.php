@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
@@ -29,7 +30,9 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
@@ -54,9 +57,12 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 
 		Functions\when( '__' )->returnArg( 1 );
 
+		$fetcher = new RedirectFetcher( Mockery::mock( RedirectRepositoryInterface::class ) );
+
 		$this->registrar = new AbilitiesRegistrar(
 			Mockery::mock( RedirectManager::class ),
-			new RedirectFetcher( Mockery::mock( RedirectRepositoryInterface::class ) ),
+			$fetcher,
+			new RedirectBatch( $fetcher ),
 			Mockery::mock( RedirectQueryRepositoryInterface::class ),
 			Mockery::mock( RedirectAuditor::class )
 		);

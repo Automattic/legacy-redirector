@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 
 /**
@@ -18,6 +19,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -48,7 +50,7 @@ final class DeleteCommandTest extends CliTestCase {
 
 		$this->command = new DeleteCommand(
 			$this->manager(),
-			new RedirectFetcher( $this->repository() )
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) )
 		);
 	}
 

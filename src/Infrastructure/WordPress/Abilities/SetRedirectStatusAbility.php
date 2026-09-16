@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -117,15 +118,14 @@ final class SetRedirectStatusAbility implements AbilityInterface {
 		$input       = is_array( $input ) ? $input : array();
 		$post_status = 'disabled' === ( $input['status'] ?? '' ) ? 'draft' : 'publish';
 
-		$result = $this->batch->apply(
+		$items = $this->batch->apply(
 			$input['redirects'] ?? array(),
-			fn( Redirect $redirect ) => $this->manager->change_status( (int) $redirect->id(), $post_status ),
-			__( 'The redirect status could not be changed.', 'wpcom-legacy-redirector' )
+			fn( Redirect $redirect ) => $this->manager->change_status( (int) $redirect->id(), $post_status )
 		);
 
 		return array(
-			'updated' => $result['changed'],
-			'failed'  => $result['failures'],
+			'updated' => RedirectBatch::count_succeeded( $items ),
+			'failed'  => BatchFailures::format( $items, __( 'The redirect status could not be changed.', 'wpcom-legacy-redirector' ) ),
 		);
 	}
 }
