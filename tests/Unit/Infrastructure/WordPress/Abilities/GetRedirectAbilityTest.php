@@ -110,9 +110,7 @@ final class GetRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility::execute
 	 */
 	public function test_execute_returns_an_error_for_an_invalid_identifier(): void {
-		Functions\when( 'esc_url_raw' )->justReturn( '' );
-
-		$result = $this->ability->execute( array( 'redirect' => 'not a path' ) );
+		$result = $this->ability->execute( array( 'redirect' => 'http://example.com' ) );
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'wpcom_legacy_redirector_invalid_identifier', $result->get_error_code() );

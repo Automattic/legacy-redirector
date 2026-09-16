@@ -138,13 +138,11 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_rejects_an_invalid_source(): void {
-		Functions\when( 'esc_url_raw' )->justReturn( '' );
-
 		$this->manager->shouldNotReceive( 'create_redirect' );
 
 		$result = $this->ability->execute(
 			array(
-				'from' => 'nonsense',
+				'from' => 'http://example.com',
 				'to'   => '/new-page',
 			)
 		);

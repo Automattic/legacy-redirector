@@ -151,11 +151,9 @@ final class RedirectBatchTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch::resolve
 	 */
 	public function test_resolve_reports_an_invalid_identifier(): void {
-		Functions\when( 'esc_url_raw' )->justReturn( '' );
-
-		$result = $this->batch->resolve( array( 'not a path' ) );
+		$result = $this->batch->resolve( array( 'http://example.com' ) );
 
 		$this->assertSame( array(), $result['resolved'] );
-		$this->assertSame( 'not a path', $result['failures'][0]['redirect'] );
+		$this->assertSame( 'http://example.com', $result['failures'][0]['redirect'] );
 	}
 }

@@ -459,4 +459,63 @@ final class SourceUrlTest extends MonkeyStubs {
 		// Latin-1 bytes, not valid UTF-8.
 		SourceUrl::from_string( "/caf\xE9" );
 	}
+
+	// =========================================================================
+	// Sanitisation (previously delegated to esc_url_raw, now pure PHP)
+	// =========================================================================
+
+	/**
+	 * Test characters outside the URL-safe set are stripped.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_disallowed_characters(): void {
+		$source = SourceUrl::from_string( '/pa"ge<b>' );
+
+		$this->assertSame( '/pageb', $source->path() );
+	}
+
+	/**
+	 * Test percent-encoded line breaks are removed, even when nested.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_strips_encoded_line_breaks(): void {
+		$source = SourceUrl::from_string( '/page%0D%0A?a=b' );
+
+		$this->assertSame( '/page?a=b', $source->path() );
+
+		// Stripping one layer must not reassemble another (%0%0dd -> %0d).
+		$nested = SourceUrl::from_string( '/page%0%0dd' );
+
+		$this->assertSame( '/page', $nested->path() );
+	}
+
+	/**
+	 * Test a non-http(s) scheme is rejected.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_rejects_non_http_scheme(): void {
+		$this->expectException( InvalidArgumentException::class );
+		$this->expectExceptionMessage( 'The URL does not validate.' );
+
+		SourceUrl::from_string( 'httpfoo://example.com/old-page' );
+	}
+
+	/**
+	 * Test a percent-encoded path normalises identically to its decoded form.
+	 *
+	 * Sources arrive both ways (a browser-copied URL is encoded, a hand-typed
+	 * one is not) and must land on the same stored hash to match at all.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_normalises_encoded_and_decoded_forms_identically(): void {
+		$encoded = SourceUrl::from_string( '/my%20page' );
+		$decoded = SourceUrl::from_string( '/my page' );
+
+		$this->assertSame( $decoded->path(), $encoded->path() );
+		$this->assertSame( $decoded->hash(), $encoded->hash() );
+	}
 }
