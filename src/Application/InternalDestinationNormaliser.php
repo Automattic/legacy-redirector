@@ -11,9 +11,10 @@ namespace Automattic\LegacyRedirector\Application;
 
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\Url;
 
 /**
- * Rewrites absolute destination URLs that point at this site to relative paths.
+ * Rewrites internal destinations to one canonical stored form.
  *
  * The same internal destination can be entered as '/foo' or as
  * 'https://example.com/foo'. Storing both forms makes the list table
@@ -21,6 +22,15 @@ use Automattic\LegacyRedirector\Domain\DestinationUrl;
  * distinguishes internal from external destinations to guess from the stored
  * string. Normalising to the relative form on save means anything stored
  * absolute is external by construction.
+ *
+ * Encoding is canonicalised as well, because '/café' and '/caf%C3%A9' are two
+ * spellings of one target and used to be stored as whichever was typed. The
+ * canonical form decodes the path and fragment - the parts a human reads in
+ * the list table - and keeps the query percent-encoded: query values have
+ * sub-structure, so decoding a literal '%26' into '&' would turn one value
+ * into two parameters. WordPress re-encodes non-ASCII on the way out through
+ * wp_sanitize_redirect(), so a decoded stored path still emits a valid
+ * Location header.
  *
  * The scheme is deliberately ignored ('http://example.com/foo' also becomes
  * '/foo'): the redirect then follows whatever scheme the site canonically
@@ -45,18 +55,45 @@ final class InternalDestinationNormaliser {
 	 * Normalise a destination to its canonical stored form.
 	 *
 	 * @param Destination $destination The destination as entered.
-	 * @return Destination The destination with internal absolute URLs made relative.
+	 * @return Destination The destination with internal URLs in canonical form.
 	 */
 	public function normalise( Destination $destination ): Destination {
-		if ( ! $destination->is_url() || $destination->as_url()->is_relative() ) {
+		if ( ! $destination->is_url() ) {
 			return $destination;
 		}
 
-		$path = $this->to_internal_path( $destination->as_url()->value() );
+		$value = $destination->as_url()->value();
 
-		return null === $path
+		$path = $destination->as_url()->is_relative()
+			? $this->canonicalise( $value )
+			: $this->to_internal_path( $value );
+
+		return null === $path || $path === $value
 			? $destination
 			: Destination::from_url( DestinationUrl::from_string( $path ) );
+	}
+
+	/**
+	 * The canonical stored form of a site-relative destination.
+	 *
+	 * Path and fragment decoded, query kept percent-encoded, so
+	 *
+	 *     /caf%C3%A9?tag=caf%C3%A9#caf%C3%A9  ->  /café?tag=caf%C3%A9#café
+	 *
+	 * and its already-decoded twin '/café?tag=caf%C3%A9#café' come out
+	 * identical: one target, one stored string, whichever spelling was typed.
+	 *
+	 * @param string $relative The relative destination as entered or as stored.
+	 * @return string|null The canonical form, or null when it cannot be parsed.
+	 */
+	public function canonicalise( string $relative ): ?string {
+		$parts = Url::parse_encoded( $relative );
+
+		if ( null === $parts || ! isset( $parts['path'] ) ) {
+			return null;
+		}
+
+		return $this->assemble( $parts['path'], $parts['query'] ?? null, $parts['fragment'] ?? null );
 	}
 
 	/**
@@ -66,7 +103,10 @@ final class InternalDestinationNormaliser {
 	 * @return string|null The site-relative path, or null when the URL is not internal.
 	 */
 	public function to_internal_path( string $url ): ?string {
-		$target   = wp_parse_url( $url );
+		// Url::parse_encoded() rather than wp_parse_url(), which corrupts raw
+		// multibyte bytes on some hosts. The components come back
+		// percent-encoded; assemble() decides what gets decoded.
+		$target   = Url::parse_encoded( $url );
 		$home_url = home_url();
 
 		if ( null === $this->parsed_home || $this->parsed_home[0] !== $home_url ) {
@@ -74,15 +114,17 @@ final class InternalDestinationNormaliser {
 		}
 		$home = $this->parsed_home[1];
 
-		if ( ! is_array( $target ) || ! is_array( $home ) ) {
+		if ( null === $target || ! is_array( $home ) ) {
 			return null;
 		}
 
 		// Exact host match: a substring or suffix match would swallow
-		// hosts like example.com.attacker.net.
+		// hosts like example.com.attacker.net. The port is compared as a
+		// string because Url::parse_encoded() and wp_parse_url() disagree on
+		// its type.
 		if ( empty( $target['host'] ) || empty( $home['host'] )
-			|| strtolower( $target['host'] ) !== strtolower( $home['host'] )
-			|| ( $target['port'] ?? null ) !== ( $home['port'] ?? null )
+			|| 0 !== strcasecmp( $target['host'], (string) $home['host'] )
+			|| (string) ( $target['port'] ?? '' ) !== (string) ( $home['port'] ?? '' )
 		) {
 			return null;
 		}
@@ -105,13 +147,31 @@ final class InternalDestinationNormaliser {
 			return null;
 		}
 
-		$path = ( '' === $target_path ? '/' : $target_path )
-			. ( isset( $target['query'] ) ? '?' . $target['query'] : '' )
-			. ( isset( $target['fragment'] ) ? '#' . $target['fragment'] : '' );
+		return $this->assemble( $target_path, $target['query'] ?? null, $target['fragment'] ?? null );
+	}
+
+	/**
+	 * Assemble the canonical relative form from percent-encoded components.
+	 *
+	 * The path and fragment are decoded; the query is kept as it arrived.
+	 *
+	 * @param string      $encoded_path The path, percent-encoded.
+	 * @param string|null $query        The query string, percent-encoded, or null when absent.
+	 * @param string|null $fragment     The fragment, percent-encoded, or null when absent.
+	 * @return string|null The canonical relative destination, or null when the
+	 *                     result would not be site-relative.
+	 */
+	private function assemble( string $encoded_path, ?string $query, ?string $fragment ): ?string {
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.urlencode_urldecode -- Pairs with Url::parse_encoded(); the path is stored decoded.
+		$path = urldecode( '' === $encoded_path ? '/' : $encoded_path )
+			. ( null !== $query ? '?' . $query : '' )
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.urlencode_urldecode -- Fragments have no sub-structure to protect.
+			. ( null !== $fragment ? '#' . urldecode( $fragment ) : '' );
 
 		// A '//'-prefixed result is scheme-relative, not site-relative:
 		// DestinationUrl would reject it and collapsing the slashes would
-		// change the URL. Leave the destination as entered.
+		// change the URL. Leave the destination as entered. Decoding can
+		// manufacture this ('/%2F%2Fx'), so the guard runs on the decoded form.
 		if ( str_starts_with( $path, '//' ) ) {
 			return null;
 		}

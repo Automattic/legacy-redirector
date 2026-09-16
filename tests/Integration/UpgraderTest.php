@@ -347,6 +347,46 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A relative destination stored percent-encoded is canonicalised.
+	 *
+	 * Before version 4, whichever encoding was typed was what got stored, so
+	 * one target could be two different strings. Existing rows converge on
+	 * the decoded form the normaliser now produces on save.
+	 *
+	 * @return void
+	 */
+	public function test_encoded_relative_destination_is_canonicalised() {
+		$post_id = $this->create_legacy_redirect( '/old-page', '/caf%C3%A9?q=a%26b' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['normalised'] );
+		// The path decodes; the query keeps its encoding, because its values
+		// have sub-structure a decode would corrupt.
+		$this->assertSame( '/café?q=a%26b', get_post( $post_id )->post_excerpt );
+
+		$destination = DestinationUrl::from_string( get_post( $post_id )->post_excerpt );
+		$this->assertTrue( $destination->is_relative() );
+	}
+
+	/**
+	 * A relative destination already in canonical form is left uncounted.
+	 *
+	 * The destination pass runs on every future version walk, so a rewrite
+	 * that fired on already-canonical rows would report work forever.
+	 *
+	 * @return void
+	 */
+	public function test_canonical_relative_destination_is_not_recounted() {
+		$post_id = $this->create_legacy_redirect( '/old-page', '/café' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( '/café', get_post( $post_id )->post_excerpt );
+	}
+
+	/**
 	 * A dry run reports destinations due to be made relative.
 	 *
 	 * @return void

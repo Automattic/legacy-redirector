@@ -42,7 +42,11 @@ use WP_Query;
  * Version 3 adds destination normalisation: absolute destination URLs that
  * point at this site (e.g. 'https://example.com/foo') are rewritten to the
  * relative form ('/foo') that 2.0 stores canonically, so that anything left
- * absolute is external by construction. All three migrations are idempotent
+ * absolute is external by construction. Version 4 extends the same pass to
+ * the destination's encoding: a relative destination stored as whichever of
+ * '/café' or '/caf%C3%A9' was typed is rewritten to the canonical form the
+ * normaliser now produces on save (path and fragment decoded, query kept
+ * percent-encoded). All three migrations are idempotent
  * per redirect, so a site already at version 2 safely re-walks the set.
  *
  * The publish and repath passes only apply when the site is coming from a
@@ -80,7 +84,7 @@ final class Upgrader {
 	/**
 	 * Current data schema version.
 	 */
-	public const int DB_VERSION = 3;
+	public const int DB_VERSION = 4;
 
 	/**
 	 * The first data version written under 2.0's rules.
@@ -391,11 +395,21 @@ final class Upgrader {
 	 * @return string|null The normalised destination, or null when already canonical.
 	 */
 	private function normalised_excerpt( string $excerpt ): ?string {
-		if ( ! str_starts_with( $excerpt, 'http' ) ) {
+		if ( str_starts_with( $excerpt, 'http' ) ) {
+			return $this->normaliser->to_internal_path( $excerpt );
+		}
+
+		// A relative destination may have been stored in whichever encoding
+		// it was entered in; version 4 canonicalises it the same way saving
+		// does now. Null when nothing changes, so an already-canonical row is
+		// neither rewritten nor counted.
+		if ( ! str_starts_with( $excerpt, '/' ) ) {
 			return null;
 		}
 
-		return $this->normaliser->to_internal_path( $excerpt );
+		$canonical = $this->normaliser->canonicalise( $excerpt );
+
+		return null === $canonical || $canonical === $excerpt ? null : $canonical;
 	}
 
 	/**

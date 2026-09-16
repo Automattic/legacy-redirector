@@ -76,3 +76,18 @@ Feature: Creating a redirect
       """
       Error:
       """
+
+  # Contract test: '/café' and '/caf%C3%A9' are two spellings of one target,
+  # so internal destinations store in one canonical form whichever was typed.
+  Scenario: An encoded internal destination is stored decoded
+    When I run `wp wpcom-legacy-redirector create /vipplug143-source /caf%C3%A9 --skip-validation`
+    Then STDOUT should contain:
+      """
+      Success: Created redirect
+      """
+
+    When I run `wp wpcom-legacy-redirector get /vipplug143-source`
+    Then STDOUT should contain:
+      """
+      /café
+      """

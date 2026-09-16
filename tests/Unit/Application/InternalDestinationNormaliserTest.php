@@ -99,24 +99,58 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 			'network root untouched'            => array( 'https://example.com/sub1', 'https://example.com/', 'https://example.com/' ),
 			'subsite double slash untouched'    => array( 'https://example.com/sub1', 'https://example.com/sub1//x', 'https://example.com/sub1//x' ),
 
-			// Unicode. Percent-encoded forms dominate because that is what a
-			// browser copy-paste produces; the decoded rows use Latin-1
-			// supplement characters, whose UTF-8 continuation bytes all sit
-			// above 0x9F. PHP's parse_url() rewrites raw bytes in 0x80-0x9F to
-			// '_' when LC_CTYPE is a UTF-8 locale, which would otherwise make
-			// these assertions depend on the runner's locale.
-			'encoded unicode made relative'     => array( 'https://example.com', 'https://example.com/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82' ),
-			'encoded emoji made relative'       => array( 'https://example.com', 'https://example.com/%F0%9F%8E%89', '/%F0%9F%8E%89' ),
+			// Unicode and encoding canonicalisation: '/café' and '/caf%C3%A9'
+			// are two spellings of one target, so both store as the decoded
+			// form. The query alone keeps its percent-encoding, because its
+			// values have sub-structure a decode would corrupt.
+			'encoded unicode made relative'     => array( 'https://example.com', 'https://example.com/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
+			'encoded emoji made relative'       => array( 'https://example.com', 'https://example.com/%F0%9F%8E%89', '/🎉' ),
 			'decoded unicode made relative'     => array( 'https://example.com', 'https://example.com/café', '/café' ),
 			'unicode query preserved'           => array( 'https://example.com', 'https://example.com/foo?q=%D1%82%D0%B5%D1%81%D1%82', '/foo?q=%D1%82%D0%B5%D1%81%D1%82' ),
 			'unicode fragment preserved'        => array( 'https://example.com', 'https://example.com/foo#café', '/foo#café' ),
 			'external unicode untouched'        => array( 'https://example.com', 'https://google.com/café', 'https://google.com/café' ),
 			'unicode under subsite prefix'      => array( 'https://example.com/sub1', 'https://example.com/sub1/café', '/café' ),
-			'encoded unicode under subsite'     => array( 'https://example.com/sub1', 'https://example.com/sub1/%F0%9F%8E%89', '/%F0%9F%8E%89' ),
+			'encoded unicode under subsite'     => array( 'https://example.com/sub1', 'https://example.com/sub1/%F0%9F%8E%89', '/🎉' ),
 			'unicode outside subsite untouched' => array( 'https://example.com/sub1', 'https://example.com/sub2/café', 'https://example.com/sub2/café' ),
 			'unicode home path made relative'   => array( 'https://example.com/café', 'https://example.com/café/page', '/page' ),
 			'unicode home path boundary held'   => array( 'https://example.com/café', 'https://example.com/cafétéria/page', 'https://example.com/cafétéria/page' ),
+
+			// Encoding canonicalisation edges.
+			'matching port made relative'       => array( 'https://example.com:8080', 'https://example.com:8080/foo', '/foo' ),
+			'relative encoded canonicalised'    => array( 'https://example.com', '/caf%C3%A9', '/café' ),
+			'relative decoded untouched'        => array( 'https://example.com', '/café', '/café' ),
+			'raw query becomes encoded'         => array( 'https://example.com', 'https://example.com/foo?q=тест', '/foo?q=%D1%82%D0%B5%D1%81%D1%82' ),
+			'literal %26 in query preserved'    => array( 'https://example.com', 'https://example.com/foo?q=a%26b', '/foo?q=a%26b' ),
+			'encoded fragment decoded'          => array( 'https://example.com', 'https://example.com/foo#caf%C3%A9', '/foo#café' ),
+			// An encoded slash decodes to a real one, exactly as SourceUrl
+			// treats sources; a destination relying on the distinction was
+			// ambiguous to begin with.
+			'encoded slash in path decodes'     => array( 'https://example.com', 'https://example.com/a%2Fb', '/a/b' ),
+			// Unless decoding would make the path scheme-relative.
+			'decoding to double slash refused'  => array( 'https://example.com', '/%2F%2Fx', '/%2F%2Fx' ),
 		);
+	}
+
+	/**
+	 * Test both spellings of one internal destination reach one stored form.
+	 *
+	 * The inconsistency this canonicalisation exists to remove: before it,
+	 * whichever encoding the admin happened to type was what got stored, so
+	 * one target could be two different strings.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::normalise
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::canonicalise
+	 */
+	public function test_encoded_and_decoded_forms_converge(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		$stored = array();
+		foreach ( array( 'https://example.com/caf%C3%A9', 'https://example.com/café', '/caf%C3%A9', '/café' ) as $entered ) {
+			$destination = Destination::from_url( DestinationUrl::from_string( $entered ) );
+			$stored[]    = $this->normaliser->normalise( $destination )->as_url()->value();
+		}
+
+		$this->assertSame( array( '/café', '/café', '/café', '/café' ), $stored );
 	}
 
 	/**
