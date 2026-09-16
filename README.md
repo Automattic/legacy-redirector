@@ -103,23 +103,6 @@ The plugin works on WordPress multisite installations:
 - **No cross-site leakage**: Redirects on Site A do not affect Site B
 - **WP-CLI support**: Use `--url=site.example.com` to manage specific sites
 
-### Source Paths Are Site-Relative
-
-A source path is always read relative to **that site's** home URL, never the domain root. On a subsite at `example.com/blog`, a source of `/old-page` means `example.com/blog/old-page`.
-
-This matters on subdirectory multisites, where the subsite prefix is not part of the stored path:
-
-```bash
-# On a subsite at example.com/blog, these are equivalent - both store /old-page
-wp wpcom-legacy-redirector create /old-page /new-page --url=example.com/blog
-wp wpcom-legacy-redirector create https://example.com/blog/old-page /new-page --url=example.com/blog
-
-# To redirect the real URL example.com/blog/blog/old-page, the source is /blog/old-page
-wp wpcom-legacy-redirector create /blog/old-page /new-page --url=example.com/blog
-```
-
-The Add/Edit Redirect screen shows the site's home URL next to the source field so the resolved URL is visible as you type.
-
 ### WP-CLI Multisite Examples
 
 ```bash
@@ -129,6 +112,29 @@ wp wpcom-legacy-redirector create /old /new --url=site2.example.com
 # Export redirects from specific site
 wp wpcom-legacy-redirector list --format=csv --url=site2.example.com > /path/to/export.csv
 ```
+
+## Source Paths Are Site-Relative
+
+A source path is always read relative to **that site's** home URL, never the domain root. On a site at `example.com/blog`, a source of `/old-page` means `example.com/blog/old-page`.
+
+This matters wherever the home URL sits below the domain root. That includes a subdirectory multisite subsite, and equally a plain single site installed at `example.com/blog` — it is the home path that decides, not multisite. In both cases the base path is not part of the stored source:
+
+```bash
+# On a subsite at example.com/blog, these are equivalent - both store /old-page
+wp wpcom-legacy-redirector create /old-page /new-page --url=example.com/blog
+wp wpcom-legacy-redirector create https://example.com/blog/old-page /new-page --url=example.com/blog
+
+# To redirect the real URL example.com/blog/blog/old-page, the source is /blog/old-page
+wp wpcom-legacy-redirector create /blog/old-page /new-page --url=example.com/blog
+
+# On a single site installed at example.com/blog, the same rule applies without --url
+wp wpcom-legacy-redirector create /old-page /new-page
+wp wpcom-legacy-redirector create https://example.com/blog/old-page /new-page
+```
+
+Note that on such a site `example.com/old-page` is served by whatever sits at the domain root and never reaches WordPress, so only paths below the base URL can be redirected.
+
+The Add/Edit Redirect screen shows the site's home URL next to the source field so the resolved URL is visible as you type.
 
 ## How It Works
 

@@ -45,11 +45,12 @@ final class MigrateCommand extends WP_CLI_Command {
 	/**
 	 * Migrate redirect data created by version 1.x to the 2.0 format.
 	 *
-	 * Version 1.x stored every redirect as a draft, and on subdirectory
-	 * multisites stored source paths with the subsite prefix included. Version
-	 * 2.0 only serves published redirects, and looks them up by their
-	 * subsite-relative path. Until this has run, redirects created under 1.x
-	 * do not fire.
+	 * Version 1.x stored every redirect as a draft, and wherever the site is
+	 * not at the domain root it stored source paths with that base path
+	 * included - on a subsite, and equally on a single site installed at
+	 * example.com/blog. Version 2.0 only serves published redirects, and looks
+	 * them up by their site-relative path. Until this has run, redirects
+	 * created under 1.x do not fire.
 	 *
 	 * This runs automatically in small batches on ordinary page loads. Running
 	 * it here completes the whole job in one pass, which is the better option
