@@ -22,7 +22,7 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	 *
 	 * @var int
 	 */
-	private const PAGE_SIZE = 500;
+	private const int PAGE_SIZE = 500;
 
 	/**
 	 * The query repository.
@@ -45,6 +45,7 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	 *
 	 * @return string The ability name.
 	 */
+	#[\Override]
 	public function name(): string {
 		return 'wpcom-legacy-redirector/find-redirect-domains';
 	}
@@ -54,6 +55,7 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	 *
 	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
 	 */
+	#[\Override]
 	public function args(): array {
 		return array(
 			'label'               => __( 'Find Redirect Domains', 'wpcom-legacy-redirector' ),

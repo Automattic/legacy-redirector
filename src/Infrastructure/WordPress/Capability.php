@@ -20,19 +20,19 @@ final class Capability {
 	/**
 	 * The capability name for managing redirects.
 	 */
-	public const MANAGE_REDIRECTS_CAPABILITY = 'manage_redirects';
+	public const string MANAGE_REDIRECTS_CAPABILITY = 'manage_redirects';
 
 	/**
 	 * Version number for capability registration.
 	 *
 	 * Increment this to force re-registration of capabilities.
 	 */
-	private const CAPABILITIES_VERSION = 1;
+	private const int CAPABILITIES_VERSION = 1;
 
 	/**
 	 * Option key for storing the capabilities version.
 	 */
-	private const VERSION_OPTION_KEY = self::MANAGE_REDIRECTS_CAPABILITY . '_capability_version';
+	private const string VERSION_OPTION_KEY = self::MANAGE_REDIRECTS_CAPABILITY . '_capability_version';
 
 	/**
 	 * Roles that should have the manage_redirects capability.

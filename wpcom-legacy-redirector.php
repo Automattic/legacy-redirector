@@ -4,8 +4,8 @@
  * Plugin URI: https://github.com/Automattic/wpcom-legacy-redirector
  * Description: Simple plugin for handling legacy redirects in a scalable manner.
  * Version: 2.0.0-alpha
- * Requires at least: 6.4
- * Requires PHP: 8.2
+ * Requires at least: 6.8
+ * Requires PHP: 8.3
  * Author: Automattic / WordPress VIP
  * Author URI: https://wpvip.com
  *

@@ -42,6 +42,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 	 *
 	 * @return string The ability name.
 	 */
+	#[\Override]
 	public function name(): string {
 		return 'wpcom-legacy-redirector/create-redirect';
 	}
@@ -51,6 +52,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 	 *
 	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
 	 */
+	#[\Override]
 	public function args(): array {
 		return array(
 			'label'               => __( 'Create Redirect', 'wpcom-legacy-redirector' ),

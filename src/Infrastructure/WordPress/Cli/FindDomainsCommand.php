@@ -23,7 +23,7 @@ final class FindDomainsCommand extends WP_CLI_Command {
 	 *
 	 * @var int
 	 */
-	private const PAGE_SIZE = 500;
+	private const int PAGE_SIZE = 500;
 
 	/**
 	 * The query repository.

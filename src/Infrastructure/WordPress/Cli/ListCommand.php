@@ -24,7 +24,7 @@ final class ListCommand extends WP_CLI_Command {
 	 *
 	 * @var string[]
 	 */
-	private const DEFAULT_FIELDS = array( 'ID', 'from', 'to', 'type', 'status' );
+	private const array DEFAULT_FIELDS = array( 'ID', 'from', 'to', 'type', 'status' );
 
 	/**
 	 * The query repository.

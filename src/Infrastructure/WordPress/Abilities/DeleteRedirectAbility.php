@@ -49,6 +49,7 @@ final class DeleteRedirectAbility implements AbilityInterface {
 	 *
 	 * @return string The ability name.
 	 */
+	#[\Override]
 	public function name(): string {
 		return 'wpcom-legacy-redirector/delete-redirect';
 	}
@@ -58,6 +59,7 @@ final class DeleteRedirectAbility implements AbilityInterface {
 	 *
 	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
 	 */
+	#[\Override]
 	public function args(): array {
 		return array(
 			'label'               => __( 'Delete Redirects', 'wpcom-legacy-redirector' ),

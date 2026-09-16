@@ -4,8 +4,8 @@ Thank you for your interest in contributing to WPCOM Legacy Redirector! This doc
 
 ## Requirements
 
-- **PHP:** 8.2+
-- **WordPress:** 6.4+
+- **PHP:** 8.3+
+- **WordPress:** 6.8+
 - **Coding Standards:** [WordPress VIP Coding Standards](https://github.com/Automattic/VIP-Coding-Standards)
 
 ## Development Setup

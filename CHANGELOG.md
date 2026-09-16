@@ -10,8 +10,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 **Breaking Changes:**
 
-- Requires PHP 8.2 or later (previously 7.4).
-- Requires WordPress 6.4 or later (previously 5.9).
+- Requires PHP 8.3 or later (previously 7.4).
+- Requires WordPress 6.8 or later (previously 5.9).
 - Removed the `WPCOM_Legacy_Redirector` class, including the public `insert_legacy_redirect()`, `get_redirect_uri()`, and `get_redirect_post_id()` methods. See [UPGRADING.md](UPGRADING.md) for replacements.
 - The WP-CLI command set has been redesigned with no backwards-compatible aliases. See [UPGRADING.md](UPGRADING.md) for the full old-to-new command mapping: `insert-redirect` is now `create` (validating by default), `import-from-csv` is now `import`, `export-to-csv` has been removed in favour of `list --format=csv`, and `import-from-meta` flags are now kebab-case.
 - On subdirectory multisites, redirect sources are stored relative to the subsite. A redirect for `example.com/blog/old-page` is now stored as `/old-page`, where 1.x stored `/blog/old-page`. Existing data is repathed automatically by the migration, but `list` output, CSV exports, and anything reading the stored source directly will see the shorter form.

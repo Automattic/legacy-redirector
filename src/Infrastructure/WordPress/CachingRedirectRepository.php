@@ -35,7 +35,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 *
 	 * Version suffix allows cache busting when schema changes.
 	 */
-	public const CACHE_GROUP = 'vip-legacy-redirect-3';
+	public const string CACHE_GROUP = 'vip-legacy-redirect-3';
 
 	/**
 	 * Expiry, in seconds, for negative ("no redirect exists") cache entries.
@@ -46,7 +46,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * instead. Without this, arbitrary 404 traffic would fill the object cache
 	 * permanently and evict useful entries.
 	 */
-	public const NEGATIVE_CACHE_TTL = 300;
+	public const int NEGATIVE_CACHE_TTL = 300;
 
 	/**
 	 * The inner repository to delegate to.
@@ -79,6 +79,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found and active, null otherwise.
 	 */
+	#[\Override]
 	public function find_by_source( SourceUrl $source ): ?Redirect {
 		$post_id = $this->get_id_by_source( $source );
 
@@ -110,6 +111,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param int $id The redirect ID.
 	 * @return Redirect|null The redirect if found, null otherwise.
 	 */
+	#[\Override]
 	public function find_by_id( int $id ): ?Redirect {
 		return $this->inner->find_by_id( $id );
 	}
@@ -120,6 +122,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL to check.
 	 * @return bool True if a redirect exists.
 	 */
+	#[\Override]
 	public function exists( SourceUrl $source ): bool {
 		return $this->inner->exists( $source );
 	}
@@ -130,6 +133,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param Redirect $redirect The redirect to save.
 	 * @return Redirect The saved redirect with ID populated.
 	 */
+	#[\Override]
 	public function save( Redirect $redirect ): Redirect {
 		// On updates, invalidate the previously stored source too: if the
 		// source changed, its positive cache entry would otherwise keep
@@ -157,6 +161,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param Redirect $redirect The redirect to delete.
 	 * @return bool True if deleted successfully.
 	 */
+	#[\Override]
 	public function delete( Redirect $redirect ): bool {
 		$this->invalidate_cache( $redirect->source() );
 
@@ -178,6 +183,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL.
 	 * @return int The redirect ID, or 0 if not found.
 	 */
+	#[\Override]
 	public function get_id_by_source( SourceUrl $source ): int {
 		$cache_key = self::cache_key( $source->hash() );
 		$post_id   = wp_cache_get( $cache_key, self::CACHE_GROUP );

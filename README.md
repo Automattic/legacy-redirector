@@ -1,9 +1,9 @@
 # WPCOM Legacy Redirector
 
 Stable tag: 2.0.0-alpha
-Requires at least: 6.4
-Tested up to: 6.7
-Requires PHP: 8.2
+Requires at least: 6.8
+Tested up to: 7.1
+Requires PHP: 8.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Tags: redirects, 301, legacy, migration, seo

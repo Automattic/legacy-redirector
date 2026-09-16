@@ -31,7 +31,7 @@ final class AbilitiesRegistrar {
 	 *
 	 * @var string
 	 */
-	public const CATEGORY = 'legacy-redirects';
+	public const string CATEGORY = 'legacy-redirects';
 
 	/**
 	 * The redirect manager.

@@ -19,7 +19,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
  */
 final class CheckDuplicateHandler {
 
-	private const ACTION = 'check_redirect_duplicate';
+	private const string ACTION = 'check_redirect_duplicate';
 
 	/**
 	 * Repository for redirect lookups.

@@ -40,27 +40,31 @@ jobs:
       matrix:
         include:
           # Check lowest supported WP version, with the lowest supported PHP.
-          - wordpress: '6.4'
-            php: '8.2'
+          - wordpress: '6.8'
+            php: '8.3'
           # Check latest WP with the latest PHP.
           - wordpress: 'master'
-            php: 'latest'
+            php: '8.5'
           # Check multisite on latest WP with the latest PHP. The multisite-only
           # tests skip elsewhere, so this is the only run that can check their
           # covers annotations, hence coverage rather than a plain run.
           - wordpress: 'master'
-            php: 'latest'
+            php: '8.5'
             multisite: true
             coverage: true
           # One single-site coverage-enabled run: PHPUnit only enforces the
           # strict covers-annotation settings when a coverage driver is active,
           # and single site exercises different branches to multisite.
           - wordpress: 'master'
-            php: 'latest'
+            php: '8.5'
             coverage: true
 
     env:
       WP_ENV_CORE: WordPress/WordPress#${{ matrix.wordpress }}
+      # The tests run inside the wp-env container, so the matrix PHP version has
+      # to reach wp-env too. Without this it would fall back to .wp-env.json and
+      # every job would run on the same PHP, whatever the job name claimed.
+      WP_ENV_PHP_VERSION: ${{ matrix.php }}
 
     steps:
       - name: Checkout code
