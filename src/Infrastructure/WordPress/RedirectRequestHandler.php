@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
 use Automattic\LegacyRedirector\Application\RedirectResolver;
-use Automattic\LegacyRedirector\Domain\RedirectStatus;
+use Automattic\LegacyRedirector\Domain\RedirectHttpStatus;
 
 /**
  * Performs HTTP redirects for the current front-end request.
@@ -122,7 +122,7 @@ final class RedirectRequestHandler {
 		 */
 		$max_age = (int) apply_filters(
 			'wpcom_legacy_redirector_redirect_max_age',
-			RedirectStatus::from( $status_code )->is_permanent() ? DAY_IN_SECONDS : MINUTE_IN_SECONDS,
+			RedirectHttpStatus::from( $status_code )->is_permanent() ? DAY_IN_SECONDS : MINUTE_IN_SECONDS,
 			$url,
 			$status_code
 		);

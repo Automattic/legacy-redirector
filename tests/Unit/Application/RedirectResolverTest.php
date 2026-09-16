@@ -30,7 +30,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
- * @uses \Automattic\LegacyRedirector\Domain\RedirectStatus
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class RedirectResolverTest extends MonkeyStubs {

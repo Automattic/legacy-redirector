@@ -15,6 +15,7 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * RedirectTest class.
@@ -207,6 +208,58 @@ final class RedirectTest extends MonkeyStubs {
 
 		$this->assertSame( 'publish', $redirect->status() );
 		$this->assertSame( 'trash', $trashed->status() );
+	}
+
+	/**
+	 * Test with_status accepts each known status.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::with_status
+	 *
+	 * @dataProvider data_known_statuses
+	 *
+	 * @param string $status A known status.
+	 */
+	public function test_with_status_accepts_known_statuses( string $status ): void {
+		$redirect = Redirect::reconstitute(
+			1,
+			SourceUrl::from_string( '/old' ),
+			Destination::from_url( DestinationUrl::from_string( '/new' ) ),
+			'publish'
+		);
+
+		$this->assertSame( $status, $redirect->with_status( $status )->status() );
+	}
+
+	/**
+	 * Data provider of known statuses.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public function data_known_statuses(): array {
+		return array(
+			'publish' => array( 'publish' ),
+			'draft'   => array( 'draft' ),
+			'trash'   => array( 'trash' ),
+		);
+	}
+
+	/**
+	 * Test with_status rejects an unknown status.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\Redirect::with_status
+	 */
+	public function test_with_status_rejects_unknown_status(): void {
+		$redirect = Redirect::reconstitute(
+			1,
+			SourceUrl::from_string( '/old' ),
+			Destination::from_url( DestinationUrl::from_string( '/new' ) ),
+			'publish'
+		);
+
+		$this->expectException( InvalidArgumentException::class );
+		$this->expectExceptionMessage( "The status must be 'publish', 'draft', or 'trash'." );
+
+		$redirect->with_status( 'banana' );
 	}
 
 	/**

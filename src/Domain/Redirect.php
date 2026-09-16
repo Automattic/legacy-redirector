@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Domain;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 
 /**
  * Redirect entity - the core domain model.
@@ -248,10 +249,15 @@ final class Redirect {
 	/**
 	 * Create a copy with a new status.
 	 *
-	 * @param string $status The new status.
+	 * @param string $status The new status ('publish', 'draft', or 'trash').
 	 * @return self
+	 * @throws InvalidArgumentException If the status is not a known status.
 	 */
 	public function with_status( string $status ): self {
+		if ( ! in_array( $status, array( 'publish', 'draft', 'trash' ), true ) ) {
+			throw new InvalidArgumentException( "The status must be 'publish', 'draft', or 'trash'." );
+		}
+
 		return new self(
 			$this->id,
 			$this->source,

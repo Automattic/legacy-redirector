@@ -21,7 +21,7 @@ wpcom-legacy-redirector/
 ├── src/
 │   ├── Domain/             # Value objects, entities, repository interfaces
 │   │   ├── Redirect.php, SourceUrl.php, DestinationUrl.php
-│   │   ├── RedirectStatus.php, RedirectCriteria.php
+│   │   ├── RedirectHttpStatus.php, RedirectCriteria.php
 │   │   └── ValidationIssue.php
 │   ├── Application/        # Use cases and services
 │   │   ├── RedirectManager.php     # Create, update, delete redirects
@@ -46,7 +46,7 @@ wpcom-legacy-redirector/
 
 ### Key Classes
 
-- **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectStatus`, `RedirectCriteria`; `ValidationIssue`; repository interfaces
+- **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectHttpStatus`, `RedirectCriteria`; `ValidationIssue`; repository interfaces
 - **Application**: `RedirectManager` (CRUD), `RedirectResolver` (runtime resolution), `RedirectValidator` (rule validation), `ValidationResult`
 - **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, `RedirectRequestHandler` (performs the HTTP redirect), admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.), `AbilitiesRegistrar` and the `*Ability` classes behind it
 
