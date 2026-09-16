@@ -70,6 +70,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	 *
 	 * @return string The ability name.
 	 */
+	#[\Override]
 	public function name(): string {
 		return 'wpcom-legacy-redirector/validate-redirects';
 	}
@@ -79,6 +80,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	 *
 	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
 	 */
+	#[\Override]
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'wpcom-legacy-redirector' ),

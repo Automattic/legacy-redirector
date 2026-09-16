@@ -43,6 +43,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found and active, null otherwise.
 	 */
+	#[\Override]
 	public function find_by_source( SourceUrl $source ): ?Redirect {
 		$post_id = $this->get_id_by_source( $source );
 
@@ -75,6 +76,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param int $id The redirect ID.
 	 * @return Redirect|null The redirect if found, null otherwise.
 	 */
+	#[\Override]
 	public function find_by_id( int $id ): ?Redirect {
 		$post = get_post( $id );
 
@@ -97,6 +99,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL to check.
 	 * @return bool True if a redirect exists.
 	 */
+	#[\Override]
 	public function exists( SourceUrl $source ): bool {
 		return $this->get_id_by_source( $source ) > 0;
 	}
@@ -115,6 +118,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 *
 	 * @throws RedirectPersistenceException If the save fails, an insert would duplicate an existing source, or the redirect is corrupt.
 	 */
+	#[\Override]
 	public function save( Redirect $redirect ): Redirect {
 		// A corrupt redirect holds placeholder values; saving it would
 		// overwrite the stored row with those placeholders.
@@ -157,6 +161,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param Redirect $redirect The redirect to delete.
 	 * @return bool True if deleted successfully.
 	 */
+	#[\Override]
 	public function delete( Redirect $redirect ): bool {
 		if ( ! $redirect->is_persisted() ) {
 			return false;
@@ -173,6 +178,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param SourceUrl $source The source URL.
 	 * @return int The redirect ID, or 0 if not found.
 	 */
+	#[\Override]
 	public function get_id_by_source( SourceUrl $source ): int {
 		global $wpdb;
 

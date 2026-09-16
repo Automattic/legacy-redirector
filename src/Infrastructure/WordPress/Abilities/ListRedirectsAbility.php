@@ -46,6 +46,7 @@ final class ListRedirectsAbility implements AbilityInterface {
 	 *
 	 * @return string The ability name.
 	 */
+	#[\Override]
 	public function name(): string {
 		return 'wpcom-legacy-redirector/list-redirects';
 	}
@@ -55,6 +56,7 @@ final class ListRedirectsAbility implements AbilityInterface {
 	 *
 	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
 	 */
+	#[\Override]
 	public function args(): array {
 		return array(
 			'label'               => __( 'List Redirects', 'wpcom-legacy-redirector' ),

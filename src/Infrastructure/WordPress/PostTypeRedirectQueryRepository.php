@@ -73,6 +73,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * @param RedirectCriteria $criteria The query criteria.
 	 * @return Redirect[] Array of matching redirects.
 	 */
+	#[\Override]
 	public function find_matching( RedirectCriteria $criteria ): array {
 		$query = new WP_Query( $this->build_query_args( $criteria ) );
 
@@ -88,6 +89,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * @param RedirectCriteria $criteria The query criteria (limit/offset are ignored).
 	 * @return int The total count of matching redirects.
 	 */
+	#[\Override]
 	public function count_matching( RedirectCriteria $criteria ): int {
 		// Build query args for counting (no pagination).
 		$args = $this->build_query_args( $criteria );
@@ -108,6 +110,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * @param int $offset Number of URLs to skip.
 	 * @return string[] The destination URLs.
 	 */
+	#[\Override]
 	public function get_external_destination_urls( int $limit, int $offset ): array {
 		global $wpdb;
 
@@ -128,6 +131,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 *
 	 * @return int The total count.
 	 */
+	#[\Override]
 	public function count_external_destinations(): int {
 		global $wpdb;
 
@@ -146,6 +150,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 *
 	 * @return array{post_id: int, path: int, external: int} Counts by kind.
 	 */
+	#[\Override]
 	public function count_by_destination_type(): array {
 		return array(
 			'post_id'  => $this->count_destination_type( 'post_id' ),

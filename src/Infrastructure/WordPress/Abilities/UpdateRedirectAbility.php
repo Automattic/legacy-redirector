@@ -50,6 +50,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	 *
 	 * @return string The ability name.
 	 */
+	#[\Override]
 	public function name(): string {
 		return 'wpcom-legacy-redirector/update-redirect';
 	}
@@ -59,6 +60,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	 *
 	 * @return array<string, mixed> Arguments accepted by wp_register_ability().
 	 */
+	#[\Override]
 	public function args(): array {
 		return array(
 			'label'               => __( 'Update Redirects', 'wpcom-legacy-redirector' ),
