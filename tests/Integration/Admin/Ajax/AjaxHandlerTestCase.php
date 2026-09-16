@@ -34,6 +34,14 @@ abstract class AjaxHandlerTestCase extends WP_Ajax_UnitTestCase {
 
 		( new Capability() )->register();
 
+		// A WP core older than the container's PHP emits engine deprecations
+		// (e.g. implicit-nullable parameters in the bundled Requests library)
+		// that land in the AJAX output buffer and corrupt the captured JSON.
+		// The parent already drops E_WARNING for the same reason, and its
+		// tear_down() restores the original level.
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_error_reporting
+		error_reporting( error_reporting() & ~E_DEPRECATED );
+
 		$_POST = array();
 	}
 
@@ -92,6 +100,10 @@ abstract class AjaxHandlerTestCase extends WP_Ajax_UnitTestCase {
 			unset( $e );
 		}
 
-		return json_decode( $this->_last_response, true, 512, JSON_THROW_ON_ERROR );
+		try {
+			return json_decode( $this->_last_response, true, 512, JSON_THROW_ON_ERROR );
+		} catch ( \JsonException $e ) {
+			$this->fail( "Handler emitted invalid JSON:\n" . $this->_last_response );
+		}
 	}
 }
