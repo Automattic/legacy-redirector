@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectBatch;
-use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -42,11 +41,11 @@ final class UpdateCommand extends WP_CLI_Command {
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
-	 * @param RedirectFetcher $fetcher The redirect fetcher.
+	 * @param RedirectBatch   $batch   The batch resolver.
 	 */
-	public function __construct( RedirectManager $manager, RedirectFetcher $fetcher ) {
+	public function __construct( RedirectManager $manager, RedirectBatch $batch ) {
 		$this->manager = $manager;
-		$this->batch   = new RedirectBatch( $fetcher );
+		$this->batch   = $batch;
 	}
 
 	/**

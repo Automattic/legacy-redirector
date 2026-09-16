@@ -48,6 +48,13 @@ final class AbilitiesRegistrar {
 	private RedirectFetcher $fetcher;
 
 	/**
+	 * The batch resolver.
+	 *
+	 * @var RedirectBatch
+	 */
+	private RedirectBatch $batch;
+
+	/**
 	 * The query repository.
 	 *
 	 * @var RedirectQueryRepositoryInterface
@@ -66,17 +73,20 @@ final class AbilitiesRegistrar {
 	 *
 	 * @param RedirectManager                  $manager          The redirect manager.
 	 * @param RedirectFetcher                  $fetcher          The redirect fetcher.
+	 * @param RedirectBatch                    $batch            The batch resolver.
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
 	 * @param RedirectAuditor                  $auditor          The redirect auditor.
 	 */
 	public function __construct(
 		RedirectManager $manager,
 		RedirectFetcher $fetcher,
+		RedirectBatch $batch,
 		RedirectQueryRepositoryInterface $query_repository,
 		RedirectAuditor $auditor
 	) {
 		$this->manager          = $manager;
 		$this->fetcher          = $fetcher;
+		$this->batch            = $batch;
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
 	}
@@ -127,16 +137,14 @@ final class AbilitiesRegistrar {
 	 * @return AbilityInterface[] The abilities.
 	 */
 	public function abilities(): array {
-		$batch = new RedirectBatch( $this->fetcher );
-
 		return array(
 			new CreateRedirectAbility( $this->manager ),
 			new GetRedirectAbility( $this->fetcher ),
 			new ListRedirectsAbility( $this->query_repository ),
-			new UpdateRedirectAbility( $this->manager, $batch ),
-			new SetRedirectStatusAbility( $this->manager, $batch ),
-			new DeleteRedirectAbility( $this->manager, $batch ),
-			new ValidateRedirectsAbility( $this->query_repository, $this->auditor, $batch ),
+			new UpdateRedirectAbility( $this->manager, $this->batch ),
+			new SetRedirectStatusAbility( $this->manager, $this->batch ),
+			new DeleteRedirectAbility( $this->manager, $this->batch ),
+			new ValidateRedirectsAbility( $this->query_repository, $this->auditor, $this->batch ),
 			new FindRedirectDomainsAbility( $this->query_repository ),
 		);
 	}

@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectBatch;
-use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -58,18 +57,18 @@ final class ValidateCommand extends WP_CLI_Command {
 	/**
 	 * Constructor.
 	 *
-	 * @param RedirectFetcher                  $fetcher          The redirect fetcher.
+	 * @param RedirectBatch                    $batch            The batch resolver.
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
 	 * @param RedirectAuditor                  $auditor          The redirect auditor.
 	 * @param RedirectManager                  $manager          The redirect manager.
 	 */
 	public function __construct(
-		RedirectFetcher $fetcher,
+		RedirectBatch $batch,
 		RedirectQueryRepositoryInterface $query_repository,
 		RedirectAuditor $auditor,
 		RedirectManager $manager
 	) {
-		$this->batch            = new RedirectBatch( $fetcher );
+		$this->batch            = $batch;
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
 		$this->manager          = $manager;

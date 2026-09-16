@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
@@ -56,9 +57,12 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 
 		Functions\when( '__' )->returnArg( 1 );
 
+		$fetcher = new RedirectFetcher( Mockery::mock( RedirectRepositoryInterface::class ) );
+
 		$this->registrar = new AbilitiesRegistrar(
 			Mockery::mock( RedirectManager::class ),
-			new RedirectFetcher( Mockery::mock( RedirectRepositoryInterface::class ) ),
+			$fetcher,
+			new RedirectBatch( $fetcher ),
 			Mockery::mock( RedirectQueryRepositoryInterface::class ),
 			Mockery::mock( RedirectAuditor::class )
 		);

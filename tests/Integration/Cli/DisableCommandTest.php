@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 
 /**
@@ -52,7 +53,7 @@ final class DisableCommandTest extends CliTestCase {
 
 		$this->command = new DisableCommand(
 			$this->manager(),
-			new RedirectFetcher( $this->repository() )
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) )
 		);
 	}
 

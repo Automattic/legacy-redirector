@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\DI;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
@@ -140,6 +141,18 @@ final class Container {
 			$this->services['fetcher'] = new RedirectFetcher( $this->repository() );
 		}
 		return $this->services['fetcher'];
+	}
+
+	/**
+	 * Get the batch resolver, which acts on a list of redirect identifiers.
+	 *
+	 * @return RedirectBatch
+	 */
+	public function batch(): RedirectBatch {
+		if ( ! isset( $this->services['batch'] ) ) {
+			$this->services['batch'] = new RedirectBatch( $this->fetcher() );
+		}
+		return $this->services['batch'];
 	}
 
 	/**

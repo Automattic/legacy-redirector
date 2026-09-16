@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\EnableCommand;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 
 /**
@@ -52,7 +53,7 @@ final class EnableCommandTest extends CliTestCase {
 
 		$this->command = new EnableCommand(
 			$this->manager(),
-			new RedirectFetcher( $this->repository() )
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) )
 		);
 	}
 

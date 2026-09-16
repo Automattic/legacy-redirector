@@ -178,6 +178,7 @@ final class PluginBootstrapper {
 		$abilities = new AbilitiesRegistrar(
 			$this->container->manager(),
 			$this->container->fetcher(),
+			$this->container->batch(),
 			$this->container->query_repository(),
 			$this->container->auditor()
 		);
@@ -196,6 +197,7 @@ final class PluginBootstrapper {
 
 		$manager = $this->container->manager();
 		$fetcher = $this->container->fetcher();
+		$batch   = $this->container->batch();
 
 		// Register parent command for help text.
 		\WP_CLI::add_command(
@@ -225,28 +227,28 @@ final class PluginBootstrapper {
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector update',
-			new UpdateCommand( $manager, $fetcher )
+			new UpdateCommand( $manager, $batch )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector delete',
-			new DeleteCommand( $manager, $fetcher )
+			new DeleteCommand( $manager, $batch )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector enable',
-			new EnableCommand( $manager, $fetcher )
+			new EnableCommand( $manager, $batch )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector disable',
-			new DisableCommand( $manager, $fetcher )
+			new DisableCommand( $manager, $batch )
 		);
 
 		\WP_CLI::add_command(
 			'wpcom-legacy-redirector validate',
 			new ValidateCommand(
-				$fetcher,
+				$batch,
 				$this->container->query_repository(),
 				$this->container->auditor(),
 				$manager
