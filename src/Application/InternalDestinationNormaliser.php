@@ -92,17 +92,17 @@ final class InternalDestinationNormaliser {
 			return null;
 		}
 
-		$home_path   = rtrim( $home['path'] ?? '', '/' );
-		$target_path = $target['path'] ?? '/';
-
 		// Where home is not the domain root the destination must sit inside
 		// this site, whether that is a subsite or a single site installed at
-		// example.com/blog; the '/' boundary stops '/sub1' matching '/sub10/foo'.
-		if ( '' !== $home_path ) {
-			if ( $target_path !== $home_path && ! str_starts_with( $target_path, $home_path . '/' ) ) {
-				return null;
-			}
-			$target_path = substr( $target_path, strlen( $home_path ) );
+		// example.com/blog, so a path that is not under home is not internal.
+		// The home path comes from HomePath rather than from $home['path']
+		// because HomePath::current() is multibyte-safe where a bare
+		// wp_parse_url() is not; the cached parse above is still what answers
+		// for host and port.
+		$target_path = HomePath::make_relative( $target['path'] ?? '/', HomePath::current() );
+
+		if ( null === $target_path ) {
+			return null;
 		}
 
 		$path = ( '' === $target_path ? '/' : $target_path )

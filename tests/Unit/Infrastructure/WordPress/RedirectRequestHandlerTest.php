@@ -28,6 +28,7 @@ use Mockery;
  * over a mocked repository.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
