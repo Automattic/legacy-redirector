@@ -21,6 +21,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * the already-up-to-date short circuit, and the progress and summary output.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  */
