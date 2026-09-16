@@ -264,56 +264,6 @@ class RedirectValidator {
 	}
 
 	/**
-	 * Validate that the source URL returns a 404.
-	 *
-	 * This is an optional validation that can be used to ensure
-	 * redirects are only created for non-existent URLs.
-	 *
-	 * @param SourceUrl $source The source URL.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_source_is_404( SourceUrl $source ): ValidationResult {
-		$url           = home_url( $source->path() );
-		$response_code = $this->get_response_code( $url );
-
-		if ( 404 !== $response_code ) {
-			return ValidationResult::invalid(
-				'non-404',
-				__( 'Redirects need to be from URLs that have a 404 status.', 'wpcom-legacy-redirector' )
-			);
-		}
-
-		return ValidationResult::valid();
-	}
-
-	/**
-	 * Validate that the source URL is not currently private.
-	 *
-	 * @param SourceUrl $source The source URL.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_source_not_private( SourceUrl $source ): ValidationResult {
-		$slug = trim( $source->path(), '/' );
-
-		// See validate_relative_path(): an empty slug matches an arbitrary post.
-		if ( '' === $slug ) {
-			return ValidationResult::valid();
-		}
-
-		$post_types = get_post_types();
-		$post       = get_page_by_path( $slug, OBJECT, $post_types );
-
-		if ( null !== $post && 'publish' !== get_post_status( $post ) ) {
-			return ValidationResult::invalid(
-				'private-url',
-				__( 'You are trying to redirect from a URL that is currently private.', 'wpcom-legacy-redirector' )
-			);
-		}
-
-		return ValidationResult::valid();
-	}
-
-	/**
 	 * Validate that the destination does not return a 404.
 	 *
 	 * Performs an HTTP request to check the destination is reachable.

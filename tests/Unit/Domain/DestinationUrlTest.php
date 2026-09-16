@@ -86,7 +86,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 		$destination = DestinationUrl::home();
 
 		$this->assertSame( '/', $destination->value() );
-		$this->assertTrue( $destination->is_home() );
 	}
 
 	/**
@@ -134,28 +133,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test is_home returns true for root path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::is_home
-	 */
-	public function test_is_home_for_root_path(): void {
-		$destination = DestinationUrl::from_string( '/' );
-
-		$this->assertTrue( $destination->is_home() );
-	}
-
-	/**
-	 * Test is_home returns false for other paths.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::is_home
-	 */
-	public function test_is_home_for_other_path(): void {
-		$destination = DestinationUrl::from_string( '/page' );
-
-		$this->assertFalse( $destination->is_home() );
-	}
-
-	/**
 	 * Test resolve returns absolute URL as-is.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::resolve
@@ -186,54 +163,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 		$destination = DestinationUrl::from_string( '/page' );
 
 		$this->assertSame( 'https://example.com/page', $destination->resolve( 'https://example.com/' ) );
-	}
-
-	/**
-	 * Test with_query_params appends parameters.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_appends(): void {
-		$destination = DestinationUrl::from_string( '/page' );
-		$result      = $destination->with_query_params( array( 'foo' => 'bar' ) );
-
-		$this->assertSame( '/page?foo=bar', $result->value() );
-	}
-
-	/**
-	 * Test with_query_params appends to existing query.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_appends_to_existing(): void {
-		$destination = DestinationUrl::from_string( '/page?existing=value' );
-		$result      = $destination->with_query_params( array( 'foo' => 'bar' ) );
-
-		$this->assertSame( '/page?existing=value&foo=bar', $result->value() );
-	}
-
-	/**
-	 * Test with_query_params returns same instance for empty params.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_empty_returns_same(): void {
-		$destination = DestinationUrl::from_string( '/page' );
-		$result      = $destination->with_query_params( array() );
-
-		$this->assertSame( $destination, $result );
-	}
-
-	/**
-	 * Test with_query_params is immutable.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_immutable(): void {
-		$destination = DestinationUrl::from_string( '/page' );
-		$destination->with_query_params( array( 'foo' => 'bar' ) );
-
-		$this->assertSame( '/page', $destination->value() );
 	}
 
 	/**
@@ -324,39 +253,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 			'scheme only'        => array( 'https:' ),
 			'no slashes'         => array( 'https:evil.com' ),
 		);
-	}
-
-	/**
-	 * Test with_query_params handles multiple params.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_multiple(): void {
-		$destination = DestinationUrl::from_string( '/page' );
-		$result      = $destination->with_query_params(
-			array(
-				'utm_source'   => 'test',
-				'utm_medium'   => 'email',
-				'utm_campaign' => 'launch',
-			)
-		);
-
-		$this->assertStringContainsString( 'utm_source=test', $result->value() );
-		$this->assertStringContainsString( 'utm_medium=email', $result->value() );
-		$this->assertStringContainsString( 'utm_campaign=launch', $result->value() );
-	}
-
-	/**
-	 * Test with_query_params handles special characters in values.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_special_chars(): void {
-		$destination = DestinationUrl::from_string( '/page' );
-		$result      = $destination->with_query_params( array( 'redirect' => 'https://example.com/path' ) );
-
-		// Value should be URL-encoded.
-		$this->assertStringContainsString( 'redirect=', $result->value() );
 	}
 
 	/**
@@ -472,24 +368,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test appended query params percent-encode unicode without touching the path.
-	 *
-	 * Appending uses http_build_query(), which encodes what it is given; the
-	 * existing path must pass through untouched so a unicode destination is not
-	 * double-encoded.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::with_query_params
-	 */
-	public function test_with_query_params_on_unicode_path(): void {
-		$destination = DestinationUrl::from_string( '/日本語' );
-
-		$result = $destination->with_query_params( array( 'q' => 'тест' ) );
-
-		$this->assertSame( '/日本語?q=%D1%82%D0%B5%D1%81%D1%82', $result->value() );
-		$this->assertTrue( $result->is_relative() );
-	}
-
-	/**
 	 * Test unicode equality is byte-exact.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::equals
@@ -500,15 +378,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 
 		$this->assertTrue( $nfc->equals( DestinationUrl::from_string( "/caf\xC3\xA9" ) ) );
 		$this->assertFalse( $nfc->equals( $nfd ) );
-	}
-
-	/**
-	 * Test a unicode path is not mistaken for the home page.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::is_home
-	 */
-	public function test_unicode_path_is_not_home(): void {
-		$this->assertFalse( DestinationUrl::from_string( '/日本語' )->is_home() );
 	}
 
 	/**

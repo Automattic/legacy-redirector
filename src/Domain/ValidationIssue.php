@@ -101,84 +101,11 @@ final class ValidationIssue {
 	}
 
 	/**
-	 * Check if the redirect is broken and should be disabled.
-	 *
-	 * @return bool
-	 */
-	public function is_broken(): bool {
-		return $this->type->is_broken();
-	}
-
-	/**
 	 * Get the redirect ID.
-	 *
-	 * Convenience method for output formatting.
 	 *
 	 * @return int|null
 	 */
 	public function redirect_id(): ?int {
 		return $this->redirect->id();
-	}
-
-	/**
-	 * Get the redirect source path.
-	 *
-	 * Convenience method for output formatting.
-	 *
-	 * @return string
-	 */
-	public function source_path(): string {
-		return $this->redirect->source()->path();
-	}
-
-	/**
-	 * Get the destination as a string (URL or post ID).
-	 *
-	 * Convenience method for output formatting.
-	 *
-	 * @return string
-	 */
-	public function destination_string(): string {
-		$dest = $this->redirect->destination();
-
-		if ( $dest->is_post_id() ) {
-			return (string) $dest->as_post_id()->value();
-		}
-
-		return $dest->as_url()->value();
-	}
-
-	/**
-	 * Get the destination type label.
-	 *
-	 * @return string Either 'post' or 'url'.
-	 */
-	public function destination_type(): string {
-		return $this->redirect->destination()->is_post_id() ? 'post' : 'url';
-	}
-
-	/**
-	 * Get the redirect status label.
-	 *
-	 * @return string Either 'enabled' or 'disabled'.
-	 */
-	public function status_label(): string {
-		return $this->redirect->is_active() ? 'enabled' : 'disabled';
-	}
-
-	/**
-	 * Convert to array for CLI output formatting.
-	 *
-	 * @return array{ID: int|null, from: string, to: string, type: string, issue: string, status: string}
-	 */
-	public function to_array(): array {
-		return array(
-			'ID'     => $this->redirect_id(),
-			'from'   => $this->source_path(),
-			'to'     => $this->destination_string(),
-			'type'   => $this->destination_type(),
-			'issue'  => $this->label(),
-			'status' => $this->status_label(),
-		);
 	}
 }

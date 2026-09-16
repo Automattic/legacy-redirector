@@ -190,15 +190,6 @@ final class Redirect {
 	}
 
 	/**
-	 * Check if the redirect is trashed.
-	 *
-	 * @return bool True if status is 'trash'.
-	 */
-	public function is_trashed(): bool {
-		return 'trash' === $this->status;
-	}
-
-	/**
 	 * Get the creation timestamp.
 	 *
 	 * @return DateTimeImmutable|null
@@ -266,24 +257,6 @@ final class Redirect {
 			$this->created_at,
 			$this->corruption
 		);
-	}
-
-	/**
-	 * Publish this redirect (set status to publish).
-	 *
-	 * @return self
-	 */
-	public function publish(): self {
-		return $this->with_status( 'publish' );
-	}
-
-	/**
-	 * Trash this redirect (set status to trash).
-	 *
-	 * @return self
-	 */
-	public function trash(): self {
-		return $this->with_status( 'trash' );
 	}
 
 	/**

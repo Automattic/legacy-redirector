@@ -66,7 +66,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$this->assertInstanceOf( Redirect::class, $found );
 		$this->assertSame( $saved->id(), $found->id() );
 		$this->assertTrue( $source->equals( $found->source() ) );
-		$this->assertTrue( $destination->equals( $found->destination() ) );
+		$this->assertSame( $destination->raw_value(), $found->destination()->raw_value() );
 	}
 
 	/**
@@ -573,7 +573,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		wp_trash_post( $saved->id() );
 		$found_trashed = $this->repository->find_by_id( $saved->id() );
 		$this->assertSame( 'trash', $found_trashed->status() );
-		$this->assertTrue( $found_trashed->is_trashed() );
+		$this->assertFalse( $found_trashed->is_active() );
 	}
 
 	/**

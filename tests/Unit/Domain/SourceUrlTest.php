@@ -171,86 +171,6 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test path_without_query returns path only.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::path_without_query
-	 */
-	public function test_path_without_query(): void {
-		$source = SourceUrl::from_string( '/test-page?foo=bar' );
-
-		$this->assertSame( '/test-page', $source->path_without_query() );
-	}
-
-	/**
-	 * Test path_without_query with no query returns full path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::path_without_query
-	 */
-	public function test_path_without_query_when_no_query(): void {
-		$source = SourceUrl::from_string( '/test-page' );
-
-		$this->assertSame( '/test-page', $source->path_without_query() );
-	}
-
-	/**
-	 * Test query_string returns query without question mark.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::query_string
-	 */
-	public function test_query_string(): void {
-		$source = SourceUrl::from_string( '/test-page?foo=bar&baz=qux' );
-
-		$this->assertSame( 'foo=bar&baz=qux', $source->query_string() );
-	}
-
-	/**
-	 * Test query_string returns empty string when no query.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::query_string
-	 */
-	public function test_query_string_when_no_query(): void {
-		$source = SourceUrl::from_string( '/test-page' );
-
-		$this->assertSame( '', $source->query_string() );
-	}
-
-	/**
-	 * Test without_query_params removes specified params.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_removes_params(): void {
-		$source = SourceUrl::from_string( '/page?foo=bar&utm_source=test&baz=qux' );
-		$result = $source->without_query_params( array( 'utm_source' ) );
-
-		$this->assertSame( '/page?foo=bar&baz=qux', $result->path() );
-	}
-
-	/**
-	 * Test without_query_params returns same instance when no keys.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_empty_keys_returns_same(): void {
-		$source = SourceUrl::from_string( '/page?foo=bar' );
-		$result = $source->without_query_params( array() );
-
-		$this->assertSame( $source, $result );
-	}
-
-	/**
-	 * Test without_query_params does not modify original.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_immutable(): void {
-		$source = SourceUrl::from_string( '/page?foo=bar&baz=qux' );
-		$source->without_query_params( array( 'foo' ) );
-
-		$this->assertSame( '/page?foo=bar&baz=qux', $source->path() );
-	}
-
-	/**
 	 * Test equals returns true for same path.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::equals
@@ -320,54 +240,6 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test without_query_params handles multiple params to remove.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_removes_multiple_params(): void {
-		$source = SourceUrl::from_string( '/page?utm_source=test&foo=bar&utm_medium=email&baz=qux' );
-		$result = $source->without_query_params( array( 'utm_source', 'utm_medium' ) );
-
-		$this->assertSame( '/page?foo=bar&baz=qux', $result->path() );
-	}
-
-	/**
-	 * Test without_query_params handles params not in URL.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_ignores_missing_params(): void {
-		$source = SourceUrl::from_string( '/page?foo=bar' );
-		$result = $source->without_query_params( array( 'nonexistent' ) );
-
-		$this->assertSame( '/page?foo=bar', $result->path() );
-	}
-
-	/**
-	 * Test without_query_params handles removing all params.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_removes_all_params(): void {
-		$source = SourceUrl::from_string( '/page?foo=bar&baz=qux' );
-		$result = $source->without_query_params( array( 'foo', 'baz' ) );
-
-		$this->assertSame( '/page', $result->path() );
-	}
-
-	/**
-	 * Test without_query_params handles URL with no query string.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_handles_no_query(): void {
-		$source = SourceUrl::from_string( '/page' );
-		$result = $source->without_query_params( array( 'foo' ) );
-
-		$this->assertSame( '/page', $result->path() );
-	}
-
-	/**
 	 * Test query params with special characters are URL-decoded.
 	 *
 	 * SourceUrl normalizes by decoding URL-encoded characters.
@@ -379,7 +251,6 @@ final class SourceUrlTest extends YoastTestCase {
 
 		// URL-encoded values are decoded by SourceUrl.
 		$this->assertSame( '/page?redirect=https://example.com&name=John Doe', $source->path() );
-		$this->assertSame( 'redirect=https://example.com&name=John Doe', $source->query_string() );
 	}
 
 	/**
@@ -402,7 +273,6 @@ final class SourceUrlTest extends YoastTestCase {
 		$source = SourceUrl::from_string( '/page?debug&verbose' );
 
 		$this->assertSame( '/page?debug&verbose', $source->path() );
-		$this->assertSame( 'debug&verbose', $source->query_string() );
 	}
 
 	/**
@@ -414,8 +284,6 @@ final class SourceUrlTest extends YoastTestCase {
 		$source = SourceUrl::from_string( '/?foo=bar' );
 
 		$this->assertSame( '/?foo=bar', $source->path() );
-		$this->assertSame( '/', $source->path_without_query() );
-		$this->assertSame( 'foo=bar', $source->query_string() );
 	}
 
 	/**
@@ -589,24 +457,6 @@ final class SourceUrlTest extends YoastTestCase {
 		$this->assertNotSame( $nfc->path(), $nfd->path() );
 		$this->assertNotSame( $nfc->hash(), $nfd->hash() );
 		$this->assertFalse( $nfc->equals( $nfd ) );
-	}
-
-	/**
-	 * Test unicode survives without_query_params().
-	 *
-	 * Rebuilding uses http_build_query(), which re-encodes what it keeps, so
-	 * the path has to be reassembled from the untouched base path rather than
-	 * round-tripped.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::without_query_params
-	 */
-	public function test_without_query_params_preserves_unicode_path(): void {
-		$source = SourceUrl::from_string( '/привет-мир/?utm_source=x&тест=значение' );
-
-		$result = $source->without_query_params( array( 'utm_source' ) );
-
-		$this->assertSame( '/привет-мир/', $result->path_without_query() );
-		$this->assertSame( 'тест', rawurldecode( explode( '=', $result->query_string() )[0] ) );
 	}
 
 	/**
