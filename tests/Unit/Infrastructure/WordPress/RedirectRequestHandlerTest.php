@@ -22,7 +22,8 @@ use Mockery;
  *
  * Tests the request-handling shell around RedirectResolver. The redirect
  * itself cannot be unit tested (wp_safe_redirect is followed by exit), so
- * these tests cover the early-exit paths and the allowed-hosts filter logic.
+ * these tests cover the early-exit paths, the Cache-Control header, and
+ * the allowed-hosts filter logic.
  *
  * RedirectResolver is final, so the handler is tested with a real resolver
  * over a mocked repository.
@@ -30,6 +31,7 @@ use Mockery;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class RedirectRequestHandlerTest extends MonkeyStubs {
@@ -58,6 +60,91 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
 		$this->handler    = new RedirectRequestHandler( new RedirectResolver( $this->repository ) );
+
+		$GLOBALS['wpcom_legacy_redirector_sent_headers'] = array();
+	}
+
+	/**
+	 * Invoke the private Cache-Control header method.
+	 *
+	 * The method is reached in production only via perform_redirect(), which
+	 * ends in exit, so it is driven directly here.
+	 *
+	 * @param string $url         The destination URL.
+	 * @param int    $status_code The HTTP status code.
+	 * @return string[] The headers sent, as recorded by the header() stub.
+	 */
+	private function send_cache_control_header( string $url, int $status_code ): array {
+		( new \ReflectionMethod( $this->handler, 'send_cache_control_header' ) )
+			->invoke( $this->handler, $url, $status_code );
+
+		return $GLOBALS['wpcom_legacy_redirector_sent_headers'];
+	}
+
+	/**
+	 * Test the max-age defaults to one minute for a non-permanent redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 */
+	public function test_cache_control_max_age_defaults_to_a_minute_for_temporary_redirects(): void {
+		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_max_age' )
+			->once()
+			->with( MINUTE_IN_SECONDS, 'https://example.com/destination', 302 )
+			->andReturnFirstArg();
+
+		$this->assertSame(
+			array( 'Cache-Control: max-age=60' ),
+			$this->send_cache_control_header( 'https://example.com/destination', 302 )
+		);
+	}
+
+	/**
+	 * Test the filter overrides the default max-age.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 */
+	public function test_cache_control_max_age_can_be_overridden_by_the_filter(): void {
+		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_max_age' )
+			->once()
+			->with( DAY_IN_SECONDS, 'https://example.com/destination', 301 )
+			->andReturn( 3600 );
+
+		$this->assertSame(
+			array( 'Cache-Control: max-age=3600' ),
+			$this->send_cache_control_header( 'https://example.com/destination', 301 )
+		);
+	}
+
+	/**
+	 * Test a filtered max-age of zero or less suppresses the header.
+	 *
+	 * @dataProvider data_suppressing_max_ages
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 *
+	 * @param int $max_age The filtered max-age.
+	 * @return void
+	 */
+	public function test_cache_control_header_is_suppressed_by_a_non_positive_max_age( int $max_age ): void {
+		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_max_age' )
+			->once()
+			->andReturn( $max_age );
+
+		$this->assertSame(
+			array(),
+			$this->send_cache_control_header( 'https://example.com/destination', 301 )
+		);
+	}
+
+	/**
+	 * Data provider for max-ages that suppress the header.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public static function data_suppressing_max_ages(): array {
+		return array(
+			'zero'     => array( 0 ),
+			'negative' => array( -1 ),
+		);
 	}
 
 	/**
