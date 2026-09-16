@@ -31,6 +31,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class RedirectRequestHandlerTest extends MonkeyStubs {
 

@@ -37,6 +37,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures

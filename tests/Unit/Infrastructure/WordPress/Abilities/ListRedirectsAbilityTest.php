@@ -28,6 +28,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  */
 final class ListRedirectsAbilityTest extends MonkeyStubs {

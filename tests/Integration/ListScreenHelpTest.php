@@ -23,6 +23,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup
  * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class ListScreenHelpTest extends TestCase {
 

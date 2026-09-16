@@ -43,6 +43,7 @@ use Automattic\LegacyRedirector\Domain\ValidationIssueType;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class CorruptRedirectRowsTest extends TestCase {
 

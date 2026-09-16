@@ -27,6 +27,7 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class CreateRedirectAbilityTest extends MonkeyStubs {
 

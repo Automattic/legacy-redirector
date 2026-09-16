@@ -49,6 +49,7 @@ use WP_Ability;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
  * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository

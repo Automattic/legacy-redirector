@@ -24,6 +24,7 @@ use Brain\Monkey\Functions;
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class InternalDestinationNormaliserTest extends MonkeyStubs {
 
