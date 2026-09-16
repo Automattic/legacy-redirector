@@ -7,7 +7,9 @@ This guide covers breaking changes and migration steps when upgrading from versi
 Two storage changes between 1.x and 2.0 would otherwise stop every redirect you already have from working, with no error and no warning:
 
 1. **Version 1.x stored redirects as drafts.** It called `wp_insert_post()` without a `post_status`, so WordPress defaulted each redirect to `draft`. Version 2.0 only serves redirects with the `publish` status.
-2. **On subdirectory multisites, 1.x stored source paths with the subsite prefix included** (`/subsite1/old-page`), because it prefixed `home_url()` before saving. Version 2.0 strips the subsite prefix from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
+2. **Where your site is not at the domain root, 1.x stored source paths with that prefix included** (`/subsite1/old-page` on a subsite, `/blog/old-page` on a single site installed at `example.com/blog`). Version 1.x read the raw request path for both storing and matching, so the two agreed. Version 2.0 strips the site's base path from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
+
+   This applies to any install whose home URL is below the domain root, not just multisites. If your site lives at `example.com/blog`, you are affected in exactly the same way as a subsite.
 
 A one-off migration handles both. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated so it runs only once.
 
@@ -35,7 +37,7 @@ wp site list --field=url | xargs -I % wp --url=% wpcom-legacy-redirector migrate
 
 Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes redirects that were **never** published, which WordPress records with a `post_modified_gmt` of `0000-00-00 00:00:00`. Anything you disable after upgrading keeps a real modified date and is left alone.
 
-If rewriting a subsite path would collide with a redirect that already uses the subsite-relative form, the migration leaves the 1.x redirect untouched and reports the clash rather than silently discarding one of them. `wp wpcom-legacy-redirector migrate` lists any such conflicts for you to reconcile by hand.
+If stripping the base path would collide with a redirect that already uses the site-relative form, the migration leaves the 1.x redirect untouched and reports the clash rather than silently discarding one of them. `wp wpcom-legacy-redirector migrate` lists any such conflicts for you to reconcile by hand.
 
 ## Breaking Changes
 
