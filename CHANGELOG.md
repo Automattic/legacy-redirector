@@ -20,7 +20,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Added
 
-- Admin UI for managing redirects: a list table with status views for viewing, adding, editing, deleting, and validating redirects, all gated on the new `manage_redirects` capability, in https://github.com/Automattic/wpcom-legacy-redirector/pull/159 and https://github.com/Automattic/wpcom-legacy-redirector/pull/132
+- Admin UI for managing redirects: a list table with status views for viewing, adding, editing, deleting, and validating redirects, sortable by source or destination, all gated on the new `manage_redirects` capability, in https://github.com/Automattic/wpcom-legacy-redirector/pull/159 and https://github.com/Automattic/wpcom-legacy-redirector/pull/132
 - The Add/Edit Redirect form shows the site's home URL alongside the source field, so it is clear the path is read relative to that site. On a subsite at `example.com/blog`, a source of `/foo` means `example.com/blog/foo`, not `example.com/foo`.
 - Full multisite/network support with per-site redirect management in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
 - One-off migration of redirect data created by 1.x, covering the draft post status 1.x left on every redirect, the subsite prefix 1.x baked into stored source paths on subdirectory multisites, and destination URLs pointing back at the site itself (now stored in their relative, canonically encoded form). Runs automatically in batches, or in one pass via the new `wp wpcom-legacy-redirector migrate` command (`--dry-run` supported).

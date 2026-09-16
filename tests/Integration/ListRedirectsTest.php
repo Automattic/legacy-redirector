@@ -459,4 +459,101 @@ final class ListRedirectsTest extends TestCase {
 		$this->assertNotFalse( has_action( 'manage_vip-legacy-redirect_posts_custom_column', array( $columns_manager, 'render_column' ) ) );
 		$this->assertNotFalse( has_filter( 'post_row_actions', array( $row_actions_manager, 'modify_row_actions' ) ) );
 	}
+
+	/**
+	 * Paginating the list table shows every redirect exactly once.
+	 *
+	 * Redirects created by a CSV import share a post_date to the second, and
+	 * ordering by post_date alone is not a total order, so tied rows sort
+	 * differently on every page query - repeating on some pages and vanishing
+	 * from others. Asserted across all three sort orders, because titles and
+	 * destinations tie as readily as dates.
+	 *
+	 * @dataProvider data_list_table_sorts
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::handle_sorting
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::order_by_destination
+	 *
+	 * @param string $orderby The orderby the request asks for.
+	 * @param string $order   The sort direction.
+	 */
+	public function test_pagination_shows_every_redirect_exactly_once( string $orderby, string $order ): void {
+		$shared_date = '2026-01-01 00:00:00';
+		$total       = 25;
+		$per_page    = 10;
+
+		// Identical post_date, title prefix and destination, so every column
+		// the list table can sort by is fully tied.
+		$expected = array();
+		for ( $i = 1; $i <= $total; $i++ ) {
+			$expected[] = self::factory()->post->create(
+				array(
+					'post_type'     => PostType::POST_TYPE,
+					'post_status'   => 'publish',
+					'post_title'    => '/tied-source',
+					'post_name'     => md5( '/tied-source-' . $i ),
+					'post_excerpt'  => '/tied-destination',
+					'post_date'     => $shared_date,
+					'post_date_gmt' => $shared_date,
+				)
+			);
+		}
+
+		$this->columns_manager->register();
+		set_current_screen( 'edit-' . PostType::POST_TYPE );
+
+		$pages = (int) ceil( $total / $per_page );
+		$seen  = array();
+
+		// phpcs:disable WordPress.WP.GlobalVariablesOverride.Prohibited -- handle_sorting() and order_by_destination() act only on the main query, so the query under test has to be it; the original is restored below.
+		$previous = $GLOBALS['wp_the_query'];
+
+		for ( $page = 1; $page <= $pages; $page++ ) {
+			$query                   = new \WP_Query();
+			$GLOBALS['wp_the_query'] = $query;
+
+			$ids = $query->query(
+				array(
+					'post_type'      => PostType::POST_TYPE,
+					'post_status'    => array( 'publish', 'future', 'draft', 'pending', 'private' ),
+					'orderby'        => $orderby,
+					'order'          => $order,
+					'posts_per_page' => $per_page,
+					'paged'          => $page,
+					'fields'         => 'ids',
+				)
+			);
+
+			$seen = array_merge( $seen, $ids );
+		}
+
+		$GLOBALS['wp_the_query'] = $previous;
+		// phpcs:enable WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		set_current_screen( 'front' );
+
+		sort( $seen );
+		sort( $expected );
+
+		$this->assertSame(
+			$expected,
+			$seen,
+			'Every redirect should appear on exactly one page, with none repeated or skipped.'
+		);
+	}
+
+	/**
+	 * Sort orders the list table offers.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public function data_list_table_sorts(): array {
+		return array(
+			'default (date)'  => array( '', 'DESC' ),
+			'from ascending'  => array( 'from', 'ASC' ),
+			'from descending' => array( 'from', 'DESC' ),
+			'to ascending'    => array( 'to', 'ASC' ),
+			'to descending'   => array( 'to', 'DESC' ),
+		);
+	}
 }
