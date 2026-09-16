@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
@@ -17,6 +18,22 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * Handles row actions for the redirects list table.
  */
 final class RowActionsManager {
+
+	/**
+	 * Redirect repository.
+	 *
+	 * @var RedirectRepositoryInterface
+	 */
+	private RedirectRepositoryInterface $repository;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectRepositoryInterface $repository Redirect repository.
+	 */
+	public function __construct( RedirectRepositoryInterface $repository ) {
+		$this->repository = $repository;
+	}
 
 	/**
 	 * Register hooks.
@@ -52,6 +69,11 @@ final class RowActionsManager {
 			return $actions;
 		}
 
+		$redirect = $this->repository->find_by_id( $post->ID );
+		if ( null === $redirect ) {
+			return $actions;
+		}
+
 		// Edit link - use our custom Edit Redirect page.
 		$edit_link       = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $post->ID );
 		$actions['edit'] = sprintf(
@@ -61,7 +83,7 @@ final class RowActionsManager {
 		);
 
 		// Enable/Disable link based on current status.
-		if ( 'publish' === $post->post_status ) {
+		if ( $redirect->is_active() ) {
 			$disable_link       = wp_nonce_url(
 				add_query_arg(
 					array(
@@ -111,14 +133,14 @@ final class RowActionsManager {
 			'<a href="%1$s" class="validate-redirect" data-redirect-id="%2$d" data-source="%3$s">%4$s</a>',
 			esc_url( $validate_link ),
 			$post->ID,
-			esc_attr( $post->post_title ),
+			esc_attr( $redirect->source()->path() ),
 			esc_html__( 'Validate', 'wpcom-legacy-redirector' )
 		);
 
 		// Follow link - use home_url() to include subsite path in subdirectory multisite.
 		$actions['follow'] = sprintf(
 			'<a href="%1$s" target="_blank">%2$s</a>',
-			esc_url( home_url( $post->post_title ) ),
+			esc_url( home_url( $redirect->source()->path() ) ),
 			esc_html__( 'Follow', 'wpcom-legacy-redirector' )
 		);
 

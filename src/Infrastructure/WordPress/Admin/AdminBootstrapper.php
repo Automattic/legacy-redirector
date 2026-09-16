@@ -132,7 +132,7 @@ final class AdminBootstrapper {
 		$columns = new ColumnsManager( $this->repository, $this->auditor );
 		$columns->register();
 
-		$row_actions = new RowActionsManager();
+		$row_actions = new RowActionsManager( $this->repository );
 		$row_actions->register();
 
 		$view_filters = new ViewFilters( $this->query_repository );

@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -26,12 +27,21 @@ final class StatusActionsHandler {
 	private RedirectManager $manager;
 
 	/**
+	 * Redirect repository.
+	 *
+	 * @var RedirectRepositoryInterface
+	 */
+	private RedirectRepositoryInterface $repository;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param RedirectManager $manager Redirect manager.
+	 * @param RedirectManager             $manager    Redirect manager.
+	 * @param RedirectRepositoryInterface $repository Redirect repository.
 	 */
-	public function __construct( RedirectManager $manager ) {
-		$this->manager = $manager;
+	public function __construct( RedirectManager $manager, RedirectRepositoryInterface $repository ) {
+		$this->manager    = $manager;
+		$this->repository = $repository;
 	}
 
 	/**
@@ -88,14 +98,13 @@ final class StatusActionsHandler {
 			wp_die( esc_html__( 'You do not have permission to modify redirects.', 'wpcom-legacy-redirector' ) );
 		}
 
-		// Get the redirect source before modifying. RedirectManager rejects posts
-		// of other types too, but this handler reads the title before calling it,
-		// so it checks the type itself rather than relying on that.
-		$redirect_post = get_post( $redirect_id );
-		if ( ! $redirect_post || PostType::POST_TYPE !== $redirect_post->post_type ) {
+		// Get the redirect source before modifying. The repository returns
+		// null for missing IDs and posts of other types.
+		$redirect = $this->repository->find_by_id( $redirect_id );
+		if ( null === $redirect ) {
 			wp_die( esc_html__( 'Invalid redirect.', 'wpcom-legacy-redirector' ) );
 		}
-		$redirect_source = $redirect_post->post_title;
+		$redirect_source = $redirect->source()->path();
 
 		// Perform the status change.
 		$success = 'publish' === $new_status

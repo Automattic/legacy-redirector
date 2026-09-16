@@ -153,7 +153,7 @@ final class PluginBootstrapper {
 		$bulk_actions->register();
 
 		// Register status actions handler (single enable/disable).
-		$status_actions = new StatusActionsHandler( $this->container->manager() );
+		$status_actions = new StatusActionsHandler( $this->container->manager(), $this->container->repository() );
 		$status_actions->register();
 
 		// Register status change notices.
@@ -165,7 +165,7 @@ final class PluginBootstrapper {
 		$upgrade_notice->register();
 
 		// Register trash redirect enhancer.
-		$trash_enhancer = new TrashRedirectEnhancer();
+		$trash_enhancer = new TrashRedirectEnhancer( $this->container->repository() );
 		$trash_enhancer->register();
 	}
 

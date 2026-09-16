@@ -51,7 +51,7 @@ final class StatusActionsHandlerTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->handler = new StatusActionsHandler( $this->manager() );
+		$this->handler = new StatusActionsHandler( $this->manager(), $this->repository() );
 
 		( new Capability() )->register();
 

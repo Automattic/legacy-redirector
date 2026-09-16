@@ -10,19 +10,25 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Admin\Notices;
 
 use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey;
 use Brain\Monkey\Functions;
 use Mockery;
-use WP_Post;
 
 /**
  * ValidationNoticesTest class.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  */
 final class ValidationNoticesTest extends MonkeyStubs {
 
@@ -78,22 +84,25 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	public function test_display_validation_notices_requires_capability(): void {
 		$this->prime_notice_request();
 		Functions\when( 'current_user_can' )->justReturn( false );
-		Functions\expect( 'get_post' )->never();
+		$this->repository->shouldNotReceive( 'find_by_id' );
 
 		$this->assertSame( '', $this->render() );
 	}
 
 	/**
-	 * Test the title of a post that is not a redirect is never disclosed.
+	 * Test no source context is shown when the ID is not a redirect.
+	 *
+	 * The repository returns null for IDs of other post types, so no foreign
+	 * post title can be disclosed.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
 	public function test_display_validation_notices_ignores_other_post_types(): void {
 		$this->prime_notice_request();
 		Functions\when( 'current_user_can' )->justReturn( true );
-		Functions\when( 'get_post' )->justReturn( $this->post( 'post', 'Secret draft title' ) );
+		$this->repository->shouldReceive( 'find_by_id' )->with( 123 )->andReturn( null );
 
-		$this->assertStringNotContainsString( 'Secret draft title', $this->render() );
+		$this->assertStringNotContainsString( 'for', $this->render() );
 	}
 
 	/**
@@ -104,7 +113,7 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	public function test_display_validation_notices_shows_redirect_source(): void {
 		$this->prime_notice_request();
 		Functions\when( 'current_user_can' )->justReturn( true );
-		Functions\when( 'get_post' )->justReturn( $this->post( PostType::POST_TYPE, '/old-page' ) );
+		$this->repository->shouldReceive( 'find_by_id' )->with( 123 )->andReturn( $this->redirect( '/old-page' ) );
 
 		$this->assertStringContainsString( '/old-page', $this->render() );
 	}
@@ -164,18 +173,18 @@ final class ValidationNoticesTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Build a WP_Post stub.
+	 * Build a Redirect entity.
 	 *
-	 * @param string $post_type  Post type.
-	 * @param string $post_title Post title.
-	 * @return WP_Post
+	 * @param string $source_path Source path.
+	 * @return Redirect
 	 */
-	private function post( string $post_type, string $post_title ): WP_Post {
-		$post             = Mockery::mock( WP_Post::class );
-		$post->post_type  = $post_type;
-		$post->post_title = $post_title;
-
-		return $post;
+	private function redirect( string $source_path ): Redirect {
+		return Redirect::reconstitute(
+			123,
+			SourceUrl::from_string( $source_path ),
+			Destination::from_url( DestinationUrl::from_string( '/new-page' ) ),
+			'publish'
+		);
 	}
 
 	/**
