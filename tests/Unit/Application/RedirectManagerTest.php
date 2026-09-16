@@ -578,6 +578,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
 	 */
 	public function test_update_redirect_returns_true_on_success(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$source          = SourceUrl::from_string( '/old-page' );
 		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
 		$new_destination = Destination::from_url( DestinationUrl::from_string( '/new-destination' ) );
@@ -626,6 +627,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
 	 */
 	public function test_update_redirect_returns_error_for_invalid_source(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$source   = SourceUrl::from_string( '/old-page' );
 		$redirect = $this->create_test_redirect( 123, $source, 'publish' );
 
@@ -682,6 +684,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::update_redirect
 	 */
 	public function test_update_redirect_returns_false_when_validation_fails(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$source          = SourceUrl::from_string( '/old-page' );
 		$redirect        = $this->create_test_redirect( 123, $source, 'publish' );
 		$new_destination = Destination::from_url( DestinationUrl::from_string( '/new-source' ) );

@@ -50,7 +50,7 @@ final class RedirectFetcher {
 			return $this->repository->find_by_id( (int) $identifier );
 		}
 
-		$source      = SourceUrl::from_string( $identifier );
+		$source      = SourceUrl::from_string( $identifier, HomePath::current() );
 		$redirect_id = $this->repository->get_id_by_source( $source );
 
 		return $redirect_id > 0 ? $this->repository->find_by_id( $redirect_id ) : null;

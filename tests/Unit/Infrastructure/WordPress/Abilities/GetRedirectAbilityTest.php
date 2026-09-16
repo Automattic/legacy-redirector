@@ -110,6 +110,7 @@ final class GetRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility::execute
 	 */
 	public function test_execute_returns_an_error_for_an_invalid_identifier(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$result = $this->ability->execute( array( 'redirect' => 'http://example.com' ) );
 
 		$this->assertInstanceOf( WP_Error::class, $result );

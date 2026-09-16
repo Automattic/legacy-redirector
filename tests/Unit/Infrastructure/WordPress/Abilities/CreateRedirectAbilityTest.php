@@ -63,6 +63,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_returns_the_created_redirect(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->with( Mockery::any(), Mockery::any(), true, 'publish' )
@@ -93,6 +94,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_creates_a_disabled_redirect_as_a_draft(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->with( Mockery::any(), Mockery::any(), true, 'draft' )
@@ -117,6 +119,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_returns_an_error_when_creation_fails(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->andReturn( RedirectCreationResult::error( 'duplicate-redirect', 'Already exists.' ) );
@@ -138,6 +141,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
 	 */
 	public function test_execute_rejects_an_invalid_source(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		$this->manager->shouldNotReceive( 'create_redirect' );
 
 		$result = $this->ability->execute(

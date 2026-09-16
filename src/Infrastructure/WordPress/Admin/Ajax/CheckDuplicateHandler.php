@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -74,7 +75,7 @@ final class CheckDuplicateHandler {
 		}
 
 		try {
-			$source   = SourceUrl::from_string( $redirect_from );
+			$source   = SourceUrl::from_string( $redirect_from, HomePath::current() );
 			$existing = $this->repository->get_id_by_source( $source );
 
 			$exists = $existing > 0 && $existing !== $exclude_id;

@@ -50,13 +50,19 @@ final class SourceUrl {
 	 * Accepts full URLs (with scheme/host) or paths. The URL is normalised
 	 * to just the path and query string components.
 	 *
-	 * @param string $url The URL or path to create a SourceUrl from.
+	 * @param string $url       The URL or path to create a SourceUrl from.
+	 * @param string $home_path The current site's home path without a trailing
+	 *                          slash (e.g. '/subsite1'), used to strip the
+	 *                          subsite prefix from full URLs on subdirectory
+	 *                          multisites. '' means home is at the domain root
+	 *                          and nothing is stripped. Callers with WordPress
+	 *                          available should pass HomePath::current().
 	 * @return self
 	 *
 	 * @throws InvalidArgumentException If the URL is empty, invalid, or cannot be parsed.
 	 */
-	public static function from_string( string $url ): self {
-		$normalised = self::normalise( $url );
+	public static function from_string( string $url, string $home_path = '' ): self {
+		$normalised = self::normalise( $url, $home_path );
 		return new self( $normalised );
 	}
 
@@ -70,12 +76,13 @@ final class SourceUrl {
 	 * that a source given as a full URL lands on the same subsite-relative
 	 * path an incoming request is looked up by. See strip_home_path().
 	 *
-	 * @param string $url URL to normalise.
+	 * @param string $url       URL to normalise.
+	 * @param string $home_path The site's home path ('' when at the domain root).
 	 * @return string Normalised URL (path + query).
 	 *
 	 * @throws InvalidArgumentException If the URL is invalid or cannot be parsed.
 	 */
-	private static function normalise( string $url ): string {
+	private static function normalise( string $url, string $home_path ): string {
 		// Ensure path starts with / before sanitisation, so a bare 'path' is
 		// treated as a path rather than a schemeless domain.
 		// REQUEST_URI always starts with /, so source paths must too.
@@ -105,7 +112,7 @@ final class SourceUrl {
 		// subsite it still carries the subsite prefix. A bare request URI never
 		// does, so the guard keeps the request hot path untouched.
 		if ( isset( $components['host'] ) ) {
-			$normalised = self::strip_home_path( $normalised );
+			$normalised = self::strip_home_path( $normalised, $home_path );
 		}
 
 		if ( ! empty( $components['query'] ) ) {
@@ -213,15 +220,15 @@ final class SourceUrl {
 	 * match anything whatever host it came from.
 	 *
 	 * No-op on single sites and subdomain multisites, where the home path is
-	 * '/' and there is nothing to remove.
+	 * '' and there is nothing to remove.
 	 *
-	 * @param string $path The path component of a full URL.
+	 * @param string $path      The path component of a full URL.
+	 * @param string $home_path The site's home path, injected by the caller
+	 *                          because the domain layer cannot ask WordPress.
 	 * @return string The path relative to this site's home URL.
-	 *
-	 * @throws InvalidArgumentException If the site's home URL cannot be parsed.
 	 */
-	private static function strip_home_path( string $path ): string {
-		$home_path = rtrim( (string) ( self::mb_parse_url( home_url() )['path'] ?? '' ), '/' );
+	private static function strip_home_path( string $path, string $home_path ): string {
+		$home_path = rtrim( $home_path, '/' );
 
 		if ( '' === $home_path ) {
 			return $path;

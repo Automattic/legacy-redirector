@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
@@ -164,7 +165,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 				}
 
 				try {
-					$source = SourceUrl::from_string( $from_path );
+					$source = SourceUrl::from_string( $from_path, HomePath::current() );
 				} catch ( \InvalidArgumentException $e ) {
 					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
 					continue;

@@ -66,7 +66,9 @@ final class RedirectResolver {
 		$preservable_params = $this->get_preservable_params( $path );
 		$lookup_path        = $this->strip_preservable_params( $path, $preservable_params );
 
-		// Find the redirect.
+		// Find the redirect. No home path is passed: $lookup_path is a bare
+		// request path with no host, so home-path stripping can never fire,
+		// and this hot path skips the home_url() lookup entirely.
 		try {
 			$source   = SourceUrl::from_string( $lookup_path );
 			$redirect = $this->repository->find_by_source( $source );
@@ -124,7 +126,7 @@ final class RedirectResolver {
 	 */
 	public function find_redirect( string $url ): ?Redirect {
 		try {
-			$source = SourceUrl::from_string( $url );
+			$source = SourceUrl::from_string( $url, HomePath::current() );
 			return $this->repository->find_by_source( $source );
 		} catch ( \InvalidArgumentException $e ) {
 			return null;
