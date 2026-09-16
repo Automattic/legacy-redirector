@@ -16,6 +16,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * Integration tests for DeleteCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher

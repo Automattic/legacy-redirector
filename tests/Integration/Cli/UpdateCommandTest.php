@@ -17,6 +17,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * Integration tests for UpdateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher

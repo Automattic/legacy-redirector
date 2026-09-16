@@ -23,6 +23,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @group multisite
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Domain\Destination
