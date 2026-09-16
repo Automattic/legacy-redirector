@@ -11,6 +11,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 
 /**
@@ -162,7 +163,7 @@ final class MultisiteTest extends TestCase {
 
 		$this->assertSame(
 			'/old-page',
-			SourceUrl::from_string( $full_url )->path(),
+			SourceUrl::from_string( $full_url, HomePath::current() )->path(),
 			'The site home path should not survive into the stored source.'
 		);
 
