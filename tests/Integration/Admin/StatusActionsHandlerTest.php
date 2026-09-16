@@ -107,6 +107,72 @@ final class StatusActionsHandlerTest extends TestCase {
 	}
 
 	/**
+	 * Test a missing nonce stops the request.
+	 */
+	public function test_missing_nonce_dies(): void {
+		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
+		$_GET        = array( 'redirect_id' => (string) $redirect_id );
+
+		$this->assert_dies_with( 'Security check failed.', 'handle_disable_redirect' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test an invalid nonce stops the request.
+	 */
+	public function test_invalid_nonce_dies(): void {
+		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
+		$_GET        = array(
+			'redirect_id' => (string) $redirect_id,
+			'_wpnonce'    => 'not-a-real-nonce',
+		);
+
+		$this->assert_dies_with( 'Security check failed.', 'handle_disable_redirect' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test a nonce issued for a different redirect stops the request.
+	 *
+	 * The nonce is per-ID, so one valid nonce must not act on every redirect.
+	 */
+	public function test_nonce_for_another_redirect_dies(): void {
+		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
+		$other_id    = $this->create_redirect( '/other-page', 'https://example.com/other' );
+		$_GET        = array(
+			'redirect_id' => (string) $redirect_id,
+			'_wpnonce'    => wp_create_nonce( 'disable_redirect_' . $other_id ),
+		);
+
+		$this->assert_dies_with( 'Security check failed.', 'handle_disable_redirect' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test a user without the capability is stopped.
+	 */
+	public function test_missing_capability_dies(): void {
+		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
+
+		// Nonces are tied to the current user, so sign in before minting one.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+		$this->request( 'disable_redirect', $redirect_id );
+
+		$this->assert_dies_with( 'You do not have permission to modify redirects.', 'handle_disable_redirect' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test the enable action is gated by its own nonce and the capability.
+	 */
+	public function test_enable_redirect_requires_a_valid_nonce(): void {
+		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
+		$this->request( 'disable_redirect', $redirect_id );
+
+		$this->assert_dies_with( 'Security check failed.', 'handle_enable_redirect' );
+	}
+
+	/**
 	 * Populate $_GET with the row action arguments and a valid nonce.
 	 *
 	 * @param string $action      The action name, as used in the nonce.
