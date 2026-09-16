@@ -143,7 +143,8 @@ final class PluginBootstrapper {
 			$this->container->repository(),
 			$this->container->manager(),
 			$this->container->validator(),
-			$this->container->query_repository()
+			$this->container->query_repository(),
+			$this->container->auditor()
 		);
 		$admin->init();
 

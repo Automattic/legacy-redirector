@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 
 /**
  * Handles status view filters and destination type filters for the redirects list table.
@@ -177,51 +178,29 @@ final class ViewFilters {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filtering.
 		$destination_type = sanitize_key( $_GET['destination_type'] );
 
-		switch ( $destination_type ) {
-			case 'post_id':
-				// Redirects to post IDs have post_parent > 0.
-				$query->set( 'post_parent__not_in', array( 0 ) );
-				break;
-
-			case 'path':
-				// Internal path redirects - handled by add_destination_type_where_clause.
-				$query->set( 'wpcom_legacy_redirector_path_filter', true );
-				break;
-
-			case 'external':
-				// External redirects - handled by add_destination_type_where_clause.
-				$query->set( 'wpcom_legacy_redirector_external_filter', true );
-				break;
+		if ( in_array( $destination_type, array( 'post_id', 'path', 'external' ), true ) ) {
+			// Applied by add_destination_type_where_clause.
+			$query->set( 'wpcom_legacy_redirector_destination_type', $destination_type );
 		}
 	}
 
 	/**
-	 * Add WHERE clause for path and external redirect filtering.
+	 * Add WHERE clause for destination-type filtering.
+	 *
+	 * The classification rule itself lives in the query repository, which owns
+	 * the storage mapping; this hook only applies it to the admin list query.
 	 *
 	 * @param string    $where The WHERE clause.
 	 * @param \WP_Query $query The query object.
 	 * @return string Modified WHERE clause.
 	 */
 	public function add_destination_type_where_clause( string $where, \WP_Query $query ): string {
-		global $wpdb;
+		$destination_type = (string) $query->get( 'wpcom_legacy_redirector_destination_type' );
 
-		if ( $query->get( 'wpcom_legacy_redirector_path_filter' ) ) {
-			// Internal paths: relative paths starting with /.
-			$where .= $wpdb->prepare(
-				" AND {$wpdb->posts}.post_excerpt LIKE %s",
-				'/%'
-			);
+		if ( '' === $destination_type ) {
+			return $where;
 		}
 
-		if ( $query->get( 'wpcom_legacy_redirector_external_filter' ) ) {
-			// Internal absolute URLs are normalised to relative paths on save
-			// (and by the v3 migration), so anything stored absolute is external.
-			$where .= $wpdb->prepare(
-				" AND {$wpdb->posts}.post_excerpt LIKE %s",
-				'http%'
-			);
-		}
-
-		return $where;
+		return $where . PostTypeRedirectQueryRepository::destination_type_where( $destination_type );
 	}
 }

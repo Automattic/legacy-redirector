@@ -361,24 +361,11 @@ final class UITest extends TestCase {
 	}
 
 	/**
-	 * Test filter_by_destination_type sets post_parent__not_in for post_id type.
+	 * Test the post_id destination filter returns only post-ID redirects.
 	 *
-	 * Note: filter_by_destination_type only applies to main queries in admin.
-	 * This test verifies the method correctly modifies a WP_Query object when called directly.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::filter_by_destination_type
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
 	 */
 	public function test_filter_by_destination_type_sets_query_for_post_id(): void {
-		$_GET['destination_type'] = 'post_id';
-
-		// Create a mock main query.
-		$query = new \WP_Query();
-		$query->set( 'post_type', PostType::POST_TYPE );
-
-		// We can't simulate is_main_query() being true, so we test
-		// that when conditions are met, the query is modified.
-		// Instead, verify the WHERE clause directly via the posts_where filter.
-
 		// Set up test data.
 		$this->delete_all_redirects();
 
@@ -410,13 +397,24 @@ final class UITest extends TestCase {
 			)
 		);
 
-		// Query with post_parent__not_in which is what filter_by_destination_type sets.
+		// Add the post_id filter via posts_where.
+		$this->view_filters->register();
+
+		// Add a filter to set the query var at the right time (before posts_where).
+		$set_filter_var = function ( \WP_Query $query ) {
+			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
+				$query->query_vars['wpcom_legacy_redirector_destination_type'] = 'post_id';
+			}
+		};
+		add_action( 'pre_get_posts', $set_filter_var, 1 );
+
 		$query = new \WP_Query(
 			array(
-				'post_type'           => PostType::POST_TYPE,
-				'post_parent__not_in' => array( 0 ),
+				'post_type' => PostType::POST_TYPE,
 			)
 		);
+
+		remove_action( 'pre_get_posts', $set_filter_var, 1 );
 
 		// Should only return the post ID redirect.
 		$this->assertCount( 1, $query->posts );
@@ -479,7 +477,7 @@ final class UITest extends TestCase {
 		// Add a filter to set the query var at the right time (before posts_where).
 		$set_filter_var = function ( \WP_Query $query ) {
 			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
-				$query->query_vars['wpcom_legacy_redirector_path_filter'] = true;
+				$query->query_vars['wpcom_legacy_redirector_destination_type'] = 'path';
 			}
 		};
 		add_action( 'pre_get_posts', $set_filter_var, 1 );
@@ -546,7 +544,7 @@ final class UITest extends TestCase {
 		// Add a filter to set the query var at the right time (before posts_where).
 		$set_filter_var = function ( \WP_Query $query ) {
 			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
-				$query->query_vars['wpcom_legacy_redirector_external_filter'] = true;
+				$query->query_vars['wpcom_legacy_redirector_destination_type'] = 'external';
 			}
 		};
 		add_action( 'pre_get_posts', $set_filter_var, 1 );
@@ -659,13 +657,13 @@ final class UITest extends TestCase {
 		// Create query, parse basic args, then use set() to add the filter flag.
 		$query = new \WP_Query();
 		$query->parse_query( array() );
-		$query->set( 'wpcom_legacy_redirector_path_filter', true );
+		$query->set( 'wpcom_legacy_redirector_destination_type', 'path' );
 
 		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
 		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );
 
 		// Verify the flag was set.
-		$this->assertTrue( $query->get( 'wpcom_legacy_redirector_path_filter' ), 'Query var should be set' );
+		$this->assertSame( 'path', $query->get( 'wpcom_legacy_redirector_destination_type' ), 'Query var should be set' );
 
 		// Verify the WHERE clause filters for paths starting with /.
 		$this->assertStringContainsString( 'post_excerpt LIKE', $result, 'WHERE clause should filter for paths' );
@@ -679,7 +677,7 @@ final class UITest extends TestCase {
 	public function test_filter_external_redirects_where_adds_external_clause(): void {
 		// Create and initialize query object with parse_query, then set the filter flag.
 		$query = new \WP_Query();
-		$query->parse_query( array( 'wpcom_legacy_redirector_external_filter' => true ) );
+		$query->parse_query( array( 'wpcom_legacy_redirector_destination_type' => 'external' ) );
 
 		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
 		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );

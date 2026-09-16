@@ -200,22 +200,22 @@ final class RedirectFormPage {
 			wp_die( esc_html__( 'Invalid redirect ID.', 'wpcom-legacy-redirector' ) );
 		}
 
-		$post = get_post( $redirect_id );
-		if ( ! $post || PostType::POST_TYPE !== $post->post_type ) {
+		$redirect = $this->repository->find_by_id( $redirect_id );
+		if ( null === $redirect ) {
 			wp_die( esc_html__( 'Redirect not found.', 'wpcom-legacy-redirector' ) );
 		}
 
-		$this->render_form_page( $post );
+		$this->render_form_page( $redirect );
 	}
 
 	/**
 	 * Render the redirect form page.
 	 *
-	 * @param \WP_Post|null $post The post object for edit, null for add.
+	 * @param Redirect|null $redirect The redirect for edit, null for add.
 	 * @return void
 	 */
-	private function render_form_page( ?\WP_Post $post ): void {
-		$is_edit = null !== $post;
+	private function render_form_page( ?Redirect $redirect ): void {
+		$is_edit = null !== $redirect;
 		$title   = $is_edit ? __( 'Edit Redirect', 'wpcom-legacy-redirector' ) : __( 'Add Redirect', 'wpcom-legacy-redirector' );
 
 		// Get current values.
@@ -225,23 +225,22 @@ final class RedirectFormPage {
 		$destination_display = '';
 
 		if ( $is_edit ) {
-			// Editing existing redirect - get values from post.
-			$redirect_from   = $post->post_title;
-			$redirect_status = $post->post_status;
-			$excerpt         = $post->post_excerpt;
-			$post_parent     = $post->post_parent;
+			// Editing existing redirect - render from the entity.
+			$redirect_from   = $redirect->source()->path();
+			$redirect_status = $redirect->status();
+			$destination     = $redirect->destination();
 
-			if ( ! empty( $excerpt ) ) {
-				$destination_value   = $excerpt;
-				$destination_display = $excerpt;
-			} elseif ( $post_parent > 0 ) {
-				$destination_value = $post_parent;
-				$parent_post       = get_post( $post_parent );
+			if ( $destination->is_post_id() ) {
+				$destination_value = $destination->as_post_id()->value();
+				$parent_post       = get_post( $destination_value );
 				if ( $parent_post ) {
-					$destination_display = get_the_title( $parent_post ) . ' (ID: ' . $post_parent . ')';
+					$destination_display = get_the_title( $parent_post ) . ' (ID: ' . $destination_value . ')';
 				} else {
-					$destination_display = (string) $post_parent;
+					$destination_display = (string) $destination_value;
 				}
+			} else {
+				$destination_value   = $destination->as_url()->value();
+				$destination_display = $destination_value;
 			}
 		} else {
 			// Adding new redirect - check for preserved values from validation error.
@@ -265,7 +264,7 @@ final class RedirectFormPage {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Just reading error params for display.
 		$error = isset( $_GET['error'] ) ? sanitize_text_field( wp_unslash( $_GET['error'] ) ) : '';
 
-		$post_id       = $is_edit ? $post->ID : 0;
+		$post_id       = $is_edit ? (int) $redirect->id() : 0;
 		$error_message = '' !== $error ? $this->get_error_message( $error ) : '';
 
 		// Sources are stored relative to this site's home URL, which on a
