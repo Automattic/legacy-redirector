@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
@@ -32,7 +32,9 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
  */
 final class SetRedirectStatusAbilityTest extends MonkeyStubs {
 

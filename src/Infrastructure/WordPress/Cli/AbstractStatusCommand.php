@@ -9,8 +9,10 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -18,6 +20,8 @@ use WP_CLI_Command;
  * Shared behaviour for the enable and disable commands.
  */
 abstract class AbstractStatusCommand extends WP_CLI_Command {
+
+	use ReportsBatchFailures;
 
 	/**
 	 * The redirect manager.
@@ -27,11 +31,11 @@ abstract class AbstractStatusCommand extends WP_CLI_Command {
 	protected RedirectManager $manager;
 
 	/**
-	 * The redirect fetcher.
+	 * The batch resolver.
 	 *
-	 * @var RedirectFetcher
+	 * @var RedirectBatch
 	 */
-	protected RedirectFetcher $fetcher;
+	protected RedirectBatch $batch;
 
 	/**
 	 * Constructor.
@@ -41,7 +45,7 @@ abstract class AbstractStatusCommand extends WP_CLI_Command {
 	 */
 	public function __construct( RedirectManager $manager, RedirectFetcher $fetcher ) {
 		$this->manager = $manager;
-		$this->fetcher = $fetcher;
+		$this->batch   = new RedirectBatch( $fetcher );
 	}
 
 	/**
@@ -52,33 +56,13 @@ abstract class AbstractStatusCommand extends WP_CLI_Command {
 	 * @param string $past_tense  The past tense verb for messages ('Enabled' or 'Disabled').
 	 */
 	protected function change_status( array $identifiers, string $post_status, string $past_tense ): void {
-		$changed = 0;
-		$failed  = 0;
+		$items = $this->batch->apply(
+			$identifiers,
+			fn( Redirect $redirect ) => $this->manager->change_status( $redirect->id(), $post_status )
+		);
 
-		foreach ( $identifiers as $identifier ) {
-			try {
-				$redirect = $this->fetcher->fetch( $identifier );
-			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::warning( sprintf( 'Invalid source path: %s (%s)', $identifier, $e->getMessage() ) );
-				++$failed;
-				continue;
-			}
-
-			if ( null === $redirect ) {
-				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
-				++$failed;
-				continue;
-			}
-
-			$result = $this->manager->change_status( $redirect->id(), $post_status );
-			if ( $result->is_error() ) {
-				WP_CLI::warning( sprintf( 'Could not update redirect: %s (%s)', $identifier, $result->error_message() ) );
-				++$failed;
-				continue;
-			}
-
-			++$changed;
-		}
+		$changed = $this->report_batch_failures( $items, 'update' );
+		$failed  = count( $items ) - $changed;
 
 		if ( $failed > 0 ) {
 			WP_CLI::error( sprintf( 'Only %s %d of %d redirects.', strtolower( $past_tense ), $changed, count( $identifiers ) ) );

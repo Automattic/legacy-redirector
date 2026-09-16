@@ -9,8 +9,10 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -18,6 +20,8 @@ use WP_CLI_Command;
  * Delete one or more redirects.
  */
 final class DeleteCommand extends WP_CLI_Command {
+
+	use ReportsBatchFailures;
 
 	/**
 	 * The redirect manager.
@@ -27,11 +31,11 @@ final class DeleteCommand extends WP_CLI_Command {
 	private RedirectManager $manager;
 
 	/**
-	 * The redirect fetcher.
+	 * The batch resolver.
 	 *
-	 * @var RedirectFetcher
+	 * @var RedirectBatch
 	 */
-	private RedirectFetcher $fetcher;
+	private RedirectBatch $batch;
 
 	/**
 	 * Constructor.
@@ -41,7 +45,7 @@ final class DeleteCommand extends WP_CLI_Command {
 	 */
 	public function __construct( RedirectManager $manager, RedirectFetcher $fetcher ) {
 		$this->manager = $manager;
-		$this->fetcher = $fetcher;
+		$this->batch   = new RedirectBatch( $fetcher );
 	}
 
 	/**
@@ -86,26 +90,13 @@ final class DeleteCommand extends WP_CLI_Command {
 			$assoc_args
 		);
 
-		$deleted = 0;
-		$failed  = 0;
+		$items = $this->batch->apply(
+			$args,
+			fn( Redirect $redirect ): bool => $this->manager->delete_by_id( $redirect->id() )
+		);
 
-		foreach ( $args as $identifier ) {
-			try {
-				$redirect = $this->fetcher->fetch( $identifier );
-			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::warning( sprintf( 'Invalid source path: %s (%s)', $identifier, $e->getMessage() ) );
-				++$failed;
-				continue;
-			}
-
-			if ( null === $redirect || ! $this->manager->delete_by_id( $redirect->id() ) ) {
-				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
-				++$failed;
-				continue;
-			}
-
-			++$deleted;
-		}
+		$deleted = $this->report_batch_failures( $items, 'delete' );
+		$failed  = count( $items ) - $deleted;
 
 		if ( $failed > 0 ) {
 			WP_CLI::error( sprintf( 'Only deleted %d of %d redirects.', $deleted, count( $args ) ) );

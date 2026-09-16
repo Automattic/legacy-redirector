@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -148,7 +149,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 			$status = 'disabled' === $input['status'] ? 'draft' : 'publish';
 		}
 
-		$result = $this->batch->apply(
+		$items = $this->batch->apply(
 			$input['redirects'] ?? array(),
 			function ( Redirect $redirect ) use ( $destination, $status ) {
 				$redirect_id = (int) $redirect->id();
@@ -156,13 +157,12 @@ final class UpdateRedirectAbility implements AbilityInterface {
 				return null !== $destination
 					? $this->manager->update_destination( $redirect_id, $destination, $status )
 					: $this->manager->change_status( $redirect_id, (string) $status );
-			},
-			__( 'The redirect could not be saved.', 'wpcom-legacy-redirector' )
+			}
 		);
 
 		return array(
-			'updated' => $result['changed'],
-			'failed'  => $result['failures'],
+			'updated' => RedirectBatch::count_succeeded( $items ),
+			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be saved.', 'wpcom-legacy-redirector' ) ),
 		);
 	}
 }

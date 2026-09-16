@@ -27,7 +27,7 @@ use WP_Ability;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @covers \Automattic\LegacyRedirector\Application\RedirectBatch
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility

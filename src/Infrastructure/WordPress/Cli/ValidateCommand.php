@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
@@ -24,12 +25,14 @@ use WP_CLI_Command;
  */
 final class ValidateCommand extends WP_CLI_Command {
 
+	use ReportsBatchFailures;
+
 	/**
-	 * The redirect fetcher.
+	 * The batch resolver.
 	 *
-	 * @var RedirectFetcher
+	 * @var RedirectBatch
 	 */
-	private RedirectFetcher $fetcher;
+	private RedirectBatch $batch;
 
 	/**
 	 * The query repository.
@@ -66,7 +69,7 @@ final class ValidateCommand extends WP_CLI_Command {
 		RedirectAuditor $auditor,
 		RedirectManager $manager
 	) {
-		$this->fetcher          = $fetcher;
+		$this->batch            = new RedirectBatch( $fetcher );
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
 		$this->manager          = $manager;
@@ -251,23 +254,10 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * @return Redirect[]|null The redirects, or null if none could be resolved.
 	 */
 	private function fetch_by_identifiers( array $identifiers ): ?array {
-		$redirects = array();
+		$items = $this->batch->resolve( $identifiers );
+		$this->report_batch_failures( $items, 'validate' );
 
-		foreach ( $identifiers as $identifier ) {
-			try {
-				$redirect = $this->fetcher->fetch( $identifier );
-			} catch ( \InvalidArgumentException $e ) {
-				WP_CLI::warning( sprintf( 'Invalid source path: %s (%s)', $identifier, $e->getMessage() ) );
-				continue;
-			}
-
-			if ( null === $redirect ) {
-				WP_CLI::warning( sprintf( 'Redirect not found: %s', $identifier ) );
-				continue;
-			}
-
-			$redirects[] = $redirect;
-		}
+		$redirects = RedirectBatch::redirects( $items );
 
 		if ( empty( $redirects ) ) {
 			WP_CLI::error( 'No matching redirects found.' );

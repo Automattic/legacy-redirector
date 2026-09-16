@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\ValidationIssue;
@@ -174,9 +175,9 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 		$failures = array();
 
 		if ( ! empty( $input['redirects'] ) ) {
-			$batch     = $this->batch->resolve( $input['redirects'] );
-			$failures  = $batch['failures'];
-			$redirects = array_column( $batch['resolved'], 'redirect' );
+			$items     = $this->batch->resolve( $input['redirects'] );
+			$failures  = BatchFailures::format( $items );
+			$redirects = RedirectBatch::redirects( $items );
 		} else {
 			$status    = (string) ( $input['status'] ?? 'enabled' );
 			$redirects = $this->query_repository->find_matching(

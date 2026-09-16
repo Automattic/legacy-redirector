@@ -29,7 +29,9 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility

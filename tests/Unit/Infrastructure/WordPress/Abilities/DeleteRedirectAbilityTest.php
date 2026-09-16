@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\DeleteRedirectAbility;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
 use Mockery;
@@ -30,7 +30,9 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
  */
 final class DeleteRedirectAbilityTest extends MonkeyStubs {
 
@@ -113,6 +115,10 @@ final class DeleteRedirectAbilityTest extends MonkeyStubs {
 	/**
 	 * Test a deletion that does not happen is reported, not counted.
 	 *
+	 * Failures come back in the order the identifiers were given, and a
+	 * redirect that exists but could not be deleted reports a different
+	 * reason from one that was never found.
+	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\DeleteRedirectAbility::execute
 	 */
 	public function test_execute_reports_redirects_it_could_not_delete(): void {
@@ -125,6 +131,11 @@ final class DeleteRedirectAbilityTest extends MonkeyStubs {
 
 		$this->assertSame( 0, $result['deleted'] );
 		$this->assertCount( 2, $result['failed'] );
-		$this->assertSame( '2', $result['failed'][0]['redirect'] );
+
+		$this->assertSame( '1', $result['failed'][0]['redirect'] );
+		$this->assertSame( 'The redirect could not be deleted.', $result['failed'][0]['reason'] );
+
+		$this->assertSame( '2', $result['failed'][1]['redirect'] );
+		$this->assertSame( 'No redirect found.', $result['failed'][1]['reason'] );
 	}
 }

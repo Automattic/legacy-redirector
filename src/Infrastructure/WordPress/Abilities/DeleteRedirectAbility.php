@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -106,15 +107,14 @@ final class DeleteRedirectAbility implements AbilityInterface {
 	public function execute( $input = array() ): array {
 		$input = is_array( $input ) ? $input : array();
 
-		$result = $this->batch->apply(
+		$items = $this->batch->apply(
 			$input['redirects'] ?? array(),
-			fn( Redirect $redirect ): bool => $this->manager->delete_by_id( (int) $redirect->id() ),
-			__( 'The redirect could not be deleted.', 'wpcom-legacy-redirector' )
+			fn( Redirect $redirect ): bool => $this->manager->delete_by_id( (int) $redirect->id() )
 		);
 
 		return array(
-			'deleted' => $result['changed'],
-			'failed'  => $result['failures'],
+			'deleted' => RedirectBatch::count_succeeded( $items ),
+			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be deleted.', 'wpcom-legacy-redirector' ) ),
 		);
 	}
 }
