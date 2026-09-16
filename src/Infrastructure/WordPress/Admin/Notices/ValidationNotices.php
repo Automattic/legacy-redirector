@@ -82,17 +82,18 @@ final class ValidationNotices {
 			return;
 		}
 
-		// Get redirect details for context in the notice.
+		// Get redirect details for context in the notice. The repository
+		// returns null for IDs of other post types, so no foreign title leaks.
 		$redirect_context = '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		if ( isset( $_GET['ids'] ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
-			$post = get_post( absint( $_GET['ids'] ) );
-			if ( $post instanceof \WP_Post && PostType::POST_TYPE === $post->post_type ) {
+			$redirect = $this->repository->find_by_id( absint( $_GET['ids'] ) );
+			if ( null !== $redirect ) {
 				$redirect_context = sprintf(
 					/* translators: %s: source URL path */
 					' ' . __( 'for %s', 'wpcom-legacy-redirector' ),
-					'<code>' . esc_html( $post->post_title ) . '</code>'
+					'<code>' . esc_html( $redirect->source()->path() ) . '</code>'
 				);
 			}
 		}

@@ -60,7 +60,7 @@ final class ListRedirectsTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		$this->columns_manager     = new ColumnsManager( $this->repository(), new RedirectAuditor() );
-		$this->row_actions_manager = new RowActionsManager();
+		$this->row_actions_manager = new RowActionsManager( $this->repository() );
 	}
 
 	/**
@@ -450,7 +450,7 @@ final class ListRedirectsTest extends TestCase {
 		remove_all_filters( 'post_row_actions' );
 
 		$columns_manager     = new ColumnsManager( $this->repository(), new RedirectAuditor() );
-		$row_actions_manager = new RowActionsManager();
+		$row_actions_manager = new RowActionsManager( $this->repository() );
 		$columns_manager->register();
 		$row_actions_manager->register();
 

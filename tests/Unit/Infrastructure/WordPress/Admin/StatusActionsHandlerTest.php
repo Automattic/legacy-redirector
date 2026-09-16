@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Admin;
 
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
@@ -45,7 +46,7 @@ final class StatusActionsHandlerTest extends MonkeyStubs {
 		parent::set_up();
 
 		$this->manager = Mockery::mock( RedirectManager::class );
-		$this->handler = new StatusActionsHandler( $this->manager );
+		$this->handler = new StatusActionsHandler( $this->manager, Mockery::mock( RedirectRepositoryInterface::class ) );
 	}
 
 	/**

@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
@@ -18,6 +19,22 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * so that the admin notice can display which redirect was trashed.
  */
 final class TrashRedirectEnhancer {
+
+	/**
+	 * Redirect repository.
+	 *
+	 * @var RedirectRepositoryInterface
+	 */
+	private RedirectRepositoryInterface $repository;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectRepositoryInterface $repository Redirect repository.
+	 */
+	public function __construct( RedirectRepositoryInterface $repository ) {
+		$this->repository = $repository;
+	}
 
 	/**
 	 * Register hooks.
@@ -61,12 +78,13 @@ final class TrashRedirectEnhancer {
 			return $location;
 		}
 
-		// Get the redirect source from the trashed post.
-		$post = get_post( absint( $ids[0] ) );
-		if ( ! $post || PostType::POST_TYPE !== $post->post_type ) {
+		// Get the redirect source from the trashed row. The repository returns
+		// trashed rows from find_by_id(), and null for other post types.
+		$redirect = $this->repository->find_by_id( absint( $ids[0] ) );
+		if ( null === $redirect ) {
 			return $location;
 		}
 
-		return add_query_arg( 'redirect_source', rawurlencode( $post->post_title ), $location );
+		return add_query_arg( 'redirect_source', rawurlencode( $redirect->source()->path() ), $location );
 	}
 }
