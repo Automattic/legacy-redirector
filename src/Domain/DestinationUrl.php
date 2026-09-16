@@ -135,16 +135,6 @@ final class DestinationUrl {
 	}
 
 	/**
-	 * Check equality with another DestinationUrl.
-	 *
-	 * @param self $other The other DestinationUrl to compare.
-	 * @return bool True if the URLs are identical.
-	 */
-	public function equals( self $other ): bool {
-		return $this->url === $other->url;
-	}
-
-	/**
 	 * String representation of the DestinationUrl.
 	 *
 	 * @return string The URL.

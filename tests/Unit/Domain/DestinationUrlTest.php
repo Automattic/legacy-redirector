@@ -166,30 +166,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test equals returns true for same URL.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::equals
-	 */
-	public function test_equals_same_url(): void {
-		$destination1 = DestinationUrl::from_string( '/page' );
-		$destination2 = DestinationUrl::from_string( '/page' );
-
-		$this->assertTrue( $destination1->equals( $destination2 ) );
-	}
-
-	/**
-	 * Test equals returns false for different URLs.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::equals
-	 */
-	public function test_equals_different_url(): void {
-		$destination1 = DestinationUrl::from_string( '/page-one' );
-		$destination2 = DestinationUrl::from_string( '/page-two' );
-
-		$this->assertFalse( $destination1->equals( $destination2 ) );
-	}
-
-	/**
 	 * Test __toString returns URL.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::__toString
@@ -365,19 +341,6 @@ final class DestinationUrlTest extends MonkeyStubs {
 		$destination = DestinationUrl::from_string( 'https://example.com/🎉' );
 
 		$this->assertSame( 'https://example.com/🎉', $destination->resolve( 'https://other.test' ) );
-	}
-
-	/**
-	 * Test unicode equality is byte-exact.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl::equals
-	 */
-	public function test_equals_compares_unicode_byte_exactly(): void {
-		$nfc = DestinationUrl::from_string( "/caf\xC3\xA9" );
-		$nfd = DestinationUrl::from_string( "/cafe\xCC\x81" );
-
-		$this->assertTrue( $nfc->equals( DestinationUrl::from_string( "/caf\xC3\xA9" ) ) );
-		$this->assertFalse( $nfc->equals( $nfd ) );
 	}
 
 	/**

@@ -113,30 +113,6 @@ final class DestinationPostIdTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test equals returns true for same ID.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationPostId::equals
-	 */
-	public function test_equals_same_id(): void {
-		$destination1 = DestinationPostId::from_int( 100 );
-		$destination2 = DestinationPostId::from_int( 100 );
-
-		$this->assertTrue( $destination1->equals( $destination2 ) );
-	}
-
-	/**
-	 * Test equals returns false for different IDs.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\DestinationPostId::equals
-	 */
-	public function test_equals_different_id(): void {
-		$destination1 = DestinationPostId::from_int( 100 );
-		$destination2 = DestinationPostId::from_int( 200 );
-
-		$this->assertFalse( $destination1->equals( $destination2 ) );
-	}
-
-	/**
 	 * Test __toString returns string representation.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\DestinationPostId::__toString
