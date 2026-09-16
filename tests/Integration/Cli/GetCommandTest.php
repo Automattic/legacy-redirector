@@ -53,10 +53,6 @@ final class GetCommandTest extends CliTestCase {
 		);
 	}
 
-	// =========================================================================
-	// Tests for get by source
-	// =========================================================================
-
 	/**
 	 * Test getting a redirect by source path.
 	 */
@@ -145,10 +141,6 @@ final class GetCommandTest extends CliTestCase {
 		$this->assert_error_contains( 'Invalid source path' );
 	}
 
-	// =========================================================================
-	// Tests for get by ID
-	// =========================================================================
-
 	/**
 	 * Test getting a redirect by ID.
 	 */
@@ -178,10 +170,6 @@ final class GetCommandTest extends CliTestCase {
 
 		$this->assert_error_contains( 'not found' );
 	}
-
-	// =========================================================================
-	// Tests for field options
-	// =========================================================================
 
 	/**
 	 * Test getting a single field value.

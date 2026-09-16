@@ -209,10 +209,6 @@ final class RedirectFormPageTest extends TestCase {
 		return $this->repository()->find_by_source( SourceUrl::from_string( $source ) );
 	}
 
-	// =========================================================================
-	// Tests for access control
-	// =========================================================================
-
 	/**
 	 * Test a missing nonce stops the request.
 	 */
@@ -243,10 +239,6 @@ final class RedirectFormPageTest extends TestCase {
 
 		$this->assert_dies_with( 'You do not have permission to manage redirects.' );
 	}
-
-	// =========================================================================
-	// Tests for validation errors
-	// =========================================================================
 
 	/**
 	 * Test empty fields redirect back to the add page with an error.
@@ -479,10 +471,6 @@ final class RedirectFormPageTest extends TestCase {
 		$this->assertSame( 'draft', $query['redirect_status'] );
 	}
 
-	// =========================================================================
-	// Tests for creating
-	// =========================================================================
-
 	/**
 	 * Test a valid submission creates the redirect.
 	 */
@@ -626,10 +614,6 @@ final class RedirectFormPageTest extends TestCase {
 		$this->assertStringContainsString( 'error=same_source_destination', $location );
 		$this->assertSame( 0, $this->redirect_id_for( '/form-loop-absolute' ) );
 	}
-
-	// =========================================================================
-	// Tests for editing
-	// =========================================================================
 
 	/**
 	 * Test editing an existing redirect updates source and destination.

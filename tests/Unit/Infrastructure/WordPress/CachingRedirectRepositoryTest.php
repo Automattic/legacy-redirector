@@ -87,10 +87,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		);
 	}
 
-	// =========================================================================
-	// find_by_source tests
-	// =========================================================================
-
 	/**
 	 * Test find_by_source resolves and caches the true row ID on cache miss.
 	 *
@@ -419,10 +415,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_active() );
 	}
 
-	// =========================================================================
-	// find_by_id tests
-	// =========================================================================
-
 	/**
 	 * Test find_by_id passes through to inner repository.
 	 *
@@ -458,10 +450,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		$this->assertNull( $result );
 	}
-
-	// =========================================================================
-	// exists tests
-	// =========================================================================
 
 	/**
 	 * Test exists passes through to inner repository.
@@ -500,10 +488,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		$this->assertFalse( $result );
 	}
-
-	// =========================================================================
-	// save tests
-	// =========================================================================
 
 	/**
 	 * Test save invalidates cache before saving.
@@ -620,10 +604,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		$this->assertSame( 456, $result->id() );
 	}
 
-	// =========================================================================
-	// delete tests
-	// =========================================================================
-
 	/**
 	 * Test delete invalidates cache before deleting.
 	 *
@@ -704,10 +684,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 
 		$this->assertFalse( $result );
 	}
-
-	// =========================================================================
-	// get_id_by_source tests
-	// =========================================================================
 
 	/**
 	 * Test get_id_by_source delegates to inner on cache miss.

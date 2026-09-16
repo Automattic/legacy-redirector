@@ -83,10 +83,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 		Functions\when( 'wp_cache_delete' )->justReturn( true );
 	}
 
-	// =========================================================================
-	// create_redirect() tests
-	// =========================================================================
-
 	/**
 	 * Test create_redirect returns success with redirect ID.
 	 *
@@ -270,10 +266,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 	}
 
 
-	// =========================================================================
-	// enable() / disable() tests
-	// =========================================================================
-
 	/**
 	 * Test enable returns true on success.
 	 *
@@ -377,10 +369,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 
 		$this->assertFalse( $result );
 	}
-
-	// =========================================================================
-	// bulk_enable() / bulk_disable() tests
-	// =========================================================================
 
 	/**
 	 * Test bulk_enable returns count of successful updates.
@@ -486,10 +474,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->assertSame( 3, $result );
 	}
 
-	// =========================================================================
-	// update_destination() tests
-	// =========================================================================
-
 	/**
 	 * Test update_destination returns true on success.
 	 *
@@ -569,10 +553,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_success() );
 	}
 
-	// =========================================================================
-	// update_redirect() tests
-	// =========================================================================
-
 	/**
 	 * Test update_redirect returns true on success.
 	 *
@@ -647,10 +627,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 	}
 
 
-
-	// =========================================================================
-	// update validation tests
-	// =========================================================================
 
 	/**
 	 * Test update_destination refuses an update the validator rejects.
@@ -789,10 +765,6 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->assertSame( 'save-failed', $result->error_code() );
 		$this->assertSame( 'Database error', $result->error_message() );
 	}
-
-	// =========================================================================
-	// Helper methods
-	// =========================================================================
 
 	/**
 	 * Create a real redirect object for testing.

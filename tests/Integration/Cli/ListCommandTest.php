@@ -49,10 +49,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->command = new ListCommand( $this->query_repository() );
 	}
 
-	// =========================================================================
-	// Tests for basic listing
-	// =========================================================================
-
 	/**
 	 * Test listing all redirects.
 	 */
@@ -103,10 +99,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_stdout_contains( 'No redirects found' );
 	}
 
-	// =========================================================================
-	// Tests for status filter
-	// =========================================================================
-
 	/**
 	 * Test listing only enabled redirects.
 	 */
@@ -155,10 +147,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_stdout_not_contains( '/enabled-page2' );
 	}
 
-	// =========================================================================
-	// Tests for destination type filter
-	// =========================================================================
-
 	/**
 	 * Test listing only URL redirects.
 	 */
@@ -195,10 +183,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_stdout_not_contains( '/url-redirect2' );
 	}
 
-	// =========================================================================
-	// Tests for search filter
-	// =========================================================================
-
 	/**
 	 * Test searching redirects.
 	 */
@@ -215,10 +199,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_stdout_contains( '/blog/article-one' );
 		$this->assert_stdout_not_contains( '/news/story-two' );
 	}
-
-	// =========================================================================
-	// Tests for pagination
-	// =========================================================================
 
 	/**
 	 * Test listing with limit.
@@ -240,10 +220,6 @@ final class ListCommandTest extends CliTestCase {
 		$matches = preg_match_all( '/\/limit-(one|two|three)/', $stdout );
 		$this->assertEquals( 2, $matches, 'Should only show 2 redirects with limit=2' );
 	}
-
-	// =========================================================================
-	// Tests for output formats
-	// =========================================================================
 
 	/**
 	 * Test count format.
@@ -284,10 +260,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assertCount( 2, $ids );
 	}
 
-	// =========================================================================
-	// Tests for combined filters
-	// =========================================================================
-
 	/**
 	 * Test combining status and destination type filters.
 	 */
@@ -320,10 +292,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_stdout_not_contains( '/enabled-post' );
 		$this->assert_stdout_not_contains( '/disabled-url' );
 	}
-
-	// =========================================================================
-	// Tests for fields option
-	// =========================================================================
 
 	/**
 	 * Test limiting output to selected fields.

@@ -111,10 +111,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		return new WP_Post( $status );
 	}
 
-	// =========================================================================
-	// validate() tests
-	// =========================================================================
-
 	/**
 	 * Test validate returns a duplicate error when the source is already taken.
 	 *
@@ -301,10 +297,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_valid() );
 	}
 
-	// =========================================================================
-	// validate_source_destination_different tests
-	// =========================================================================
-
 	/**
 	 * Test validate_source_destination_different returns invalid when paths match.
 	 *
@@ -459,10 +451,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_valid() );
 	}
 
-	// =========================================================================
-	// validate_destination_post_id tests
-	// =========================================================================
-
 	/**
 	 * Test validate_destination_post_id returns invalid when post does not exist.
 	 *
@@ -535,10 +523,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		$this->assertTrue( $result->is_valid() );
 	}
-
-	// =========================================================================
-	// validate_destination_url tests
-	// =========================================================================
 
 	/**
 	 * Test validate_destination_url root path is always valid.
@@ -640,10 +624,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_invalid() );
 		$this->assertSame( 'invalid-scheme', $result->error_code() );
 	}
-
-	// =========================================================================
-	// validate_relative_path tests
-	// =========================================================================
 
 	/**
 	 * Test validate_relative_path treats a path resolving to no post as indeterminate.
@@ -785,10 +765,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_valid() );
 	}
 
-	// =========================================================================
-	// validate_source_is_404 tests
-	// =========================================================================
-
 	/**
 	 * Test validate_source_is_404 returns invalid when URL is not 404.
 	 *
@@ -887,10 +863,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertSame( 'non-404', $result->error_code() );
 	}
 
-	// =========================================================================
-	// validate_source_not_private tests
-	// =========================================================================
-
 	/**
 	 * Test validate_source_not_private returns invalid when source is private post.
 	 *
@@ -984,10 +956,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_valid() );
 	}
 
-	// =========================================================================
-	// validate_destination tests
-	// =========================================================================
-
 	/**
 	 * Test validate_destination routes to validate_destination_post_id for post ID.
 	 *
@@ -1018,10 +986,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		$this->assertTrue( $result->is_valid() );
 	}
-
-	// =========================================================================
-	// validate_destination_not_404 tests
-	// =========================================================================
 
 	/**
 	 * Test validate_destination_not_404 returns valid when URL returns 200.
@@ -1194,10 +1158,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->assertTrue( $result->is_valid() );
 	}
 
-	// =========================================================================
-	// resolve_destination_url tests
-	// =========================================================================
-
 	/**
 	 * Test resolve_destination_url returns permalink for post ID destination.
 	 *
@@ -1264,10 +1224,6 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		$this->assertSame( 'https://external.com/page', $result );
 	}
-
-	// =========================================================================
-	// Tests using testable subclass (demonstrates protected get_response_code)
-	// =========================================================================
 
 	/**
 	 * Test validate_source_is_404 using testable subclass.

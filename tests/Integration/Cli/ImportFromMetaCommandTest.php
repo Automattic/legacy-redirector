@@ -92,10 +92,6 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		return $this->repository()->find_by_source( SourceUrl::from_string( $source ) );
 	}
 
-	// =========================================================================
-	// Tests for importing
-	// =========================================================================
-
 	/**
 	 * Test importing redirects from post meta.
 	 */
@@ -186,10 +182,6 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->assertNotNull( $this->find_redirect( '/offset-second' ) );
 	}
 
-	// =========================================================================
-	// Tests for dry run
-	// =========================================================================
-
 	/**
 	 * Test dry run reports the run type and creates nothing.
 	 */
@@ -209,10 +201,6 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->assert_stdout_contains( '---Dry Run---' );
 		$this->assertNull( $this->find_redirect( '/dry-run-source' ) );
 	}
-
-	// =========================================================================
-	// Tests for skipping rows
-	// =========================================================================
 
 	/**
 	 * Test a meta value with no path is reported and skipped.
@@ -279,10 +267,6 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->assertStringNotContainsString( 'All of your redirects have been imported', $this->get_output() );
 		$this->assertStringContainsString( '/draft-destination', $this->get_output() );
 	}
-
-	// =========================================================================
-	// Tests for error handling
-	// =========================================================================
 
 	/**
 	 * Test an error is raised when the meta key matches no rows.
