@@ -137,6 +137,20 @@ Note that on such a site `example.com/old-page` is served by whatever sits at th
 
 The Add/Edit Redirect screen shows the site's home URL next to the source field so the resolved URL is visible as you type.
 
+## Trailing Slashes Are Ignored
+
+A source is stored without its trailing slash, and incoming requests are canonicalised the same way, so `/old-page` and `/old-page/` are one redirect:
+
+```bash
+# Both of these create - or update - the same redirect
+wp wpcom-legacy-redirector create /old-page /new-page
+wp wpcom-legacy-redirector create /old-page/ /new-page   # rejected as a duplicate
+```
+
+Whichever form a visitor's old link carries, the redirect fires. This is deliberately independent of your permalink structure: the source is a URL from a site that no longer exists, so your own trailing-slash convention says nothing about it, and keying on a mutable setting would orphan every stored redirect the moment it changed.
+
+Destinations are not affected. A trailing slash there is part of where the visitor lands, so `/new-page` and `/new-page/` remain distinct.
+
 ## How It Works
 
 Redirects are stored as a custom post type (`vip-legacy-redirect`) with:

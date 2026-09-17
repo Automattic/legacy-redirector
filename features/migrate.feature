@@ -35,13 +35,13 @@ Feature: Migrating 1.x redirect data
       """
     And STDOUT should contain:
       """
-      210 redirect(s) would be inspected, of which 110 would be published, 0 would have their source path rewritten, and 0 would have their destination made relative.
+      210 redirect(s) would be inspected, of which 110 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 0 would have their destination made relative.
       """
 
     When I run `wp wpcom-legacy-redirector migrate`
     Then STDOUT should contain:
       """
-      Success: Migration complete. 10 redirect(s) inspected, 10 published, 0 source path(s) rewritten, 0 destination(s) made relative.
+      Success: Migration complete. 10 redirect(s) inspected, 10 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 0 destination(s) made relative.
       """
 
     When I run `wp post list --post_type=vip-legacy-redirect --post_status=draft --format=count`

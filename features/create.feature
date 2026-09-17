@@ -77,6 +77,33 @@ Feature: Creating a redirect
       Error:
       """
 
+  # Contract test: the trailing slash is not part of the source, so the
+  # slashed spelling is the same redirect and the second create is a duplicate.
+  Scenario: A source with a trailing slash collides with the slash-less form
+    Given there is a published post with a slug of "slash-target"
+    And there is a redirect from "/slash-source" to "/slash-target"
+
+    When I try `wp wpcom-legacy-redirector create /slash-source/ /slash-target`
+    Then STDERR should contain:
+      """
+      Error:
+      """
+
+  # Contract test: the slash is dropped on the way in, so a source entered
+  # with one is keyed, and therefore addressable, without it.
+  Scenario: A source entered with a trailing slash is stored without one
+    When I run `wp wpcom-legacy-redirector create /stored-without-slash/ /elsewhere --skip-validation`
+    Then STDOUT should contain:
+      """
+      Success: Created redirect
+      """
+
+    When I run `wp wpcom-legacy-redirector get /stored-without-slash`
+    Then STDOUT should contain:
+      """
+      /elsewhere
+      """
+
   # Contract test: '/café' and '/caf%C3%A9' are two spellings of one target,
   # so internal destinations store in one canonical form whichever was typed.
   Scenario: An encoded internal destination is stored decoded

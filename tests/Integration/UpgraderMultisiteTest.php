@@ -242,22 +242,56 @@ final class UpgraderMultisiteTest extends TestCase {
 	}
 
 	/**
-	 * A rewrite that would collide is skipped and reported.
+	 * A rewrite that collides with an identical redirect is trashed.
+	 *
+	 * Both rows send visitors to the same place, so the prefixed one is pure
+	 * redundancy once it has been made subsite-relative. It cannot simply be
+	 * left as it was: lookups are keyed on the relative form, so a row keeping
+	 * the prefix would never fire again while still appearing to be live.
 	 *
 	 * @return void
 	 */
-	public function test_colliding_rewrite_is_skipped_and_reported() {
+	public function test_colliding_rewrite_of_the_same_destination_is_trashed() {
 		$prefixed_id = $this->create_legacy_redirect( '/old-page' );
-		$this->create_relative_redirect( '/old-page' );
+		$kept_id     = $this->create_relative_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame(
-			'/' . $this->subsite . '/old-page',
-			get_post( $prefixed_id )->post_title,
-			'A colliding redirect should be left exactly as it was.'
+		$this->assertSame( 1, $result['deduped'] );
+		$this->assertSame( array(), $result['conflicts'] );
+
+		$this->assertSame( 'trash', get_post( $prefixed_id )->post_status );
+		$this->assertSame( 'publish', get_post( $kept_id )->post_status );
+	}
+
+	/**
+	 * A rewrite that collides with a different destination is drafted and reported.
+	 *
+	 * @return void
+	 */
+	public function test_colliding_rewrite_of_a_different_destination_is_drafted() {
+		$prefixed_id = $this->create_legacy_redirect( '/old-page' );
+
+		$kept_id = (int) wp_insert_post(
+			array(
+				'post_name'    => md5( '/old-page' ),
+				'post_title'   => '/old-page',
+				'post_excerpt' => 'https://example.com/somewhere-else',
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'draft',
+			)
 		);
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['deduped'] );
 		$this->assertCount( 1, $result['conflicts'] );
-		$this->assertStringContainsString( 'would collide', $result['conflicts'][0] );
+		$this->assertStringContainsString( 'collides with', $result['conflicts'][0] );
+
+		$this->assertSame( 'draft', get_post( $prefixed_id )->post_status );
+		$this->assertSame( 'publish', get_post( $kept_id )->post_status );
+
+		// The loser keeps its own slug rather than contending for the winner's.
+		$this->assertSame( md5( '/' . $this->subsite . '/old-page' ), get_post( $prefixed_id )->post_name );
 	}
 }

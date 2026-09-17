@@ -117,7 +117,7 @@ final class ListScreenSetup {
 	private function get_columns_help(): string {
 		return '<p>' . __( 'The list table displays the following columns:', 'wpcom-legacy-redirector' ) . '</p>' .
 			'<ul>' .
-			'<li><strong>' . __( 'Redirect From', 'wpcom-legacy-redirector' ) . '</strong> &mdash; ' . __( 'The source URL path that triggers the redirect.', 'wpcom-legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'Redirect From', 'wpcom-legacy-redirector' ) . '</strong> &mdash; ' . __( 'The source URL path that triggers the redirect. Trailing slashes are ignored, so <code>/old-page</code> and <code>/old-page/</code> are the same redirect and only one of them needs creating.', 'wpcom-legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Redirect To', 'wpcom-legacy-redirector' ) . '</strong> &mdash; ' . __( 'The destination where visitors are sent. Can be a relative path, absolute URL, or post ID.', 'wpcom-legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Status', 'wpcom-legacy-redirector' ) . '</strong> &mdash; ' . __( 'Whether the redirect is Enabled (active) or Disabled (inactive).', 'wpcom-legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Date', 'wpcom-legacy-redirector' ) . '</strong> &mdash; ' . __( 'When the redirect was created.', 'wpcom-legacy-redirector' ) . '</li>' .

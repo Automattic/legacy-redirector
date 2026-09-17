@@ -89,16 +89,17 @@ final class MigrateCommand extends WP_CLI_Command {
 			WP_CLI::line( sprintf( 'Dry run - no changes will be made.' ) );
 			WP_CLI::line(
 				sprintf(
-					'%d redirect(s) would be inspected, of which %d would be published, %d would have their source path rewritten, and %d would have their destination made relative.',
+					'%d redirect(s) would be inspected, of which %d would be published, %d would have their source path rewritten, %d would be trashed as duplicates, and %d would have their destination made relative.',
 					$pending['total'],
 					$pending['to_publish'],
 					$pending['to_repath'],
+					$pending['to_dedupe'],
 					$pending['to_normalise']
 				)
 			);
 
 			if ( array() !== $pending['conflicts'] ) {
-				WP_CLI::warning( sprintf( '%d path rewrite(s) would collide and be skipped:', count( $pending['conflicts'] ) ) );
+				WP_CLI::warning( sprintf( '%d source path(s) would collide with a redirect pointing somewhere else:', count( $pending['conflicts'] ) ) );
 				foreach ( $pending['conflicts'] as $conflict ) {
 					WP_CLI::line( '  ' . $conflict );
 				}
@@ -109,6 +110,7 @@ final class MigrateCommand extends WP_CLI_Command {
 
 		$published  = 0;
 		$repathed   = 0;
+		$deduped    = 0;
 		$normalised = 0;
 		$processed  = 0;
 		$conflicts  = array();
@@ -119,6 +121,7 @@ final class MigrateCommand extends WP_CLI_Command {
 			$processed  += $batch['processed'];
 			$published  += $batch['published'];
 			$repathed   += $batch['repathed'];
+			$deduped    += $batch['deduped'];
 			$normalised += $batch['normalised'];
 			$conflicts   = array_merge( $conflicts, $batch['conflicts'] );
 
@@ -128,19 +131,20 @@ final class MigrateCommand extends WP_CLI_Command {
 		} while ( ! $batch['complete'] );
 
 		if ( array() !== $conflicts ) {
-			WP_CLI::warning( sprintf( '%d path rewrite(s) were skipped because they would collide with an existing redirect:', count( $conflicts ) ) );
+			WP_CLI::warning( sprintf( '%d redirect(s) collided with a redirect pointing somewhere else:', count( $conflicts ) ) );
 			foreach ( $conflicts as $conflict ) {
 				WP_CLI::line( '  ' . $conflict );
 			}
-			WP_CLI::line( 'Review these manually; the 1.x redirect has been left as it was.' );
+			WP_CLI::line( 'Each has been drafted rather than deleted, so no redirect fires from a path two rows disagree about. Review them, then delete or re-point and republish.' );
 		}
 
 		WP_CLI::success(
 			sprintf(
-				'Migration complete. %d redirect(s) inspected, %d published, %d source path(s) rewritten, %d destination(s) made relative.',
+				'Migration complete. %d redirect(s) inspected, %d published, %d source path(s) rewritten, %d duplicate(s) trashed, %d destination(s) made relative.',
 				$processed,
 				$published,
 				$repathed,
+				$deduped,
 				$normalised
 			)
 		);
