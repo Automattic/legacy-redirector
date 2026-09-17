@@ -94,7 +94,7 @@ final class MigrateCommand extends WP_CLI_Command {
 					$pending['to_publish'],
 					$pending['to_repath'],
 					$pending['to_dedupe'],
-					$pending['to_normalise']
+					$pending['to_normalize']
 				)
 			);
 
@@ -111,7 +111,7 @@ final class MigrateCommand extends WP_CLI_Command {
 		$published  = 0;
 		$repathed   = 0;
 		$deduped    = 0;
-		$normalised = 0;
+		$normalized = 0;
 		$processed  = 0;
 		$conflicts  = array();
 
@@ -122,7 +122,7 @@ final class MigrateCommand extends WP_CLI_Command {
 			$published  += $batch['published'];
 			$repathed   += $batch['repathed'];
 			$deduped    += $batch['deduped'];
-			$normalised += $batch['normalised'];
+			$normalized += $batch['normalized'];
 			$conflicts   = array_merge( $conflicts, $batch['conflicts'] );
 
 			if ( $batch['processed'] > 0 ) {
@@ -145,7 +145,7 @@ final class MigrateCommand extends WP_CLI_Command {
 				$published,
 				$repathed,
 				$deduped,
-				$normalised
+				$normalized
 			)
 		);
 	}

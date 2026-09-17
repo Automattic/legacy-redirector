@@ -153,7 +153,7 @@ Redirects can be managed from three places. All of them are presentation only: e
 - **WP-CLI** (`src/Infrastructure/WordPress/Cli/`)
 - **Abilities API** (`src/Infrastructure/WordPress/Abilities/`) — registered on WordPress 6.9+ so MCP clients can manage redirects
 
-Ability names mirror the CLI verbs, so when you add or change a command, consider whether the matching ability needs the same change. Behaviour that two surfaces need belongs in `Application/`, not in a command, an ability, or an admin handler.
+Ability names mirror the CLI verbs, so when you add or change a command, consider whether the matching ability needs the same change. Behavior that two surfaces need belongs in `Application/`, not in a command, an ability, or an admin handler.
 
 Services are wired through the DI container (`src/Infrastructure/DI/Container.php`); prefer that over scattering `new` calls in production code. The test suite deliberately constructs services directly — see `tests/Integration/RedirectTestHelper.php`.
 
@@ -165,7 +165,7 @@ Services are wired through the DI container (`src/Infrastructure/DI/Container.ph
 
 ## Recognition
 
-Contributors are recognised in:
+Contributors are recognized in:
 - [CHANGELOG.md](./CHANGELOG.md) for significant contributions
 - GitHub contributors list
 

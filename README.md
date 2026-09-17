@@ -139,7 +139,7 @@ The Add/Edit Redirect screen shows the site's home URL next to the source field 
 
 ## Trailing Slashes Are Ignored
 
-A source is stored without its trailing slash, and incoming requests are canonicalised the same way, so `/old-page` and `/old-page/` are one redirect:
+A source is stored without its trailing slash, and incoming requests are canonicalized the same way, so `/old-page` and `/old-page/` are one redirect:
 
 ```bash
 # Both of these create - or update - the same redirect

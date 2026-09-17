@@ -28,7 +28,7 @@ use Mockery;
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination

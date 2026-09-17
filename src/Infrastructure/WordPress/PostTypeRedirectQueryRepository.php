@@ -33,7 +33,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	/**
 	 * LIKE pattern matching external (absolute URL) destinations.
 	 *
-	 * Internal absolute URLs are normalised to relative paths on save (and by
+	 * Internal absolute URLs are normalized to relative paths on save (and by
 	 * the v3 migration), so anything stored absolute is external.
 	 */
 	private const string EXTERNAL_LIKE = 'http%';

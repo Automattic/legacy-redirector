@@ -27,7 +27,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl

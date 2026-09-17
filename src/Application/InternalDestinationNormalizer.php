@@ -1,6 +1,6 @@
 <?php
 /**
- * Internal destination normaliser service.
+ * Internal destination normalizer service.
  *
  * @package Automattic\LegacyRedirector\Application
  */
@@ -20,10 +20,10 @@ use Automattic\LegacyRedirector\Domain\Url;
  * 'https://example.com/foo'. Storing both forms makes the list table
  * inconsistent, defeats duplicate detection, and forces every consumer that
  * distinguishes internal from external destinations to guess from the stored
- * string. Normalising to the relative form on save means anything stored
+ * string. Normalizing to the relative form on save means anything stored
  * absolute is external by construction.
  *
- * Encoding is canonicalised as well, because '/café' and '/caf%C3%A9' are two
+ * Encoding is canonicalized as well, because '/café' and '/caf%C3%A9' are two
  * spellings of one target and used to be stored as whichever was typed. The
  * canonical form decodes the path and fragment - the parts a human reads in
  * the list table - and keeps the query percent-encoded: query values have
@@ -39,7 +39,7 @@ use Automattic\LegacyRedirector\Domain\Url;
  * cannot verify, and rewriting would silently change the destination when
  * they do not.
  */
-final class InternalDestinationNormaliser {
+final class InternalDestinationNormalizer {
 
 	/**
 	 * The last home URL parsed, and its parsed form.
@@ -52,12 +52,12 @@ final class InternalDestinationNormaliser {
 	private ?array $parsed_home = null;
 
 	/**
-	 * Normalise a destination to its canonical stored form.
+	 * Normalize a destination to its canonical stored form.
 	 *
 	 * @param Destination $destination The destination as entered.
 	 * @return Destination The destination with internal URLs in canonical form.
 	 */
-	public function normalise( Destination $destination ): Destination {
+	public function normalize( Destination $destination ): Destination {
 		if ( ! $destination->is_url() ) {
 			return $destination;
 		}
@@ -65,7 +65,7 @@ final class InternalDestinationNormaliser {
 		$value = $destination->as_url()->value();
 
 		$path = $destination->as_url()->is_relative()
-			? $this->canonicalise( $value )
+			? $this->canonicalize( $value )
 			: $this->to_internal_path( $value );
 
 		return null === $path || $path === $value
@@ -86,7 +86,7 @@ final class InternalDestinationNormaliser {
 	 * @param string $relative The relative destination as entered or as stored.
 	 * @return string|null The canonical form, or null when it cannot be parsed.
 	 */
-	public function canonicalise( string $relative ): ?string {
+	public function canonicalize( string $relative ): ?string {
 		$parts = Url::parse_encoded( $relative );
 
 		if ( null === $parts || ! isset( $parts['path'] ) ) {

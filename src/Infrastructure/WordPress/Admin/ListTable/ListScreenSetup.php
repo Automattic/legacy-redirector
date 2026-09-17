@@ -178,13 +178,13 @@ final class ListScreenSetup {
 	 * Get the base URL help content.
 	 *
 	 * Only shown where home is not the domain root, which is exactly where the
-	 * grey prefix appears and where a bare path would otherwise be ambiguous.
+	 * gray prefix appears and where a bare path would otherwise be ambiguous.
 	 *
 	 * @return string Help content HTML.
 	 */
 	private function get_base_url_help(): string {
 		return '<p>' . __( 'This site is installed below the domain root, so redirect paths are stored relative to the site\'s base URL rather than to the domain.', 'wpcom-legacy-redirector' ) . '</p>' .
-			'<p>' . __( 'In the Redirect From and Redirect To columns, paths are shown with a grey prefix giving that base URL. This makes clear that a path like <code>/hello-world</code> resolves against the site, not the domain root.', 'wpcom-legacy-redirector' ) . '</p>' .
+			'<p>' . __( 'In the Redirect From and Redirect To columns, paths are shown with a gray prefix giving that base URL. This makes clear that a path like <code>/hello-world</code> resolves against the site, not the domain root.', 'wpcom-legacy-redirector' ) . '</p>' .
 			'<p>' . sprintf(
 				/* translators: 1: example base URL, 2: example path, 3: example resulting URL */
 				esc_html__( 'For example, on a site at %1$s, the path %2$s refers to %3$s.', 'wpcom-legacy-redirector' ),

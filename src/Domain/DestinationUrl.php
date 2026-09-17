@@ -74,7 +74,7 @@ final class DestinationUrl {
 				throw new InvalidArgumentException( 'Absolute destination URLs must use http or https scheme.' );
 			}
 
-			// Reject malformed forms such as `https:/evil.com`, which browsers normalise to `https://evil.com`.
+			// Reject malformed forms such as `https:/evil.com`, which browsers normalize to `https://evil.com`.
 			if ( empty( $parts['host'] ) ) {
 				throw new InvalidArgumentException( 'Absolute destination URLs must include a host.' );
 			}

@@ -9,7 +9,7 @@
       Hello world.
       """
 
-  Scenario: WP-CLI recognises plugin commands
+  Scenario: WP-CLI recognizes plugin commands
     Given a WP install
 
     When I run `wp plugin --help`
@@ -18,7 +18,7 @@
       Manages plugins, including installs, activations, and updates.
       """
 
-  Scenario: WP-CLI recognises wpcom-legacy-redirector commands when the plugin is loaded
+  Scenario: WP-CLI recognizes wpcom-legacy-redirector commands when the plugin is loaded
     Given a WP installation with the WPCOM Legacy Redirector plugin
 
     When I run `wp wpcom-legacy-redirector --help`

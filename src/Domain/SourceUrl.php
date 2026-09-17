@@ -14,22 +14,22 @@ use InvalidArgumentException;
 /**
  * Immutable value object representing a redirect source URL.
  *
- * Encapsulates the "from" URL for a redirect, handling normalisation,
- * validation, and hash generation. URLs are normalised to path + query
+ * Encapsulates the "from" URL for a redirect, handling normalization,
+ * validation, and hash generation. URLs are normalized to path + query
  * only (scheme and host are stripped), with any trailing slash removed from
  * the path so that /old-page and /old-page/ are the same redirect.
  */
 final class SourceUrl {
 
 	/**
-	 * The normalised URL path (and optional query string).
+	 * The normalized URL path (and optional query string).
 	 *
 	 * @var string
 	 */
 	private string $path;
 
 	/**
-	 * The MD5 hash of the normalised path.
+	 * The MD5 hash of the normalized path.
 	 *
 	 * @var string
 	 */
@@ -38,7 +38,7 @@ final class SourceUrl {
 	/**
 	 * Private constructor - use named constructors.
 	 *
-	 * @param string $path The normalised URL path.
+	 * @param string $path The normalized URL path.
 	 */
 	private function __construct( string $path ) {
 		$this->path = $path;
@@ -48,7 +48,7 @@ final class SourceUrl {
 	/**
 	 * Create a SourceUrl from a URL string.
 	 *
-	 * Accepts full URLs (with scheme/host) or paths. The URL is normalised
+	 * Accepts full URLs (with scheme/host) or paths. The URL is normalized
 	 * to just the path and query string components.
 	 *
 	 * @param string $url       The URL or path to create a SourceUrl from.
@@ -64,12 +64,12 @@ final class SourceUrl {
 	 * @throws InvalidArgumentException If the URL is empty, invalid, or cannot be parsed.
 	 */
 	public static function from_string( string $url, string $home_path = '' ): self {
-		$normalised = self::normalise( $url, $home_path );
-		return new self( $normalised );
+		$normalized = self::normalize( $url, $home_path );
+		return new self( $normalized );
 	}
 
 	/**
-	 * Normalise a URL to just path and query string.
+	 * Normalize a URL to just path and query string.
 	 *
 	 * Removes scheme and host from the URL, as redirects should be
 	 * independent of these. Validates the URL structure.
@@ -81,13 +81,13 @@ final class SourceUrl {
 	 * Any trailing slash comes off the path as well, so that /old-page and
 	 * /old-page/ are one redirect rather than two. See strip_trailing_slash().
 	 *
-	 * @param string $url       URL to normalise.
+	 * @param string $url       URL to normalize.
 	 * @param string $home_path The site's home path ('' when at the domain root).
-	 * @return string Normalised URL (path + query).
+	 * @return string Normalized URL (path + query).
 	 *
 	 * @throws InvalidArgumentException If the URL is invalid or cannot be parsed.
 	 */
-	private static function normalise( string $url, string $home_path ): string {
+	private static function normalize( string $url, string $home_path ): string {
 		// Ensure path starts with / before sanitisation, so a bare 'path' is
 		// treated as a path rather than a schemeless domain.
 		// REQUEST_URI always starts with /, so source paths must too.
@@ -110,34 +110,34 @@ final class SourceUrl {
 			throw new InvalidArgumentException( 'The URL contains neither a path nor query string.' );
 		}
 
-		// Build normalised URL from path and optional query.
-		$normalised = $components['path'] ?? '';
+		// Build normalized URL from path and optional query.
+		$normalized = $components['path'] ?? '';
 
 		// A path that arrived with a host was written from the domain root, so
 		// it still carries the home path wherever home is not the root. A bare
 		// request URI never does, so the guard keeps the hot path untouched.
 		if ( isset( $components['host'] ) ) {
-			$normalised = self::strip_home_path( $normalised, $home_path );
+			$normalized = self::strip_home_path( $normalized, $home_path );
 		}
 
-		$normalised = self::strip_trailing_slash( $normalised );
+		$normalized = self::strip_trailing_slash( $normalized );
 
 		if ( ! empty( $components['query'] ) ) {
-			$normalised .= '?' . $components['query'];
+			$normalized .= '?' . $components['query'];
 		}
 
-		return $normalised;
+		return $normalized;
 	}
 
 	/**
 	 * Sanitise a URL for storage, in pure PHP.
 	 *
 	 * A recreation of WordPress's esc_url_raw() - esc_url( $url, null, 'db' )
-	 * - specialised to the inputs this value object produces: a non-empty
-	 * input here always starts with '/' or 'http' (see normalise()).
+	 * - specialized to the inputs this value object produces: a non-empty
+	 * input here always starts with '/' or 'http' (see normalize()).
 	 *
 	 * Output must stay byte-identical to esc_url_raw() for stored sources:
-	 * the md5 of the normalised path is the persisted lookup key
+	 * the md5 of the normalized path is the persisted lookup key
 	 * (post_name), so any drift here orphans existing redirects.
 	 *
 	 * Deliberate differences from core, none of which change the output for
@@ -146,7 +146,7 @@ final class SourceUrl {
 	 * - non-http(s) schemes are rejected outright rather than laundered
 	 *   through wp_kses_bad_protocol();
 	 * - a colonless non-path input is rejected instead of gaining an
-	 *   'http://' prefix (normalise() has already prefixed '/' onto any
+	 *   'http://' prefix (normalize() has already prefixed '/' onto any
 	 *   input that could take that branch);
 	 * - the mailto: exemption from CRLF stripping is dropped (a source can
 	 *   never be a mailto: link).
@@ -261,7 +261,7 @@ final class SourceUrl {
 	 * itself picks one form and redirects the other - which form depending on
 	 * whether the site's permalink structure ends in a slash.
 	 *
-	 * Canonicalising here rather than trying both forms at lookup time is what
+	 * Canonicalizing here rather than trying both forms at lookup time is what
 	 * makes the md5 of this path a single key per source: one stored row, one
 	 * query, and no way to create /old-page and /old-page/ as rival redirects
 	 * with different destinations.
@@ -322,16 +322,16 @@ final class SourceUrl {
 	}
 
 	/**
-	 * Get the normalised path (including query string if present).
+	 * Get the normalized path (including query string if present).
 	 *
-	 * @return string The normalised URL path.
+	 * @return string The normalized URL path.
 	 */
 	public function path(): string {
 		return $this->path;
 	}
 
 	/**
-	 * Get the MD5 hash of the normalised path.
+	 * Get the MD5 hash of the normalized path.
 	 *
 	 * This hash is used as the post_name for redirect posts,
 	 * enabling fast indexed lookups.
@@ -355,7 +355,7 @@ final class SourceUrl {
 	/**
 	 * String representation of the SourceUrl.
 	 *
-	 * @return string The normalised path.
+	 * @return string The normalized path.
 	 */
 	public function __toString(): string {
 		return $this->path;

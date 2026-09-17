@@ -19,7 +19,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\AbstractStatusCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher

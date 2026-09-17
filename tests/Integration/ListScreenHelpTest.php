@@ -15,7 +15,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 /**
  * ListScreenHelpTest class.
  *
- * The Base URL tab explains the grey prefix on the list table, so it has to
+ * The Base URL tab explains the gray prefix on the list table, so it has to
  * appear under exactly the same condition the prefix does: home is not the
  * domain root. Gating it on is_multisite() left a single site at
  * example.com/blog showing a prefix with nothing to explain it, and gave a

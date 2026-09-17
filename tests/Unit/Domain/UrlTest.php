@@ -217,7 +217,7 @@ final class UrlTest extends YoastTestCase {
 
 		$this->assertSame( 'https', $parts['scheme'] );
 		$this->assertSame( 'example.com', $parts['host'] );
-		$this->assertSame( '8080', $parts['port'], 'The port is normalised to a string.' );
+		$this->assertSame( '8080', $parts['port'], 'The port is normalized to a string.' );
 		$this->assertSame( '/日本', $parts['path'] );
 		$this->assertSame( 'q=1', $parts['query'] );
 		$this->assertSame( 'frag', $parts['fragment'] );

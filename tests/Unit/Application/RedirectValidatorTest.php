@@ -318,7 +318,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
 	 */
-	public function test_validate_source_destination_different_normalises_trailing_slashes(): void {
+	public function test_validate_source_destination_different_normalizes_trailing_slashes(): void {
 		$source      = $this->create_source( '/same-path/' );
 		$destination = $this->create_url_destination( '/same-path' );
 

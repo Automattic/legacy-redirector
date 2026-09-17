@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination

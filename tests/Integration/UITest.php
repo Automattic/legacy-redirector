@@ -523,7 +523,7 @@ final class UITest extends TestCase {
 		$this->delete_all_redirects();
 
 		// Create redirect to internal URL. Internal destinations are stored
-		// relative by construction (absolute forms are normalised on save).
+		// relative by construction (absolute forms are normalized on save).
 		self::factory()->post->create(
 			array(
 				'post_type'    => PostType::POST_TYPE,

@@ -217,7 +217,7 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 * the upgrade routine works from stored post_name hashes - must build the
 	 * key the same way, or it silently deletes nothing.
 	 *
-	 * @param string $hash The MD5 hash of the normalised source path.
+	 * @param string $hash The MD5 hash of the normalized source path.
 	 * @return string The cache key.
 	 */
 	public static function cache_key( string $hash ): string {

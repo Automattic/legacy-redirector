@@ -23,7 +23,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
@@ -201,7 +201,7 @@ final class ListRedirectsTest extends TestCase {
 	 * Expected 'to' column output for a relative path.
 	 *
 	 * Where home is not the domain root the column prefixes the path with the
-	 * site's home URL in grey; where home is the root the path is rendered
+	 * site's home URL in gray; where home is the root the path is rendered
 	 * as-is. Note this is not the same as "multisite": the network's root site
 	 * has home at the domain root and so takes no prefix, while a single site
 	 * installed at example.com/blog does.

@@ -36,7 +36,7 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test from_string normalises full URL to path only.
+	 * Test from_string normalizes full URL to path only.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
 	 */
@@ -99,7 +99,7 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test a full URL for the subsite's own home page normalises to '/'.
+	 * Test a full URL for the subsite's own home page normalizes to '/'.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
 	 */
@@ -340,14 +340,14 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test a percent-encoded path normalises identically to its decoded form.
+	 * Test a percent-encoded path normalizes identically to its decoded form.
 	 *
 	 * Sources arrive both ways (a browser-copied URL is encoded, a hand-typed
 	 * one is not) and must land on the same stored hash to match at all.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
 	 */
-	public function test_from_string_normalises_encoded_and_decoded_forms_identically(): void {
+	public function test_from_string_normalizes_encoded_and_decoded_forms_identically(): void {
 		$encoded = SourceUrl::from_string( '/my%20page' );
 		$decoded = SourceUrl::from_string( '/my page' );
 
@@ -355,7 +355,7 @@ final class SourceUrlTest extends YoastTestCase {
 		$this->assertSame( $decoded->hash(), $encoded->hash() );
 	}
 	/**
-	 * Test non-ASCII paths survive normalisation across scripts and planes.
+	 * Test non-ASCII paths survive normalization across scripts and planes.
 	 *
 	 * The sanitiser's character class keeps the \x80-\xff byte range, which is
 	 * the only reason any of this works; a narrowing of that class would strip
@@ -432,7 +432,7 @@ final class SourceUrlTest extends YoastTestCase {
 			'emoji (4 bytes)'                 => array( '/%F0%9F%8E%89', '/🎉' ),
 			'Cyrillic in query'               => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
 			'emoji in query'                  => array( '/page?q=%F0%9F%8E%89', '/page?q=🎉' ),
-			// Both canonicalisations at once, in opposite directions. The rows
+			// Both canonicalizations at once, in opposite directions. The rows
 			// above differ only in encoding, so slash stripping could be
 			// skipped for percent-encoded input and they would still pass.
 			'encoded slashed vs decoded bare' => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو' ),
@@ -442,7 +442,7 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test the two Unicode normalisation forms of the same glyph do not match.
+	 * Test the two Unicode normalization forms of the same glyph do not match.
 	 *
 	 * The hash is an md5 of the raw bytes, so precomposed 'é' (U+00E9) and
 	 * decomposed 'e' + U+0301 render identically but store and look up under
@@ -450,8 +450,8 @@ final class SourceUrlTest extends YoastTestCase {
 	 * else uses NFC, so a source pasted from a Mac Finder path can silently
 	 * fail to match the same-looking URL a browser requests.
 	 *
-	 * This pins the current behaviour rather than endorsing it: fixing it
-	 * would mean normalising to NFC before hashing, which rewrites every
+	 * This pins the current behavior rather than endorsing it: fixing it
+	 * would mean normalizing to NFC before hashing, which rewrites every
 	 * stored hash and so belongs to a migration, not to this value object.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
@@ -509,7 +509,7 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test a unicode subsite's own home URL normalises to '/'.
+	 * Test a unicode subsite's own home URL normalizes to '/'.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
 	 */

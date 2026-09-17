@@ -75,12 +75,12 @@ composer test:behat-rerun  # Re-run failed Behat scenarios
 
 Follow the standards documented in `~/code/plugin-standards/` for full details. Key points:
 
-- **Commits**: Use the `/commit` skill. Favour explaining "why" over "what".
+- **Commits**: Use the `/commit` skill. Favor explaining "why" over "what".
 - **PRs**: Use the `/pr` skill. Squash and merge by default.
 - **Branch naming**: `feature/description`, `fix/description` from `develop`.
 - **Testing**: Three test types here:
   - **Unit tests**: For isolated domain/application logic. Use `Yoast\WPTestUtils\BrainMonkey\YoastTestCase`.
-  - **Integration tests**: For WordPress-dependent behaviour. Use `Yoast\WPTestUtils\WPIntegration\TestCase`. Uses a separate config file (`phpunit-integration.xml.dist`).
+  - **Integration tests**: For WordPress-dependent behavior. Use `Yoast\WPTestUtils\WPIntegration\TestCase`. Uses a separate config file (`phpunit-integration.xml.dist`).
   - **Behat tests**: For CLI contract verification and critical happy paths only. Keep Behat scenarios minimal (2-5 per command).
 - **Code style**: WordPress coding standards via PHPCS. Tabs for indentation.
 - **i18n**: All user-facing strings must use the `wpcom-legacy-redirector` text domain.
@@ -92,7 +92,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Only the Domain layer is WordPress-free** (decided in VIPPLUG-119): Application services call WordPress APIs (`get_post`, `apply_filters`, `current_user_can`, `__()`, etc.) directly and are tested with Brain Monkey. Do not introduce ports/adapters (clock, HTTP, permalink, translation interfaces) to make Application WordPress-independent — the plugin only ever runs inside WordPress. The layering rules that do hold: Domain must not `use` Application or Infrastructure, and Application must not `use` Infrastructure.
 - **Value objects for URLs**: `SourceUrl` and `DestinationUrl` are distinct value objects (not plain strings). This prevents accidentally swapping source and destination. Always use the appropriate value object.
 - **Custom post type for storage**: Redirects are stored as a custom post type for performance and compatibility with VIP Go's infrastructure. Do not switch to custom database tables or options.
-- **Three client surfaces, one application layer**: the admin UI, WP-CLI, and the Abilities API are all presentation only. Each translates its own input into calls on `RedirectManager`, `RedirectAuditor`, and the repositories. Behaviour that any two of them need belongs in Application, not in a command or an ability. The abilities deliberately mirror the CLI verbs so the three surfaces stay in step.
+- **Three client surfaces, one application layer**: the admin UI, WP-CLI, and the Abilities API are all presentation only. Each translates its own input into calls on `RedirectManager`, `RedirectAuditor`, and the repositories. Behavior that any two of them need belongs in Application, not in a command or an ability. The abilities deliberately mirror the CLI verbs so the three surfaces stay in step.
 - **Caching repository decorator**: `CachingRedirectRepository` wraps `PostTypeRedirectRepository` with object cache. Redirect lookups happen on every page load, so caching is critical for performance.
 - **Separate PHPUnit configs**: Unit and integration tests use different PHPUnit config files because integration tests need WordPress loaded and use wp-env.
 - **One wp-env environment**: `.wp-env.json` sets `"testsEnvironment": false`, so `wp-env start` brings up a single environment and every test runs in the `cli` container. There is no `tests-cli`.

@@ -572,7 +572,7 @@ PHP;
 	 * Request a front-end path without following redirects.
 	 *
 	 * Issues a real HTTP request against the test site from inside the
-	 * cli container, so redirect behaviour is asserted at the HTTP
+	 * cli container, so redirect behavior is asserted at the HTTP
 	 * level (status line and headers are captured into STDOUT).
 	 *
 	 * @When I request the front-end path :path

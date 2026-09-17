@@ -35,7 +35,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  *
  * @covers \Automattic\LegacyRedirector\Application\HomePath
  * @covers \Automattic\LegacyRedirector\Application\RedirectResolver
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -207,9 +207,9 @@ final class UnicodeHomePathTest extends TestCase {
 	/**
 	 * Test an internal destination under the unicode home path is stored relative.
 	 *
-	 * InternalDestinationNormaliser shares the same home-path comparison, so
+	 * InternalDestinationNormalizer shares the same home-path comparison, so
 	 * it had the same blind spot: a destination entered as a full URL stayed
-	 * absolute instead of being normalised to its relative form.
+	 * absolute instead of being normalized to its relative form.
 	 *
 	 * @return void
 	 */

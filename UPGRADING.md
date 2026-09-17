@@ -10,7 +10,7 @@ Three storage changes between 1.x and 2.0 would otherwise stop redirects you alr
 2. **Where your site is not at the domain root, 1.x stored source paths with that prefix included** (`/subsite1/old-page` on a subsite, `/blog/old-page` on a single site installed at `example.com/blog`). Version 1.x read the raw request path for both storing and matching, so the two agreed. Version 2.0 strips the site's base path from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
 
    This applies to any install whose home URL is below the domain root, not just multisites. If your site lives at `example.com/blog`, you are affected in exactly the same way as a subsite.
-3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalises incoming requests the same way, so either spelling now finds the redirect. Sources are re-keyed so they match what 2.0 looks up.
+3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalizes incoming requests the same way, so either spelling now finds the redirect. Sources are re-keyed so they match what 2.0 looks up.
 
    Destinations are untouched: a trailing slash there is part of where the visitor actually lands.
 
@@ -147,7 +147,7 @@ Version 1.3.0 shipped three commands. All three change:
 
 | 1.x command | 2.0 replacement |
 |-------------|-----------------|
-| `insert-redirect <from> <to>` | `create <from> <to>` — validates the destination by default, so pass `--skip-validation` for the 1.x behaviour, and `--porcelain` to capture the new ID |
+| `insert-redirect <from> <to>` | `create <from> <to>` — validates the destination by default, so pass `--skip-validation` for the 1.x behavior, and `--porcelain` to capture the new ID |
 | `import-from-csv --csv=<file>` | `import <file>` — `-` reads from STDIN, and `--mode=upsert` updates redirects that already exist |
 | `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` — flags are now kebab-case, and `--skip_dupes=<bool>` is now the plain flag `--skip-dupes` |
 
@@ -161,7 +161,7 @@ If you have been running the plugin from the `develop` branch rather than the 1.
 
 `find-domains` keeps its name and gains a `--format` flag, including a `count` format.
 
-Other behaviour changes to be aware of:
+Other behavior changes to be aware of:
 
 - `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp wpcom-legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
 - External destinations still require the host to be allowed via the `allowed_redirect_hosts` filter, as in 1.x, but you now find out at creation time instead of discovering it in production. 1.x accepted any destination and then handed it to `wp_safe_redirect()`, which sent visitors to its fallback of `admin_url()` when the host was not allowed. Creating or updating a redirect to a host the site does not allow is now an error naming the domain, and a stored redirect whose host is not allowed leaves the original 404 in place rather than bouncing visitors to the admin. Run `wp wpcom-legacy-redirector find-domains` to list the domains your existing redirects point at, and allow the ones you intend to keep.
