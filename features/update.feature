@@ -4,7 +4,7 @@ Feature: Update a redirect
   So that I can fix or repoint redirects without recreating them
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Contract test: update changes the stored destination.
   Scenario: Update a redirect's destination
@@ -12,13 +12,13 @@ Feature: Update a redirect
     And there is a published post with a slug of "update-destination-two"
     And there is a redirect from "/update-source" to "/update-destination-one"
 
-    When I run `wp wpcom-legacy-redirector update /update-source --to=/update-destination-two`
+    When I run `wp legacy-redirector update /update-source --to=/update-destination-two`
     Then STDOUT should contain:
       """
       Success: Updated redirect: /update-source
       """
 
-    When I run `wp wpcom-legacy-redirector get /update-source`
+    When I run `wp legacy-redirector get /update-source`
     Then STDOUT should contain:
       """
       /update-destination-two

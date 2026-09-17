@@ -4,7 +4,7 @@ Feature: Validate redirects
   So that I can find and fix broken redirect destinations
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Contract test: verifies batch processing works with real WordPress.
   Scenario: Validate batch mode with no issues
@@ -12,7 +12,7 @@ Feature: Validate redirects
     And there is a redirect from "/batch-test-1" to "/batch-destination"
     And there is a redirect from "/batch-test-2" to "/batch-destination"
 
-    When I run `wp wpcom-legacy-redirector validate`
+    When I run `wp legacy-redirector validate`
     Then STDOUT should contain:
       """
       No issues found.
@@ -24,7 +24,7 @@ Feature: Validate redirects
     And there is a redirect from "/validate-trashed" to "/trashed-destination"
     And the post "trashed-destination" is trashed
 
-    When I run `wp wpcom-legacy-redirector validate /validate-trashed`
+    When I run `wp legacy-redirector validate /validate-trashed`
     Then STDOUT should contain:
       """
       broken redirect

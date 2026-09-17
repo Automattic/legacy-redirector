@@ -1,6 +1,6 @@
-# Contributing to WPCOM Legacy Redirector
+# Contributing to Legacy Redirector
 
-Thank you for your interest in contributing to WPCOM Legacy Redirector! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to Legacy Redirector! This document provides guidelines for contributing to the project.
 
 ## Requirements
 
@@ -12,8 +12,8 @@ Thank you for your interest in contributing to WPCOM Legacy Redirector! This doc
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Automattic/wpcom-legacy-redirector.git
-   cd wpcom-legacy-redirector
+   git clone https://github.com/Automattic/legacy-redirector.git
+   cd legacy-redirector
    ```
 
 2. **Install dependencies:**
@@ -160,7 +160,7 @@ Services are wired through the DI container (`src/Infrastructure/DI/Container.ph
 ## Getting Help
 
 - **GitHub Issues**: For bug reports and feature requests
-- **Wiki**: [Documentation](https://github.com/Automattic/wpcom-legacy-redirector/wiki)
+- **Wiki**: [Documentation](https://github.com/Automattic/legacy-redirector/wiki)
 - **WordPress VIP Support**: For WPVIP customers
 
 ## Recognition
@@ -169,4 +169,4 @@ Contributors are recognized in:
 - [CHANGELOG.md](./CHANGELOG.md) for significant contributions
 - GitHub contributors list
 
-Thank you for contributing to WPCOM Legacy Redirector!
+Thank you for contributing to Legacy Redirector!

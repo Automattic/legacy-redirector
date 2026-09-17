@@ -25,13 +25,13 @@ final class EnableCommand extends AbstractStatusCommand {
 	 * ## EXAMPLES
 	 *
 	 *     # Enable redirect by source path.
-	 *     $ wp wpcom-legacy-redirector enable /old-page
+	 *     $ wp legacy-redirector enable /old-page
 	 *
 	 *     # Enable redirect by ID.
-	 *     $ wp wpcom-legacy-redirector enable 123
+	 *     $ wp legacy-redirector enable 123
 	 *
 	 *     # Enable multiple redirects.
-	 *     $ wp wpcom-legacy-redirector enable /old-page /other-page
+	 *     $ wp legacy-redirector enable /old-page /other-page
 	 *
 	 * @when after_wp_load
 	 *

@@ -72,13 +72,13 @@ final class ValidateRedirectHandler {
 		check_ajax_referer( self::ACTION, 'nonce' );
 
 		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'wpcom-legacy-redirector' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'legacy-redirector' ) ) );
 		}
 
 		$redirect_id = isset( $_POST['redirect_id'] ) ? absint( $_POST['redirect_id'] ) : 0;
 
 		if ( ! $redirect_id ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid redirect ID.', 'wpcom-legacy-redirector' ) ) );
+			wp_send_json_error( array( 'message' => __( 'Invalid redirect ID.', 'legacy-redirector' ) ) );
 		}
 
 		$redirect = $this->repository->find_by_id( $redirect_id );
@@ -87,7 +87,7 @@ final class ValidateRedirectHandler {
 			wp_send_json_error(
 				array(
 					'status'  => 'null',
-					'message' => __( 'The redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ),
+					'message' => __( 'The redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ),
 				)
 			);
 		}
@@ -102,14 +102,14 @@ final class ValidateRedirectHandler {
 
 			// Map validator error codes to user-friendly messages.
 			$messages = array(
-				'empty-postid'   => __( 'The redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ),
-				'non-public'     => __( 'The redirect is pointing to content that is not publicly accessible.', 'wpcom-legacy-redirector' ),
-				'invalid-url'    => __( 'The URL is not valid. External URLs must include the scheme (http:// or https://).', 'wpcom-legacy-redirector' ),
-				'invalid-scheme' => __( 'Only http and https URLs are supported.', 'wpcom-legacy-redirector' ),
-				'invalid'        => __( 'The redirect destination URL does not exist.', 'wpcom-legacy-redirector' ),
+				'empty-postid'   => __( 'The redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ),
+				'non-public'     => __( 'The redirect is pointing to content that is not publicly accessible.', 'legacy-redirector' ),
+				'invalid-url'    => __( 'The URL is not valid. External URLs must include the scheme (http:// or https://).', 'legacy-redirector' ),
+				'invalid-scheme' => __( 'Only http and https URLs are supported.', 'legacy-redirector' ),
+				'invalid'        => __( 'The redirect destination URL does not exist.', 'legacy-redirector' ),
 			);
 
-			$message = $messages[ $error_code ] ?? __( 'The redirect is not valid.', 'wpcom-legacy-redirector' );
+			$message = $messages[ $error_code ] ?? __( 'The redirect is not valid.', 'legacy-redirector' );
 
 			wp_send_json_error(
 				array(
@@ -126,7 +126,7 @@ final class ValidateRedirectHandler {
 			wp_send_json_error(
 				array(
 					'status'  => '404',
-					'message' => __( 'The redirect destination returns a 404 error.', 'wpcom-legacy-redirector' ),
+					'message' => __( 'The redirect destination returns a 404 error.', 'legacy-redirector' ),
 				)
 			);
 		}
@@ -135,7 +135,7 @@ final class ValidateRedirectHandler {
 		wp_send_json_success(
 			array(
 				'status'  => 'valid',
-				'message' => __( 'Redirect is valid.', 'wpcom-legacy-redirector' ),
+				'message' => __( 'Redirect is valid.', 'legacy-redirector' ),
 			)
 		);
 	}

@@ -131,13 +131,13 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
 		// Mock apply_filters for request_path filter (returns path unchanged).
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/old-page' )
 			->andReturnFirstArg();
 
 		// Mock apply_filters for preserve_query_params filter (no params to preserve).
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->with( array(), '/old-page' )
 			->andReturn( array() );
@@ -150,7 +150,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->andReturn( $redirect );
 
 		// Mock apply_filters for redirect_status filter.
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->with( 301, '/old-page' )
 			->andReturn( 301 );
@@ -176,11 +176,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 			'publish'
 		);
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -195,7 +195,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( 456 )
 			->andReturn( 'https://example.com/destination-post' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -215,12 +215,12 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->stub_home_url();
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/old-page' )
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -229,7 +229,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->once()
 			->andReturn( $redirect );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -240,7 +240,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data applies wpcom_legacy_redirector_request_path filter.
+	 * Test get_redirect_data applies legacy_redirector_request_path filter.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
@@ -249,12 +249,12 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$redirect = $this->create_redirect( '/modified-path', '/new-page' );
 
 		// The filter modifies the path.
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/original-path' )
 			->andReturn( '/modified-path' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -265,7 +265,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( Mockery::on( fn( $s ) => $s->path() === '/modified-path' ) )
 			->andReturn( $redirect );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -284,13 +284,13 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$redirect = $this->create_redirect( '/old-page?other=value', '/new-page' );
 
 		// Path includes query string.
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/old-page?utm_source=test&other=value' )
 			->andReturnFirstArg();
 
 		// Filter returns keys to preserve.
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->with( array(), '/old-page?utm_source=test&other=value' )
 			->andReturn( array( 'utm_source' ) );
@@ -314,7 +314,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( array( 'utm_source' => 'test' ), 'https://example.com/new-page' )
 			->andReturn( 'https://example.com/new-page?utm_source=test' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -325,7 +325,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data applies wpcom_legacy_redirector_redirect_status filter.
+	 * Test get_redirect_data applies legacy_redirector_redirect_status filter.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
@@ -333,11 +333,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->stub_home_url();
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -347,7 +347,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->andReturn( $redirect );
 
 		// Filter changes status to 302.
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->with( 301, '/old-page' )
 			->andReturn( 302 );
@@ -367,11 +367,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->stub_home_url();
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -381,7 +381,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->andReturn( $redirect );
 
 		// Filter returns a non-redirect status code.
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->with( 301, '/old-page' )
 			->andReturn( 200 );
@@ -393,7 +393,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data applies wpcom_legacy_redirector_destination_url filter.
+	 * Test get_redirect_data applies legacy_redirector_destination_url filter.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
@@ -402,12 +402,12 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
 		// The request path filter strips the /amp suffix before lookup.
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/old-page/amp' )
 			->andReturn( '/old-page' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -417,12 +417,12 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->andReturn( $redirect );
 
 		// The destination filter receives the resolved URL, filtered path, and original URL.
-		Filters\expectApplied( 'wpcom_legacy_redirector_destination_url' )
+		Filters\expectApplied( 'legacy_redirector_destination_url' )
 			->once()
 			->with( 'https://example.com/new-page', '/old-page', '/old-page/amp' )
 			->andReturn( 'https://example.com/new-page/amp' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -441,11 +441,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$this->stub_home_url();
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -454,7 +454,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->once()
 			->andReturn( $redirect );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_destination_url' )
+		Filters\expectApplied( 'legacy_redirector_destination_url' )
 			->once()
 			->andReturn( '' );
 
@@ -471,7 +471,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	public function test_get_redirect_data_returns_null_for_empty_path(): void {
 		$this->stub_home_url();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '' )
 			->andReturn( '' );
@@ -489,7 +489,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	public function test_get_redirect_data_returns_null_when_filter_empties_path(): void {
 		$this->stub_home_url();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/some-path' )
 			->andReturn( '' );
@@ -507,11 +507,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 	public function test_get_redirect_data_returns_null_when_redirect_not_found(): void {
 		$this->stub_home_url();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -551,11 +551,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		$url_without_path = 'http://example.com';
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturn( $url_without_path );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -580,11 +580,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 			'publish'
 		);
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -614,12 +614,12 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$redirect = $this->create_redirect( '/hello world', '/new-page' );
 
 		// The path reaches the filter still encoded; SourceUrl owns decoding.
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/hello%20world' )
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -629,7 +629,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( Mockery::on( fn( $s ) => $s->path() === '/hello world' ) )
 			->andReturn( $redirect );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -659,9 +659,9 @@ final class RedirectResolverTest extends MonkeyStubs {
 		$expected = SourceUrl::from_string( $stored_source );
 		$redirect = Redirect::reconstitute( 123, $expected, $this->create_url_destination(), 'publish' );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )->once()->andReturnFirstArg();
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )->once()->andReturn( 301 );
+		Filters\expectApplied( 'legacy_redirector_request_path' )->once()->andReturnFirstArg();
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )->once()->andReturn( 301 );
 
 		$this->repository
 			->shouldReceive( 'find_by_source' )
@@ -712,11 +712,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 			'publish'
 		);
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -725,7 +725,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->once()
 			->andReturn( $redirect );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )
+		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->andReturn( 301 );
 
@@ -917,9 +917,9 @@ final class RedirectResolverTest extends MonkeyStubs {
 			$expected = SourceUrl::from_string( '/日本' );
 			$redirect = Redirect::reconstitute( 123, $expected, $this->create_url_destination(), 'publish' );
 
-			Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )->once()->andReturnFirstArg();
-			Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
-			Filters\expectApplied( 'wpcom_legacy_redirector_redirect_status' )->once()->andReturn( 301 );
+			Filters\expectApplied( 'legacy_redirector_request_path' )->once()->andReturnFirstArg();
+			Filters\expectApplied( 'legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
+			Filters\expectApplied( 'legacy_redirector_redirect_status' )->once()->andReturn( 301 );
 
 			$this->repository
 				->shouldReceive( 'find_by_source' )
@@ -950,12 +950,12 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		$this->stub_home_url( $home_url );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( $extracted )
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 

@@ -29,15 +29,15 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 	<?php if ( 'created' === $message && $is_edit ) : ?>
 		<div id="message" class="updated notice is-dismissible">
 			<p>
-				<?php esc_html_e( 'Redirect created successfully.', 'wpcom-legacy-redirector' ); ?>
-				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'wpcom-legacy-redirector' ); ?></a>
+				<?php esc_html_e( 'Redirect created successfully.', 'legacy-redirector' ); ?>
+				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?></a>
 			</p>
 		</div>
 	<?php elseif ( 'updated' === $message && $is_edit ) : ?>
 		<div id="message" class="updated notice is-dismissible">
 			<p>
-				<?php esc_html_e( 'Redirect updated successfully.', 'wpcom-legacy-redirector' ); ?>
-				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'wpcom-legacy-redirector' ); ?></a>
+				<?php esc_html_e( 'Redirect updated successfully.', 'legacy-redirector' ); ?>
+				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?></a>
 			</p>
 		</div>
 	<?php endif; ?>
@@ -60,7 +60,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 			<tbody>
 				<tr class="form-field form-required">
 					<th scope="row">
-						<label for="redirect_from"><?php esc_html_e( 'Redirect From', 'wpcom-legacy-redirector' ); ?> <span class="required">*</span></label>
+						<label for="redirect_from"><?php esc_html_e( 'Redirect From', 'legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td>
 						<div style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%;">
@@ -71,7 +71,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 							<?php
 							printf(
 								/* translators: %s: example of a full URL the entered path resolves to, e.g. https://example.com/blog/old-page. */
-								esc_html__( 'The source path that should redirect, always read relative to this site. Entering old-page matches %s.', 'wpcom-legacy-redirector' ),
+								esc_html__( 'The source path that should redirect, always read relative to this site. Entering old-page matches %s.', 'legacy-redirector' ),
 								'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>'
 							);
 
@@ -79,7 +79,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 							printf(
 								/* translators: 1: example path without a trailing slash, 2: the same path with one. */
-								esc_html__( 'Trailing slashes are ignored, so %1$s and %2$s are the same redirect.', 'wpcom-legacy-redirector' ),
+								esc_html__( 'Trailing slashes are ignored, so %1$s and %2$s are the same redirect.', 'legacy-redirector' ),
 								'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>',
 								'<code>' . esc_html( $home_prefix . 'old-page/' ) . '</code>'
 							);
@@ -90,29 +90,29 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 				</tr>
 				<tr class="form-field form-required">
 					<th scope="row">
-						<label for="redirect_to_display"><?php esc_html_e( 'Redirect To', 'wpcom-legacy-redirector' ); ?> <span class="required">*</span></label>
+						<label for="redirect_to_display"><?php esc_html_e( 'Redirect To', 'legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td style="position: relative;">
 						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" class="regular-text" autocomplete="off" required />
 						<input type="hidden" name="redirect_to" id="redirect_to" value="<?php echo esc_attr( (string) $destination_value ); ?>" />
-						<p class="description"><?php esc_html_e( 'Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts.', 'wpcom-legacy-redirector' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts.', 'legacy-redirector' ); ?></p>
 						<div id="redirect_to_suggestions" style="display: none; position: absolute; background: #fff; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; z-index: 100; width: 25em; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>
 					</td>
 				</tr>
 				<tr class="form-field">
-					<th scope="row"><?php esc_html_e( 'Status', 'wpcom-legacy-redirector' ); ?></th>
+					<th scope="row"><?php esc_html_e( 'Status', 'legacy-redirector' ); ?></th>
 					<td>
 						<fieldset>
 							<label>
 								<input type="radio" name="redirect_status" value="publish" <?php checked( $redirect_status, 'publish' ); ?> />
-								<?php esc_html_e( 'Enabled', 'wpcom-legacy-redirector' ); ?>
-								<span class="description"><?php esc_html_e( '(Redirect is active)', 'wpcom-legacy-redirector' ); ?></span>
+								<?php esc_html_e( 'Enabled', 'legacy-redirector' ); ?>
+								<span class="description"><?php esc_html_e( '(Redirect is active)', 'legacy-redirector' ); ?></span>
 							</label>
 							<br />
 							<label>
 								<input type="radio" name="redirect_status" value="draft" <?php checked( $redirect_status, 'draft' ); ?> />
-								<?php esc_html_e( 'Disabled', 'wpcom-legacy-redirector' ); ?>
-								<span class="description"><?php esc_html_e( '(Redirect is paused)', 'wpcom-legacy-redirector' ); ?></span>
+								<?php esc_html_e( 'Disabled', 'legacy-redirector' ); ?>
+								<span class="description"><?php esc_html_e( '(Redirect is paused)', 'legacy-redirector' ); ?></span>
 							</label>
 						</fieldset>
 					</td>
@@ -123,7 +123,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 		<p class="submit">
 			<?php
 			submit_button(
-				$is_edit ? __( 'Update Redirect', 'wpcom-legacy-redirector' ) : __( 'Add Redirect', 'wpcom-legacy-redirector' ),
+				$is_edit ? __( 'Update Redirect', 'legacy-redirector' ) : __( 'Add Redirect', 'legacy-redirector' ),
 				'primary',
 				'submit',
 				false
@@ -131,7 +131,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 			if ( $is_edit ) {
 				$list_url = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE );
-				echo ' <a href="' . esc_url( $list_url ) . '" class="button">' . esc_html__( 'Back to Redirects', 'wpcom-legacy-redirector' ) . '</a>';
+				echo ' <a href="' . esc_url( $list_url ) . '" class="button">' . esc_html__( 'Back to Redirects', 'legacy-redirector' ) . '</a>';
 			}
 			?>
 		</p>

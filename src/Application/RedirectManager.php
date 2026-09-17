@@ -85,7 +85,7 @@ class RedirectManager {
 		if ( ! $this->insert_allowed() ) {
 			return RedirectCreationResult::error(
 				'insert-not-allowed',
-				__( 'Redirect creation is only allowed from WP-CLI and for users who can manage redirects. Use the wpcom_legacy_redirector_allow_insert filter to allow it elsewhere.', 'wpcom-legacy-redirector' )
+				__( 'Redirect creation is only allowed from WP-CLI and for users who can manage redirects. Use the legacy_redirector_allow_insert filter to allow it elsewhere.', 'legacy-redirector' )
 			);
 		}
 
@@ -120,7 +120,7 @@ class RedirectManager {
 	 * for any user with the capability to manage redirects, wherever the
 	 * request arrives from. Anywhere else (e.g. unauthenticated front-end
 	 * code) it must be opted into via the
-	 * `wpcom_legacy_redirector_allow_insert` filter.
+	 * `legacy_redirector_allow_insert` filter.
 	 *
 	 * The 1.x gate allowed any admin-context request instead of checking the
 	 * capability; every admin entry point checks `manage_redirects` before
@@ -140,12 +140,19 @@ class RedirectManager {
 			return true;
 		}
 
+		$allow_insert = apply_filters_deprecated(
+			'wpcom_legacy_redirector_allow_insert',
+			array( false ),
+			'2.0.0',
+			'legacy_redirector_allow_insert'
+		);
+
 		/**
 		 * Filters whether redirects may be created outside WP-CLI and the admin.
 		 *
 		 * @param bool $allow_insert Whether to allow creation. Default false.
 		 */
-		return (bool) apply_filters( 'wpcom_legacy_redirector_allow_insert', false );
+		return (bool) apply_filters( 'legacy_redirector_allow_insert', $allow_insert );
 	}
 
 	/**
@@ -370,7 +377,7 @@ class RedirectManager {
 				'not-found',
 				sprintf(
 					/* translators: %s: source path. */
-					__( 'No redirect found for source: %s', 'wpcom-legacy-redirector' ),
+					__( 'No redirect found for source: %s', 'legacy-redirector' ),
 					$source->path()
 				)
 			);
@@ -485,7 +492,7 @@ class RedirectManager {
 			'not-found',
 			sprintf(
 				/* translators: %d: redirect ID. */
-				__( 'No redirect found with ID %d.', 'wpcom-legacy-redirector' ),
+				__( 'No redirect found with ID %d.', 'legacy-redirector' ),
 				$redirect_id
 			)
 		);
@@ -502,7 +509,7 @@ class RedirectManager {
 			'corrupt-redirect',
 			sprintf(
 				/* translators: %d: redirect ID. */
-				__( 'Redirect %d is corrupt and cannot be re-saved. Delete it, or update it with a full new source and destination.', 'wpcom-legacy-redirector' ),
+				__( 'Redirect %d is corrupt and cannot be re-saved. Delete it, or update it with a full new source and destination.', 'legacy-redirector' ),
 				$redirect_id
 			)
 		);

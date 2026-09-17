@@ -4,7 +4,7 @@ Feature: List redirects
   So that I can see what redirects exist
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Smoke test: verifies basic list output format via CLI.
   Scenario: List all redirects
@@ -12,7 +12,7 @@ Feature: List redirects
     And there is a redirect from "/list-test-1" to "/list-destination"
     And there is a redirect from "/list-test-2" to "/list-destination"
 
-    When I run `wp wpcom-legacy-redirector list`
+    When I run `wp legacy-redirector list`
     Then STDOUT should contain:
       """
       /list-test-1
@@ -27,7 +27,7 @@ Feature: List redirects
     Given there is a published post with a slug of "csv-destination"
     And there is a redirect from "/csv-test-1" to "/csv-destination"
 
-    When I run `wp wpcom-legacy-redirector list --format=csv`
+    When I run `wp legacy-redirector list --format=csv`
     Then STDOUT should contain:
       """
       /csv-test-1

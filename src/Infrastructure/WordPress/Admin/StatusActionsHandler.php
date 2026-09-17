@@ -81,7 +81,7 @@ final class StatusActionsHandler {
 	private function handle_redirect_status_change( string $new_status ): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below.
 		if ( ! isset( $_GET['redirect_id'] ) ) {
-			wp_die( esc_html__( 'No redirect specified.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'No redirect specified.', 'legacy-redirector' ) );
 		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Nonce verified below.
@@ -90,19 +90,19 @@ final class StatusActionsHandler {
 
 		// Verify nonce.
 		if ( ! isset( $_GET['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), $action . '_' . $redirect_id ) ) {
-			wp_die( esc_html__( 'Security check failed.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'Security check failed.', 'legacy-redirector' ) );
 		}
 
 		// Check capabilities.
 		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
-			wp_die( esc_html__( 'You do not have permission to modify redirects.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'You do not have permission to modify redirects.', 'legacy-redirector' ) );
 		}
 
 		// Get the redirect source before modifying. The repository returns
 		// null for missing IDs and posts of other types.
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
-			wp_die( esc_html__( 'Invalid redirect.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'Invalid redirect.', 'legacy-redirector' ) );
 		}
 		$redirect_source = $redirect->source()->path();
 
@@ -112,7 +112,7 @@ final class StatusActionsHandler {
 			: $this->manager->disable( $redirect_id );
 
 		if ( ! $success ) {
-			wp_die( esc_html__( 'Invalid redirect.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'Invalid redirect.', 'legacy-redirector' ) );
 		}
 
 		// Redirect back to the list.

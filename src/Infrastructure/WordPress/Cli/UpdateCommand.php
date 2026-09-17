@@ -70,16 +70,16 @@ final class UpdateCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Update a redirect's destination.
-	 *     $ wp wpcom-legacy-redirector update /old-page --to=/new-page
+	 *     $ wp legacy-redirector update /old-page --to=/new-page
 	 *
 	 *     # Point a redirect at a post.
-	 *     $ wp wpcom-legacy-redirector update /old-page --to=123
+	 *     $ wp legacy-redirector update /old-page --to=123
 	 *
 	 *     # Update the destination and disable the redirect.
-	 *     $ wp wpcom-legacy-redirector update /old-page --to=/new-page --status=disabled
+	 *     $ wp legacy-redirector update /old-page --to=/new-page --status=disabled
 	 *
 	 *     # Point several redirects at the same destination.
-	 *     $ wp wpcom-legacy-redirector update /old-a /old-b --to=/new-page
+	 *     $ wp legacy-redirector update /old-a /old-b --to=/new-page
 	 *
 	 * @when after_wp_load
 	 *

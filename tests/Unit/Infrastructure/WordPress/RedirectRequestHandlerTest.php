@@ -62,7 +62,7 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
 		$this->handler    = new RedirectRequestHandler( new RedirectResolver( $this->repository ) );
 
-		$GLOBALS['wpcom_legacy_redirector_sent_headers'] = array();
+		$GLOBALS['legacy_redirector_sent_headers'] = array();
 	}
 
 	/**
@@ -79,7 +79,7 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 		( new \ReflectionMethod( $this->handler, 'send_cache_control_header' ) )
 			->invoke( $this->handler, $url, $status_code );
 
-		return $GLOBALS['wpcom_legacy_redirector_sent_headers'];
+		return $GLOBALS['legacy_redirector_sent_headers'];
 	}
 
 	/**
@@ -88,7 +88,7 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
 	 */
 	public function test_cache_control_max_age_defaults_to_a_minute_for_temporary_redirects(): void {
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_max_age' )
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )
 			->once()
 			->with( MINUTE_IN_SECONDS, 'https://example.com/destination', 302 )
 			->andReturnFirstArg();
@@ -105,7 +105,7 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
 	 */
 	public function test_cache_control_max_age_can_be_overridden_by_the_filter(): void {
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_max_age' )
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )
 			->once()
 			->with( DAY_IN_SECONDS, 'https://example.com/destination', 301 )
 			->andReturn( 3600 );
@@ -126,7 +126,7 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	 * @return void
 	 */
 	public function test_cache_control_header_is_suppressed_by_a_non_positive_max_age( int $max_age ): void {
-		Filters\expectApplied( 'wpcom_legacy_redirector_redirect_max_age' )
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )
 			->once()
 			->andReturn( $max_age );
 
@@ -214,11 +214,11 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 			->once()
 			->andReturn( true );
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_request_path' )
+		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'wpcom_legacy_redirector_preserve_query_params' )
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
 			->once()
 			->andReturn( array() );
 
@@ -263,7 +263,7 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 
 		$this->assertSame(
 			array(),
-			$GLOBALS['wpcom_legacy_redirector_sent_headers'],
+			$GLOBALS['legacy_redirector_sent_headers'],
 			'A refused destination must not send a Cache-Control header either.'
 		);
 	}

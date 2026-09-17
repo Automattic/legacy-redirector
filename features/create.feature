@@ -4,13 +4,13 @@ Feature: Creating a redirect
   So that specific requests are redirected
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Smoke test: basic redirect creation works via CLI.
   Scenario: Create a redirect to a path
     Given there is a published post with a slug of "bar"
 
-    When I run `wp wpcom-legacy-redirector create /foo /bar`
+    When I run `wp legacy-redirector create /foo /bar`
     Then STDOUT should contain:
       """
       Success: Created redirect
@@ -25,7 +25,7 @@ Feature: Creating a redirect
     Given there is a published post with a slug of "dupe-target"
     And there is a redirect from "/dupe-source" to "/dupe-target"
 
-    When I try `wp wpcom-legacy-redirector create /dupe-source /dupe-target`
+    When I try `wp legacy-redirector create /dupe-source /dupe-target`
     Then STDERR should contain:
       """
       Error:
@@ -36,13 +36,13 @@ Feature: Creating a redirect
   Scenario: Create a redirect with a unicode source path
     Given there is a published post with a slug of "unicode-target"
 
-    When I run `wp wpcom-legacy-redirector create /привет-мир /unicode-target`
+    When I run `wp legacy-redirector create /привет-мир /unicode-target`
     Then STDOUT should contain:
       """
       Success: Created redirect
       """
 
-    When I run `wp wpcom-legacy-redirector get /привет-мир`
+    When I run `wp legacy-redirector get /привет-мир`
     Then STDOUT should contain:
       """
       /привет-мир
@@ -53,13 +53,13 @@ Feature: Creating a redirect
   Scenario: Create a redirect with an emoji source path
     Given there is a published post with a slug of "emoji-target"
 
-    When I run `wp wpcom-legacy-redirector create /party-🎉 /emoji-target`
+    When I run `wp legacy-redirector create /party-🎉 /emoji-target`
     Then STDOUT should contain:
       """
       Success: Created redirect
       """
 
-    When I run `wp wpcom-legacy-redirector get /party-🎉`
+    When I run `wp legacy-redirector get /party-🎉`
     Then STDOUT should contain:
       """
       /party-🎉
@@ -71,7 +71,7 @@ Feature: Creating a redirect
     Given there is a published post with a slug of "encoded-target"
     And there is a redirect from "/привет" to "/encoded-target"
 
-    When I try `wp wpcom-legacy-redirector create /%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82 /encoded-target`
+    When I try `wp legacy-redirector create /%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82 /encoded-target`
     Then STDERR should contain:
       """
       Error:
@@ -83,7 +83,7 @@ Feature: Creating a redirect
     Given there is a published post with a slug of "slash-target"
     And there is a redirect from "/slash-source" to "/slash-target"
 
-    When I try `wp wpcom-legacy-redirector create /slash-source/ /slash-target`
+    When I try `wp legacy-redirector create /slash-source/ /slash-target`
     Then STDERR should contain:
       """
       Error:
@@ -92,13 +92,13 @@ Feature: Creating a redirect
   # Contract test: the slash is dropped on the way in, so a source entered
   # with one is keyed, and therefore addressable, without it.
   Scenario: A source entered with a trailing slash is stored without one
-    When I run `wp wpcom-legacy-redirector create /stored-without-slash/ /elsewhere --skip-validation`
+    When I run `wp legacy-redirector create /stored-without-slash/ /elsewhere --skip-validation`
     Then STDOUT should contain:
       """
       Success: Created redirect
       """
 
-    When I run `wp wpcom-legacy-redirector get /stored-without-slash`
+    When I run `wp legacy-redirector get /stored-without-slash`
     Then STDOUT should contain:
       """
       /elsewhere
@@ -107,13 +107,13 @@ Feature: Creating a redirect
   # Contract test: '/café' and '/caf%C3%A9' are two spellings of one target,
   # so internal destinations store in one canonical form whichever was typed.
   Scenario: An encoded internal destination is stored decoded
-    When I run `wp wpcom-legacy-redirector create /vipplug143-source /caf%C3%A9 --skip-validation`
+    When I run `wp legacy-redirector create /vipplug143-source /caf%C3%A9 --skip-validation`
     Then STDOUT should contain:
       """
       Success: Created redirect
       """
 
-    When I run `wp wpcom-legacy-redirector get /vipplug143-source`
+    When I run `wp legacy-redirector get /vipplug143-source`
     Then STDOUT should contain:
       """
       /café

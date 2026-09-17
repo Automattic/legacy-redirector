@@ -28,25 +28,25 @@ final class RedirectSchema {
 		return array(
 			'id'     => array(
 				'type'        => 'integer',
-				'description' => __( 'The redirect ID.', 'wpcom-legacy-redirector' ),
+				'description' => __( 'The redirect ID.', 'legacy-redirector' ),
 			),
 			'from'   => array(
 				'type'        => 'string',
-				'description' => __( 'The source path this redirect matches, including any query string.', 'wpcom-legacy-redirector' ),
+				'description' => __( 'The source path this redirect matches, including any query string.', 'legacy-redirector' ),
 			),
 			'to'     => array(
 				'type'        => array( 'string', 'integer' ),
-				'description' => __( 'The destination: a path, an absolute URL, or a post ID.', 'wpcom-legacy-redirector' ),
+				'description' => __( 'The destination: a path, an absolute URL, or a post ID.', 'legacy-redirector' ),
 			),
 			'type'   => array(
 				'type'        => 'string',
 				'enum'        => array( 'post', 'url', 'corrupt' ),
-				'description' => __( 'Whether the destination is a post ID or a URL. "corrupt" marks a row whose stored data is unreadable; its from/to values are placeholders.', 'wpcom-legacy-redirector' ),
+				'description' => __( 'Whether the destination is a post ID or a URL. "corrupt" marks a row whose stored data is unreadable; its from/to values are placeholders.', 'legacy-redirector' ),
 			),
 			'status' => array(
 				'type'        => 'string',
 				'enum'        => array( 'enabled', 'disabled' ),
-				'description' => __( 'Whether the redirect is served to visitors.', 'wpcom-legacy-redirector' ),
+				'description' => __( 'Whether the redirect is served to visitors.', 'legacy-redirector' ),
 			),
 		);
 	}
@@ -109,18 +109,18 @@ final class RedirectSchema {
 	public static function failures_schema(): array {
 		return array(
 			'type'        => 'array',
-			'description' => __( 'Redirects that could not be changed, and why.', 'wpcom-legacy-redirector' ),
+			'description' => __( 'Redirects that could not be changed, and why.', 'legacy-redirector' ),
 			'items'       => array(
 				'type'                 => 'object',
 				'required'             => array( 'redirect', 'reason' ),
 				'properties'           => array(
 					'redirect' => array(
 						'type'        => 'string',
-						'description' => __( 'The identifier that was passed in.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The identifier that was passed in.', 'legacy-redirector' ),
 					),
 					'reason'   => array(
 						'type'        => 'string',
-						'description' => __( 'Why the redirect could not be changed.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Why the redirect could not be changed.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,

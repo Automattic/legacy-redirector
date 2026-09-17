@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: WPCOM Legacy Redirector
- * Plugin URI: https://github.com/Automattic/wpcom-legacy-redirector
+ * Plugin Name: Legacy Redirector
+ * Plugin URI: https://github.com/Automattic/legacy-redirector
  * Description: Simple plugin for handling legacy redirects in a scalable manner.
  * Version: 2.0.0-alpha
  * Requires at least: 6.8

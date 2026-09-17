@@ -41,7 +41,7 @@ final class GetRedirectAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/get-redirect';
+		return 'legacy-redirector/get-redirect';
 	}
 
 	/**
@@ -52,8 +52,8 @@ final class GetRedirectAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Get Redirect', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Returns a single redirect, looked up by its ID or by the path it redirects from. Use this to check whether a path already has a redirect before creating one, or to see where an existing redirect points.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Get Redirect', 'legacy-redirector' ),
+			'description'         => __( 'Returns a single redirect, looked up by its ID or by the path it redirects from. Use this to check whether a path already has a redirect before creating one, or to see where an existing redirect points.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -61,7 +61,7 @@ final class GetRedirectAbility implements AbilityInterface {
 				'properties'           => array(
 					'redirect' => array(
 						'type'        => array( 'string', 'integer' ),
-						'description' => __( 'A redirect ID, or the path it redirects from, e.g. /old-page.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'A redirect ID, or the path it redirects from, e.g. /old-page.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -94,10 +94,10 @@ final class GetRedirectAbility implements AbilityInterface {
 			$redirect = $this->fetcher->fetch( $identifier );
 		} catch ( \InvalidArgumentException $e ) {
 			return new WP_Error(
-				'wpcom_legacy_redirector_invalid_identifier',
+				'legacy_redirector_invalid_identifier',
 				sprintf(
 					/* translators: 1: identifier, 2: error message. */
-					__( 'Not a valid redirect ID or source path: %1$s (%2$s)', 'wpcom-legacy-redirector' ),
+					__( 'Not a valid redirect ID or source path: %1$s (%2$s)', 'legacy-redirector' ),
 					$identifier,
 					$e->getMessage()
 				)
@@ -106,10 +106,10 @@ final class GetRedirectAbility implements AbilityInterface {
 
 		if ( null === $redirect ) {
 			return new WP_Error(
-				'wpcom_legacy_redirector_not_found',
+				'legacy_redirector_not_found',
 				sprintf(
 					/* translators: %s: identifier. */
-					__( 'No redirect found for %s.', 'wpcom-legacy-redirector' ),
+					__( 'No redirect found for %s.', 'legacy-redirector' ),
 					$identifier
 				)
 			);

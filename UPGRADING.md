@@ -1,6 +1,47 @@
-# Upgrading to WPCOM Legacy Redirector 2.0
+# Upgrading to Legacy Redirector 2.0
 
 This guide covers breaking changes and migration steps when upgrading from version 1.x to 2.0.
+
+## The Plugin Has Been Renamed
+
+The plugin was called **Legacy Redirector**. It is now **Legacy Redirector**.
+
+The `WPCOM` prefix was a misnomer. The plugin is not specific to WordPress.com and works on any WordPress install, so the prefix told you something untrue about where it runs. `Legacy` stays, because it still describes what the plugin is for: redirecting the old URLs a site has accumulated, at migration scale.
+
+The rename itself touches no stored redirect data, and you do not need to reinstall or reactivate. Your redirects do change shape in 2.0, for reasons unrelated to the rename, and that is handled for you: see "Your Existing Redirects Are Migrated Automatically" below.
+
+| What | 1.x | 2.0 |
+|------|-----|-----|
+| Plugin name | Legacy Redirector | Legacy Redirector |
+| Main file | `wpcom-legacy-redirector.php` | unchanged, so the plugin stays active across the upgrade |
+| WP-CLI namespace | `wp legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias |
+| Filter prefix | `wpcom_legacy_redirector_*` | `legacy_redirector_*`, with the old names kept as deprecated aliases |
+| Text domain | `legacy-redirector` | `legacy-redirector` |
+| Composer package | `automattic/wpcom-legacy-redirector` | `automattic/legacy-redirector` |
+| Admin menu | Redirects Manager | Redirects |
+| `X-Redirect-By` header | `Legacy Redirector` | `Legacy Redirector` |
+| Post type | `vip-legacy-redirect` | unchanged |
+| Upgrade options | `wpcom_legacy_redirector_db_version` and friends | unchanged |
+
+### What you need to change
+
+- **Composer**: update your `require` entry to `automattic/legacy-redirector`. If you install from a GitHub VCS repository rather than Packagist, also update the repository URL to `https://github.com/Automattic/legacy-redirector`. The package declares `replace` for the old name, which prevents both packages resolving at once, but it does not rewrite your own `require` line for you.
+- **Nothing else, immediately.** The old WP-CLI namespace and the old filter names both still work, so scripts and `mu-plugins` keep running. Both warn, and both will be removed in a future major version, so migrate when convenient.
+
+### Renamed filters
+
+The four filters that shipped in 1.3.0 are aliased. Attaching to the old name still works and emits a deprecation notice naming the replacement:
+
+| 1.x filter | 2.0 filter |
+|------------|------------|
+| `wpcom_legacy_redirector_request_path` | `legacy_redirector_request_path` |
+| `wpcom_legacy_redirector_redirect_status` | `legacy_redirector_redirect_status` |
+| `wpcom_legacy_redirector_preserve_query_params` | `legacy_redirector_preserve_query_params` |
+| `wpcom_legacy_redirector_allow_insert` | `legacy_redirector_allow_insert` |
+
+If a callback is attached to both names, the 2.0 name wins: the deprecated filter runs first and its result is passed into the current one, so a caller that has migrated is never overridden by a callback someone forgot to remove.
+
+Filters introduced in 2.0 (`legacy_redirector_destination_url`, `legacy_redirector_redirect_max_age`, `legacy_redirector_check_destination_reachability`) never shipped under a `wpcom_` name and have no alias.
 
 ## Your Existing Redirects Are Migrated Automatically
 
@@ -21,19 +62,19 @@ A one-off migration handles all three. It runs automatically in small batches on
 If you have a lot of redirects, run the migration in one pass instead of waiting for it to work through in batches:
 
 ```bash
-wp wpcom-legacy-redirector migrate
+wp legacy-redirector migrate
 ```
 
 Preview it first if you would rather see what will change:
 
 ```bash
-wp wpcom-legacy-redirector migrate --dry-run
+wp legacy-redirector migrate --dry-run
 ```
 
 On a network, run it per site:
 
 ```bash
-wp site list --field=url | xargs -I % wp --url=% wpcom-legacy-redirector migrate
+wp site list --field=url | xargs -I % wp --url=% legacy-redirector migrate
 ```
 
 ### What the migration will not touch
@@ -49,7 +90,7 @@ Only one redirect can own a path, so the migration decides on the destinations:
 - **Both point at the same place.** The spare is redundant, so it is moved to the trash and counted in the migration summary. Nothing is deleted outright, so you can restore it from the Trash view if you disagree.
 - **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, editable, and plainly not doing anything.
 
-`wp wpcom-legacy-redirector migrate` lists every such conflict, and `--dry-run` shows them before anything is written. Review the disabled redirects afterwards, then either delete them or re-point and re-enable them.
+`wp legacy-redirector migrate` lists every such conflict, and `--dry-run` shows them before anything is written. Review the disabled redirects afterwards, then either delete them or re-point and re-enable them.
 
 ## Breaking Changes
 
@@ -141,7 +182,7 @@ $id = $result->redirect_id();
 
 ### WP-CLI Command Changes
 
-The WP-CLI command set has been redesigned. There are no backwards-compatible aliases, so any scripts, runbooks, or cron jobs calling the old commands must be updated:
+The WP-CLI command set has been redesigned. The command *namespace* is aliased, so `wp legacy-redirector <subcommand>` still reaches `wp legacy-redirector <subcommand>` with a deprecation warning on STDERR. The *subcommands* below have no aliases, so any scripts, runbooks, or cron jobs calling them must be updated:
 
 Version 1.3.0 shipped three commands. All three change:
 
@@ -163,12 +204,12 @@ If you have been running the plugin from the `develop` branch rather than the 1.
 
 Other behavior changes to be aware of:
 
-- `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp wpcom-legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
-- External destinations still require the host to be allowed via the `allowed_redirect_hosts` filter, as in 1.x, but you now find out at creation time instead of discovering it in production. 1.x accepted any destination and then handed it to `wp_safe_redirect()`, which sent visitors to its fallback of `admin_url()` when the host was not allowed. Creating or updating a redirect to a host the site does not allow is now an error naming the domain, and a stored redirect whose host is not allowed leaves the original 404 in place rather than bouncing visitors to the admin. Run `wp wpcom-legacy-redirector find-domains` to list the domains your existing redirects point at, and allow the ones you intend to keep.
+- `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
+- External destinations still require the host to be allowed via the `allowed_redirect_hosts` filter, as in 1.x, but you now find out at creation time instead of discovering it in production. 1.x accepted any destination and then handed it to `wp_safe_redirect()`, which sent visitors to its fallback of `admin_url()` when the host was not allowed. Creating or updating a redirect to a host the site does not allow is now an error naming the domain, and a stored redirect whose host is not allowed leaves the original 404 in place rather than bouncing visitors to the admin. Run `wp legacy-redirector find-domains` to list the domains your existing redirects point at, and allow the ones you intend to keep.
 
 ### Destination Validation Uses Safe HTTP Requests
 
-Destination validation (the admin "Validate" action and `wp wpcom-legacy-redirector validate --check-urls`) now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
+Destination validation (the admin "Validate" action and `wp legacy-redirector validate --check-urls`) now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
 
 **What this means for you:**
 
@@ -178,11 +219,12 @@ Destination validation (the admin "Validate" action and `wp wpcom-legacy-redirec
 
 ## No Changes Required
 
-The following APIs remain unchanged:
+The following behavior remains unchanged:
 
-- The `wpcom_legacy_redirector_request_path`, `wpcom_legacy_redirector_redirect_status`, and `wpcom_legacy_redirector_preserve_query_params` filters
-- The `wpcom_legacy_redirector_allow_insert` filter — creating redirects from code with no capable user (e.g. unauthenticated front-end code) is still blocked unless this filter returns true; in 2.0 the gate lives in `RedirectManager::create_redirect()`. Note the gate itself has changed: any user with the `manage_redirects` capability may now create redirects from any context without the filter, where 1.x keyed on being in the admin instead of on the capability (see CHANGELOG)
+- The request path, redirect status, and preserve-query-params filters all still work under their 1.x names, and still do the same thing. Only the names are deprecated (see "The Plugin Has Been Renamed" above)
+- The allow-insert filter still works under its 1.x name, and creating redirects from code with no capable user (e.g. unauthenticated front-end code) is still blocked unless it returns true; in 2.0 the gate lives in `RedirectManager::create_redirect()`. Note the gate itself has changed: any user with the `manage_redirects` capability may now create redirects from any context without the filter, where 1.x keyed on being in the admin instead of on the capability (see CHANGELOG)
 - The `vip-legacy-redirect` post type and its stored data format (no migration needed)
+- The `wpcom_legacy_redirector_db_version` option and the other upgrade-tracking options, which keep their names because they hold live state in your database
 
 ## Using the Container
 
@@ -221,4 +263,4 @@ $this->assertSame( $expected_uri, $redirect_data['url'] );
 ## Questions?
 
 If you encounter issues upgrading, please open an issue at:
-https://github.com/Automattic/WPCOM-Legacy-Redirector/issues
+https://github.com/Automattic/legacy-redirector/issues

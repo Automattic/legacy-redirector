@@ -83,16 +83,16 @@ final class ImportCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Import new redirects from a CSV file.
-	 *     $ wp wpcom-legacy-redirector import redirects.csv
+	 *     $ wp legacy-redirector import redirects.csv
 	 *
 	 *     # Update existing redirects, creating any that are missing.
-	 *     $ wp wpcom-legacy-redirector import redirects.csv --mode=upsert
+	 *     $ wp legacy-redirector import redirects.csv --mode=upsert
 	 *
 	 *     # Preview an import without making changes.
-	 *     $ wp wpcom-legacy-redirector import redirects.csv --dry-run
+	 *     $ wp legacy-redirector import redirects.csv --dry-run
 	 *
 	 *     # Import from STDIN.
-	 *     $ cat redirects.csv | wp wpcom-legacy-redirector import -
+	 *     $ cat redirects.csv | wp legacy-redirector import -
 	 *
 	 * @when after_wp_load
 	 *

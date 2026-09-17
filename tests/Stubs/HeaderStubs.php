@@ -23,7 +23,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
  *
  * @var string[]
  */
-$GLOBALS['wpcom_legacy_redirector_sent_headers'] = array();
+$GLOBALS['legacy_redirector_sent_headers'] = array();
 
 /**
  * Stub for headers_sent(), which is true under PHPUnit once output starts.
@@ -43,5 +43,5 @@ function headers_sent(): bool {
  * @return void
  */
 function header( string $header, bool $replace = true, int $response_code = 0 ): void {
-	$GLOBALS['wpcom_legacy_redirector_sent_headers'][] = $header;
+	$GLOBALS['legacy_redirector_sent_headers'][] = $header;
 }

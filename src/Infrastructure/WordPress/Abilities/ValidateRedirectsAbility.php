@@ -73,7 +73,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/validate-redirects';
+		return 'legacy-redirector/validate-redirects';
 	}
 
 	/**
@@ -84,8 +84,8 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Validate Redirects', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, and internal paths that no longer resolve. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
+			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, and internal paths that no longer resolve. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -95,25 +95,25 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 						'items'       => array(
 							'type' => array( 'string', 'integer' ),
 						),
-						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, a batch is selected using the status and limit.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, a batch is selected using the status and limit.', 'legacy-redirector' ),
 					),
 					'status'     => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'enabled', 'disabled' ),
 						'default'     => 'enabled',
-						'description' => __( 'Which redirects to select when none are given. Defaults to enabled, the ones visitors can reach.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Which redirects to select when none are given. Defaults to enabled, the ones visitors can reach.', 'legacy-redirector' ),
 					),
 					'limit'      => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'maximum'     => self::MAX_LIMIT,
 						'default'     => 100,
-						'description' => __( 'How many redirects to check when none are given.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects to check when none are given.', 'legacy-redirector' ),
 					),
 					'check_urls' => array(
 						'type'        => 'boolean',
 						'default'     => false,
-						'description' => __( 'Also request absolute URL destinations to see whether they respond. Slow, because it makes an HTTP request per redirect.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Also request absolute URL destinations to see whether they respond. Slow, because it makes an HTTP request per redirect.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -125,11 +125,11 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 				'properties'           => array(
 					'checked' => array(
 						'type'        => 'integer',
-						'description' => __( 'How many redirects were checked.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects were checked.', 'legacy-redirector' ),
 					),
 					'issues'  => array(
 						'type'        => 'array',
-						'description' => __( 'The redirects found to be broken.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The redirects found to be broken.', 'legacy-redirector' ),
 						'items'       => array(
 							'type'                 => 'object',
 							'required'             => array( 'id', 'from', 'to', 'type', 'status', 'issue', 'description' ),
@@ -138,11 +138,11 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 								array(
 									'issue'       => array(
 										'type'        => 'string',
-										'description' => __( 'A short label for what is wrong.', 'wpcom-legacy-redirector' ),
+										'description' => __( 'A short label for what is wrong.', 'legacy-redirector' ),
 									),
 									'description' => array(
 										'type'        => 'string',
-										'description' => __( 'A fuller explanation of what is wrong.', 'wpcom-legacy-redirector' ),
+										'description' => __( 'A fuller explanation of what is wrong.', 'legacy-redirector' ),
 									),
 								)
 							),

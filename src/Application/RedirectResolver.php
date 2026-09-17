@@ -49,6 +49,13 @@ final class RedirectResolver {
 	 * @return array{url: string, status_code: int}|null Redirect data or null if not found.
 	 */
 	public function get_redirect_data( string $url ): ?array {
+		$path = apply_filters_deprecated(
+			'wpcom_legacy_redirector_request_path',
+			array( $this->extract_path( $url ) ),
+			'2.0.0',
+			'legacy_redirector_request_path'
+		);
+
 		/**
 		 * Filter the request path before redirect lookup.
 		 *
@@ -58,7 +65,7 @@ final class RedirectResolver {
 		 *
 		 * @param string $path The request path, percent-encoded.
 		 */
-		$path = apply_filters( 'wpcom_legacy_redirector_request_path', $this->extract_path( $url ) );
+		$path = apply_filters( 'legacy_redirector_request_path', $path );
 
 		if ( empty( $path ) ) {
 			return null;
@@ -88,7 +95,7 @@ final class RedirectResolver {
 		/**
 		 * Filter the resolved destination URL before the redirect is performed.
 		 *
-		 * The counterpart to `wpcom_legacy_redirector_request_path`: where that
+		 * The counterpart to `legacy_redirector_request_path`: where that
 		 * filter alters the path going into the lookup, this one alters the URL
 		 * coming out of it. Returning an empty string cancels the redirect.
 		 *
@@ -98,11 +105,18 @@ final class RedirectResolver {
 		 * @param string $path            The request path used for the lookup, after filtering.
 		 * @param string $url             The original, unfiltered request URL.
 		 */
-		$destination_url = (string) apply_filters( 'wpcom_legacy_redirector_destination_url', $destination_url, $path, $url );
+		$destination_url = (string) apply_filters( 'legacy_redirector_destination_url', $destination_url, $path, $url );
 
 		if ( empty( $destination_url ) ) {
 			return null;
 		}
+
+		$status_code = apply_filters_deprecated(
+			'wpcom_legacy_redirector_redirect_status',
+			array( RedirectHttpStatus::get_default()->value, $url ),
+			'2.0.0',
+			'legacy_redirector_redirect_status'
+		);
 
 		/**
 		 * Filter the redirect status code.
@@ -115,7 +129,7 @@ final class RedirectResolver {
 		 * @param int    $status_code The HTTP status code (default 301).
 		 * @param string $url         The original request URL.
 		 */
-		$status_code = apply_filters( 'wpcom_legacy_redirector_redirect_status', RedirectHttpStatus::get_default()->value, $url );
+		$status_code = apply_filters( 'legacy_redirector_redirect_status', $status_code, $url );
 		$status      = RedirectHttpStatus::tryFrom( (int) $status_code ) ?? RedirectHttpStatus::get_default();
 
 		return array(
@@ -188,6 +202,13 @@ final class RedirectResolver {
 	 * @return array<string, string> Preserved parameter key-value pairs.
 	 */
 	private function get_preservable_params( string $url ): array {
+		$keys = apply_filters_deprecated(
+			'wpcom_legacy_redirector_preserve_query_params',
+			array( array(), $url ),
+			'2.0.0',
+			'legacy_redirector_preserve_query_params'
+		);
+
 		/**
 		 * Filter the list of preservable querystring parameter keys.
 		 *
@@ -198,7 +219,7 @@ final class RedirectResolver {
 		 * @param string[] $keys Indexed array of querystring keys to preserve.
 		 * @param string   $url  The source URL.
 		 */
-		$keys = apply_filters( 'wpcom_legacy_redirector_preserve_query_params', array(), $url );
+		$keys = apply_filters( 'legacy_redirector_preserve_query_params', $keys, $url );
 
 		if ( ! is_array( $keys ) || empty( $keys ) ) {
 			return array();

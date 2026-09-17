@@ -47,7 +47,7 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/find-redirect-domains';
+		return 'legacy-redirector/find-redirect-domains';
 	}
 
 	/**
@@ -58,8 +58,8 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Find Redirect Domains', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Returns the unique external domains that redirects on this site point at. Useful when deciding which hosts to allow as redirect destinations, since WordPress only redirects to hosts on its allow list.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Find Redirect Domains', 'legacy-redirector' ),
+			'description'         => __( 'Returns the unique external domains that redirects on this site point at. Useful when deciding which hosts to allow as redirect destinations, since WordPress only redirects to hosts on its allow list.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'output_schema'       => array(
 				'type'                 => 'object',
@@ -67,11 +67,11 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 				'properties'           => array(
 					'count'   => array(
 						'type'        => 'integer',
-						'description' => __( 'How many unique domains were found.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many unique domains were found.', 'legacy-redirector' ),
 					),
 					'domains' => array(
 						'type'        => 'array',
-						'description' => __( 'The domains, in alphabetical order.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The domains, in alphabetical order.', 'legacy-redirector' ),
 						'items'       => array(
 							'type' => 'string',
 						),

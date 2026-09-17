@@ -91,13 +91,13 @@ final class StatusChangeNotices {
 	 */
 	private function display_single_enabled_notice( string $redirect_source ): void {
 		if ( '' === $redirect_source ) {
-			wp_admin_notice( esc_html__( 'Redirect enabled.', 'wpcom-legacy-redirector' ), self::NOTICE_ARGS );
+			wp_admin_notice( esc_html__( 'Redirect enabled.', 'legacy-redirector' ), self::NOTICE_ARGS );
 			return;
 		}
 
 		$message = sprintf(
 			/* translators: %s: redirect source path */
-			__( 'Redirect from %s enabled.', 'wpcom-legacy-redirector' ),
+			__( 'Redirect from %s enabled.', 'legacy-redirector' ),
 			'<code>' . esc_html( $redirect_source ) . '</code>'
 		);
 		wp_admin_notice( wp_kses( $message, array( 'code' => array() ) ), self::NOTICE_ARGS );
@@ -111,13 +111,13 @@ final class StatusChangeNotices {
 	 */
 	private function display_single_disabled_notice( string $redirect_source ): void {
 		if ( '' === $redirect_source ) {
-			wp_admin_notice( esc_html__( 'Redirect disabled.', 'wpcom-legacy-redirector' ), self::NOTICE_ARGS );
+			wp_admin_notice( esc_html__( 'Redirect disabled.', 'legacy-redirector' ), self::NOTICE_ARGS );
 			return;
 		}
 
 		$message = sprintf(
 			/* translators: %s: redirect source path */
-			__( 'Redirect from %s disabled.', 'wpcom-legacy-redirector' ),
+			__( 'Redirect from %s disabled.', 'legacy-redirector' ),
 			'<code>' . esc_html( $redirect_source ) . '</code>'
 		);
 		wp_admin_notice( wp_kses( $message, array( 'code' => array() ) ), self::NOTICE_ARGS );
@@ -134,7 +134,7 @@ final class StatusChangeNotices {
 			esc_html(
 				sprintf(
 					/* translators: %d: number of redirects enabled */
-					_n( '%d redirect enabled.', '%d redirects enabled.', $count, 'wpcom-legacy-redirector' ),
+					_n( '%d redirect enabled.', '%d redirects enabled.', $count, 'legacy-redirector' ),
 					$count
 				)
 			),
@@ -153,7 +153,7 @@ final class StatusChangeNotices {
 			esc_html(
 				sprintf(
 					/* translators: %d: number of redirects disabled */
-					_n( '%d redirect disabled.', '%d redirects disabled.', $count, 'wpcom-legacy-redirector' ),
+					_n( '%d redirect disabled.', '%d redirects disabled.', $count, 'legacy-redirector' ),
 					$count
 				)
 			),

@@ -1,5 +1,5 @@
 {
-  "name": "wpcom-legacy-redirector",
+  "name": "legacy-redirector",
   "version": "1.0.0",
   "description": "WordPress plugin for handling large volumes of legacy redirects in a scalable manner.",
   "private": true,

@@ -64,16 +64,16 @@ final class GetCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Get redirect by source path.
-	 *     $ wp wpcom-legacy-redirector get /old-page
+	 *     $ wp legacy-redirector get /old-page
 	 *
 	 *     # Get redirect by ID.
-	 *     $ wp wpcom-legacy-redirector get 123
+	 *     $ wp legacy-redirector get 123
 	 *
 	 *     # Get just the destination.
-	 *     $ wp wpcom-legacy-redirector get /old-page --field=to
+	 *     $ wp legacy-redirector get /old-page --field=to
 	 *
 	 *     # Get redirect as JSON.
-	 *     $ wp wpcom-legacy-redirector get /old-page --format=json
+	 *     $ wp legacy-redirector get /old-page --format=json
 	 *
 	 * @when after_wp_load
 	 *

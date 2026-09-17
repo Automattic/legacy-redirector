@@ -56,8 +56,8 @@ final class BulkActionsHandler {
 	public function modify_bulk_actions( array $actions ): array {
 		unset( $actions['edit'] );
 
-		$actions['enable_redirects']  = __( 'Enable', 'wpcom-legacy-redirector' );
-		$actions['disable_redirects'] = __( 'Disable', 'wpcom-legacy-redirector' );
+		$actions['enable_redirects']  = __( 'Enable', 'legacy-redirector' );
+		$actions['disable_redirects'] = __( 'Disable', 'legacy-redirector' );
 
 		return $actions;
 	}

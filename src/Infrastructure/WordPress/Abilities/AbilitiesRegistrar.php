@@ -114,8 +114,8 @@ final class AbilitiesRegistrar {
 		wp_register_ability_category(
 			self::CATEGORY,
 			array(
-				'label'       => __( 'Legacy Redirects', 'wpcom-legacy-redirector' ),
-				'description' => __( 'Abilities that inspect and manage redirects from legacy URLs.', 'wpcom-legacy-redirector' ),
+				'label'       => __( 'Legacy Redirects', 'legacy-redirector' ),
+				'description' => __( 'Abilities that inspect and manage redirects from legacy URLs.', 'legacy-redirector' ),
 			)
 		);
 	}

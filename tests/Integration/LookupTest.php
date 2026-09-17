@@ -334,7 +334,7 @@ final class LookupTest extends TestCase {
 	}
 
 	/**
-	 * Test get_redirect_data applies wpcom_legacy_redirector_request_path filter.
+	 * Test get_redirect_data applies legacy_redirector_request_path filter.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
@@ -348,7 +348,7 @@ final class LookupTest extends TestCase {
 
 		// Add filter to modify the request path.
 		add_filter(
-			'wpcom_legacy_redirector_request_path',
+			'legacy_redirector_request_path',
 			function ( $path ) use ( $original_from, $filtered_from ) {
 				if ( $path === $original_from ) {
 					return $filtered_from;
@@ -364,11 +364,11 @@ final class LookupTest extends TestCase {
 		$this->assertSame( $to_url, $redirect_data['url'] );
 
 		// Clean up filter.
-		remove_all_filters( 'wpcom_legacy_redirector_request_path' );
+		remove_all_filters( 'legacy_redirector_request_path' );
 	}
 
 	/**
-	 * Test get_redirect_data applies wpcom_legacy_redirector_redirect_status filter.
+	 * Test get_redirect_data applies legacy_redirector_redirect_status filter.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
@@ -380,7 +380,7 @@ final class LookupTest extends TestCase {
 
 		// Add filter to change status to 302.
 		add_filter(
-			'wpcom_legacy_redirector_redirect_status',
+			'legacy_redirector_redirect_status',
 			function () {
 				return 302;
 			}
@@ -391,7 +391,7 @@ final class LookupTest extends TestCase {
 		$this->assertSame( 302, $redirect_data['status_code'] );
 
 		// Clean up filter.
-		remove_all_filters( 'wpcom_legacy_redirector_redirect_status' );
+		remove_all_filters( 'legacy_redirector_redirect_status' );
 	}
 
 	/**
@@ -406,13 +406,62 @@ final class LookupTest extends TestCase {
 		$this->create_redirect( $from_url, $to_url );
 
 		// Add filter to return false (block the redirect).
-		add_filter( 'wpcom_legacy_redirector_request_path', '__return_false' );
+		add_filter( 'legacy_redirector_request_path', '__return_false' );
 
 		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertNull( $redirect_data );
 
 		// Clean up filter.
-		remove_all_filters( 'wpcom_legacy_redirector_request_path' );
+		remove_all_filters( 'legacy_redirector_request_path' );
+	}
+
+	/**
+	 * Test the pre-2.0 hook name still takes effect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_applies_deprecated_redirect_status_filter(): void {
+		$this->setExpectedDeprecated( 'wpcom_legacy_redirector_redirect_status' );
+
+		$from_url = '/deprecated-status-filter-test';
+		$to_url   = 'http://example.com/destination';
+
+		$this->create_redirect( $from_url, $to_url );
+
+		add_filter( 'wpcom_legacy_redirector_redirect_status', fn() => 302 );
+
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
+
+		$this->assertSame( 302, $redirect_data['status_code'] );
+
+		remove_all_filters( 'wpcom_legacy_redirector_redirect_status' );
+	}
+
+	/**
+	 * Test the 2.0 hook name wins when a callback is attached to both names.
+	 *
+	 * The deprecated filter runs first and its result feeds the new filter, so
+	 * a caller that has migrated is never overridden by a stale callback.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_get_redirect_data_prefers_current_hook_over_deprecated(): void {
+		$this->setExpectedDeprecated( 'wpcom_legacy_redirector_redirect_status' );
+
+		$from_url = '/both-status-filters-test';
+		$to_url   = 'http://example.com/destination';
+
+		$this->create_redirect( $from_url, $to_url );
+
+		add_filter( 'wpcom_legacy_redirector_redirect_status', fn() => 302 );
+		add_filter( 'legacy_redirector_redirect_status', fn() => 308 );
+
+		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
+
+		$this->assertSame( 308, $redirect_data['status_code'] );
+
+		remove_all_filters( 'wpcom_legacy_redirector_redirect_status' );
+		remove_all_filters( 'legacy_redirector_redirect_status' );
 	}
 }

@@ -4,7 +4,7 @@ Feature: Import redirects from CSV
   So that I can bulk create redirects
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Contract test: verifies file I/O and bulk import workflow.
   Scenario: Import redirects from a valid CSV file
@@ -15,7 +15,7 @@ Feature: Import redirects from CSV
       /another-old-page,/destination-post
       """
 
-    When I run `wp wpcom-legacy-redirector import /tmp/redirects.csv --skip-validation`
+    When I run `wp legacy-redirector import /tmp/redirects.csv --skip-validation`
     Then STDOUT should contain:
       """
       Processed 2 redirects.

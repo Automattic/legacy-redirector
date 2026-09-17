@@ -4,11 +4,11 @@ Feature: Migrating 1.x redirect data
   So that my existing redirects fire under 2.0
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Smoke test: the command is registered and a current site is a safe no-op.
   Scenario: Migrating an already-current site reports nothing to do
-    When I run `wp wpcom-legacy-redirector migrate`
+    When I run `wp legacy-redirector migrate`
     Then STDOUT should contain:
       """
       Success: Redirect data is already up to date; nothing to migrate.
@@ -28,7 +28,7 @@ Feature: Migrating 1.x redirect data
       Seeded legacy redirects.
       """
 
-    When I run `wp wpcom-legacy-redirector migrate --dry-run`
+    When I run `wp legacy-redirector migrate --dry-run`
     Then STDOUT should contain:
       """
       Dry run - no changes will be made.
@@ -38,7 +38,7 @@ Feature: Migrating 1.x redirect data
       210 redirect(s) would be inspected, of which 110 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 0 would have their destination made relative.
       """
 
-    When I run `wp wpcom-legacy-redirector migrate`
+    When I run `wp legacy-redirector migrate`
     Then STDOUT should contain:
       """
       Success: Migration complete. 10 redirect(s) inspected, 10 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 0 destination(s) made relative.
@@ -50,7 +50,7 @@ Feature: Migrating 1.x redirect data
       0
       """
 
-    When I run `wp wpcom-legacy-redirector migrate`
+    When I run `wp legacy-redirector migrate`
     Then STDOUT should contain:
       """
       Success: Redirect data is already up to date; nothing to migrate.

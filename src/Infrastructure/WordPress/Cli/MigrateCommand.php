@@ -67,10 +67,10 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Migrate 1.x redirect data.
-	 *     $ wp wpcom-legacy-redirector migrate
+	 *     $ wp legacy-redirector migrate
 	 *
 	 *     # Migrate every site on a network.
-	 *     $ wp site list --field=url | xargs -I % wp --url=% wpcom-legacy-redirector migrate
+	 *     $ wp site list --field=url | xargs -I % wp --url=% legacy-redirector migrate
 	 *
 	 * @param array<int, string>    $args       Positional arguments.
 	 * @param array<string, string> $assoc_args Associative arguments.

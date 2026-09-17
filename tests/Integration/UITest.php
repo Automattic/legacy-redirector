@@ -420,7 +420,7 @@ final class UITest extends TestCase {
 		// Add a filter to set the query var at the right time (before posts_where).
 		$set_filter_var = function ( \WP_Query $query ) {
 			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
-				$query->query_vars['wpcom_legacy_redirector_destination_type'] = 'post_id';
+				$query->query_vars['legacy_redirector_destination_type'] = 'post_id';
 			}
 		};
 		add_action( 'pre_get_posts', $set_filter_var, 1 );
@@ -494,7 +494,7 @@ final class UITest extends TestCase {
 		// Add a filter to set the query var at the right time (before posts_where).
 		$set_filter_var = function ( \WP_Query $query ) {
 			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
-				$query->query_vars['wpcom_legacy_redirector_destination_type'] = 'path';
+				$query->query_vars['legacy_redirector_destination_type'] = 'path';
 			}
 		};
 		add_action( 'pre_get_posts', $set_filter_var, 1 );
@@ -561,7 +561,7 @@ final class UITest extends TestCase {
 		// Add a filter to set the query var at the right time (before posts_where).
 		$set_filter_var = function ( \WP_Query $query ) {
 			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
-				$query->query_vars['wpcom_legacy_redirector_destination_type'] = 'external';
+				$query->query_vars['legacy_redirector_destination_type'] = 'external';
 			}
 		};
 		add_action( 'pre_get_posts', $set_filter_var, 1 );
@@ -674,13 +674,13 @@ final class UITest extends TestCase {
 		// Create query, parse basic args, then use set() to add the filter flag.
 		$query = new \WP_Query();
 		$query->parse_query( array() );
-		$query->set( 'wpcom_legacy_redirector_destination_type', 'path' );
+		$query->set( 'legacy_redirector_destination_type', 'path' );
 
 		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
 		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );
 
 		// Verify the flag was set.
-		$this->assertSame( 'path', $query->get( 'wpcom_legacy_redirector_destination_type' ), 'Query var should be set' );
+		$this->assertSame( 'path', $query->get( 'legacy_redirector_destination_type' ), 'Query var should be set' );
 
 		// Verify the WHERE clause filters for paths starting with /.
 		$this->assertStringContainsString( 'post_excerpt LIKE', $result, 'WHERE clause should filter for paths' );
@@ -694,7 +694,7 @@ final class UITest extends TestCase {
 	public function test_filter_external_redirects_where_adds_external_clause(): void {
 		// Create and initialize query object with parse_query, then set the filter flag.
 		$query = new \WP_Query();
-		$query->parse_query( array( 'wpcom_legacy_redirector_destination_type' => 'external' ) );
+		$query->parse_query( array( 'legacy_redirector_destination_type' => 'external' ) );
 
 		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
 		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );

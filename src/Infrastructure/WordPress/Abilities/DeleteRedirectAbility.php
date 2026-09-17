@@ -51,7 +51,7 @@ final class DeleteRedirectAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/delete-redirect';
+		return 'legacy-redirector/delete-redirect';
 	}
 
 	/**
@@ -62,15 +62,15 @@ final class DeleteRedirectAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Delete Redirects', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Permanently deletes one or more redirects. Visitors following those paths will get whatever the site would otherwise serve, usually a 404. To stop serving a redirect while keeping it, update its status to disabled instead.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Delete Redirects', 'legacy-redirector' ),
+			'description'         => __( 'Permanently deletes one or more redirects. Visitors following those paths will get whatever the site would otherwise serve, usually a 404. To stop serving a redirect while keeping it, update its status to disabled instead.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'required'             => array( 'redirects' ),
 				'properties'           => array(
 					'redirects' => RedirectSchema::identifiers_schema(
-						__( 'The redirects to delete, each given as a redirect ID or the path it redirects from.', 'wpcom-legacy-redirector' )
+						__( 'The redirects to delete, each given as a redirect ID or the path it redirects from.', 'legacy-redirector' )
 					),
 				),
 				'additionalProperties' => false,
@@ -81,7 +81,7 @@ final class DeleteRedirectAbility implements AbilityInterface {
 				'properties'           => array(
 					'deleted' => array(
 						'type'        => 'integer',
-						'description' => __( 'How many redirects were deleted.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects were deleted.', 'legacy-redirector' ),
 					),
 					'failed'  => RedirectSchema::failures_schema(),
 				),
@@ -116,7 +116,7 @@ final class DeleteRedirectAbility implements AbilityInterface {
 
 		return array(
 			'deleted' => RedirectBatch::count_succeeded( $items ),
-			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be deleted.', 'wpcom-legacy-redirector' ) ),
+			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be deleted.', 'legacy-redirector' ) ),
 		);
 	}
 }

@@ -195,7 +195,7 @@ final class RedirectsTest extends TestCase {
 	 */
 	public function test_protected_query_redirect( $from, $to, $protected_from, $protected_to ) {
 		add_filter(
-			'wpcom_legacy_redirector_preserve_query_params',
+			'legacy_redirector_preserve_query_params',
 			function ( $preserved_params ) {
 				array_push(
 					$preserved_params,

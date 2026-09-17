@@ -92,7 +92,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Bulk import from a my-redirect meta key.
-	 *     $ wp wpcom-legacy-redirector import-from-meta --meta-key=my-redirect
+	 *     $ wp legacy-redirector import-from-meta --meta-key=my-redirect
 	 *     ---Live Run---
 	 *     Importing 143 redirects
 	 *     All of your redirects have been imported. Nice work!

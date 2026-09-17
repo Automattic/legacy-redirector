@@ -63,7 +63,7 @@ class RedirectValidator {
 		if ( $existing_id > 0 && $existing_id !== $redirect->id() ) {
 			return ValidationResult::invalid(
 				'duplicate-redirect-uri',
-				__( 'A redirect for this URI already exists', 'wpcom-legacy-redirector' )
+				__( 'A redirect for this URI already exists', 'legacy-redirector' )
 			);
 		}
 
@@ -98,7 +98,7 @@ class RedirectValidator {
 				if ( $destination_path && $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 					return ValidationResult::invalid(
 						'invalid-values',
-						__( '"Redirect From" and "Redirect To" values are required and should not match.', 'wpcom-legacy-redirector' )
+						__( '"Redirect From" and "Redirect To" values are required and should not match.', 'legacy-redirector' )
 					);
 				}
 			}
@@ -121,7 +121,7 @@ class RedirectValidator {
 		if ( $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 			return ValidationResult::invalid(
 				'invalid-values',
-				__( '"Redirect From" and "Redirect To" values are required and should not match.', 'wpcom-legacy-redirector' )
+				__( '"Redirect From" and "Redirect To" values are required and should not match.', 'legacy-redirector' )
 			);
 		}
 
@@ -158,7 +158,7 @@ class RedirectValidator {
 		if ( ! $post instanceof \WP_Post ) {
 			return ValidationResult::invalid(
 				'empty-postid',
-				__( 'Redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' )
+				__( 'Redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' )
 			);
 		}
 
@@ -168,7 +168,7 @@ class RedirectValidator {
 		if ( 'publish' !== get_post_status( $post ) ) {
 			return ValidationResult::invalid(
 				'non-public',
-				__( 'You are trying to redirect to a post that is not published.', 'wpcom-legacy-redirector' )
+				__( 'You are trying to redirect to a post that is not published.', 'legacy-redirector' )
 			);
 		}
 
@@ -197,7 +197,7 @@ class RedirectValidator {
 		if ( empty( $parsed['host'] ) || empty( $parsed['scheme'] ) ) {
 			return ValidationResult::invalid(
 				'invalid-url',
-				__( 'The URL is not valid. External URLs must include the scheme (http:// or https://).', 'wpcom-legacy-redirector' )
+				__( 'The URL is not valid. External URLs must include the scheme (http:// or https://).', 'legacy-redirector' )
 			);
 		}
 
@@ -205,7 +205,7 @@ class RedirectValidator {
 		if ( ! in_array( $parsed['scheme'], array( 'http', 'https' ), true ) ) {
 			return ValidationResult::invalid(
 				'invalid-scheme',
-				__( 'Only http and https URLs are supported.', 'wpcom-legacy-redirector' )
+				__( 'Only http and https URLs are supported.', 'legacy-redirector' )
 			);
 		}
 
@@ -219,7 +219,7 @@ class RedirectValidator {
 				'external-url-not-allowed',
 				sprintf(
 					/* translators: %s: destination host name */
-					__( 'Redirects to %s are not allowed. Add the domain to the "allowed_redirect_hosts" filter first.', 'wpcom-legacy-redirector' ),
+					__( 'Redirects to %s are not allowed. Add the domain to the "allowed_redirect_hosts" filter first.', 'legacy-redirector' ),
 					(string) $parsed['host']
 				)
 			);
@@ -273,7 +273,7 @@ class RedirectValidator {
 		if ( 'publish' !== get_post_status( $post ) ) {
 			return ValidationResult::invalid(
 				'non-public',
-				__( 'You are trying to redirect to a URL that is currently not public.', 'wpcom-legacy-redirector' )
+				__( 'You are trying to redirect to a URL that is currently not public.', 'legacy-redirector' )
 			);
 		}
 
@@ -294,7 +294,7 @@ class RedirectValidator {
 		if ( null === $url ) {
 			return ValidationResult::invalid(
 				'404',
-				__( 'Redirect is pointing to a page with the HTTP status of 404.', 'wpcom-legacy-redirector' )
+				__( 'Redirect is pointing to a page with the HTTP status of 404.', 'legacy-redirector' )
 			);
 		}
 
@@ -303,7 +303,7 @@ class RedirectValidator {
 		if ( 404 === $response_code ) {
 			return ValidationResult::invalid(
 				'404',
-				__( 'Redirect is pointing to a page with the HTTP status of 404.', 'wpcom-legacy-redirector' )
+				__( 'Redirect is pointing to a page with the HTTP status of 404.', 'legacy-redirector' )
 			);
 		}
 
