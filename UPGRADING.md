@@ -4,7 +4,7 @@ This guide covers breaking changes and migration steps when upgrading from versi
 
 ## The Plugin Has Been Renamed
 
-The plugin was called **Legacy Redirector**. It is now **Legacy Redirector**.
+The plugin was called **WPCOM Legacy Redirector**. It is now **Legacy Redirector**.
 
 The `WPCOM` prefix was a misnomer. The plugin is not specific to WordPress.com and works on any WordPress install, so the prefix told you something untrue about where it runs. `Legacy` stays, because it still describes what the plugin is for: redirecting the old URLs a site has accumulated, at migration scale.
 
@@ -12,21 +12,24 @@ The rename itself touches no stored redirect data, and you do not need to reinst
 
 | What | 1.x | 2.0 |
 |------|-----|-----|
-| Plugin name | Legacy Redirector | Legacy Redirector |
+| Plugin name | WPCOM Legacy Redirector | Legacy Redirector |
 | Main file | `wpcom-legacy-redirector.php` | unchanged, so the plugin stays active across the upgrade |
-| WP-CLI namespace | `wp legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias |
+| WP-CLI namespace | `wp wpcom-legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias |
 | Filter prefix | `wpcom_legacy_redirector_*` | `legacy_redirector_*`, with the old names kept as deprecated aliases |
-| Text domain | `legacy-redirector` | `legacy-redirector` |
-| Composer package | `automattic/wpcom-legacy-redirector` | `automattic/legacy-redirector` |
+| Text domain | `wpcom-legacy-redirector` | `legacy-redirector` |
+| Composer package | `automattic/wpcom-legacy-redirector` | unchanged, so your `require` entry keeps working |
 | Admin menu | Redirects Manager | Redirects |
-| `X-Redirect-By` header | `Legacy Redirector` | `Legacy Redirector` |
+| `X-Redirect-By` header | `WPCOM Legacy Redirector` | `Legacy Redirector` |
 | Post type | `vip-legacy-redirect` | unchanged |
 | Upgrade options | `wpcom_legacy_redirector_db_version` and friends | unchanged |
 
 ### What you need to change
 
-- **Composer**: update your `require` entry to `automattic/legacy-redirector`. If you install from a GitHub VCS repository rather than Packagist, also update the repository URL to `https://github.com/Automattic/legacy-redirector`. The package declares `replace` for the old name, which prevents both packages resolving at once, but it does not rewrite your own `require` line for you.
-- **Nothing else, immediately.** The old WP-CLI namespace and the old filter names both still work, so scripts and `mu-plugins` keep running. Both warn, and both will be removed in a future major version, so migrate when convenient.
+**Nothing, immediately.** The Composer package name, the old WP-CLI namespace, and the old filter names all still work, so `composer.json` files, deploy scripts, runbooks, and `mu-plugins` keep working untouched. The CLI namespace and the filters warn when used, and will be removed in a future major version, so migrate those when convenient.
+
+The Composer package stays `automattic/wpcom-legacy-redirector` permanently. Packagist cannot rename a package, so moving would mean publishing a new one and abandoning this one, and every consumer would have to edit their own `require` line to keep receiving updates. That is a real cost for a string that only ever appears inside a `composer.json`, so the name stays where it is.
+
+If you install from a GitHub VCS repository rather than Packagist, the repository has moved to `https://github.com/Automattic/legacy-redirector`. GitHub redirects the old URL permanently, so existing entries keep resolving, but it is worth updating when you next touch the file.
 
 ### Renamed filters
 
@@ -182,7 +185,7 @@ $id = $result->redirect_id();
 
 ### WP-CLI Command Changes
 
-The WP-CLI command set has been redesigned. The command *namespace* is aliased, so `wp legacy-redirector <subcommand>` still reaches `wp legacy-redirector <subcommand>` with a deprecation warning on STDERR. The *subcommands* below have no aliases, so any scripts, runbooks, or cron jobs calling them must be updated:
+The WP-CLI command set has been redesigned. The command *namespace* is aliased, so `wp wpcom-legacy-redirector <subcommand>` still reaches `wp legacy-redirector <subcommand>` with a deprecation warning on STDERR. The *subcommands* below have no aliases, so any scripts, runbooks, or cron jobs calling them must be updated:
 
 Version 1.3.0 shipped three commands. All three change:
 

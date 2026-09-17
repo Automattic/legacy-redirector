@@ -51,7 +51,7 @@ final class PluginBootstrapper {
 	 *
 	 * @var string
 	 */
-	public const string CLI_NAMESPACE_DEPRECATED = 'legacy-redirector';
+	public const string CLI_NAMESPACE_DEPRECATED = 'wpcom-legacy-redirector';
 
 	/**
 	 * Service container.

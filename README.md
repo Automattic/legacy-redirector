@@ -255,7 +255,7 @@ Note: even with this filter, safe requests only use ports 80, 443, and 8080 (plu
 
 For detailed command options, run `wp help legacy-redirector`.
 
-The pre-2.0 `wp legacy-redirector` namespace is still registered so existing scripts keep working. Every invocation through it prints a deprecation warning to STDERR, naming the `wp legacy-redirector` equivalent, and it will be removed in a future major version. Because the warning goes to STDERR, piping `--porcelain` or `--format=csv` output is unaffected.
+The pre-2.0 `wp wpcom-legacy-redirector` namespace is still registered so existing scripts keep working. Every invocation through it prints a deprecation warning to STDERR, naming the `wp legacy-redirector` equivalent, and it will be removed in a future major version. Because the warning goes to STDERR, piping `--porcelain` or `--format=csv` output is unaffected.
 
 ## Abilities API
 
