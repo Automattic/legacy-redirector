@@ -48,7 +48,7 @@ Filters introduced in 2.0 (`legacy_redirector_destination_url`, `legacy_redirect
 
 ## Your Existing Redirects Are Migrated Automatically
 
-Three storage changes between 1.x and 2.0 would otherwise stop redirects you already have from working, with no error and no warning:
+Four storage changes between 1.x and 2.0 would otherwise stop redirects you already have from working, or leave them stored in a form 2.0 no longer writes, with no error and no warning:
 
 1. **Version 1.x stored redirects as drafts.** It called `wp_insert_post()` without a `post_status`, so WordPress defaulted each redirect to `draft`. Version 2.0 only serves redirects with the `publish` status.
 2. **Where your site is not at the domain root, 1.x stored source paths with that prefix included** (`/subsite1/old-page` on a subsite, `/blog/old-page` on a single site installed at `example.com/blog`). Version 1.x read the raw request path for both storing and matching, so the two agreed. Version 2.0 strips the site's base path from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
@@ -56,9 +56,18 @@ Three storage changes between 1.x and 2.0 would otherwise stop redirects you alr
    This applies to any install whose home URL is below the domain root, not just multisites. If your site lives at `example.com/blog`, you are affected in exactly the same way as a subsite.
 3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalizes incoming requests the same way, so either spelling now finds the redirect. Sources are re-keyed so they match what 2.0 looks up.
 
-   Destinations are untouched: a trailing slash there is part of where the visitor actually lands.
+   A trailing slash on the *destination* is left alone: there it is part of where the visitor actually lands.
+4. **Destinations are canonicalized.** A destination pointing at this site by absolute URL (`https://example.com/foo`) is rewritten to the relative form (`/foo`), so anything left absolute afterwards is external by construction. A relative destination is rewritten to the encoding 2.0 produces on save, so whichever of `/café` or `/caf%C3%A9` you originally typed is now stored one way: path and fragment decoded, query string kept percent-encoded.
 
-A one-off migration handles all three. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated so it runs only once.
+   Where the visitor lands does not change — only how the destination is written down. `wp legacy-redirector migrate` counts these as "destination(s) made relative" in both its dry-run and its summary, so the number you see reported covers this pass.
+
+One migration handles all four. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated, so it walks your redirects once for the upgrade and then stops until a future release changes the stored data again.
+
+### Which passes run when
+
+The first two are corrections to the shape 1.x wrote, so they run **only** where the stored data predates 2.0. Once 2.0 has written data of its own, both readings become ambiguous: a `draft` then means "deliberately disabled" rather than "1.x never set a status", and a source beginning with your home path can be a deliberate double prefix (on a subsite at `/subsite1`, storing `/subsite1/x` is how you redirect the real URL `/subsite1/subsite1/x`). A later version bump re-walks every redirect, so leaving these two ungated would republish redirects you had disabled and rewrite sources you meant.
+
+The trailing-slash and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
 
 ### Large redirect sets
 
@@ -83,6 +92,10 @@ wp site list --field=url | xargs -I % wp --url=% legacy-redirector migrate
 ### What the migration will not touch
 
 Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes redirects that were **never** published, which WordPress records with a `post_modified_gmt` of `0000-00-00 00:00:00`. Anything you disable after upgrading keeps a real modified date and is left alone.
+
+More broadly, any redirect edited after the migration began is skipped by **every** pass, not just the publishing one: the edit was made under 2.0 rules, so whatever it now says is what you meant. That is what makes the ungated passes safe to re-run on a later version bump.
+
+Destinations given as a post ID rather than a URL are not rewritten — there is no encoding to canonicalize — and no pass changes where a redirect sends visitors. The source path is re-keyed and the destination re-spelled; the page the visitor arrives at is the same one as before.
 
 ### When two redirects end up wanting the same source
 
