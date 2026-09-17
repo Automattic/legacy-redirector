@@ -33,11 +33,11 @@
     # "I try" rather than "I run": the context only splits STDERR out of the
     # combined output when the exit code is non-zero or the step is a try, and
     # a deprecation warning does not fail the command.
-    When I try `wp legacy-redirector create /deprecated-ns /target`
+    When I try `wp wpcom-legacy-redirector create /deprecated-ns /target`
     Then the return code should be 0
     And STDERR should contain:
       """
-      `wp legacy-redirector create` is deprecated since 2.0.0. Use `wp legacy-redirector create` instead.
+      `wp wpcom-legacy-redirector create` is deprecated since 2.0.0. Use `wp legacy-redirector create` instead.
       """
 
     When I run `wp legacy-redirector get /deprecated-ns --field=to`
