@@ -139,7 +139,7 @@ final class FormScreenSetup {
 			'<li><code>https://example.com/page</code></li>' .
 			'<li><code>https://newsite.com/destination</code></li>' .
 			'</ul>' .
-			'<p><strong>' . __( 'Note:', 'wpcom-legacy-redirector' ) . '</strong> ' . __( 'External domains must be allowed via the <code>allowed_redirect_hosts</code> filter.', 'wpcom-legacy-redirector' ) . '</p>' .
+			'<p><strong>' . __( 'Note:', 'wpcom-legacy-redirector' ) . '</strong> ' . __( 'External domains must be allowed via the <code>allowed_redirect_hosts</code> filter before a redirect can point at them.', 'wpcom-legacy-redirector' ) . '</p>' .
 			'<h4>' . __( '3. Post ID', 'wpcom-legacy-redirector' ) . '</h4>' .
 			'<p>' . __( 'Select an existing post or page using the search field. The redirect will point to that content\'s permalink, which automatically updates if the slug changes.', 'wpcom-legacy-redirector' ) . '</p>';
 	}

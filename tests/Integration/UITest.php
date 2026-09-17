@@ -134,6 +134,23 @@ final class UITest extends TestCase {
 
 		$this->assertStringContainsString( 'notice-error', $output );
 		$this->assertStringContainsString( 'not valid', $output );
+		$this->assertStringContainsString( 'site-relative path', $output );
+	}
+
+	/**
+	 * Test display_validation_notices names the filter when the host is not allowed.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_host_not_allowed_notice(): void {
+		$_GET['validate'] = 'host-not-allowed';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( 'not valid', $output );
 		$this->assertStringContainsString( 'allowed_redirect_hosts', $output );
 	}
 

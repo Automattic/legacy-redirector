@@ -128,7 +128,10 @@ final class ValidationNotices {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		switch ( $_GET['validate'] ) {
 			case 'invalid':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'If you are doing an external redirect, make sure you safelist the domain using the "allowed_redirect_hosts" filter.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination must be a site-relative path beginning with a slash, or a full URL beginning with http:// or https://.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				break;
+			case 'host-not-allowed':
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination domain is not allowed. Add it to the "allowed_redirect_hosts" filter, or the redirect will not run.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case '404':
 				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'Redirect is pointing to a page with the HTTP status of 404.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
@@ -196,7 +199,7 @@ final class ValidationNotices {
 			$status_map = array(
 				'empty-postid'             => 'null',
 				'non-public'               => 'private',
-				'external-url-not-allowed' => 'invalid',
+				'external-url-not-allowed' => 'host-not-allowed',
 				'invalid'                  => 'invalid',
 			);
 

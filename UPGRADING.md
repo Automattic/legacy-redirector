@@ -152,7 +152,7 @@ If you have been running the plugin from the `develop` branch rather than the 1.
 Other behaviour changes to be aware of:
 
 - `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp wpcom-legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
-- External destinations now work end to end. The destination host is automatically allowed at redirect time, where 1.x passed everything through `wp_safe_redirect()` and silently dropped redirects to hosts outside the `allowed_redirect_hosts` filter.
+- External destinations still require the host to be allowed via the `allowed_redirect_hosts` filter, as in 1.x, but you now find out at creation time instead of discovering it in production. 1.x accepted any destination and then handed it to `wp_safe_redirect()`, which sent visitors to its fallback of `admin_url()` when the host was not allowed. Creating or updating a redirect to a host the site does not allow is now an error naming the domain, and a stored redirect whose host is not allowed leaves the original 404 in place rather than bouncing visitors to the admin. Run `wp wpcom-legacy-redirector find-domains` to list the domains your existing redirects point at, and allow the ones you intend to keep.
 
 ### Destination Validation Uses Safe HTTP Requests
 

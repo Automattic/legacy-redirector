@@ -34,6 +34,8 @@ abstract class AjaxHandlerTestCase extends WP_Ajax_UnitTestCase {
 
 		( new Capability() )->register();
 
+		$this->allow_fixture_hosts();
+
 		// A WP core older than the container's PHP emits engine deprecations
 		// (e.g. implicit-nullable parameters in the bundled Requests library)
 		// that land in the AJAX output buffer and corrupt the captured JSON.

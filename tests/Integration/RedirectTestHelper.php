@@ -31,11 +31,36 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectReposit
 trait RedirectTestHelper {
 
 	/**
+	 * The external host the fixtures redirect to.
+	 */
+	private const FIXTURE_HOST = 'example.com';
+
+	/**
 	 * Memoised service instances.
 	 *
 	 * @var array<string, object>
 	 */
 	private array $services = array();
+
+	/**
+	 * Allow the external host the fixtures redirect to.
+	 *
+	 * External destinations are refused unless the site allows the host, so
+	 * without this every fixture pointing off-site would fail validation. A
+	 * real site allows its destination hosts the same way.
+	 *
+	 * @return void
+	 */
+	private function allow_fixture_hosts(): void {
+		add_filter(
+			'allowed_redirect_hosts',
+			static function ( array $hosts ): array {
+				$hosts[] = self::FIXTURE_HOST;
+
+				return $hosts;
+			}
+		);
+	}
 
 	/**
 	 * Get the caching redirect repository.

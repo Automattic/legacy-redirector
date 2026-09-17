@@ -30,5 +30,7 @@ abstract class TestCase extends WPTestUtilsTestCase {
 		if ( ! defined( 'WP_ADMIN' ) ) {
 			define( 'WP_ADMIN', true );
 		}
+
+		$this->allow_fixture_hosts();
 	}
 }

@@ -209,9 +209,22 @@ class RedirectValidator {
 			);
 		}
 
-		// External URLs with valid http/https scheme are considered valid.
-		// The plugin automatically adds the destination host to the allowed_redirect_hosts
-		// filter at redirect time (see RedirectRequestHandler::allow_redirect_host).
+		// The host must be one WordPress will actually redirect to. Accepting it
+		// here and letting wp_safe_redirect() refuse it at request time is how
+		// 1.x behaved: the redirect stored cleanly and then quietly sent every
+		// visitor somewhere else. Refusing at creation puts the error in front
+		// of the person who can still do something about it.
+		if ( '' === wp_validate_redirect( $url, '' ) ) {
+			return ValidationResult::invalid(
+				'external-url-not-allowed',
+				sprintf(
+					/* translators: %s: destination host name */
+					__( 'Redirects to %s are not allowed. Add the domain to the "allowed_redirect_hosts" filter first.', 'wpcom-legacy-redirector' ),
+					(string) $parsed['host']
+				)
+			);
+		}
+
 		return ValidationResult::valid();
 	}
 
