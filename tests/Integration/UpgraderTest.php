@@ -487,6 +487,32 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * Trashing a duplicate must not shift later rows out from under the cursor.
+	 *
+	 * The batch query pages by offset, and WP_Query's 'any' status excludes
+	 * trash - so a duplicate trashed in batch one would shrink the result set
+	 * and the row straddling the batch boundary would be skipped, silently
+	 * left on its old key. The query names every status to keep the set stable.
+	 *
+	 * @return void
+	 */
+	public function test_row_after_a_trashed_duplicate_is_still_migrated() {
+		$this->create_legacy_redirect( '/old-page', 'https://example.com/new' );
+		$this->create_legacy_redirect( '/old-page/', 'https://example.com/new' );
+		$straddler = $this->create_legacy_redirect( '/needs-rekey/', 'https://example.com/other' );
+
+		$first = $this->upgrader->run_batch( 2 );
+		$this->assertSame( 1, $first['deduped'] );
+		$this->assertFalse( $first['complete'] );
+
+		$second = $this->upgrader->run_batch( 2 );
+
+		$this->assertSame( 1, $second['processed'] );
+		$this->assertSame( '/needs-rekey', get_post( $straddler )->post_title );
+		$this->assertSame( md5( '/needs-rekey' ), get_post( $straddler )->post_name );
+	}
+
+	/**
 	 * A collision between different destinations drafts the loser and reports it.
 	 *
 	 * Only a human can decide which destination was meant, so the survivor is

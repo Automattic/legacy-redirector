@@ -177,9 +177,12 @@ final class Upgrader {
 		$query = new WP_Query(
 			array(
 				'post_type'              => PostType::POST_TYPE,
-				// Deliberately not filtered by status: a stable result set keeps
-				// offset paging honest while we mutate statuses as we go.
-				'post_status'            => 'any',
+				// Every status by name, because 'any' excludes trash: a duplicate
+				// trashed by an earlier batch would shrink an 'any' result set
+				// and shift unprocessed rows under the offset cursor, silently
+				// skipping them. Naming trash keeps the set stable while we
+				// mutate statuses as we go.
+				'post_status'            => array_keys( get_post_stati() ),
 				'posts_per_page'         => $size,
 				'offset'                 => $cursor,
 				'orderby'                => 'ID',
@@ -249,7 +252,9 @@ final class Upgrader {
 			$query = new WP_Query(
 				array(
 					'post_type'              => PostType::POST_TYPE,
-					'post_status'            => 'any',
+					// The same status list run_batch() walks, so the dry-run
+					// counts describe the same set of rows the run will touch.
+					'post_status'            => array_keys( get_post_stati() ),
 					'posts_per_page'         => self::BATCH_SIZE,
 					'paged'                  => $paged,
 					'orderby'                => 'ID',
