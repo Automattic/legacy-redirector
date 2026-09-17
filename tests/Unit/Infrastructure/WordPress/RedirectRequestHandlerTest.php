@@ -244,57 +244,42 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test the destination's host is added to the allowed redirect hosts.
+	 * Test a destination WordPress will not redirect to is left as a 404.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::allow_redirect_host
+	 * Left unchecked, wp_safe_redirect() would send the visitor to its own
+	 * fallback, admin_url(), so the destination is tested before it gets there.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::perform_redirect
 	 */
-	public function test_destination_host_is_added_to_allowed_redirect_hosts(): void {
-		$callback = null;
-
-		Filters\expectAdded( 'allowed_redirect_hosts' )
+	public function test_a_disallowed_destination_does_not_redirect(): void {
+		Functions\expect( 'wp_validate_redirect' )
 			->once()
-			->whenHappen(
-				static function ( callable $added ) use ( &$callback ): void {
-					$callback = $added;
-				}
-			);
+			->with( 'https://external-site.com/destination', '' )
+			->andReturn( '' );
 
-		$this->allow_redirect_host( 'https://external-site.com/destination' );
+		Functions\expect( 'wp_safe_redirect' )->never();
 
-		$this->assertIsCallable( $callback );
+		$this->perform_redirect( 'https://external-site.com/destination', 301 );
+
 		$this->assertSame(
-			array( 'example.com', 'external-site.com' ),
-			$callback( array( 'example.com' ) )
+			array(),
+			$GLOBALS['wpcom_legacy_redirector_sent_headers'],
+			'A refused destination must not send a Cache-Control header either.'
 		);
 	}
 
 	/**
-	 * Test no filter is added for a destination without a host.
+	 * Invoke the private redirect method.
 	 *
-	 * A site-relative destination is already an allowed redirect target, so
-	 * there is nothing to permit and no callback should be left behind.
+	 * Only safe to drive for destinations that are refused, since an allowed
+	 * one ends in exit.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::allow_redirect_host
-	 */
-	public function test_no_filter_is_added_for_a_destination_without_a_host(): void {
-		Filters\expectAdded( 'allowed_redirect_hosts' )->never();
-
-		$this->allow_redirect_host( '/site-relative-destination' );
-
-		$this->assertTrue( true );
-	}
-
-	/**
-	 * Invoke the private allowed-hosts method.
-	 *
-	 * Like the Cache-Control header, this runs only on the way to an exit,
-	 * so it is driven directly.
-	 *
-	 * @param string $url The destination URL.
+	 * @param string $url         The destination URL.
+	 * @param int    $status_code The HTTP status code.
 	 * @return void
 	 */
-	private function allow_redirect_host( string $url ): void {
-		( new \ReflectionMethod( $this->handler, 'allow_redirect_host' ) )
-			->invoke( $this->handler, $url );
+	private function perform_redirect( string $url, int $status_code ): void {
+		( new \ReflectionMethod( $this->handler, 'perform_redirect' ) )
+			->invoke( $this->handler, $url, $status_code );
 	}
 }

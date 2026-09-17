@@ -36,18 +36,6 @@ final class ColumnsManager {
 	private RedirectAuditor $auditor;
 
 	/**
-	 * Sort direction for the "Redirect To" column, or null when not sorting by it.
-	 *
-	 * Set in handle_sorting() on pre_get_posts and read back in
-	 * order_by_destination() on posts_orderby, which fires later in the same
-	 * query. Carried on the instance because posts_orderby has no way to know
-	 * which column the request asked for.
-	 *
-	 * @var string|null
-	 */
-	private ?string $order_by_excerpt = null;
-
-	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository Redirect repository.
@@ -68,7 +56,6 @@ final class ColumnsManager {
 		add_action( 'manage_' . PostType::POST_TYPE . '_posts_custom_column', array( $this, 'render_column' ), 10, 2 );
 		add_filter( 'manage_edit-' . PostType::POST_TYPE . '_sortable_columns', array( $this, 'set_sortable_columns' ) );
 		add_action( 'pre_get_posts', array( $this, 'handle_sorting' ) );
-		add_filter( 'posts_orderby', array( $this, 'order_by_destination' ), 10, 2 );
 		add_filter( 'list_table_primary_column', array( $this, 'set_primary_column' ), 10, 2 );
 	}
 
@@ -116,19 +103,6 @@ final class ColumnsManager {
 	/**
 	 * Handle custom column sorting.
 	 *
-	 * Every list-table query passes through here, so this is also where the
-	 * ordering is made total. Without a tiebreaker the list paginates wrongly:
-	 * the "All" view spans five post statuses, which stops MySQL using the
-	 * type_status_date index for the sort, and that index is the only thing
-	 * that would otherwise break ties (it ends in ID). The fallback filesort
-	 * on post_date alone is not a total order, and redirects created by a CSV
-	 * import share a post_date to the second - thousands of them. Each page is
-	 * a separate LIMIT/OFFSET query that re-sorts the tied rows differently,
-	 * so rows repeat across pages and others are never shown at all.
-	 *
-	 * Titles and destinations tie just as readily as dates, so the tiebreaker
-	 * is appended for every sort, not only the default one.
-	 *
 	 * @param \WP_Query $query The query object.
 	 * @return void
 	 */
@@ -142,69 +116,14 @@ final class ColumnsManager {
 		}
 
 		$orderby = $query->get( 'orderby' );
-		$order   = strtoupper( (string) $query->get( 'order' ) );
 
-		// WP_Query's own default when the request does not ask for one.
-		if ( 'ASC' !== $order ) {
-			$order = 'DESC';
+		if ( 'from' === $orderby ) {
+			$query->set( 'orderby', 'title' );
 		}
 
 		if ( 'to' === $orderby ) {
-			// post_excerpt is not one of WP_Query::parse_orderby()'s allowed
-			// keys, so setting it as an orderby is silently discarded and the
-			// query falls back to post_date. It has to go in through SQL.
-			$this->order_by_excerpt = $order;
-			$query->set( 'orderby', 'ID' );
-			$query->set( 'order', $order );
-			return;
+			$query->set( 'orderby', 'post_excerpt' );
 		}
-
-		if ( 'from' === $orderby ) {
-			$orderby = 'title';
-		}
-
-		if ( '' === $orderby || array() === $orderby ) {
-			$orderby = 'date';
-		}
-
-		// Only a scalar orderby can be safely extended here; an array form
-		// already came from somewhere that chose its own ordering.
-		if ( ! is_string( $orderby ) ) {
-			return;
-		}
-
-		$query->set(
-			'orderby',
-			array(
-				$orderby => $order,
-				'ID'     => $order,
-			)
-		);
-		$query->set( 'order', $order );
-	}
-
-	/**
-	 * Order by destination URL.
-	 *
-	 * Runs only for the "Redirect To" column, which cannot be expressed as a
-	 * WP_Query orderby. ID is appended for the same reason it is everywhere
-	 * else here: many redirects share a destination, and ties would otherwise
-	 * paginate non-deterministically.
-	 *
-	 * @param string    $orderby The ORDER BY clause.
-	 * @param \WP_Query $query   The query object.
-	 * @return string The ORDER BY clause.
-	 */
-	public function order_by_destination( string $orderby, \WP_Query $query ): string {
-		if ( null === $this->order_by_excerpt || ! $query->is_main_query() ) {
-			return $orderby;
-		}
-
-		global $wpdb;
-
-		$order = 'ASC' === $this->order_by_excerpt ? 'ASC' : 'DESC';
-
-		return "{$wpdb->posts}.post_excerpt {$order}, {$wpdb->posts}.ID {$order}";
 	}
 
 	/**

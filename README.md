@@ -72,7 +72,8 @@ use function Automattic\LegacyRedirector\container;
 // Get the redirect manager via the helper function (recommended for third-party code)
 $manager = container()->manager();
 
-// Add a redirect to an external URL
+// Add a redirect to an external URL. The destination host must be allowed via
+// the allowed_redirect_hosts filter, or this fails with external-url-not-allowed.
 $source      = SourceUrl::from_string( '/old-page' );
 $destination = Destination::from_mixed( 'https://example.com/new-page' );
 $result      = $manager->create_redirect( $source, $destination );

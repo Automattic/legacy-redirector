@@ -80,13 +80,20 @@ final class RedirectRequestHandler {
 	/**
 	 * Perform the actual HTTP redirect.
 	 *
+	 * A destination whose host is not allowed is left alone: WordPress goes on
+	 * to serve the 404 that brought us here. Handing it to wp_safe_redirect()
+	 * unchecked would send the visitor to that function's fallback, which is
+	 * `admin_url()` — a front-end visitor bounced to the login screen, which is
+	 * worse than the 404 they asked for.
+	 *
 	 * @param string $url         The destination URL.
 	 * @param int    $status_code The HTTP status code.
-	 * @return never
+	 * @return void
 	 */
 	private function perform_redirect( string $url, int $status_code ): void {
-		// Allow redirects to external hosts by adding destination host to allowed list.
-		$this->allow_redirect_host( $url );
+		if ( '' === wp_validate_redirect( $url, '' ) ) {
+			return;
+		}
 
 		$this->send_cache_control_header( $url, $status_code );
 
@@ -132,27 +139,5 @@ final class RedirectRequestHandler {
 		}
 
 		header( 'Cache-Control: max-age=' . $max_age, true );
-	}
-
-	/**
-	 * Add the destination URL's host to the allowed redirect hosts.
-	 *
-	 * @param string $url The destination URL.
-	 * @return void
-	 */
-	private function allow_redirect_host( string $url ): void {
-		$host = wp_parse_url( $url, PHP_URL_HOST );
-
-		if ( empty( $host ) ) {
-			return;
-		}
-
-		add_filter(
-			'allowed_redirect_hosts',
-			static function ( array $hosts ) use ( $host ): array {
-				$hosts[] = $host;
-				return $hosts;
-			}
-		);
 	}
 }

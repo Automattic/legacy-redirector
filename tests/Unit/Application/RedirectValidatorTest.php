@@ -585,18 +585,39 @@ final class RedirectValidatorTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test validate_destination_url accepts external URLs with valid http/https scheme.
-	 *
-	 * The plugin automatically adds the destination host to allowed_redirect_hosts
-	 * at redirect time (see RedirectRequestHandler::allow_redirect_host), so we only
-	 * validate that the URL has a valid scheme here.
+	 * Test validate_destination_url accepts an external URL on an allowed host.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_destination_url
 	 */
 	public function test_validate_destination_url_accepts_valid_external_urls(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->andReturnFirstArg();
+
 		$result = $this->validator->validate_destination_url( 'https://external.com/page' );
 
 		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * Test validate_destination_url rejects an external URL on a host WordPress will not redirect to.
+	 *
+	 * Accepting it here would store a redirect that silently sends every
+	 * visitor to the wp_safe_redirect() fallback instead of the destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_destination_url
+	 */
+	public function test_validate_destination_url_rejects_an_external_url_on_a_disallowed_host(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->with( 'https://external.com/page', '' )
+			->andReturn( '' );
+
+		$result = $this->validator->validate_destination_url( 'https://external.com/page' );
+
+		$this->assertTrue( $result->is_invalid() );
+		$this->assertSame( 'external-url-not-allowed', $result->error_code() );
+		$this->assertStringContainsString( 'external.com', $result->error_message() );
 	}
 
 	/**
