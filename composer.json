@@ -1,5 +1,5 @@
 {
-	"name": "automattic/legacy-redirector",
+	"name": "automattic/wpcom-legacy-redirector",
 	"description": "WordPress plugin for handling large volumes of legacy redirects in a scalable manner.",
 	"license": "GPL-2.0-or-later",
 	"type": "wordpress-plugin",
@@ -13,9 +13,6 @@
 	"support": {
 		"issues": "https://github.com/Automattic/legacy-redirector/issues",
 		"source": "https://github.com/Automattic/legacy-redirector"
-	},
-	"replace": {
-		"automattic/wpcom-legacy-redirector": "self.version"
 	},
 	"require": {
 		"php": ">=8.3",

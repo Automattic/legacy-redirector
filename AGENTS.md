@@ -9,7 +9,7 @@ Handles large volumes of redirects for a site's legacy URLs.
 | **Main file** | `wpcom-legacy-redirector.php` (kept from the pre-2.0 name so upgrades do not deactivate the plugin) |
 | **Text domain** | `legacy-redirector` |
 | **Namespace** | `Automattic\LegacyRedirector` |
-| **Composer package** | `automattic/legacy-redirector` |
+| **Composer package** | `automattic/wpcom-legacy-redirector` (kept from the pre-2.0 name; see below) |
 | **WP-CLI namespace** | `legacy-redirector` (plus `legacy-redirector` as a deprecated alias) |
 | **Filter prefix** | `legacy_redirector_` |
 | **Post type** | `vip-legacy-redirect` |
@@ -18,7 +18,12 @@ Handles large volumes of redirects for a site's legacy URLs.
 | **Requires PHP** | 8.3+ |
 | **Requires WP** | 6.8+ |
 
-The plugin was renamed from "Legacy Redirector" in 2.0. Three things deliberately keep the old name because they are necessary: the main file (renaming it deactivates the plugin on update), the `vip-legacy-redirect` post type, and the `wpcom_legacy_redirector_db_version` / `_upgrade_started_gmt` / `_upgrade_cursor` options. All three hold live state. Do not "tidy" them.
+The plugin was renamed from "WPCOM Legacy Redirector" in 2.0. Four things deliberately keep the old name, and each would cost a user something to change. Do not "tidy" them:
+
+- **`wpcom-legacy-redirector.php`** — renaming the main file deactivates the plugin on update.
+- **`automattic/wpcom-legacy-redirector`** — Packagist cannot rename a package, so moving means publishing a new one and abandoning this one, and every consumer has to edit their own `require` line or silently stop receiving updates. `dev-develop` is the most-installed version, so that is the majority of users.
+- **`vip-legacy-redirect`** — the post type is in the database.
+- **`wpcom_legacy_redirector_db_version` / `_upgrade_started_gmt` / `_upgrade_cursor`** — these options hold live upgrade state.
 
 ### Directory Structure
 
