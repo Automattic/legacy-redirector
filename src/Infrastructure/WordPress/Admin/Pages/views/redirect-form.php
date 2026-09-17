@@ -63,9 +63,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 						<label for="redirect_from"><?php esc_html_e( 'Redirect From', 'wpcom-legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td>
-						<div style="display: inline-flex; align-items: center;">
-							<span class="code" style="padding: 0 8px; background: #f0f0f1; border: 1px solid #8c8f94; border-right: 0; border-radius: 4px 0 0 4px; line-height: 28px; color: #50575e;"><?php echo esc_html( $home_prefix ); ?></span>
-							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="border-radius: 0 4px 4px 0;" required placeholder="old-page" />
+						<div style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%;">
+							<span class="code" style="color: #646970; white-space: nowrap;"><?php echo esc_html( $home_prefix ); ?></span>
+							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" />
 						</div>
 						<p class="description">
 							<?php
