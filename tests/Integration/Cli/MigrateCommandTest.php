@@ -25,6 +25,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class MigrateCommandTest extends CliTestCase {
@@ -105,7 +106,7 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->assert_stdout_contains( 'Dry run - no changes will be made.' );
 		$this->assert_stdout_contains(
-			'2 redirect(s) would be inspected, of which 2 would be published, 0 would have their source path rewritten, and 1 would have their destination made relative.'
+			'2 redirect(s) would be inspected, of which 2 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 1 would have their destination made relative.'
 		);
 
 		$this->assertSame( 'draft', get_post_status( $external_id ) );
@@ -125,7 +126,7 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->assert_stdout_contains( 'Processed 2 redirect(s)...' );
 		$this->assert_success_contains(
-			'Migration complete. 2 redirect(s) inspected, 2 published, 0 source path(s) rewritten, 1 destination(s) made relative.'
+			'Migration complete. 2 redirect(s) inspected, 2 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 1 destination(s) made relative.'
 		);
 
 		$this->assertSame( 'publish', get_post_status( $external_id ) );

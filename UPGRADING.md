@@ -4,14 +4,17 @@ This guide covers breaking changes and migration steps when upgrading from versi
 
 ## Your Existing Redirects Are Migrated Automatically
 
-Two storage changes between 1.x and 2.0 would otherwise stop every redirect you already have from working, with no error and no warning:
+Three storage changes between 1.x and 2.0 would otherwise stop redirects you already have from working, with no error and no warning:
 
 1. **Version 1.x stored redirects as drafts.** It called `wp_insert_post()` without a `post_status`, so WordPress defaulted each redirect to `draft`. Version 2.0 only serves redirects with the `publish` status.
 2. **Where your site is not at the domain root, 1.x stored source paths with that prefix included** (`/subsite1/old-page` on a subsite, `/blog/old-page` on a single site installed at `example.com/blog`). Version 1.x read the raw request path for both storing and matching, so the two agreed. Version 2.0 strips the site's base path from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
 
    This applies to any install whose home URL is below the domain root, not just multisites. If your site lives at `example.com/blog`, you are affected in exactly the same way as a subsite.
+3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalises incoming requests the same way, so either spelling now finds the redirect. Sources are re-keyed so they match what 2.0 looks up.
 
-A one-off migration handles both. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated so it runs only once.
+   Destinations are untouched: a trailing slash there is part of where the visitor actually lands.
+
+A one-off migration handles all three. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated so it runs only once.
 
 ### Large redirect sets
 
@@ -37,7 +40,16 @@ wp site list --field=url | xargs -I % wp --url=% wpcom-legacy-redirector migrate
 
 Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes redirects that were **never** published, which WordPress records with a `post_modified_gmt` of `0000-00-00 00:00:00`. Anything you disable after upgrading keeps a real modified date and is left alone.
 
-If stripping the base path would collide with a redirect that already uses the site-relative form, the migration leaves the 1.x redirect untouched and reports the clash rather than silently discarding one of them. `wp wpcom-legacy-redirector migrate` lists any such conflicts for you to reconcile by hand.
+### When two redirects end up wanting the same source
+
+Re-keying a source can bring two redirects onto one path — most often because you used the old workaround of storing both `/old-page` and `/old-page/`, but also where stripping the base path lands a 1.x source on one that already uses the site-relative form.
+
+Only one redirect can own a path, so the migration decides on the destinations:
+
+- **Both point at the same place.** The spare is redundant, so it is moved to the trash and counted in the migration summary. Nothing is deleted outright, so you can restore it from the Trash view if you disagree.
+- **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, editable, and plainly not doing anything.
+
+`wp wpcom-legacy-redirector migrate` lists every such conflict, and `--dry-run` shows them before anything is written. Review the disabled redirects afterwards, then either delete them or re-point and re-enable them.
 
 ## Breaking Changes
 

@@ -16,7 +16,8 @@ use InvalidArgumentException;
  *
  * Encapsulates the "from" URL for a redirect, handling normalisation,
  * validation, and hash generation. URLs are normalised to path + query
- * only (scheme and host are stripped).
+ * only (scheme and host are stripped), with any trailing slash removed from
+ * the path so that /old-page and /old-page/ are the same redirect.
  */
 final class SourceUrl {
 
@@ -77,6 +78,9 @@ final class SourceUrl {
 	 * so that a source given as a full URL lands on the same home-relative
 	 * path an incoming request is looked up by. See strip_home_path().
 	 *
+	 * Any trailing slash comes off the path as well, so that /old-page and
+	 * /old-page/ are one redirect rather than two. See strip_trailing_slash().
+	 *
 	 * @param string $url       URL to normalise.
 	 * @param string $home_path The site's home path ('' when at the domain root).
 	 * @return string Normalised URL (path + query).
@@ -115,6 +119,8 @@ final class SourceUrl {
 		if ( isset( $components['host'] ) ) {
 			$normalised = self::strip_home_path( $normalised, $home_path );
 		}
+
+		$normalised = self::strip_trailing_slash( $normalised );
 
 		if ( ! empty( $components['query'] ) ) {
 			$normalised .= '?' . $components['query'];
@@ -244,6 +250,48 @@ final class SourceUrl {
 		$stripped = substr( $path, strlen( $home_path ) );
 
 		return '' === $stripped ? '/' : $stripped;
+	}
+
+	/**
+	 * Remove a trailing slash from the front-end path.
+	 *
+	 * A trailing slash is not significant in a source: /old-page and
+	 * /old-page/ are one redirect, not two. Whichever form a visitor's old
+	 * link happens to carry, they want the same destination, and WordPress
+	 * itself picks one form and redirects the other - which form depending on
+	 * whether the site's permalink structure ends in a slash.
+	 *
+	 * Canonicalising here rather than trying both forms at lookup time is what
+	 * makes the md5 of this path a single key per source: one stored row, one
+	 * query, and no way to create /old-page and /old-page/ as rival redirects
+	 * with different destinations.
+	 *
+	 * Deliberately independent of the site's permalink structure. The source
+	 * is a URL from a site that no longer exists, so this site's convention
+	 * says nothing about it - and keying on a mutable option would orphan
+	 * every stored redirect the moment somebody edited it.
+	 *
+	 * Destinations are untouched by this: a trailing slash there is part of
+	 * where the visitor actually lands.
+	 *
+	 * Public because the upgrade routine has to re-derive the same canonical
+	 * form for already-stored sources, and the rule must have exactly one
+	 * definition or migrated rows drift from newly saved ones.
+	 *
+	 * @param string $path The path component, after home-path stripping.
+	 * @return string The path without its trailing slash, or '/' for the site root.
+	 */
+	public static function strip_trailing_slash( string $path ): string {
+		// A query-only source such as 'http://example.com?p=123' parses to no
+		// path at all. Leave it empty rather than inventing a '/'.
+		if ( '' === $path ) {
+			return $path;
+		}
+
+		$trimmed = rtrim( $path, '/' );
+
+		// The root is all slash, so trimming empties it. '' is not a path.
+		return '' === $trimmed ? '/' : $trimmed;
 	}
 
 	/**

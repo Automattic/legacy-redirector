@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Removed the `WPCOM_Legacy_Redirector` class, including the public `insert_legacy_redirect()`, `get_redirect_uri()`, and `get_redirect_post_id()` methods. See [UPGRADING.md](UPGRADING.md) for replacements.
 - The WP-CLI command set has been redesigned with no backwards-compatible aliases. See [UPGRADING.md](UPGRADING.md) for the full old-to-new command mapping: `insert-redirect` is now `create` (validating by default), `import-from-csv` is now `import`, `export-to-csv` has been removed in favour of `list --format=csv`, and `import-from-meta` flags are now kebab-case.
 - On subdirectory multisites, redirect sources are stored relative to the subsite. A redirect for `example.com/blog/old-page` is now stored as `/old-page`, where 1.x stored `/blog/old-page`. Existing data is repathed automatically by the migration, but `list` output, CSV exports, and anything reading the stored source directly will see the shorter form.
+- Redirect sources no longer keep a trailing slash: `/old-page` and `/old-page/` are one redirect, stored under the slash-less form. 1.x treated them as two, so covering both meant creating both. Existing rows are re-keyed by the migration; where a site stored both forms, an identical pair is merged and a pair pointing at different destinations is reported. See [UPGRADING.md](UPGRADING.md).
 
 See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
@@ -56,6 +57,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Fixed
 
+- A redirect created for `/old-page` now also fires for a request to `/old-page/`, and vice versa. 1.x required an exact match, so the documented workaround was to store both forms. Reported in https://github.com/Automattic/wpcom-legacy-redirector/issues/50; the approach follows the analysis by @bdtech in that thread and in https://github.com/Automattic/wpcom-legacy-redirector/pull/54
 - Negative ("no redirect exists") object cache entries now expire after five minutes. 1.x cached them indefinitely, so 404 traffic could fill the object cache with permanent entries.
 - Whitespace around the CSV file path is trimmed, so a path dragged and dropped into the terminal is accepted.
 

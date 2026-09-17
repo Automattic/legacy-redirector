@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\InternalDestinationNormaliser;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
 use WP_Post;
 use WP_Query;
 
@@ -39,15 +40,23 @@ use WP_Query;
  * prefixed ones pointing at unreachable keys, which looks like success and is
  * not. Both are therefore handled in a single pass.
  *
- * Version 3 adds destination normalisation: absolute destination URLs that
- * point at this site (e.g. 'https://example.com/foo') are rewritten to the
- * relative form ('/foo') that 2.0 stores canonically, so that anything left
- * absolute is external by construction. Version 4 extends the same pass to
- * the destination's encoding: a relative destination stored as whichever of
- * '/café' or '/caf%C3%A9' was typed is rewritten to the canonical form the
- * normaliser now produces on save (path and fragment decoded, query kept
- * percent-encoded). All three migrations are idempotent
- * per redirect, so a site already at version 2 safely re-walks the set.
+ * Two further passes bring stored data into the canonical forms 2.0 writes,
+ * and apply to any site, not only one coming from 1.x:
+ *
+ * 3. Destinations are canonicalised. An absolute destination pointing at this
+ *    site ('https://example.com/foo') is rewritten to the relative form
+ *    ('/foo'), so anything left absolute is external by construction, and a
+ *    relative destination stored as whichever of '/café' or '/caf%C3%A9' was
+ *    typed is rewritten to the form the normaliser now produces on save
+ *    (path and fragment decoded, query kept percent-encoded).
+ *
+ * 4. Source paths lose their trailing slash, because 2.0 treats '/old-page'
+ *    and '/old-page/' as one redirect rather than two. See
+ *    SourceUrl::strip_trailing_slash(). Sites that worked around the old
+ *    behaviour by storing both forms will have the two rows converge on one
+ *    key; see migrate_post() for how that is resolved.
+ *
+ * Every pass is idempotent per redirect, so re-walking the set is safe.
  *
  * The publish and repath passes only apply when the site is coming from a
  * pre-2.0 data version. Both are 1.x-shape corrections that become unsafe
@@ -56,8 +65,8 @@ use WP_Query;
  * a legitimate reading (on a subsite at /subsite1, the stored '/subsite1/x'
  * is how you redirect the real URL /subsite1/subsite1/x). A later version
  * bump re-walks the whole set, so ungated passes would republish disabled
- * redirects and rewrite those sources into something else. Destination
- * normalisation has no such ambiguity and runs on every walk.
+ * redirects and rewrite those sources into something else. The destination
+ * and trailing-slash passes have no such ambiguity and run on every walk.
  *
  * The routine is version-gated so it runs exactly once, and processes in
  * batches so that a site with a very large redirect set completes over
@@ -84,7 +93,7 @@ final class Upgrader {
 	/**
 	 * Current data schema version.
 	 */
-	public const int DB_VERSION = 4;
+	public const int DB_VERSION = 5;
 
 	/**
 	 * The first data version written under 2.0's rules.
@@ -147,7 +156,7 @@ final class Upgrader {
 	 * Process one batch of redirects.
 	 *
 	 * @param int $size Maximum number of redirects to process.
-	 * @return array{processed: int, published: int, repathed: int, normalised: int, conflicts: string[], complete: bool}
+	 * @return array{processed: int, published: int, repathed: int, deduped: int, normalised: int, conflicts: string[], complete: bool}
 	 */
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
@@ -159,6 +168,7 @@ final class Upgrader {
 			'processed'  => 0,
 			'published'  => 0,
 			'repathed'   => 0,
+			'deduped'    => 0,
 			'normalised' => 0,
 			'conflicts'  => array(),
 			'complete'   => false,
@@ -218,7 +228,7 @@ final class Upgrader {
 	 * Walks the whole redirect set, so it is proportional to the number of
 	 * redirects rather than constant time.
 	 *
-	 * @return array{total: int, to_publish: int, to_repath: int, to_normalise: int, conflicts: string[]}
+	 * @return array{total: int, to_publish: int, to_repath: int, to_dedupe: int, to_normalise: int, conflicts: string[]}
 	 */
 	public function count_pending(): array {
 		$started   = $this->started_at( false );
@@ -230,6 +240,7 @@ final class Upgrader {
 			'total'        => 0,
 			'to_publish'   => 0,
 			'to_repath'    => 0,
+			'to_dedupe'    => 0,
 			'to_normalise' => 0,
 			'conflicts'    => array(),
 		);
@@ -269,20 +280,25 @@ final class Upgrader {
 					++$pending['to_normalise'];
 				}
 
-				$new_path = '' === $home_path ? null : HomePath::make_relative( $post->post_title, $home_path );
+				$new_path = $this->canonical_source( $post->post_title, $home_path );
 
 				if ( null === $new_path ) {
 					continue;
 				}
 
-				$existing = $this->find_post_id_by_hash( md5( $new_path ) );
+				$existing = $this->find_post_by_hash( md5( $new_path ) );
 
-				if ( 0 !== $existing && $existing !== $post->ID ) {
+				if ( null !== $existing && $existing->ID !== $post->ID ) {
+					if ( $this->same_destination( $post, $existing ) ) {
+						++$pending['to_dedupe'];
+						continue;
+					}
+
 					$pending['conflicts'][] = sprintf(
-						'#%d (%s) would collide with #%d (%s)',
+						'#%d (%s) would collide with #%d (%s) and be drafted',
 						$post->ID,
 						$post->post_title,
-						$existing,
+						$existing->ID,
 						$new_path
 					);
 					continue;
@@ -313,23 +329,41 @@ final class Upgrader {
 		$source_path = $post->post_title;
 		$conflict    = null;
 
-		$new_path = '' === $home_path ? null : HomePath::make_relative( $source_path, $home_path );
+		$new_path = $this->canonical_source( $source_path, $home_path );
 
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
-			$existing = $this->find_post_id_by_hash( $new_hash );
-			if ( 0 !== $existing && $existing !== $post->ID ) {
-				// Rewriting would collide with a redirect that already uses the
-				// subsite-relative form. Leaving the legacy row untouched keeps
-				// the working redirect working; the operator can reconcile.
-				$conflict = sprintf(
-					'#%d (%s) would collide with #%d (%s)',
-					$post->ID,
-					$source_path,
-					$existing,
-					$new_path
-				);
+			$existing = $this->find_post_by_hash( $new_hash );
+			if ( null !== $existing && $existing->ID !== $post->ID ) {
+				// Two rows now want one key. Only one can survive: the loser
+				// must not keep its old post_name (no request will produce it
+				// again) and must not take the new one either, because two
+				// rows contending for one slug would send this through
+				// wp_unique_post_slug() and silently suffix it, leaving the
+				// redirect findable under neither.
+				if ( $this->same_destination( $post, $existing ) ) {
+					// Both send visitors to the same place, so the loser is
+					// pure redundancy - typically a site that worked around
+					// the old trailing-slash behaviour by storing both forms.
+					// Trash rather than delete: an upgrade running quietly on
+					// someone's site should not destroy rows outright.
+					$update['post_status'] = 'trash';
+					++$result['deduped'];
+				} else {
+					// They disagree about where the visitor should land, which
+					// only a human can settle. Draft means "deliberately
+					// disabled" here, so the row stays visible and editable
+					// while plainly not firing.
+					$update['post_status'] = 'draft';
+					$conflict              = sprintf(
+						'#%d (%s) collides with #%d (%s) and has been drafted',
+						$post->ID,
+						$source_path,
+						$existing->ID,
+						$new_path
+					);
+				}
 			} else {
 				$update['post_title'] = $new_path;
 				$update['post_name']  = $new_hash;
@@ -337,7 +371,9 @@ final class Upgrader {
 			}
 		}
 
-		if ( $publish && 'draft' === $post->post_status ) {
+		// isset(): a row the collision branch has just trashed or drafted must
+		// not be resurrected by the publish pass a moment later.
+		if ( $publish && 'draft' === $post->post_status && ! isset( $update['post_status'] ) ) {
 			$update['post_status'] = 'publish';
 			++$result['published'];
 		}
@@ -366,12 +402,67 @@ final class Upgrader {
 	}
 
 	/**
-	 * Find a redirect post ID by its source hash.
+	 * The canonical stored form of a source path, or null when already canonical.
+	 *
+	 * Two corrections, in the order storage applies them: the home path comes
+	 * off first (only for a site coming from 1.x, where $home_path is set),
+	 * then the trailing slash comes off whatever is left.
+	 *
+	 * The slash rule is delegated to SourceUrl rather than repeated, so a
+	 * migrated row and a freshly saved one cannot disagree. Only the query
+	 * split is done here: SourceUrl works on the path alone, and a query can
+	 * legitimately end in a slash ('/a?b=c/') that must survive.
+	 *
+	 * @param string $source_path The stored source path, with optional query string.
+	 * @param string $home_path   The site's home path, or '' when there is nothing to strip.
+	 * @return string|null The canonical path, or null when no rewrite is due.
+	 */
+	private function canonical_source( string $source_path, string $home_path ): ?string {
+		$path  = $source_path;
+		$query = '';
+
+		$separator = strpos( $path, '?' );
+		if ( false !== $separator ) {
+			$query = substr( $path, $separator );
+			$path  = substr( $path, 0, $separator );
+		}
+
+		if ( '' !== $home_path ) {
+			$path = HomePath::make_relative( $path, $home_path ) ?? $path;
+		}
+
+		$canonical = SourceUrl::strip_trailing_slash( $path ) . $query;
+
+		return $canonical === $source_path ? null : $canonical;
+	}
+
+	/**
+	 * Whether two redirects send visitors to the same place.
+	 *
+	 * Compares post IDs and URLs in their normalised forms, so that a pair
+	 * differing only in an encoding this upgrade is about to canonicalise
+	 * anyway is not mistaken for a genuine disagreement.
+	 *
+	 * @param WP_Post $a One redirect.
+	 * @param WP_Post $b The other redirect.
+	 * @return bool True when both resolve to the same destination.
+	 */
+	private function same_destination( WP_Post $a, WP_Post $b ): bool {
+		if ( $a->post_parent > 0 || $b->post_parent > 0 ) {
+			return $a->post_parent === $b->post_parent;
+		}
+
+		return ( $this->normalised_excerpt( $a->post_excerpt ) ?? $a->post_excerpt )
+			=== ( $this->normalised_excerpt( $b->post_excerpt ) ?? $b->post_excerpt );
+	}
+
+	/**
+	 * Find a redirect post by its source hash.
 	 *
 	 * @param string $hash The MD5 hash of the source path.
-	 * @return int The post ID, or 0 when none exists.
+	 * @return WP_Post|null The post, or null when none exists.
 	 */
-	private function find_post_id_by_hash( string $hash ): int {
+	private function find_post_by_hash( string $hash ): ?WP_Post {
 		$query = new WP_Query(
 			array(
 				'post_type'              => PostType::POST_TYPE,
@@ -385,7 +476,18 @@ final class Upgrader {
 			)
 		);
 
-		return isset( $query->posts[0] ) ? (int) $query->posts[0] : 0;
+		if ( ! isset( $query->posts[0] ) ) {
+			return null;
+		}
+
+		// Deliberately an ID query followed by get_post(), rather than letting
+		// WP_Query hydrate the post: asking this query for full objects while
+		// another WP_Query is mid-iteration returns an empty result set even
+		// when the row is plainly there. A collision is settled by comparing
+		// the two rows' destinations, so the object is needed either way.
+		$post = get_post( (int) $query->posts[0] );
+
+		return $post instanceof WP_Post ? $post : null;
 	}
 
 	/**

@@ -33,6 +33,22 @@ Feature: Front-end redirects
       /http-destination
       """
 
+  # End-to-end test: the trailing slash is not part of the match, so one
+  # stored redirect covers both spellings of the old link (GH #50).
+  Scenario: A redirect fires for a request that adds a trailing slash
+    Given there is a published post with a slug of "http-destination"
+    And there is a redirect from "/http-slash-source" to "/http-destination"
+
+    When I request the front-end path "/http-slash-source/"
+    Then STDOUT should contain:
+      """
+      301 Moved Permanently
+      """
+    And STDOUT should contain:
+      """
+      /http-destination
+      """
+
   # End-to-end test: disabling a redirect stops it firing on the front end.
   Scenario: A disabled redirect does not redirect
     Given there is a published post with a slug of "http-destination"

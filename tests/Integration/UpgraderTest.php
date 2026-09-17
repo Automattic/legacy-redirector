@@ -10,9 +10,11 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
@@ -23,7 +25,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
@@ -397,5 +401,174 @@ final class UpgraderTest extends TestCase {
 		$pending = $this->upgrader->count_pending();
 
 		$this->assertSame( 1, $pending['to_normalise'] );
+	}
+	/**
+	 * A stored source with a trailing slash is re-keyed without one.
+	 *
+	 * @return void
+	 */
+	public function test_trailing_slash_source_is_canonicalised() {
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['repathed'] );
+
+		$post = get_post( $post_id );
+		$this->assertSame( '/old-page', $post->post_title );
+		$this->assertSame( md5( '/old-page' ), $post->post_name );
+	}
+
+	/**
+	 * The trailing slash comes off the path, not off the query string.
+	 *
+	 * @return void
+	 */
+	public function test_trailing_slash_is_stripped_from_the_path_only() {
+		$post_id = $this->create_legacy_redirect( '/old-page/?ref=a/' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/old-page?ref=a/', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * A source already without a trailing slash is left uncounted.
+	 *
+	 * The pass runs on every future version walk, so rewriting rows that are
+	 * already canonical would report work forever.
+	 *
+	 * @return void
+	 */
+	public function test_canonical_source_is_not_recounted() {
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['repathed'] );
+		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * The site root keeps its slash rather than being emptied.
+	 *
+	 * @return void
+	 */
+	public function test_root_source_survives_canonicalisation() {
+		$post_id = $this->create_legacy_redirect( '/' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['repathed'] );
+		$this->assertSame( '/', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * Both halves of the old two-row workaround converge, and the copy is trashed.
+	 *
+	 * Storing '/old-page' and '/old-page/' pointing at the same place was the
+	 * documented way to cover both forms before 2.0. They now want one key, so
+	 * the redundant row goes to the trash rather than being deleted outright.
+	 *
+	 * @return void
+	 */
+	public function test_duplicate_of_the_same_destination_is_trashed() {
+		$kept    = $this->create_legacy_redirect( '/old-page', 'https://example.com/new' );
+		$dupe_id = $this->create_legacy_redirect( '/old-page/', 'https://example.com/new' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['deduped'] );
+		$this->assertSame( array(), $result['conflicts'] );
+
+		$this->assertSame( 'trash', get_post( $dupe_id )->post_status );
+		$this->assertSame( 'publish', get_post( $kept )->post_status );
+		$this->assertSame( md5( '/old-page' ), get_post( $kept )->post_name );
+	}
+
+	/**
+	 * A collision between different destinations drafts the loser and reports it.
+	 *
+	 * Only a human can decide which destination was meant, so the survivor is
+	 * left firing and the other is disabled rather than silently discarded.
+	 *
+	 * @return void
+	 */
+	public function test_colliding_different_destination_is_drafted_and_reported() {
+		$kept     = $this->create_legacy_redirect( '/old-page', 'https://example.com/one' );
+		$loser_id = $this->create_legacy_redirect( '/old-page/', 'https://example.com/two' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['deduped'] );
+		$this->assertCount( 1, $result['conflicts'] );
+		$this->assertStringContainsString( 'drafted', $result['conflicts'][0] );
+
+		$this->assertSame( 'draft', get_post( $loser_id )->post_status );
+		$this->assertSame( 'publish', get_post( $kept )->post_status );
+	}
+
+	/**
+	 * The losing row keeps its own slug rather than contending for the winner's.
+	 *
+	 * Two rows sharing a post_name would go through wp_unique_post_slug() and
+	 * be silently suffixed, leaving the redirect findable under neither its old
+	 * key nor its new one.
+	 *
+	 * @return void
+	 */
+	public function test_colliding_row_does_not_take_the_winners_slug() {
+		$kept     = $this->create_legacy_redirect( '/old-page', 'https://example.com/one' );
+		$loser_id = $this->create_legacy_redirect( '/old-page/', 'https://example.com/two' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( md5( '/old-page' ), get_post( $kept )->post_name );
+		$this->assertSame( md5( '/old-page/' ), get_post( $loser_id )->post_name );
+	}
+
+	/**
+	 * A dry run reports duplicates and conflicts without writing anything.
+	 *
+	 * @return void
+	 */
+	public function test_count_pending_reports_duplicates_and_conflicts() {
+		$this->create_legacy_redirect( '/dupe', 'https://example.com/same' );
+		$dupe_id = $this->create_legacy_redirect( '/dupe/', 'https://example.com/same' );
+		$this->create_legacy_redirect( '/clash', 'https://example.com/one' );
+		$this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
+
+		$pending = $this->upgrader->count_pending();
+
+		$this->assertSame( 1, $pending['to_dedupe'] );
+		$this->assertCount( 1, $pending['conflicts'] );
+
+		// Nothing was written.
+		$this->assertSame( 'draft', get_post( $dupe_id )->post_status );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
+	 * A canonicalised source is reachable by a request in either spelling.
+	 *
+	 * The point of the migration: the stored row moves to the canonical key,
+	 * and lookups canonicalise the request the same way, so both forms land.
+	 *
+	 * @return void
+	 */
+	public function test_canonicalised_source_is_reachable_by_either_spelling() {
+		$this->create_legacy_redirect( '/old-page/' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$repository = new PostTypeRedirectRepository();
+
+		foreach ( array( '/old-page', '/old-page/' ) as $request ) {
+			$this->assertInstanceOf(
+				Redirect::class,
+				$repository->find_by_source( SourceUrl::from_string( $request ) ),
+				$request . ' should resolve after migration'
+			);
+		}
 	}
 }

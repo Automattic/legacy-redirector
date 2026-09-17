@@ -631,17 +631,22 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Data provider of unicode source paths.
 	 *
+	 * Deliberately free of trailing slashes: these rows assert a byte-for-byte
+	 * round-trip, and a source is stored without one. Canonicalisation of a
+	 * unicode path that does carry a slash is covered by
+	 * test_unicode_source_with_trailing_slash_is_stored_canonically().
+	 *
 	 * @return array<string, array{string}>
 	 */
 	public function data_unicode_source_paths(): array {
 		return array(
-			'Arabic (RTL)'          => array( '/فوتوغرافيا/' ),
-			'Cyrillic'              => array( '/привет-мир/' ),
+			'Arabic (RTL)'          => array( '/فوتوغرافيا' ),
+			'Cyrillic'              => array( '/привет-мир' ),
 			'Japanese'              => array( '/JP納豆' ),
 			'Hebrew (RTL)'          => array( '/שלום-עולם' ),
 			'Latin with diacritics' => array( '/café-münchen' ),
 			'emoji (needs utf8mb4)' => array( '/party-🎉' ),
-			'unicode in query'      => array( '/страница/?тест=значение' ),
+			'unicode in query'      => array( '/страница?тест=значение' ),
 			'mixed scripts'         => array( '/привет-納豆-🎉' ),
 		);
 	}
@@ -665,6 +670,49 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		$this->assertInstanceOf( Redirect::class, $found );
 		$this->assertSame( $saved->id(), $found->id() );
+	}
+
+	/**
+	 * Test a unicode source with a trailing slash stores and resolves canonically.
+	 *
+	 * The two canonicalisations meet here: the slash comes off the path and
+	 * the percent-encoding is decoded. Every spelling of the same old link
+	 * therefore has to reach one row, whichever combination of the two a
+	 * visitor's browser happens to send.
+	 *
+	 * Separate from data_unicode_source_paths(), whose rows deliberately
+	 * round-trip byte-for-byte to prove the column survives the charset. The
+	 * point of this one is that the stored form differs from the input.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 */
+	public function test_unicode_source_with_trailing_slash_is_stored_canonically(): void {
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
+
+		$saved = $this->repository->save(
+			Redirect::create( SourceUrl::from_string( '/привет/' ), $destination )
+		);
+
+		$this->assertSame(
+			'/привет',
+			$saved->source()->path(),
+			'The trailing slash should have come off before storage.'
+		);
+
+		$spellings = array(
+			'/привет',
+			'/привет/',
+			'/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82',
+			'/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82/',
+		);
+
+		foreach ( $spellings as $spelling ) {
+			$found = $this->repository->find_by_source( SourceUrl::from_string( $spelling ) );
+
+			$this->assertInstanceOf( Redirect::class, $found, $spelling . ' should resolve.' );
+			$this->assertSame( $saved->id(), $found->id(), $spelling . ' should reach the stored row.' );
+		}
 	}
 
 	/**

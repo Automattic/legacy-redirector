@@ -224,9 +224,9 @@ final class SourceUrlTest extends YoastTestCase {
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
 	 */
 	public function test_from_string_handles_unicode(): void {
-		$source = SourceUrl::from_string( '/فوتوغرافيا/' );
+		$source = SourceUrl::from_string( '/فوتوغرافيا' );
 
-		$this->assertSame( '/فوتوغرافيا/', $source->path() );
+		$this->assertSame( '/فوتوغرافيا', $source->path() );
 	}
 
 	/**
@@ -235,9 +235,9 @@ final class SourceUrlTest extends YoastTestCase {
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
 	 */
 	public function test_from_string_handles_unicode_with_query(): void {
-		$source = SourceUrl::from_string( '/فوتوغرافيا/?test=فوتوغرافيا' );
+		$source = SourceUrl::from_string( '/فوتوغرافيا?test=فوتوغرافيا' );
 
-		$this->assertSame( '/فوتوغرافيا/?test=فوتوغرافيا', $source->path() );
+		$this->assertSame( '/فوتوغرافيا?test=فوتوغرافيا', $source->path() );
 	}
 
 	/**
@@ -380,10 +380,10 @@ final class SourceUrlTest extends YoastTestCase {
 	 */
 	public static function data_unicode_paths(): array {
 		return array(
-			'Arabic (RTL)'          => array( '/فوتوغرافيا/' ),
-			'Arabic with query'     => array( '/فوتوغرافيا/?test=فوتوغرافيا' ),
-			'Cyrillic'              => array( '/привет-мир/' ),
-			'Cyrillic with query'   => array( '/страница/?тест=значение' ),
+			'Arabic (RTL)'          => array( '/فوتوغرافيا' ),
+			'Arabic with query'     => array( '/فوتوغرافيا?test=فوتوغرافيا' ),
+			'Cyrillic'              => array( '/привет-мир' ),
+			'Cyrillic with query'   => array( '/страница?тест=значение' ),
 			'Japanese'              => array( '/JP納豆' ),
 			'Greek'                 => array( '/καλημέρα' ),
 			'Hebrew (RTL)'          => array( '/שלום-עולם' ),
@@ -426,12 +426,18 @@ final class SourceUrlTest extends YoastTestCase {
 	 */
 	public static function data_encoded_and_decoded_unicode(): array {
 		return array(
-			'Arabic'            => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
-			'Cyrillic'          => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
-			'Japanese'          => array( '/%E7%B4%8D%E8%B1%86', '/納豆' ),
-			'emoji (4 bytes)'   => array( '/%F0%9F%8E%89', '/🎉' ),
-			'Cyrillic in query' => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
-			'emoji in query'    => array( '/page?q=%F0%9F%8E%89', '/page?q=🎉' ),
+			'Arabic'                          => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
+			'Cyrillic'                        => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
+			'Japanese'                        => array( '/%E7%B4%8D%E8%B1%86', '/納豆' ),
+			'emoji (4 bytes)'                 => array( '/%F0%9F%8E%89', '/🎉' ),
+			'Cyrillic in query'               => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
+			'emoji in query'                  => array( '/page?q=%F0%9F%8E%89', '/page?q=🎉' ),
+			// Both canonicalisations at once, in opposite directions. The rows
+			// above differ only in encoding, so slash stripping could be
+			// skipped for percent-encoded input and they would still pass.
+			'encoded slashed vs decoded bare' => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو' ),
+			'encoded bare vs decoded slashed' => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет/' ),
+			'astral slashed vs bare'          => array( '/%F0%9F%8E%89/', '/🎉' ),
 		);
 	}
 
@@ -558,5 +564,84 @@ final class SourceUrlTest extends YoastTestCase {
 		$source = SourceUrl::from_string( '/日本/ページ', '/日本' );
 
 		$this->assertSame( '/日本/ページ', $source->path() );
+	}
+	/**
+	 * Test a trailing slash is removed from the source path.
+	 *
+	 * @dataProvider data_trailing_slash_paths
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 *
+	 * @param string $input    The source as entered or requested.
+	 * @param string $expected The canonical stored path.
+	 */
+	public function test_from_string_strips_trailing_slash( string $input, string $expected ): void {
+		$source = SourceUrl::from_string( $input );
+
+		$this->assertSame( $expected, $source->path() );
+	}
+
+	/**
+	 * Data provider of sources and their trailing-slash-canonical form.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_trailing_slash_paths(): array {
+		return array(
+			'trailing slash removed'      => array( '/old-page/', '/old-page' ),
+			'already canonical'           => array( '/old-page', '/old-page' ),
+			'nested path'                 => array( '/2019/04/old-page/', '/2019/04/old-page' ),
+			'repeated trailing slashes'   => array( '/old-page///', '/old-page' ),
+			'root is preserved'           => array( '/', '/' ),
+			'query is kept, slash is not' => array( '/old-page/?utm_source=x', '/old-page?utm_source=x' ),
+			'query-only source'           => array( '/?p=123', '/?p=123' ),
+			'full URL'                    => array( 'https://example.com/old-page/', '/old-page' ),
+			'unicode path'                => array( '/café/', '/café' ),
+			// rtrim() works on bytes, so this pins that it cannot eat into a
+			// multibyte character: every UTF-8 continuation byte is >= 0x80
+			// and so can never be the 0x2F it is looking for.
+			'astral path'                 => array( '/party-🎉/', '/party-🎉' ),
+		);
+	}
+
+	/**
+	 * Test every spelling of one source converges on a single hash.
+	 *
+	 * The hash is the stored post_name, so this is what makes /old-page and
+	 * /old-page/ one redirect rather than two rival rows.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::hash
+	 */
+	public function test_trailing_slash_spellings_hash_identically(): void {
+		$canonical = SourceUrl::from_string( '/old-page' );
+
+		$spellings = array(
+			'/old-page/',
+			'https://example.com/old-page',
+			'https://example.com/old-page/',
+		);
+
+		foreach ( $spellings as $spelling ) {
+			$this->assertSame(
+				$canonical->hash(),
+				SourceUrl::from_string( $spelling )->hash(),
+				$spelling . ' should hash as /old-page'
+			);
+		}
+	}
+
+	/**
+	 * Test a subsite's own home URL with a trailing slash still becomes root.
+	 *
+	 * Home-path stripping leaves '/', which must survive slash removal rather
+	 * than being emptied.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_from_string_subsite_home_url_with_slash_becomes_root(): void {
+		$source = SourceUrl::from_string( 'https://example.com/blog/', '/blog' );
+
+		$this->assertSame( '/', $source->path() );
 	}
 }
