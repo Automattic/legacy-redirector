@@ -21,7 +21,7 @@ interface AbilityInterface {
 	/**
 	 * Get the namespaced ability name.
 	 *
-	 * @return string The ability name, e.g. 'wpcom-legacy-redirector/get-redirect'.
+	 * @return string The ability name, e.g. 'legacy-redirector/get-redirect'.
 	 */
 	public function name(): string;
 

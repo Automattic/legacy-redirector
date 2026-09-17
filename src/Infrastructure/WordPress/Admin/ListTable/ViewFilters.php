@@ -65,7 +65,7 @@ final class ViewFilters {
 		if ( isset( $views['publish'] ) && is_string( $views['publish'] ) ) {
 			$views['publish'] = preg_replace(
 				'/\bPublished\b/',
-				__( 'Enabled', 'wpcom-legacy-redirector' ),
+				__( 'Enabled', 'legacy-redirector' ),
 				$views['publish']
 			);
 		}
@@ -74,7 +74,7 @@ final class ViewFilters {
 		if ( isset( $views['draft'] ) && is_string( $views['draft'] ) ) {
 			$views['draft'] = preg_replace(
 				'/\bDrafts?\b/',
-				__( 'Disabled', 'wpcom-legacy-redirector' ),
+				__( 'Disabled', 'legacy-redirector' ),
 				$views['draft']
 			);
 		}
@@ -112,7 +112,7 @@ final class ViewFilters {
 				'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
 				esc_url( $post_id_url ),
 				esc_attr( $post_id_class ),
-				esc_html__( 'To ID', 'wpcom-legacy-redirector' ),
+				esc_html__( 'To ID', 'legacy-redirector' ),
 				number_format_i18n( $counts['post_id'] )
 			);
 		}
@@ -125,7 +125,7 @@ final class ViewFilters {
 				'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
 				esc_url( $path_url ),
 				esc_attr( $path_class ),
-				esc_html__( 'To Path', 'wpcom-legacy-redirector' ),
+				esc_html__( 'To Path', 'legacy-redirector' ),
 				number_format_i18n( $counts['path'] )
 			);
 		}
@@ -138,7 +138,7 @@ final class ViewFilters {
 				'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
 				esc_url( $external_url ),
 				esc_attr( $external_class ),
-				esc_html__( 'To External', 'wpcom-legacy-redirector' ),
+				esc_html__( 'To External', 'legacy-redirector' ),
 				number_format_i18n( $counts['external'] )
 			);
 		}
@@ -180,7 +180,7 @@ final class ViewFilters {
 
 		if ( in_array( $destination_type, array( 'post_id', 'path', 'external' ), true ) ) {
 			// Applied by add_destination_type_where_clause.
-			$query->set( 'wpcom_legacy_redirector_destination_type', $destination_type );
+			$query->set( 'legacy_redirector_destination_type', $destination_type );
 		}
 	}
 
@@ -195,7 +195,7 @@ final class ViewFilters {
 	 * @return string Modified WHERE clause.
 	 */
 	public function add_destination_type_where_clause( string $where, \WP_Query $query ): string {
-		$destination_type = (string) $query->get( 'wpcom_legacy_redirector_destination_type' );
+		$destination_type = (string) $query->get( 'legacy_redirector_destination_type' );
 
 		if ( '' === $destination_type ) {
 			return $where;

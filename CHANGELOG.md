@@ -1,4 +1,4 @@
-# Change Log for WPCOM Legacy Redirector
+# Change Log for Legacy Redirector
 
 All notable changes to this project will be documented in this file.
 
@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 **Breaking Changes:**
 
+- The plugin is renamed from "Legacy Redirector" to "Legacy Redirector". The `WPCOM` prefix was a misnomer: the plugin is not specific to WordPress.com and runs on any WordPress install. The Composer package is now `automattic/legacy-redirector` (the old name is declared in `replace`, so both cannot resolve at once), the text domain is now `legacy-redirector`, and the `X-Redirect-By` header now reads `Legacy Redirector`. The main plugin file keeps its `wpcom-legacy-redirector.php` name so existing installs stay active through the upgrade, and the `vip-legacy-redirect` post type and the `wpcom_legacy_redirector_db_version` family of options are unchanged because they hold live data.
 - Requires PHP 8.3 or later (previously 7.4).
 - Requires WordPress 6.8 or later (previously 5.9).
 - Removed the `WPCOM_Legacy_Redirector` class, including the public `insert_legacy_redirect()`, `get_redirect_uri()`, and `get_redirect_post_id()` methods. See [UPGRADING.md](UPGRADING.md) for replacements.
@@ -21,43 +22,55 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Added
 
-- Admin UI for managing redirects: a list table with status views for viewing, adding, editing, deleting, and validating redirects, all gated on the new `manage_redirects` capability, in https://github.com/Automattic/wpcom-legacy-redirector/pull/159 and https://github.com/Automattic/wpcom-legacy-redirector/pull/132
+- Admin UI for managing redirects: a list table with status views for viewing, adding, editing, deleting, and validating redirects, all gated on the new `manage_redirects` capability, in https://github.com/Automattic/legacy-redirector/pull/159 and https://github.com/Automattic/legacy-redirector/pull/132
 - The Add/Edit Redirect form shows the site's home URL alongside the source field, so it is clear the path is read relative to that site. On a subsite at `example.com/blog`, a source of `/foo` means `example.com/blog/foo`, not `example.com/foo`.
-- Full multisite/network support with per-site redirect management in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
-- One-off migration of redirect data created by 1.x, covering the draft post status 1.x left on every redirect, the subsite prefix 1.x baked into stored source paths on subdirectory multisites, and destination URLs pointing back at the site itself (now stored in their relative, canonically encoded form). Runs automatically in batches, or in one pass via the new `wp wpcom-legacy-redirector migrate` command (`--dry-run` supported).
+- Full multisite/network support with per-site redirect management in https://github.com/Automattic/legacy-redirector/pull/159
+- One-off migration of redirect data created by 1.x, covering the draft post status 1.x left on every redirect, the subsite prefix 1.x baked into stored source paths on subdirectory multisites, and destination URLs pointing back at the site itself (now stored in their relative, canonically encoded form). Runs automatically in batches, or in one pass via the new `wp legacy-redirector migrate` command (`--dry-run` supported).
 - Redesigned WP-CLI command set: `create`, `get`, `list`, `update`, `delete`, `enable`, `disable`, `validate`, `import`, `find-domains`, and `migrate`. Every command accepts a redirect ID or a source path, and the write commands accept multiple redirects at once.
   - `create` validates the destination by default (`--skip-validation` to opt out, matching the UI), and `--porcelain` prints just the new redirect ID for scripting.
   - `get` and `list` accept `--fields` to limit output columns; `list --format=csv` replaces `export-to-csv`, and `list --format=ids` can be piped into `delete`.
   - `delete`, `enable`, and `disable` take multiple redirects behind a single confirmation (or `--yes`).
-  - `validate` runs in batch or targeted mode (`wp wpcom-legacy-redirector validate /path 123`), disables broken redirects with `--fix`, and exports broken ones with `--format=csv`. Destination checks use `wp_safe_remote_get()`/`wp_safe_remote_head()`, so stored URLs cannot be used to probe loopback, private, or reserved addresses (SSRF); validating destinations on other internal hosts requires opting in via the `http_request_host_is_external` filter, as described in the README.
+  - `validate` runs in batch or targeted mode (`wp legacy-redirector validate /path 123`), disables broken redirects with `--fix`, and exports broken ones with `--format=csv`. Destination checks use `wp_safe_remote_get()`/`wp_safe_remote_head()`, so stored URLs cannot be used to probe loopback, private, or reserved addresses (SSRF); validating destinations on other internal hosts requires opting in via the `http_request_host_is_external` filter, as described in the README.
   - `import` replaces `import-from-csv`, reads from STDIN (`import -`), supports `--mode=upsert` and `--verbose`, and round-trips a status column so enabled/disabled state survives export and import.
   - `find-domains` lists the domains redirects point at, with `--format` (including a `count` format).
 - Abilities API registrations on WordPress 6.9 and later, so MCP clients can create, read, update, enable, disable, delete, and validate redirects, and list the external domains redirects point at. Every ability requires the `manage_redirects` capability and goes through the same services as the admin screens and WP-CLI.
-- `wpcom_legacy_redirector_destination_url` filter, the counterpart to `wpcom_legacy_redirector_request_path`, for altering the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
-- `Cache-Control: max-age` header on redirect responses, so browsers no longer cache 301s indefinitely. Defaults to one day for 301s and one minute otherwise, filterable via `wpcom_legacy_redirector_redirect_max_age` (return `0` to suppress the header).
+- `legacy_redirector_destination_url` filter, the counterpart to `legacy_redirector_request_path`, for altering the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
+- `Cache-Control: max-age` header on redirect responses, so browsers no longer cache 301s indefinitely. Defaults to one day for 301s and one minute otherwise, filterable via `legacy_redirector_redirect_max_age` (return `0` to suppress the header).
 - Progress bar and `--verbose` flag for the `import-from-meta` command.
-- Complete DDD (Domain-Driven Design) architecture with Domain, Application, and Infrastructure layers in https://github.com/Automattic/wpcom-legacy-redirector/pull/159
-- Development tooling: Behat end-to-end tests in https://github.com/Automattic/wpcom-legacy-redirector/pull/118, wp-env configuration for local development, WPCS and VIPCS coding standards enforced in CI in https://github.com/Automattic/wpcom-legacy-redirector/pull/119, and split unit and integration test suites.
-- GPL v2 LICENSE file, CONTRIBUTING.md, and an expanded README covering usage examples and architecture, in https://github.com/Automattic/wpcom-legacy-redirector/pull/157
+- Complete DDD (Domain-Driven Design) architecture with Domain, Application, and Infrastructure layers in https://github.com/Automattic/legacy-redirector/pull/159
+- Development tooling: Behat end-to-end tests in https://github.com/Automattic/legacy-redirector/pull/118, wp-env configuration for local development, WPCS and VIPCS coding standards enforced in CI in https://github.com/Automattic/legacy-redirector/pull/119, and split unit and integration test suites.
+- GPL v2 LICENSE file, CONTRIBUTING.md, and an expanded README covering usage examples and architecture, in https://github.com/Automattic/legacy-redirector/pull/157
 
 ### Changed
 
-- The `wpcom_legacy_redirector_redirect_status` filter now validates its result: values that are not a valid HTTP redirect status code (301, 302, 303, 307, 308) are replaced with the default 301 instead of being passed to `wp_safe_redirect()`. The Cache-Control max-age default also now treats 308 as permanent (one day), not just 301.
-- Redirect creation is now allowed for any user with the `manage_redirects` capability, wherever the request arrives from — including the REST API and Abilities/MCP clients. Previously the gate allowed any admin-context request regardless of capability, and blocked everything else (including capable users) unless the `wpcom_legacy_redirector_allow_insert` filter opted in. The filter still governs creation from contexts with no capable user, such as unauthenticated front-end code.
-- Only enabled (published) redirects are served, so a redirect can be paused by disabling it rather than deleted, in https://github.com/Automattic/wpcom-legacy-redirector/pull/154
+- Filters are now prefixed `legacy_redirector_` rather than `wpcom_legacy_redirector_`. The four filters that shipped in 1.3.0 keep working under their old names via `apply_filters_deprecated()`, which warns only when a callback is actually attached. The deprecated filter runs first and its result feeds the current one, so a caller that has migrated is not overridden by a stale callback on the old name.
+
+  | Deprecated filter | Current filter |
+  |-------------------|----------------|
+  | `wpcom_legacy_redirector_request_path` | `legacy_redirector_request_path` |
+  | `wpcom_legacy_redirector_redirect_status` | `legacy_redirector_redirect_status` |
+  | `wpcom_legacy_redirector_preserve_query_params` | `legacy_redirector_preserve_query_params` |
+  | `wpcom_legacy_redirector_allow_insert` | `legacy_redirector_allow_insert` |
+
+  `legacy_redirector_destination_url`, `legacy_redirector_redirect_max_age`, and `legacy_redirector_check_destination_reachability` are new in 2.0 and have no deprecated alias.
+- The WP-CLI namespace is now `wp legacy-redirector`. `wp legacy-redirector` is still registered for every subcommand and prints a deprecation warning to STDERR, so piped `--porcelain` and `--format` output is unaffected and existing runbooks keep working.
+- The admin menu is now labeled "Redirects" rather than "Redirects Manager". It names the content, as WordPress's own top-level menus do, rather than restating the plugin name.
+- The `legacy_redirector_redirect_status` filter now validates its result: values that are not a valid HTTP redirect status code (301, 302, 303, 307, 308) are replaced with the default 301 instead of being passed to `wp_safe_redirect()`. The Cache-Control max-age default also now treats 308 as permanent (one day), not just 301.
+- Redirect creation is now allowed for any user with the `manage_redirects` capability, wherever the request arrives from — including the REST API and Abilities/MCP clients. Previously the gate allowed any admin-context request regardless of capability, and blocked everything else (including capable users) unless the `legacy_redirector_allow_insert` filter opted in. The filter still governs creation from contexts with no capable user, such as unauthenticated front-end code.
+- Only enabled (published) redirects are served, so a redirect can be paused by disabling it rather than deleted, in https://github.com/Automattic/legacy-redirector/pull/154
 - Internal destinations are stored in one canonical form whatever was typed: absolute URLs pointing at this site become relative, and `/café` and `/caf%C3%A9` both store as `/café` (the path and fragment are decoded; the query keeps its percent-encoding, since its values have sub-structure a decode would corrupt). 1.x stored whichever spelling was entered, so one target could be two different strings; the migration rewrites existing rows to match.
 - External redirect destinations are refused at creation time unless the site allows the host via the `allowed_redirect_hosts` filter, with an error naming the domain. 1.x accepted them silently and then sent every visitor to `wp_safe_redirect()`'s fallback, `admin_url()` — so a redirect that looked fine in the admin screen quietly bounced visitors to the login page. A stored destination whose host is no longer allowed now leaves the 404 in place rather than bouncing to the admin.
-- Use `wp wpcom-legacy-redirector find-domains` to list the domains existing redirects point at when populating the filter.
-- Source paths containing non-ASCII or percent-encoded characters are matched correctly, in https://github.com/Automattic/wpcom-legacy-redirector/pull/102, including where home is not the domain root — a source saved for `example.com/日本/ページ` resolves for the percent-encoded path a browser actually requests. Matching no longer depends on the server's locale either: every URL the plugin parses now goes through a UTF-8 safe parser, where PHP's own `parse_url()` corrupts raw multibyte bytes on hosts whose `LC_CTYPE` treats the C1 range as control characters.
+- Use `wp legacy-redirector find-domains` to list the domains existing redirects point at when populating the filter.
+- Source paths containing non-ASCII or percent-encoded characters are matched correctly, in https://github.com/Automattic/legacy-redirector/pull/102, including where home is not the domain root — a source saved for `example.com/日本/ページ` resolves for the percent-encoded path a browser actually requests. Matching no longer depends on the server's locale either: every URL the plugin parses now goes through a UTF-8 safe parser, where PHP's own `parse_url()` corrupts raw multibyte bytes on hosts whose `LC_CTYPE` treats the C1 range as control characters.
 - `import-from-meta`: flags renamed to kebab-case (`--skip_dupes` is now the plain flag `--skip-dupes`, and `--dry_run` is now `--dry-run`), rows that fail to import are reported rather than silently swallowed, an error is returned when the meta key matches no redirects, and the batch query is faster.
-- `x_redirect_by` header used instead of a custom header in https://github.com/Automattic/wpcom-legacy-redirector/pull/70
-- Redirect post type arguments tightened, and the post type excluded from site search in https://github.com/Automattic/wpcom-legacy-redirector/pull/67 and https://github.com/Automattic/wpcom-legacy-redirector/pull/45, and from ElasticPress indexing.
+- `x_redirect_by` header used instead of a custom header in https://github.com/Automattic/legacy-redirector/pull/70
+- Redirect post type arguments tightened, and the post type excluded from site search in https://github.com/Automattic/legacy-redirector/pull/67 and https://github.com/Automattic/legacy-redirector/pull/45, and from ElasticPress indexing.
 - `WP_CLI::error` halts the operation on a failed insert, rather than continuing.
-- Improved terminology to be more inclusive in https://github.com/Automattic/wpcom-legacy-redirector/pull/78
+- Improved terminology to be more inclusive in https://github.com/Automattic/legacy-redirector/pull/78
 
 ### Fixed
 
-- A redirect created for `/old-page` now also fires for a request to `/old-page/`, and vice versa. 1.x required an exact match, so the documented workaround was to store both forms. Reported in https://github.com/Automattic/wpcom-legacy-redirector/issues/50; the approach follows the analysis by @bdtech in that thread and in https://github.com/Automattic/wpcom-legacy-redirector/pull/54
+- A redirect created for `/old-page` now also fires for a request to `/old-page/`, and vice versa. 1.x required an exact match, so the documented workaround was to store both forms. Reported in https://github.com/Automattic/legacy-redirector/issues/50; the approach follows the analysis by @bdtech in that thread and in https://github.com/Automattic/legacy-redirector/pull/54
 - Negative ("no redirect exists") object cache entries now expire after five minutes. 1.x cached them indefinitely, so 404 traffic could fill the object cache with permanent entries.
 - Whitespace around the CSV file path is trimmed, so a path dragged and dropped into the terminal is accepted.
 
@@ -66,7 +79,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - `insert-redirect` CLI command; use `create` instead.
 - `import-from-csv` CLI command; use `import <file>` instead. Its `--delete` mode is replaced by piping `list --format=ids` into `delete`.
 - `export-to-csv` CLI command. It never appeared in a tagged 1.x release, but has been on `develop` since 2019: use `list --format=csv` instead, or `validate --format=csv` for broken redirects.
-- Obsolete Travis CI configuration in https://github.com/Automattic/wpcom-legacy-redirector/pull/156
+- Obsolete Travis CI configuration in https://github.com/Automattic/legacy-redirector/pull/156
 - Drop support for PHP 5.3-8.1.
 - Drop support for WordPress < 6.4.
 
@@ -74,7 +87,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 ### Added
 
-- `wpcom_legacy_redirector_preserve_query_params` filter to allow for the safelisting of params that should be passed through to the redirected URL.
+- `legacy_redirector_preserve_query_params` filter to allow for the safelisting of params that should be passed through to the redirected URL.
 
 ### Changed
 
@@ -90,8 +103,8 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 ### Added
 
 - Composer support
-- `wpcom_legacy_redirector_redirect_status` filter for redirect status code (props spacedmonkey)
-- `wpcom_legacy_redirector_redirect_allow_insert` filter to enable inserts outside of WP-CLI.
+- `legacy_redirector_redirect_status` filter for redirect status code (props spacedmonkey)
+- `legacy_redirector_redirect_allow_insert` filter to enable inserts outside of WP-CLI.
 
 ### Fixed
 
@@ -112,7 +125,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 
 Initial release.
 
-[2.0.0]: https://github.com/Automattic/wpcom-legacy-redirector/compare/1.3.0...2.0.0
-[1.3.0]: https://github.com/Automattic/wpcom-legacy-redirector/compare/1.2.0...1.3.0
-[1.2.0]: https://github.com/Automattic/wpcom-legacy-redirector/compare/1.1.0...1.2.0
-[1.1.0]: https://github.com/Automattic/wpcom-legacy-redirector/compare/1.0.0...1.1.0
+[2.0.0]: https://github.com/Automattic/legacy-redirector/compare/1.3.0...2.0.0
+[1.3.0]: https://github.com/Automattic/legacy-redirector/compare/1.2.0...1.3.0
+[1.2.0]: https://github.com/Automattic/legacy-redirector/compare/1.1.0...1.2.0
+[1.1.0]: https://github.com/Automattic/legacy-redirector/compare/1.0.0...1.1.0

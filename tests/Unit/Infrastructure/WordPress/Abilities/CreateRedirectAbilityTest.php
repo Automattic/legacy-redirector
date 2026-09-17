@@ -134,7 +134,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'wpcom_legacy_redirector_duplicate_redirect', $result->get_error_code() );
+		$this->assertSame( 'legacy_redirector_duplicate_redirect', $result->get_error_code() );
 	}
 
 	/**
@@ -154,6 +154,6 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'wpcom_legacy_redirector_invalid_redirect', $result->get_error_code() );
+		$this->assertSame( 'legacy_redirector_invalid_redirect', $result->get_error_code() );
 	}
 }

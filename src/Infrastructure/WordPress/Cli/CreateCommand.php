@@ -66,17 +66,17 @@ final class CreateCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Create a redirect from /foo (must not exist) to /bar.
-	 *     $ wp wpcom-legacy-redirector create /foo /bar
+	 *     $ wp legacy-redirector create /foo /bar
 	 *     Success: Created redirect 123: /foo -> /bar
 	 *
 	 *     # Create a redirect from /bar to post ID 5.
-	 *     $ wp wpcom-legacy-redirector create /bar 5
+	 *     $ wp legacy-redirector create /bar 5
 	 *
 	 *     # Create a disabled redirect.
-	 *     $ wp wpcom-legacy-redirector create /old /new --status=disabled
+	 *     $ wp legacy-redirector create /old /new --status=disabled
 	 *
 	 *     # Create a redirect and capture its ID.
-	 *     $ wp wpcom-legacy-redirector create /old /new --porcelain
+	 *     $ wp legacy-redirector create /old /new --porcelain
 	 *     123
 	 *
 	 * @when after_wp_load

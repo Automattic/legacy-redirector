@@ -100,7 +100,7 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 			$name = $ability->name();
 			$args = $ability->args();
 
-			$this->assertStringStartsWith( 'wpcom-legacy-redirector/', $name );
+			$this->assertStringStartsWith( 'legacy-redirector/', $name );
 			$this->assertMatchesRegularExpression( '#^[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*$#', $name );
 			$this->assertNotContains( $name, $names, 'Ability names must be unique.' );
 			$names[] = $name;
@@ -128,10 +128,10 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 	 */
 	public function test_writing_abilities_are_annotated_as_writes(): void {
 		$writes = array(
-			'wpcom-legacy-redirector/create-redirect',
-			'wpcom-legacy-redirector/update-redirect',
-			'wpcom-legacy-redirector/set-redirect-status',
-			'wpcom-legacy-redirector/delete-redirect',
+			'legacy-redirector/create-redirect',
+			'legacy-redirector/update-redirect',
+			'legacy-redirector/set-redirect-status',
+			'legacy-redirector/delete-redirect',
 		);
 
 		$annotations = array();
@@ -144,19 +144,19 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 		}
 
 		$this->assertTrue(
-			$annotations['wpcom-legacy-redirector/delete-redirect']['destructive'],
+			$annotations['legacy-redirector/delete-redirect']['destructive'],
 			'Deleting a redirect is destructive.'
 		);
 		$this->assertFalse(
-			$annotations['wpcom-legacy-redirector/update-redirect']['destructive'],
+			$annotations['legacy-redirector/update-redirect']['destructive'],
 			'Updating a redirect is not destructive.'
 		);
 		$this->assertFalse(
-			$annotations['wpcom-legacy-redirector/set-redirect-status']['destructive'],
+			$annotations['legacy-redirector/set-redirect-status']['destructive'],
 			'Disabling a redirect keeps it, so it is not destructive.'
 		);
 		$this->assertTrue(
-			$annotations['wpcom-legacy-redirector/validate-redirects']['readonly'],
+			$annotations['legacy-redirector/validate-redirects']['readonly'],
 			'Validating only reports.'
 		);
 	}

@@ -40,6 +40,20 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 final class PluginBootstrapper {
 
 	/**
+	 * WP-CLI command namespace.
+	 *
+	 * @var string
+	 */
+	public const string CLI_NAMESPACE = 'legacy-redirector';
+
+	/**
+	 * WP-CLI command namespace used before 2.0.0, still registered as an alias.
+	 *
+	 * @var string
+	 */
+	public const string CLI_NAMESPACE_DEPRECATED = 'legacy-redirector';
+
+	/**
 	 * Service container.
 	 *
 	 * @var Container
@@ -199,78 +213,61 @@ final class PluginBootstrapper {
 		$fetcher = $this->container->fetcher();
 		$batch   = $this->container->batch();
 
-		// Register parent command for help text.
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector',
-			RedirectorCommand::class
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector create',
-			new CreateCommand( $manager )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector migrate',
-			new MigrateCommand( $this->container->upgrader() )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector get',
-			new GetCommand( $fetcher )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector list',
-			new ListCommand( $this->container->query_repository() )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector update',
-			new UpdateCommand( $manager, $batch )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector delete',
-			new DeleteCommand( $manager, $batch )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector enable',
-			new EnableCommand( $manager, $batch )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector disable',
-			new DisableCommand( $manager, $batch )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector validate',
-			new ValidateCommand(
+		// The empty key is the parent command, registered for help text only.
+		$commands = array(
+			''                 => RedirectorCommand::class,
+			'create'           => new CreateCommand( $manager ),
+			'migrate'          => new MigrateCommand( $this->container->upgrader() ),
+			'get'              => new GetCommand( $fetcher ),
+			'list'             => new ListCommand( $this->container->query_repository() ),
+			'update'           => new UpdateCommand( $manager, $batch ),
+			'delete'           => new DeleteCommand( $manager, $batch ),
+			'enable'           => new EnableCommand( $manager, $batch ),
+			'disable'          => new DisableCommand( $manager, $batch ),
+			'validate'         => new ValidateCommand(
 				$batch,
 				$this->container->query_repository(),
 				$this->container->auditor(),
 				$manager
-			)
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector import',
-			new ImportCommand( $manager )
-		);
-
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector import-from-meta',
-			new ImportFromMetaCommand(
+			),
+			'import'           => new ImportCommand( $manager ),
+			'import-from-meta' => new ImportFromMetaCommand(
 				$manager,
 				$this->container->repository()
-			)
+			),
+			'find-domains'     => new FindDomainsCommand( $this->container->query_repository() ),
 		);
 
-		\WP_CLI::add_command(
-			'wpcom-legacy-redirector find-domains',
-			new FindDomainsCommand( $this->container->query_repository() )
-		);
+		foreach ( $commands as $subcommand => $command ) {
+			\WP_CLI::add_command( rtrim( self::CLI_NAMESPACE . ' ' . $subcommand ), $command );
+
+			// The 1.x command namespace still works, so existing runbooks and
+			// deploy scripts do not break on upgrade. WP_CLI::warning() writes
+			// to STDERR, leaving piped --porcelain and --format output intact.
+			//
+			// The parent command gets no before_invoke: WP-CLI runs a parent's
+			// hook on the way down to a subcommand, so attaching it there warns
+			// twice per invocation.
+			$args = array();
+
+			if ( '' !== $subcommand ) {
+				$args['before_invoke'] = static function () use ( $subcommand ): void {
+					\WP_CLI::warning(
+						sprintf(
+							'`wp %1$s %3$s` is deprecated since 2.0.0. Use `wp %2$s %3$s` instead.',
+							self::CLI_NAMESPACE_DEPRECATED,
+							self::CLI_NAMESPACE,
+							$subcommand
+						)
+					);
+				};
+			}
+
+			\WP_CLI::add_command(
+				rtrim( self::CLI_NAMESPACE_DEPRECATED . ' ' . $subcommand ),
+				$command,
+				$args
+			);
+		}
 	}
 }

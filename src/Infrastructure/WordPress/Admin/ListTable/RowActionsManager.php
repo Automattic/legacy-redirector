@@ -79,7 +79,7 @@ final class RowActionsManager {
 		$actions['edit'] = sprintf(
 			'<a href="%1$s">%2$s</a>',
 			esc_url( $edit_link ),
-			esc_html__( 'Edit', 'wpcom-legacy-redirector' )
+			esc_html__( 'Edit', 'legacy-redirector' )
 		);
 
 		// Enable/Disable link based on current status.
@@ -97,7 +97,7 @@ final class RowActionsManager {
 			$actions['disable'] = sprintf(
 				'<a href="%1$s">%2$s</a>',
 				esc_url( $disable_link ),
-				esc_html__( 'Disable', 'wpcom-legacy-redirector' )
+				esc_html__( 'Disable', 'legacy-redirector' )
 			);
 		} else {
 			$enable_link       = wp_nonce_url(
@@ -113,7 +113,7 @@ final class RowActionsManager {
 			$actions['enable'] = sprintf(
 				'<a href="%1$s">%2$s</a>',
 				esc_url( $enable_link ),
-				esc_html__( 'Enable', 'wpcom-legacy-redirector' )
+				esc_html__( 'Enable', 'legacy-redirector' )
 			);
 		}
 
@@ -134,7 +134,7 @@ final class RowActionsManager {
 			esc_url( $validate_link ),
 			$post->ID,
 			esc_attr( $redirect->source()->path() ),
-			esc_html__( 'Validate', 'wpcom-legacy-redirector' )
+			esc_html__( 'Validate', 'legacy-redirector' )
 		);
 
 		// Follow link - use home_url() so the stored home-relative path is
@@ -143,7 +143,7 @@ final class RowActionsManager {
 		$actions['follow'] = sprintf(
 			'<a href="%1$s" target="_blank">%2$s</a>',
 			esc_url( home_url( $redirect->source()->path() ) ),
-			esc_html__( 'Follow', 'wpcom-legacy-redirector' )
+			esc_html__( 'Follow', 'legacy-redirector' )
 		);
 
 		// Re-insert trash link.
@@ -213,7 +213,7 @@ final class RowActionsManager {
 				$toColumn.find('.validation-result').remove();
 
 				// Add loading state.
-				$link.addClass('validating').text('<?php echo esc_js( __( 'Validating...', 'wpcom-legacy-redirector' ) ); ?>');
+				$link.addClass('validating').text('<?php echo esc_js( __( 'Validating...', 'legacy-redirector' ) ); ?>');
 
 				$.ajax({
 					url: ajaxurl,
@@ -224,7 +224,7 @@ final class RowActionsManager {
 						nonce: validateNonce
 					},
 					success: function(response) {
-						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'wpcom-legacy-redirector' ) ); ?>');
+						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'legacy-redirector' ) ); ?>');
 
 						var resultClass = response.success ? 'valid' : 'invalid';
 						var icon = response.success ? 'dashicons-yes-alt' : 'dashicons-warning';
@@ -247,11 +247,11 @@ final class RowActionsManager {
 						}
 					},
 					error: function() {
-						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'wpcom-legacy-redirector' ) ); ?>');
+						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'legacy-redirector' ) ); ?>');
 
 						var $result = $('<div class="validation-result invalid">' +
 							'<span class="dashicons dashicons-warning"></span>' +
-							'<?php echo esc_js( __( 'Validation request failed.', 'wpcom-legacy-redirector' ) ); ?>' +
+							'<?php echo esc_js( __( 'Validation request failed.', 'legacy-redirector' ) ); ?>' +
 							'</div>');
 
 						$toColumn.append($result);

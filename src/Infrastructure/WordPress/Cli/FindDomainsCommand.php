@@ -61,10 +61,10 @@ final class FindDomainsCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Get a list of the domains used as redirect destinations.
-	 *     $ wp wpcom-legacy-redirector find-domains
+	 *     $ wp legacy-redirector find-domains
 	 *
 	 *     # Get the domains as a plain CSV column.
-	 *     $ wp wpcom-legacy-redirector find-domains --format=csv
+	 *     $ wp legacy-redirector find-domains --format=csv
 	 *
 	 * @when after_wp_load
 	 *

@@ -1,23 +1,29 @@
-# WPCOM Legacy Redirector
+# Legacy Redirector
 
-Handles redirects for legacy WordPress.com URLs.
+Handles large volumes of redirects for a site's legacy URLs.
 
 ## Project Knowledge
 
 | Property | Value |
 |----------|-------|
-| **Main file** | `wpcom-legacy-redirector.php` |
-| **Text domain** | `wpcom-legacy-redirector` |
+| **Main file** | `wpcom-legacy-redirector.php` (kept from the pre-2.0 name so upgrades do not deactivate the plugin) |
+| **Text domain** | `legacy-redirector` |
 | **Namespace** | `Automattic\LegacyRedirector` |
+| **Composer package** | `automattic/legacy-redirector` |
+| **WP-CLI namespace** | `legacy-redirector` (plus `legacy-redirector` as a deprecated alias) |
+| **Filter prefix** | `legacy_redirector_` |
+| **Post type** | `vip-legacy-redirect` |
 | **Source directory** | `src/` |
 | **Version** | 2.0.0-alpha |
 | **Requires PHP** | 8.3+ |
 | **Requires WP** | 6.8+ |
 
+The plugin was renamed from "Legacy Redirector" in 2.0. Three things deliberately keep the old name because they are necessary: the main file (renaming it deactivates the plugin on update), the `vip-legacy-redirect` post type, and the `wpcom_legacy_redirector_db_version` / `_upgrade_started_gmt` / `_upgrade_cursor` options. All three hold live state. Do not "tidy" them.
+
 ### Directory Structure
 
 ```
-wpcom-legacy-redirector/
+legacy-redirector/
 ├── src/
 │   ├── Domain/             # Value objects, entities, repository interfaces
 │   │   ├── Redirect.php, SourceUrl.php, DestinationUrl.php
@@ -83,7 +89,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
   - **Integration tests**: For WordPress-dependent behavior. Use `Yoast\WPTestUtils\WPIntegration\TestCase`. Uses a separate config file (`phpunit-integration.xml.dist`).
   - **Behat tests**: For CLI contract verification and critical happy paths only. Keep Behat scenarios minimal (2-5 per command).
 - **Code style**: WordPress coding standards via PHPCS. Tabs for indentation.
-- **i18n**: All user-facing strings must use the `wpcom-legacy-redirector` text domain.
+- **i18n**: All user-facing strings must use the `legacy-redirector` text domain.
 - **DDD layering**: Domain classes must not depend on Infrastructure or Application.
 
 ## Architectural Decisions

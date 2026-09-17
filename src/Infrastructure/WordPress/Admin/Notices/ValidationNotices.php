@@ -117,35 +117,35 @@ final class ValidationNotices {
 			if ( null !== $redirect ) {
 				$redirect_context = sprintf(
 					/* translators: %s: source URL path */
-					' ' . __( 'for %s', 'wpcom-legacy-redirector' ),
+					' ' . __( 'for %s', 'legacy-redirector' ),
 					'<code>' . esc_html( $redirect->source()->path() ) . '</code>'
 				);
 			}
 		}
 
-		$redirect_not_valid_text = __( 'Redirect is not valid', 'wpcom-legacy-redirector' );
+		$redirect_not_valid_text = __( 'Redirect is not valid', 'legacy-redirector' );
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		switch ( $_GET['validate'] ) {
 			case 'invalid':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination must be a site-relative path beginning with a slash, or a full URL beginning with http:// or https://.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination must be a site-relative path beginning with a slash, or a full URL beginning with http:// or https://.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case 'host-not-allowed':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination domain is not allowed. Add it to the "allowed_redirect_hosts" filter, or the redirect will not run.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination domain is not allowed. Add it to the "allowed_redirect_hosts" filter, or the redirect will not run.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case '404':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'Redirect is pointing to a page with the HTTP status of 404.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'Redirect is pointing to a page with the HTTP status of 404.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case 'valid':
 				/* translators: %s: context showing which redirect (e.g. "for /old-page") */
-				$message = sprintf( __( 'Redirect is valid%s.', 'wpcom-legacy-redirector' ), $redirect_context );
+				$message = sprintf( __( 'Redirect is valid%s.', 'legacy-redirector' ), $redirect_context );
 				wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
 				break;
 			case 'private':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to content that is not publicly accessible.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to content that is not publicly accessible.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 			case 'null':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
 				break;
 		}
 	}
@@ -177,7 +177,7 @@ final class ValidationNotices {
 		}
 
 		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
-			wp_die( esc_html__( 'You do not have permission to validate redirects.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'You do not have permission to validate redirects.', 'legacy-redirector' ) );
 		}
 
 		$redirect = $this->repository->find_by_id( $post_id );

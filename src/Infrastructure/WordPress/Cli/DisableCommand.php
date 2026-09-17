@@ -27,13 +27,13 @@ final class DisableCommand extends AbstractStatusCommand {
 	 * ## EXAMPLES
 	 *
 	 *     # Disable redirect by source path.
-	 *     $ wp wpcom-legacy-redirector disable /old-page
+	 *     $ wp legacy-redirector disable /old-page
 	 *
 	 *     # Disable redirect by ID.
-	 *     $ wp wpcom-legacy-redirector disable 123
+	 *     $ wp legacy-redirector disable 123
 	 *
 	 *     # Disable multiple redirects.
-	 *     $ wp wpcom-legacy-redirector disable /old-page /other-page
+	 *     $ wp legacy-redirector disable /old-page /other-page
 	 *
 	 * @when after_wp_load
 	 *

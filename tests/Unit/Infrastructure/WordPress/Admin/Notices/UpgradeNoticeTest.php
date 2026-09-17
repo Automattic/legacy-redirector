@@ -59,7 +59,7 @@ final class UpgradeNoticeTest extends MonkeyStubs {
 		$output = $this->render();
 
 		$this->assertStringContainsString( 'notice-info', $output );
-		$this->assertStringContainsString( 'wp wpcom-legacy-redirector migrate', $output );
+		$this->assertStringContainsString( 'wp legacy-redirector migrate', $output );
 	}
 
 	/**

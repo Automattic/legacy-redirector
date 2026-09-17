@@ -44,7 +44,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/create-redirect';
+		return 'legacy-redirector/create-redirect';
 	}
 
 	/**
@@ -55,8 +55,8 @@ final class CreateRedirectAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Create Redirect', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Creates a redirect from a path on this site to a new destination, so visitors and search engines following the old URL are sent to the right place. The destination may be a path, an absolute URL, or the ID of a post on this site. Fails if a redirect already exists for the path, or if the destination is invalid.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Create Redirect', 'legacy-redirector' ),
+			'description'         => __( 'Creates a redirect from a path on this site to a new destination, so visitors and search engines following the old URL are sent to the right place. The destination may be a path, an absolute URL, or the ID of a post on this site. Fails if a redirect already exists for the path, or if the destination is invalid.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -64,17 +64,17 @@ final class CreateRedirectAbility implements AbilityInterface {
 				'properties'           => array(
 					'from'   => array(
 						'type'        => 'string',
-						'description' => __( 'The path to redirect from, e.g. /old-page or /old-page/?utm_source=news.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The path to redirect from, e.g. /old-page or /old-page/?utm_source=news.', 'legacy-redirector' ),
 					),
 					'to'     => array(
 						'type'        => array( 'string', 'integer' ),
-						'description' => __( 'The destination: a path, an absolute URL, or a post ID.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The destination: a path, an absolute URL, or a post ID.', 'legacy-redirector' ),
 					),
 					'status' => array(
 						'type'        => 'string',
 						'enum'        => array( 'enabled', 'disabled' ),
 						'default'     => 'enabled',
-						'description' => __( 'Whether the redirect starts out being served to visitors. Defaults to enabled.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Whether the redirect starts out being served to visitors. Defaults to enabled.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -110,10 +110,10 @@ final class CreateRedirectAbility implements AbilityInterface {
 			$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
 		} catch ( \InvalidArgumentException $e ) {
 			return new WP_Error(
-				'wpcom_legacy_redirector_invalid_redirect',
+				'legacy_redirector_invalid_redirect',
 				sprintf(
 					/* translators: 1: source path, 2: destination, 3: error message. */
-					__( 'Could not create a redirect from %1$s to %2$s: %3$s', 'wpcom-legacy-redirector' ),
+					__( 'Could not create a redirect from %1$s to %2$s: %3$s', 'legacy-redirector' ),
 					$from,
 					(string) $to,
 					$e->getMessage()
@@ -127,7 +127,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 
 		if ( $result->is_error() ) {
 			return new WP_Error(
-				'wpcom_legacy_redirector_' . str_replace( '-', '_', (string) $result->error_code() ),
+				'legacy_redirector_' . str_replace( '-', '_', (string) $result->error_code() ),
 				(string) $result->error_message()
 			);
 		}

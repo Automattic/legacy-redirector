@@ -4,14 +4,14 @@ Feature: Get a redirect
   So that I can inspect its destination and status
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Smoke test: get shows the redirect's fields.
   Scenario: Get a redirect by its source path
     Given there is a published post with a slug of "get-destination"
     And there is a redirect from "/get-source" to "/get-destination"
 
-    When I run `wp wpcom-legacy-redirector get /get-source`
+    When I run `wp legacy-redirector get /get-source`
     Then STDOUT should contain:
       """
       /get-source
@@ -27,5 +27,5 @@ Feature: Get a redirect
 
   # Contract test: a missing redirect is an error, not empty output.
   Scenario: Get a redirect that does not exist
-    When I try `wp wpcom-legacy-redirector get /no-such-redirect`
+    When I try `wp legacy-redirector get /no-such-redirect`
     Then the return code should not be 0

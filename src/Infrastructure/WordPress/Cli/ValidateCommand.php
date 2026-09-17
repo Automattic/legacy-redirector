@@ -128,25 +128,25 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Find broken redirects.
-	 *     $ wp wpcom-legacy-redirector validate
+	 *     $ wp legacy-redirector validate
 	 *
 	 *     # Validate a single redirect by source path, including URL checks.
-	 *     $ wp wpcom-legacy-redirector validate /old-page --check-urls
+	 *     $ wp legacy-redirector validate /old-page --check-urls
 	 *
 	 *     # Validate a single redirect by ID.
-	 *     $ wp wpcom-legacy-redirector validate 123
+	 *     $ wp legacy-redirector validate 123
 	 *
 	 *     # Find and disable broken redirects.
-	 *     $ wp wpcom-legacy-redirector validate --fix
+	 *     $ wp legacy-redirector validate --fix
 	 *
 	 *     # Check all redirects (enabled and disabled).
-	 *     $ wp wpcom-legacy-redirector validate --status=any
+	 *     $ wp legacy-redirector validate --status=any
 	 *
 	 *     # Get count of broken redirects.
-	 *     $ wp wpcom-legacy-redirector validate --format=count
+	 *     $ wp legacy-redirector validate --format=count
 	 *
 	 *     # Export broken redirects to a CSV file.
-	 *     $ wp wpcom-legacy-redirector validate --format=csv > broken.csv
+	 *     $ wp legacy-redirector validate --format=csv > broken.csv
 	 *
 	 * @when after_wp_load
 	 *

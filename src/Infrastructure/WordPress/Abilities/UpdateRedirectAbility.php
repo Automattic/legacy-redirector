@@ -53,7 +53,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/update-redirect';
+		return 'legacy-redirector/update-redirect';
 	}
 
 	/**
@@ -64,24 +64,24 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Update Redirects', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Update Redirects', 'legacy-redirector' ),
+			'description'         => __( 'Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'required'             => array( 'redirects' ),
 				'properties'           => array(
 					'redirects' => RedirectSchema::identifiers_schema(
-						__( 'The redirects to update, each given as a redirect ID or the path it redirects from.', 'wpcom-legacy-redirector' )
+						__( 'The redirects to update, each given as a redirect ID or the path it redirects from.', 'legacy-redirector' )
 					),
 					'to'        => array(
 						'type'        => array( 'string', 'integer' ),
-						'description' => __( 'The new destination: a path, an absolute URL, or a post ID.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The new destination: a path, an absolute URL, or a post ID.', 'legacy-redirector' ),
 					),
 					'status'    => array(
 						'type'        => 'string',
 						'enum'        => array( 'enabled', 'disabled' ),
-						'description' => __( 'Whether the redirects should be served to visitors.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Whether the redirects should be served to visitors.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -92,7 +92,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 				'properties'           => array(
 					'updated' => array(
 						'type'        => 'integer',
-						'description' => __( 'How many redirects were updated.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects were updated.', 'legacy-redirector' ),
 					),
 					'failed'  => RedirectSchema::failures_schema(),
 				),
@@ -124,8 +124,8 @@ final class UpdateRedirectAbility implements AbilityInterface {
 
 		if ( ! isset( $input['to'] ) && ! isset( $input['status'] ) ) {
 			return new WP_Error(
-				'wpcom_legacy_redirector_nothing_to_update',
-				__( 'Pass a new destination, a new status, or both.', 'wpcom-legacy-redirector' )
+				'legacy_redirector_nothing_to_update',
+				__( 'Pass a new destination, a new status, or both.', 'legacy-redirector' )
 			);
 		}
 
@@ -136,10 +136,10 @@ final class UpdateRedirectAbility implements AbilityInterface {
 				$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
 			} catch ( \InvalidArgumentException $e ) {
 				return new WP_Error(
-					'wpcom_legacy_redirector_invalid_destination',
+					'legacy_redirector_invalid_destination',
 					sprintf(
 						/* translators: 1: destination, 2: error message. */
-						__( 'Not a valid destination: %1$s (%2$s)', 'wpcom-legacy-redirector' ),
+						__( 'Not a valid destination: %1$s (%2$s)', 'legacy-redirector' ),
 						(string) $to,
 						$e->getMessage()
 					)
@@ -164,7 +164,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 
 		return array(
 			'updated' => RedirectBatch::count_succeeded( $items ),
-			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be saved.', 'wpcom-legacy-redirector' ) ),
+			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be saved.', 'legacy-redirector' ) ),
 		);
 	}
 }

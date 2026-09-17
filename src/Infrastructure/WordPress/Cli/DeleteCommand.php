@@ -61,16 +61,16 @@ final class DeleteCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # Delete redirect by source path.
-	 *     $ wp wpcom-legacy-redirector delete /old-page
+	 *     $ wp legacy-redirector delete /old-page
 	 *
 	 *     # Delete redirect by ID.
-	 *     $ wp wpcom-legacy-redirector delete 123
+	 *     $ wp legacy-redirector delete 123
 	 *
 	 *     # Delete multiple redirects without confirmation.
-	 *     $ wp wpcom-legacy-redirector delete /old-page /other-page --yes
+	 *     $ wp legacy-redirector delete /old-page /other-page --yes
 	 *
 	 *     # Delete all disabled redirects.
-	 *     $ wp wpcom-legacy-redirector list --status=disabled --format=ids | xargs wp wpcom-legacy-redirector delete --yes
+	 *     $ wp legacy-redirector list --status=disabled --format=ids | xargs wp legacy-redirector delete --yes
 	 *
 	 * @when after_wp_load
 	 *

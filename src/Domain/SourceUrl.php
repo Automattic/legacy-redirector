@@ -218,7 +218,7 @@ final class SourceUrl {
 	 * domain root: on a subsite at /subsite1, the stored '/old-page' means
 	 * example.com/subsite1/old-page, and RedirectResolver::extract_path()
 	 * strips '/subsite1' from every incoming request to match. A full URL
-	 * pasted into the admin form, handed to `wp wpcom-legacy-redirector
+	 * pasted into the admin form, handed to `wp legacy-redirector
 	 * create`, or read from a CSV import carries that prefix, so it has to
 	 * come off here or the redirect is saved under a key no request produces.
 	 *

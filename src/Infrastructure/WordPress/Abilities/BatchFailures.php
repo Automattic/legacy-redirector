@@ -36,10 +36,10 @@ final class BatchFailures {
 				BatchOutcome::SUCCESS   => null,
 				BatchOutcome::INVALID   => sprintf(
 					/* translators: %s: error message. */
-					__( 'Not a valid redirect ID or source path (%s).', 'wpcom-legacy-redirector' ),
+					__( 'Not a valid redirect ID or source path (%s).', 'legacy-redirector' ),
 					(string) $item['error']
 				),
-				BatchOutcome::NOT_FOUND => __( 'No redirect found.', 'wpcom-legacy-redirector' ),
+				BatchOutcome::NOT_FOUND => __( 'No redirect found.', 'legacy-redirector' ),
 				BatchOutcome::FAILED    => $item['error'] ?? $failure_reason,
 			};
 

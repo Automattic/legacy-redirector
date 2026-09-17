@@ -48,7 +48,7 @@ final class ListRedirectsAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/list-redirects';
+		return 'legacy-redirector/list-redirects';
 	}
 
 	/**
@@ -59,8 +59,8 @@ final class ListRedirectsAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'List Redirects', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Returns a page of redirects, optionally filtered by whether they are enabled, by what kind of destination they point at, or by a search term matched against their source paths. The total count of matching redirects is returned alongside the page, so further pages can be requested with an offset.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'List Redirects', 'legacy-redirector' ),
+			'description'         => __( 'Returns a page of redirects, optionally filtered by whether they are enabled, by what kind of destination they point at, or by a search term matched against their source paths. The total count of matching redirects is returned alongside the page, so further pages can be requested with an offset.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -69,30 +69,30 @@ final class ListRedirectsAbility implements AbilityInterface {
 						'type'        => 'string',
 						'enum'        => array( 'any', 'enabled', 'disabled' ),
 						'default'     => 'any',
-						'description' => __( 'Only return redirects with this status.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Only return redirects with this status.', 'legacy-redirector' ),
 					),
 					'destination_type' => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'post', 'url' ),
 						'default'     => 'any',
-						'description' => __( 'Only return redirects pointing at a post ID, or at a URL.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Only return redirects pointing at a post ID, or at a URL.', 'legacy-redirector' ),
 					),
 					'search'           => array(
 						'type'        => 'string',
-						'description' => __( 'Only return redirects whose source path contains this text.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Only return redirects whose source path contains this text.', 'legacy-redirector' ),
 					),
 					'limit'            => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'maximum'     => self::MAX_LIMIT,
 						'default'     => 20,
-						'description' => __( 'How many redirects to return.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects to return.', 'legacy-redirector' ),
 					),
 					'offset'           => array(
 						'type'        => 'integer',
 						'minimum'     => 0,
 						'default'     => 0,
-						'description' => __( 'How many redirects to skip, for paging through the results.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects to skip, for paging through the results.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -104,11 +104,11 @@ final class ListRedirectsAbility implements AbilityInterface {
 				'properties'           => array(
 					'total'     => array(
 						'type'        => 'integer',
-						'description' => __( 'How many redirects match the filters, ignoring limit and offset.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects match the filters, ignoring limit and offset.', 'legacy-redirector' ),
 					),
 					'redirects' => array(
 						'type'        => 'array',
-						'description' => __( 'The matching redirects.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'The matching redirects.', 'legacy-redirector' ),
 						'items'       => RedirectSchema::object_schema(),
 					),
 				),

@@ -41,7 +41,7 @@ Behat tests provide unique value for:
 |---------|----------|-----------|
 | testing.feature | WP-CLI loads for your tests | Validates wp-env setup works |
 | testing.feature | WP-CLI recognizes plugin commands | Validates plugin activation |
-| testing.feature | WP-CLI recognizes wpcom-legacy-redirector commands | Validates command registration |
+| testing.feature | WP-CLI recognizes legacy-redirector commands | Validates command registration |
 | create.feature | Create a redirect to a path | Smoke test for basic creation |
 | create.feature | Creating a duplicate redirect fails | Tests error contract and exit code |
 | list.feature | List all redirects | Smoke test for list output format |

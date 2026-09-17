@@ -72,8 +72,8 @@ final class UpgradeNotice {
 
 		$message = sprintf(
 			/* translators: %s: WP-CLI command */
-			__( 'Redirect data migration is in progress and completes automatically in the background. Older redirects may not work or display consistently until it finishes. To finish it now, run: %s', 'wpcom-legacy-redirector' ),
-			'<code>wp wpcom-legacy-redirector migrate</code>'
+			__( 'Redirect data migration is in progress and completes automatically in the background. Older redirects may not work or display consistently until it finishes. To finish it now, run: %s', 'legacy-redirector' ),
+			'<code>wp legacy-redirector migrate</code>'
 		);
 		wp_admin_notice(
 			wp_kses( $message, array( 'code' => array() ) ),

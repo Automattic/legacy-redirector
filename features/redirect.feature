@@ -4,7 +4,7 @@ Feature: Front-end redirects
   So that old links keep working
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
     # The plugin only redirects 404s; with plain permalinks an unmatched
     # path is not a 404, so pretty permalinks are required.
     And I run `wp rewrite structure /%postname%/ --hard`
@@ -22,7 +22,7 @@ Feature: Front-end redirects
       """
     And STDOUT should contain:
       """
-      X-Redirect-By: WPCOM Legacy Redirector
+      X-Redirect-By: Legacy Redirector
       """
     And STDOUT should contain:
       """
@@ -54,7 +54,7 @@ Feature: Front-end redirects
     Given there is a published post with a slug of "http-destination"
     And there is a redirect from "/http-disabled-source" to "/http-destination"
 
-    When I run `wp wpcom-legacy-redirector disable /http-disabled-source`
+    When I run `wp legacy-redirector disable /http-disabled-source`
     And I request the front-end path "/http-disabled-source"
     Then STDOUT should contain:
       """
@@ -74,7 +74,7 @@ Feature: Front-end redirects
       """
     And STDOUT should contain:
       """
-      X-Redirect-By: WPCOM Legacy Redirector
+      X-Redirect-By: Legacy Redirector
       """
     And STDOUT should contain:
       """

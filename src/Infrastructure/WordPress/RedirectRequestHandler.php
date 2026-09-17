@@ -41,7 +41,7 @@ final class RedirectRequestHandler {
 	 * @param RedirectResolver $resolver    The redirect resolver.
 	 * @param string           $plugin_name Plugin name for the X-Redirect-By header.
 	 */
-	public function __construct( RedirectResolver $resolver, string $plugin_name = 'WPCOM Legacy Redirector' ) {
+	public function __construct( RedirectResolver $resolver, string $plugin_name = 'Legacy Redirector' ) {
 		$this->resolver    = $resolver;
 		$this->plugin_name = $plugin_name;
 	}
@@ -128,7 +128,7 @@ final class RedirectRequestHandler {
 		 * @param int    $status_code The HTTP status code.
 		 */
 		$max_age = (int) apply_filters(
-			'wpcom_legacy_redirector_redirect_max_age',
+			'legacy_redirector_redirect_max_age',
 			RedirectHttpStatus::from( $status_code )->is_permanent() ? DAY_IN_SECONDS : MINUTE_IN_SECONDS,
 			$url,
 			$status_code

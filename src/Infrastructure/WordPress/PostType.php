@@ -67,7 +67,7 @@ final class PostType {
 		if ( 1 === $bulk_counts['trashed'] && $redirect_source ) {
 			$trashed_message = sprintf(
 				/* translators: %s: redirect source path */
-				__( 'Redirect from %s moved to the Trash.', 'wpcom-legacy-redirector' ),
+				__( 'Redirect from %s moved to the Trash.', 'legacy-redirector' ),
 				'<code>' . esc_html( $redirect_source ) . '</code>'
 			);
 		} else {
@@ -76,7 +76,7 @@ final class PostType {
 				'%s redirect moved to the Trash.',
 				'%s redirects moved to the Trash.',
 				$bulk_counts['trashed'],
-				'wpcom-legacy-redirector'
+				'legacy-redirector'
 			);
 		}
 
@@ -86,23 +86,23 @@ final class PostType {
 				'%s redirect updated.',
 				'%s redirects updated.',
 				$bulk_counts['updated'],
-				'wpcom-legacy-redirector'
+				'legacy-redirector'
 			),
 			'locked'    => ( 1 === $bulk_counts['locked'] )
-				? __( '1 redirect not updated, somebody is editing it.', 'wpcom-legacy-redirector' )
+				? __( '1 redirect not updated, somebody is editing it.', 'legacy-redirector' )
 				/* translators: %s: Number of redirects. */
 				: _n(
 					'%s redirect not updated, somebody is editing it.',
 					'%s redirects not updated, somebody is editing them.',
 					$bulk_counts['locked'],
-					'wpcom-legacy-redirector'
+					'legacy-redirector'
 				),
 			/* translators: %s: Number of redirects or redirect source path. */
 			'deleted'   => _n(
 				'%s redirect permanently deleted.',
 				'%s redirects permanently deleted.',
 				$bulk_counts['deleted'],
-				'wpcom-legacy-redirector'
+				'legacy-redirector'
 			),
 			/* translators: %s: Number of redirects or redirect source path. */
 			'trashed'   => $trashed_message,
@@ -111,7 +111,7 @@ final class PostType {
 				'%s redirect restored from the Trash.',
 				'%s redirects restored from the Trash.',
 				$bulk_counts['untrashed'],
-				'wpcom-legacy-redirector'
+				'legacy-redirector'
 			),
 		);
 
@@ -125,22 +125,22 @@ final class PostType {
 	 */
 	private function get_labels(): array {
 		return array(
-			'name'                  => _x( 'Redirects Manager', 'Post type general name', 'wpcom-legacy-redirector' ),
-			'singular_name'         => _x( 'Redirect', 'Post type singular name', 'wpcom-legacy-redirector' ),
-			'menu_name'             => _x( 'Redirects Manager', 'Admin Menu text', 'wpcom-legacy-redirector' ),
-			'name_admin_bar'        => _x( 'Redirect', 'Add New on Toolbar', 'wpcom-legacy-redirector' ),
-			'add_new'               => __( 'Add Redirect', 'wpcom-legacy-redirector' ),
-			'add_new_item'          => __( 'Add Redirect', 'wpcom-legacy-redirector' ),
-			'new_item'              => __( 'New Redirect', 'wpcom-legacy-redirector' ),
-			'edit_item'             => __( 'Edit Redirect', 'wpcom-legacy-redirector' ),
-			'view_item'             => __( 'View Redirect', 'wpcom-legacy-redirector' ),
-			'all_items'             => __( 'All Redirects', 'wpcom-legacy-redirector' ),
-			'search_items'          => __( 'Search Redirects', 'wpcom-legacy-redirector' ),
-			'not_found'             => __( 'No redirects found.', 'wpcom-legacy-redirector' ),
-			'not_found_in_trash'    => __( 'No redirects found in Trash.', 'wpcom-legacy-redirector' ),
-			'filter_items_list'     => _x( 'Filter redirects list', 'Screen reader text for the filter links heading on the post type listing screen. Default "Filter posts list"/"Filter pages list". Added in 4.4', 'wpcom-legacy-redirector' ),
-			'items_list_navigation' => _x( 'Redirect list navigation', 'Screen reader text for the pagination heading on the post type listing screen. Default "Posts list navigation"/"Pages list navigation". Added in 4.4', 'wpcom-legacy-redirector' ),
-			'items_list'            => _x( 'Redirects list', 'Screen reader text for the items list heading on the post type listing screen. Default "Posts list"/"Pages list". Added in 4.4', 'wpcom-legacy-redirector' ),
+			'name'                  => _x( 'Redirects', 'Post type general name', 'legacy-redirector' ),
+			'singular_name'         => _x( 'Redirect', 'Post type singular name', 'legacy-redirector' ),
+			'menu_name'             => _x( 'Redirects', 'Admin Menu text', 'legacy-redirector' ),
+			'name_admin_bar'        => _x( 'Redirect', 'Add New on Toolbar', 'legacy-redirector' ),
+			'add_new'               => __( 'Add Redirect', 'legacy-redirector' ),
+			'add_new_item'          => __( 'Add Redirect', 'legacy-redirector' ),
+			'new_item'              => __( 'New Redirect', 'legacy-redirector' ),
+			'edit_item'             => __( 'Edit Redirect', 'legacy-redirector' ),
+			'view_item'             => __( 'View Redirect', 'legacy-redirector' ),
+			'all_items'             => __( 'All Redirects', 'legacy-redirector' ),
+			'search_items'          => __( 'Search Redirects', 'legacy-redirector' ),
+			'not_found'             => __( 'No redirects found.', 'legacy-redirector' ),
+			'not_found_in_trash'    => __( 'No redirects found in Trash.', 'legacy-redirector' ),
+			'filter_items_list'     => _x( 'Filter redirects list', 'Screen reader text for the filter links heading on the post type listing screen. Default "Filter posts list"/"Filter pages list". Added in 4.4', 'legacy-redirector' ),
+			'items_list_navigation' => _x( 'Redirect list navigation', 'Screen reader text for the pagination heading on the post type listing screen. Default "Posts list navigation"/"Pages list navigation". Added in 4.4', 'legacy-redirector' ),
+			'items_list'            => _x( 'Redirects list', 'Screen reader text for the items list heading on the post type listing screen. Default "Posts list"/"Pages list". Added in 4.4', 'legacy-redirector' ),
 		);
 	}
 

@@ -83,7 +83,7 @@ final class AbilitiesTest extends TestCase {
 	 * @return WP_Ability The ability.
 	 */
 	private function ability( string $name ): WP_Ability {
-		$ability = wp_get_ability( 'wpcom-legacy-redirector/' . $name );
+		$ability = wp_get_ability( 'legacy-redirector/' . $name );
 
 		$this->assertInstanceOf( WP_Ability::class, $ability, $name . ' should be registered.' );
 

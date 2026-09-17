@@ -13,7 +13,7 @@ use Behat\Testwork\Hook\Scope\AfterSuiteScope;
 use RuntimeException;
 
 /**
- * Feature tests context class for WPCOM Legacy Redirector.
+ * Feature tests context class for Legacy Redirector.
  *
  * Extends the Automattic Behat wp-env context with plugin-specific steps.
  *
@@ -393,13 +393,13 @@ PHP;
 	}
 
 	/**
-	 * Set up a WP installation with WPCOM Legacy Redirector plugin activated.
+	 * Set up a WP installation with Legacy Redirector plugin activated.
 	 *
-	 * @Given a WP install(ation) with the WPCOM Legacy Redirector plugin
+	 * @Given a WP install(ation) with the Legacy Redirector plugin
 	 * @throws RuntimeException If plugin activation fails.
 	 * @return void
 	 */
-	public function given_a_wp_installation_with_the_wpcomlr_plugin(): void {
+	public function given_a_wp_installation_with_the_legacy_redirector_plugin(): void {
 		// Activation survives the between-scenario reset, which only clears
 		// posts, users, transients and cache, and no scenario deactivates the
 		// plugin, so this is checked once per run rather than once per scenario.
@@ -430,7 +430,7 @@ PHP;
 
 		// phpcs:disable WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 		throw new RuntimeException(
-			'Failed to activate WPCOM Legacy Redirector plugin: ' . $this->output . ' ' . $this->error_output
+			'Failed to activate Legacy Redirector plugin: ' . $this->output . ' ' . $this->error_output
 		);
 		// phpcs:enable WordPress.Security.EscapeOutput.ExceptionNotEscaped
 	}
@@ -544,7 +544,7 @@ PHP;
 	 */
 	public function there_is_a_redirect_from_to( string $from, string $to ): void {
 		$this->run_wp_cli_command(
-			sprintf( 'wpcom-legacy-redirector create %s %s', $from, $to ),
+			sprintf( 'legacy-redirector create %s %s', $from, $to ),
 			false
 		);
 

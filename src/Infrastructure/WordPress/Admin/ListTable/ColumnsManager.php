@@ -67,10 +67,10 @@ final class ColumnsManager {
 	public function set_columns(): array {
 		return array(
 			'cb'     => '<input type="checkbox" />',
-			'from'   => __( 'Redirect From', 'wpcom-legacy-redirector' ),
-			'to'     => __( 'Redirect To', 'wpcom-legacy-redirector' ),
-			'status' => __( 'Status', 'wpcom-legacy-redirector' ),
-			'date'   => __( 'Date', 'wpcom-legacy-redirector' ),
+			'from'   => __( 'Redirect From', 'legacy-redirector' ),
+			'to'     => __( 'Redirect To', 'legacy-redirector' ),
+			'status' => __( 'Status', 'legacy-redirector' ),
+			'date'   => __( 'Date', 'legacy-redirector' ),
 		);
 	}
 
@@ -170,7 +170,7 @@ final class ColumnsManager {
 			'<strong><a class="row-title" href="%1$s" aria-label="%2$s">%3$s</a></strong>',
 			esc_url( $edit_link ),
 			/* translators: %s: redirect source path */
-			esc_attr( sprintf( __( 'Edit redirect from &#8220;%s&#8221;', 'wpcom-legacy-redirector' ), $source ) ),
+			esc_attr( sprintf( __( 'Edit redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
 			esc_html( $source )
 		);
 	}
@@ -194,7 +194,7 @@ final class ColumnsManager {
 		}
 
 		if ( ValidationIssueType::POST_DELETED === $issue_type ) {
-			echo '<em>' . esc_html__( 'Redirect is pointing to a Post ID that does not exist.', 'wpcom-legacy-redirector' ) . '</em>';
+			echo '<em>' . esc_html__( 'Redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ) . '</em>';
 			return;
 		}
 
@@ -217,7 +217,7 @@ final class ColumnsManager {
 		}
 
 		if ( ValidationIssueType::POST_TRASHED === $issue_type || ValidationIssueType::POST_UNPUBLISHED === $issue_type ) {
-			echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'wpcom-legacy-redirector' ) . '</em>';
+			echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'legacy-redirector' ) . '</em>';
 		}
 	}
 
@@ -292,11 +292,11 @@ final class ColumnsManager {
 	 */
 	private function render_status_column( Redirect $redirect ): void {
 		if ( $redirect->is_active() ) {
-			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" title="' . esc_attr__( 'Enabled', 'wpcom-legacy-redirector' ) . '"></span> ';
-			echo esc_html__( 'Enabled', 'wpcom-legacy-redirector' );
+			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" title="' . esc_attr__( 'Enabled', 'legacy-redirector' ) . '"></span> ';
+			echo esc_html__( 'Enabled', 'legacy-redirector' );
 		} else {
-			echo '<span class="dashicons dashicons-no" style="color: #dc3232;" title="' . esc_attr__( 'Disabled', 'wpcom-legacy-redirector' ) . '"></span> ';
-			echo esc_html__( 'Disabled', 'wpcom-legacy-redirector' );
+			echo '<span class="dashicons dashicons-no" style="color: #dc3232;" title="' . esc_attr__( 'Disabled', 'legacy-redirector' ) . '"></span> ';
+			echo esc_html__( 'Disabled', 'legacy-redirector' );
 		}
 	}
 }

@@ -107,7 +107,7 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		$result = $this->ability->execute( array( 'redirects' => array( 1 ) ) );
 
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'wpcom_legacy_redirector_nothing_to_update', $result->get_error_code() );
+		$this->assertSame( 'legacy_redirector_nothing_to_update', $result->get_error_code() );
 	}
 
 	/**
@@ -194,6 +194,6 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'wpcom_legacy_redirector_invalid_destination', $result->get_error_code() );
+		$this->assertSame( 'legacy_redirector_invalid_destination', $result->get_error_code() );
 	}
 }

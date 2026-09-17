@@ -103,7 +103,7 @@ final class GetRedirectAbilityTest extends MonkeyStubs {
 		$result = $this->ability->execute( array( 'redirect' => '5' ) );
 
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'wpcom_legacy_redirector_not_found', $result->get_error_code() );
+		$this->assertSame( 'legacy_redirector_not_found', $result->get_error_code() );
 	}
 
 	/**
@@ -116,6 +116,6 @@ final class GetRedirectAbilityTest extends MonkeyStubs {
 		$result = $this->ability->execute( array( 'redirect' => 'http://example.com' ) );
 
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'wpcom_legacy_redirector_invalid_identifier', $result->get_error_code() );
+		$this->assertSame( 'legacy_redirector_invalid_identifier', $result->get_error_code() );
 	}
 }

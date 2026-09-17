@@ -1,4 +1,4 @@
-# WPCOM Legacy Redirector
+# Legacy Redirector
 
 Stable tag: 2.0.0-alpha
 Requires at least: 6.8
@@ -25,13 +25,13 @@ A WordPress plugin for handling legacy redirects in a scalable manner. Designed 
 
 1. Upload the plugin folder to `/wp-content/plugins/` or install via the WordPress admin
 2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Navigate to **Tools > Redirects** to add or manage redirects
+3. Navigate to the top-level **Redirects** menu to add or manage redirects
 
 ## Usage
 
 ### Adding Redirects via Admin
 
-1. Go to **Tools > Redirects > Add Redirect**
+1. Go to **Redirects > Add Redirect**
 2. Enter the "Redirect From" path (e.g., `/old-page`)
 3. Enter the "Redirect To" destination (URL or post ID)
 4. Click "Add Redirect"
@@ -40,26 +40,26 @@ A WordPress plugin for handling legacy redirects in a scalable manner. Designed 
 
 ```bash
 # Add a single redirect
-wp wpcom-legacy-redirector create /old-page https://example.com/new-page
+wp legacy-redirector create /old-page https://example.com/new-page
 
 # Redirect to an internal post by ID
-wp wpcom-legacy-redirector create /old-page 123
+wp legacy-redirector create /old-page 123
 
 # Inspect, list, and manage redirects (by source path or ID)
-wp wpcom-legacy-redirector get /old-page
-wp wpcom-legacy-redirector list --status=disabled
-wp wpcom-legacy-redirector update /old-page --to=/new-page
-wp wpcom-legacy-redirector disable /old-page
-wp wpcom-legacy-redirector delete /old-page
+wp legacy-redirector get /old-page
+wp legacy-redirector list --status=disabled
+wp legacy-redirector update /old-page --to=/new-page
+wp legacy-redirector disable /old-page
+wp legacy-redirector delete /old-page
 
 # Find and disable broken redirects
-wp wpcom-legacy-redirector validate --fix
+wp legacy-redirector validate --fix
 
 # Import redirects from CSV
-wp wpcom-legacy-redirector import /path/to/redirects.csv
+wp legacy-redirector import /path/to/redirects.csv
 
 # Export redirects to CSV
-wp wpcom-legacy-redirector list --limit=100000 --format=csv > /path/to/export.csv
+wp legacy-redirector list --limit=100000 --format=csv > /path/to/export.csv
 ```
 
 ### Programmatic Usage
@@ -108,10 +108,10 @@ The plugin works on WordPress multisite installations:
 
 ```bash
 # Add redirect on specific site
-wp wpcom-legacy-redirector create /old /new --url=site2.example.com
+wp legacy-redirector create /old /new --url=site2.example.com
 
 # Export redirects from specific site
-wp wpcom-legacy-redirector list --format=csv --url=site2.example.com > /path/to/export.csv
+wp legacy-redirector list --format=csv --url=site2.example.com > /path/to/export.csv
 ```
 
 ## Source Paths Are Site-Relative
@@ -122,15 +122,15 @@ This matters wherever the home URL sits below the domain root. That includes a s
 
 ```bash
 # On a subsite at example.com/blog, these are equivalent - both store /old-page
-wp wpcom-legacy-redirector create /old-page /new-page --url=example.com/blog
-wp wpcom-legacy-redirector create https://example.com/blog/old-page /new-page --url=example.com/blog
+wp legacy-redirector create /old-page /new-page --url=example.com/blog
+wp legacy-redirector create https://example.com/blog/old-page /new-page --url=example.com/blog
 
 # To redirect the real URL example.com/blog/blog/old-page, the source is /blog/old-page
-wp wpcom-legacy-redirector create /blog/old-page /new-page --url=example.com/blog
+wp legacy-redirector create /blog/old-page /new-page --url=example.com/blog
 
 # On a single site installed at example.com/blog, the same rule applies without --url
-wp wpcom-legacy-redirector create /old-page /new-page
-wp wpcom-legacy-redirector create https://example.com/blog/old-page /new-page
+wp legacy-redirector create /old-page /new-page
+wp legacy-redirector create https://example.com/blog/old-page /new-page
 ```
 
 Note that on such a site `example.com/old-page` is served by whatever sits at the domain root and never reaches WordPress, so only paths below the base URL can be redirected.
@@ -143,8 +143,8 @@ A source is stored without its trailing slash, and incoming requests are canonic
 
 ```bash
 # Both of these create - or update - the same redirect
-wp wpcom-legacy-redirector create /old-page /new-page
-wp wpcom-legacy-redirector create /old-page/ /new-page   # rejected as a duplicate
+wp legacy-redirector create /old-page /new-page
+wp legacy-redirector create /old-page/ /new-page   # rejected as a duplicate
 ```
 
 Whichever form a visitor's old link carries, the redirect fires. This is deliberately independent of your permalink structure: the source is a URL from a site that no longer exists, so your own trailing-slash convention says nothing about it, and keying on a mutable setting would orphan every stored redirect the moment it changed.
@@ -163,12 +163,14 @@ The plugin intercepts 404 requests early (priority 0 on `template_redirect`) and
 
 ## Hooks and Filters
 
+All filters use the `legacy_redirector_` prefix. The four that shipped before 2.0 were prefixed `wpcom_legacy_redirector_`; those names still work and emit a deprecation notice naming the replacement. Where a callback is attached to both names, the current name wins. See [UPGRADING.md](UPGRADING.md) for the full mapping.
+
 ### Preserve Query Parameters
 
 By default, query parameters are stripped during redirect lookup. To preserve specific parameters (like UTM codes):
 
 ```php
-add_filter( 'wpcom_legacy_redirector_preserve_query_params', function( $params, $url ) {
+add_filter( 'legacy_redirector_preserve_query_params', function( $params, $url ) {
     return array( 'utm_source', 'utm_medium', 'utm_campaign' );
 }, 10, 2 );
 ```
@@ -178,7 +180,7 @@ add_filter( 'wpcom_legacy_redirector_preserve_query_params', function( $params, 
 Change the HTTP status code (default: 301):
 
 ```php
-add_filter( 'wpcom_legacy_redirector_redirect_status', function( $status, $url ) {
+add_filter( 'legacy_redirector_redirect_status', function( $status, $url ) {
     return 302; // Temporary redirect
 }, 10, 2 );
 ```
@@ -188,7 +190,7 @@ add_filter( 'wpcom_legacy_redirector_redirect_status', function( $status, $url )
 Redirect responses are sent with a `Cache-Control: max-age` header so browsers do not cache them indefinitely. The default is one day for 301 redirects and one minute otherwise:
 
 ```php
-add_filter( 'wpcom_legacy_redirector_redirect_max_age', function( $max_age, $url, $status ) {
+add_filter( 'legacy_redirector_redirect_max_age', function( $max_age, $url, $status ) {
     return HOUR_IN_SECONDS;
 }, 10, 3 );
 ```
@@ -200,29 +202,29 @@ Return `0` to suppress the header, e.g. where an edge cache manages redirect cac
 Alter the path before redirect lookup. The path is still percent-encoded at this point, since decoding happens during lookup:
 
 ```php
-add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
+add_filter( 'legacy_redirector_request_path', function( $path ) {
     return strtolower( $path ); // Case-insensitive matching
 } );
 ```
 
 ### Modify the Destination URL
 
-The counterpart to `wpcom_legacy_redirector_request_path`: alter the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
+The counterpart to `legacy_redirector_request_path`: alter the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
 
 This is mainly useful where a path suffix is stripped for lookup and needs re-adding to the destination, such as the legacy `/amp/` paired URL structure:
 
 ```php
 // Match /old-path/amp against the stored /old-path redirect, then re-append /amp.
-add_filter( 'wpcom_legacy_redirector_request_path', function( $path ) {
+add_filter( 'legacy_redirector_request_path', function( $path ) {
     return preg_replace( '#/amp/?$#', '', $path );
 } );
 
-add_filter( 'wpcom_legacy_redirector_destination_url', function( $destination, $path, $url ) {
+add_filter( 'legacy_redirector_destination_url', function( $destination, $path, $url ) {
     return preg_match( '#/amp/?$#', $url ) ? trailingslashit( $destination ) . 'amp/' : $destination;
 }, 10, 3 );
 ```
 
-If your site uses the AMP plugin's default query parameter structure (`?amp=1`) rather than the path suffix, you don't need this filter — use `wpcom_legacy_redirector_preserve_query_params` with `'amp'` instead.
+If your site uses the AMP plugin's default query parameter structure (`?amp=1`) rather than the path suffix, you don't need this filter — use `legacy_redirector_preserve_query_params` with `'amp'` instead.
 
 ### Validate Destinations on Internal Hosts
 
@@ -251,7 +253,9 @@ Note: even with this filter, safe requests only use ports 80, 443, and 8080 (plu
 | `import-from-meta` | Import from post meta |
 | `find-domains` | List destination domains |
 
-For detailed command options, run `wp help wpcom-legacy-redirector`.
+For detailed command options, run `wp help legacy-redirector`.
+
+The pre-2.0 `wp legacy-redirector` namespace is still registered so existing scripts keep working. Every invocation through it prints a deprecation warning to STDERR, naming the `wp legacy-redirector` equivalent, and it will be removed in a future major version. Because the warning goes to STDERR, piping `--porcelain` or `--format=csv` output is unaffected.
 
 ## Abilities API
 
@@ -259,24 +263,24 @@ On WordPress 6.9 and later, the plugin registers abilities so that MCP clients a
 
 | Ability | Description |
 |---------|-------------|
-| `wpcom-legacy-redirector/create-redirect` | Create a redirect |
-| `wpcom-legacy-redirector/get-redirect` | Get one redirect, by ID or source path |
-| `wpcom-legacy-redirector/list-redirects` | List redirects, with filters and paging |
-| `wpcom-legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects |
-| `wpcom-legacy-redirector/set-redirect-status` | Enable or disable one or more redirects |
-| `wpcom-legacy-redirector/delete-redirect` | Delete one or more redirects |
-| `wpcom-legacy-redirector/validate-redirects` | Report redirects with broken destinations |
-| `wpcom-legacy-redirector/find-redirect-domains` | List the external domains redirects point at |
+| `legacy-redirector/create-redirect` | Create a redirect |
+| `legacy-redirector/get-redirect` | Get one redirect, by ID or source path |
+| `legacy-redirector/list-redirects` | List redirects, with filters and paging |
+| `legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects |
+| `legacy-redirector/set-redirect-status` | Enable or disable one or more redirects |
+| `legacy-redirector/delete-redirect` | Delete one or more redirects |
+| `legacy-redirector/validate-redirects` | Report redirects with broken destinations |
+| `legacy-redirector/find-redirect-domains` | List the external domains redirects point at |
 
 Every ability requires the `manage_redirects` capability, including the read-only ones. Disabling a redirect keeps it and its destination, but stops serving it to visitors.
 
 ## Documentation
 
-See the [Wiki](https://github.com/Automattic/wpcom-legacy-redirector/wiki) for detailed documentation.
+See the [Wiki](https://github.com/Automattic/legacy-redirector/wiki) for detailed documentation.
 
 ## Support
 
-- **Bug reports & features**: [GitHub Issues](https://github.com/Automattic/wpcom-legacy-redirector/issues)
+- **Bug reports & features**: [GitHub Issues](https://github.com/Automattic/legacy-redirector/issues)
 - **VIP customers**: Contact [WordPress VIP Support](https://wpvip.com/wordpress-vip-enterprise-support/)
 
 Please use GitHub Issues only for bug reports and feature requests, not general support questions.

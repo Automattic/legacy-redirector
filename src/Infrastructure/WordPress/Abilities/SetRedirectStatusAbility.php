@@ -56,7 +56,7 @@ final class SetRedirectStatusAbility implements AbilityInterface {
 	 */
 	#[\Override]
 	public function name(): string {
-		return 'wpcom-legacy-redirector/set-redirect-status';
+		return 'legacy-redirector/set-redirect-status';
 	}
 
 	/**
@@ -67,20 +67,20 @@ final class SetRedirectStatusAbility implements AbilityInterface {
 	#[\Override]
 	public function args(): array {
 		return array(
-			'label'               => __( 'Enable or Disable Redirects', 'wpcom-legacy-redirector' ),
-			'description'         => __( 'Turns redirects on or off without deleting them or changing where they point. A disabled redirect stays in the list and keeps its destination, but is no longer served to visitors, who get whatever the site would otherwise serve for that path. Accepts one redirect or several.', 'wpcom-legacy-redirector' ),
+			'label'               => __( 'Enable or Disable Redirects', 'legacy-redirector' ),
+			'description'         => __( 'Turns redirects on or off without deleting them or changing where they point. A disabled redirect stays in the list and keeps its destination, but is no longer served to visitors, who get whatever the site would otherwise serve for that path. Accepts one redirect or several.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'required'             => array( 'redirects', 'status' ),
 				'properties'           => array(
 					'redirects' => RedirectSchema::identifiers_schema(
-						__( 'The redirects to enable or disable, each given as a redirect ID or the path it redirects from.', 'wpcom-legacy-redirector' )
+						__( 'The redirects to enable or disable, each given as a redirect ID or the path it redirects from.', 'legacy-redirector' )
 					),
 					'status'    => array(
 						'type'        => 'string',
 						'enum'        => array( 'enabled', 'disabled' ),
-						'description' => __( 'Whether the redirects should be served to visitors.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'Whether the redirects should be served to visitors.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -91,7 +91,7 @@ final class SetRedirectStatusAbility implements AbilityInterface {
 				'properties'           => array(
 					'updated' => array(
 						'type'        => 'integer',
-						'description' => __( 'How many redirects had their status set.', 'wpcom-legacy-redirector' ),
+						'description' => __( 'How many redirects had their status set.', 'legacy-redirector' ),
 					),
 					'failed'  => RedirectSchema::failures_schema(),
 				),
@@ -127,7 +127,7 @@ final class SetRedirectStatusAbility implements AbilityInterface {
 
 		return array(
 			'updated' => RedirectBatch::count_succeeded( $items ),
-			'failed'  => BatchFailures::format( $items, __( 'The redirect status could not be changed.', 'wpcom-legacy-redirector' ) ),
+			'failed'  => BatchFailures::format( $items, __( 'The redirect status could not be changed.', 'legacy-redirector' ) ),
 		);
 	}
 }

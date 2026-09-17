@@ -4,14 +4,14 @@ Feature: Find redirect destination domains
   So that I can audit outbound redirect targets
 
   Background:
-    Given a WP installation with the WPCOM Legacy Redirector plugin
+    Given a WP installation with the Legacy Redirector plugin
 
   # Smoke test: find-domains lists the unique external destination domains.
   Scenario: List domains for external redirects
     Given "external.example.com" is allowed to be redirected
     And there is a redirect from "/find-domains-source" to "https://external.example.com/some-page"
 
-    When I run `wp wpcom-legacy-redirector find-domains`
+    When I run `wp legacy-redirector find-domains`
     Then STDOUT should contain:
       """
       external.example.com

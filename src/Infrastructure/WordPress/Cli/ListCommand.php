@@ -123,22 +123,22 @@ final class ListCommand extends WP_CLI_Command {
 	 * ## EXAMPLES
 	 *
 	 *     # List all redirects.
-	 *     $ wp wpcom-legacy-redirector list
+	 *     $ wp legacy-redirector list
 	 *
 	 *     # List disabled redirects.
-	 *     $ wp wpcom-legacy-redirector list --status=disabled
+	 *     $ wp legacy-redirector list --status=disabled
 	 *
 	 *     # List redirects pointing to posts.
-	 *     $ wp wpcom-legacy-redirector list --destination-type=post
+	 *     $ wp legacy-redirector list --destination-type=post
 	 *
 	 *     # Search for redirects containing "blog".
-	 *     $ wp wpcom-legacy-redirector list --search=blog
+	 *     $ wp legacy-redirector list --search=blog
 	 *
 	 *     # Get count of all redirects.
-	 *     $ wp wpcom-legacy-redirector list --format=count
+	 *     $ wp legacy-redirector list --format=count
 	 *
 	 *     # Export all redirects to a CSV file.
-	 *     $ wp wpcom-legacy-redirector list --limit=100000 --format=csv > redirects.csv
+	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
 	 *
 	 * @when after_wp_load
 	 *

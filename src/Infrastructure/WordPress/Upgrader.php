@@ -70,7 +70,7 @@ use WP_Query;
  *
  * The routine is version-gated so it runs exactly once, and processes in
  * batches so that a site with a very large redirect set completes over
- * several requests rather than timing out on one. `wp wpcom-legacy-redirector
+ * several requests rather than timing out on one. `wp legacy-redirector
  * migrate` runs the whole thing in one go and is the better option for large
  * sites.
  */

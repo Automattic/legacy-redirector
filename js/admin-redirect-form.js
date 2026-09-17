@@ -3,7 +3,7 @@
  * autocomplete for the Add/Edit Redirect admin pages.
  *
  * Configuration is provided by wp_localize_script() as
- * `wpcomLegacyRedirectorForm`:
+ * `legacyRedirectorForm`:
  * - postId            Redirect post ID being edited (0 on the Add page).
  * - checkAction       AJAX action for the duplicate-source check.
  * - checkNonce        Nonce for the duplicate-source check.
@@ -12,7 +12,7 @@
  * - duplicateMessage  Message shown when the source already redirects.
  */
 jQuery( document ).ready( function ( $ ) {
-	var settings = window.wpcomLegacyRedirectorForm || {};
+	var settings = window.legacyRedirectorForm || {};
 	var originalFrom = $( '#redirect_from' ).val();
 	var postId = parseInt( settings.postId, 10 ) || 0;
 	var searchTimeout;

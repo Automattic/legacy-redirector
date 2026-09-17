@@ -90,7 +90,7 @@ final class RedirectFormPage {
 		}
 
 		wp_enqueue_script(
-			'wpcom-legacy-redirector-form',
+			'legacy-redirector-form',
 			plugins_url( 'js/admin-redirect-form.js', \Automattic\LegacyRedirector\PLUGIN_FILE ),
 			array( 'jquery' ),
 			\Automattic\LegacyRedirector\VERSION,
@@ -101,15 +101,15 @@ final class RedirectFormPage {
 		$redirect_id = isset( $_GET['redirect_id'] ) ? absint( $_GET['redirect_id'] ) : 0;
 
 		wp_localize_script(
-			'wpcom-legacy-redirector-form',
-			'wpcomLegacyRedirectorForm',
+			'legacy-redirector-form',
+			'legacyRedirectorForm',
 			array(
 				'postId'           => $redirect_id,
 				'checkAction'      => CheckDuplicateHandler::get_action(),
 				'checkNonce'       => wp_create_nonce( CheckDuplicateHandler::get_action() ),
 				'searchAction'     => SearchPostsHandler::get_action(),
 				'searchNonce'      => wp_create_nonce( SearchPostsHandler::get_action() ),
-				'duplicateMessage' => __( 'A redirect already exists for this source URL.', 'wpcom-legacy-redirector' ),
+				'duplicateMessage' => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
 			)
 		);
 	}
@@ -123,8 +123,8 @@ final class RedirectFormPage {
 		// Add Redirect page.
 		add_submenu_page(
 			'edit.php?post_type=' . PostType::POST_TYPE,
-			__( 'Add Redirect', 'wpcom-legacy-redirector' ),
-			__( 'Add Redirect', 'wpcom-legacy-redirector' ),
+			__( 'Add Redirect', 'legacy-redirector' ),
+			__( 'Add Redirect', 'legacy-redirector' ),
 			Capability::MANAGE_REDIRECTS_CAPABILITY,
 			'add-redirect',
 			array( $this, 'render_add_page' )
@@ -133,8 +133,8 @@ final class RedirectFormPage {
 		// Edit Redirect page (hidden from menu).
 		add_submenu_page(
 			'',
-			__( 'Edit Redirect', 'wpcom-legacy-redirector' ),
-			__( 'Edit Redirect', 'wpcom-legacy-redirector' ),
+			__( 'Edit Redirect', 'legacy-redirector' ),
+			__( 'Edit Redirect', 'legacy-redirector' ),
 			Capability::MANAGE_REDIRECTS_CAPABILITY,
 			'edit-redirect',
 			array( $this, 'render_edit_page' )
@@ -197,12 +197,12 @@ final class RedirectFormPage {
 		$redirect_id = isset( $_GET['redirect_id'] ) ? absint( $_GET['redirect_id'] ) : 0;
 
 		if ( ! $redirect_id ) {
-			wp_die( esc_html__( 'Invalid redirect ID.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'Invalid redirect ID.', 'legacy-redirector' ) );
 		}
 
 		$redirect = $this->repository->find_by_id( $redirect_id );
 		if ( null === $redirect ) {
-			wp_die( esc_html__( 'Redirect not found.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'Redirect not found.', 'legacy-redirector' ) );
 		}
 
 		$this->render_form_page( $redirect );
@@ -216,7 +216,7 @@ final class RedirectFormPage {
 	 */
 	private function render_form_page( ?Redirect $redirect ): void {
 		$is_edit = null !== $redirect;
-		$title   = $is_edit ? __( 'Edit Redirect', 'wpcom-legacy-redirector' ) : __( 'Add Redirect', 'wpcom-legacy-redirector' );
+		$title   = $is_edit ? __( 'Edit Redirect', 'legacy-redirector' ) : __( 'Add Redirect', 'legacy-redirector' );
 
 		// Get current values.
 		$redirect_from       = '';
@@ -286,12 +286,12 @@ final class RedirectFormPage {
 	public function handle_save(): void {
 		// Verify nonce.
 		if ( ! isset( $_POST['redirect_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['redirect_nonce'] ) ), 'save_redirect' ) ) {
-			wp_die( esc_html__( 'Security check failed.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'Security check failed.', 'legacy-redirector' ) );
 		}
 
 		// Check capabilities.
 		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
-			wp_die( esc_html__( 'You do not have permission to manage redirects.', 'wpcom-legacy-redirector' ) );
+			wp_die( esc_html__( 'You do not have permission to manage redirects.', 'legacy-redirector' ) );
 		}
 
 		// Get form values.
@@ -407,7 +407,7 @@ final class RedirectFormPage {
 		 *
 		 * @param bool $check Whether to perform the check. Default true.
 		 */
-		return (bool) apply_filters( 'wpcom_legacy_redirector_check_destination_reachability', true );
+		return (bool) apply_filters( 'legacy_redirector_check_destination_reachability', true );
 	}
 
 	/**
@@ -470,17 +470,17 @@ final class RedirectFormPage {
 	 */
 	private function get_error_message( string $error ): string {
 		$messages = array(
-			'empty_fields'            => __( 'Redirect From and Redirect To are required fields.', 'wpcom-legacy-redirector' ),
-			'invalid_destination'     => __( 'The destination is not valid.', 'wpcom-legacy-redirector' ),
-			'invalid_source'          => __( 'The source URL is not valid.', 'wpcom-legacy-redirector' ),
-			'duplicate'               => __( 'A redirect already exists for this source URL.', 'wpcom-legacy-redirector' ),
-			'same_source_destination' => __( 'Redirect From and Redirect To must not be the same. This would create a redirect loop.', 'wpcom-legacy-redirector' ),
-			'save_failed'             => __( 'Failed to save the redirect. Please try again.', 'wpcom-legacy-redirector' ),
-			'post_not_found'          => __( 'The destination post ID does not exist.', 'wpcom-legacy-redirector' ),
-			'post_not_public'         => __( 'The destination post is not published.', 'wpcom-legacy-redirector' ),
-			'path_not_found'          => __( 'The destination path does not exist.', 'wpcom-legacy-redirector' ),
+			'empty_fields'            => __( 'Redirect From and Redirect To are required fields.', 'legacy-redirector' ),
+			'invalid_destination'     => __( 'The destination is not valid.', 'legacy-redirector' ),
+			'invalid_source'          => __( 'The source URL is not valid.', 'legacy-redirector' ),
+			'duplicate'               => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
+			'same_source_destination' => __( 'Redirect From and Redirect To must not be the same. This would create a redirect loop.', 'legacy-redirector' ),
+			'save_failed'             => __( 'Failed to save the redirect. Please try again.', 'legacy-redirector' ),
+			'post_not_found'          => __( 'The destination post ID does not exist.', 'legacy-redirector' ),
+			'post_not_public'         => __( 'The destination post is not published.', 'legacy-redirector' ),
+			'path_not_found'          => __( 'The destination path does not exist.', 'legacy-redirector' ),
 		);
 
-		return $messages[ $error ] ?? __( 'An error occurred.', 'wpcom-legacy-redirector' );
+		return $messages[ $error ] ?? __( 'An error occurred.', 'legacy-redirector' );
 	}
 }

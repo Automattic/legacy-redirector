@@ -132,7 +132,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test the wpcom_legacy_redirector_allow_insert filter permits front-end creation.
+	 * Test the legacy_redirector_allow_insert filter permits front-end creation.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
 	 */
@@ -163,7 +163,7 @@ final class RedirectManagerTest extends MonkeyStubs {
 	 * Test a user who can manage redirects creates even when the filter says no.
 	 *
 	 * WordPress.com's wpcom-helper.php registers `__return_false` on
-	 * `wpcom_legacy_redirector_allow_insert` at priority 9999 to keep front-end
+	 * `legacy_redirector_allow_insert` at priority 9999 to keep front-end
 	 * code from writing redirects. A capable user — such as one arriving via an
 	 * ability whose permission callback checked `manage_redirects` — must not
 	 * be caught by it, so the capability is consulted before the filter.
