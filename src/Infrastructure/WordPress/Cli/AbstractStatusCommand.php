@@ -16,7 +16,7 @@ use WP_CLI;
 use WP_CLI_Command;
 
 /**
- * Shared behaviour for the enable and disable commands.
+ * Shared behavior for the enable and disable commands.
  */
 abstract class AbstractStatusCommand extends WP_CLI_Command {
 

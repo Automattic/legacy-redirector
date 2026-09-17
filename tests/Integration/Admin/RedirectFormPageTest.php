@@ -27,7 +27,7 @@ use WPDieException;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::handle_save
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
@@ -558,7 +558,7 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
-	 * Test an unrecognised status falls back to publish.
+	 * Test an unrecognized status falls back to publish.
 	 */
 	public function test_unknown_status_falls_back_to_publish(): void {
 		$this->login_as_redirect_manager();

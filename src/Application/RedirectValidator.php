@@ -95,7 +95,7 @@ class RedirectValidator {
 				// source path arrives decoded from SourceUrl, and a bare
 				// parse_url() would also corrupt a multibyte permalink.
 				$destination_path = Url::parse( (string) $post_permalink )['path'] ?? '';
-				if ( $destination_path && $this->normalise_path( $source->path() ) === $this->normalise_path( $destination_path ) ) {
+				if ( $destination_path && $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 					return ValidationResult::invalid(
 						'invalid-values',
 						__( '"Redirect From" and "Redirect To" values are required and should not match.', 'wpcom-legacy-redirector' )
@@ -118,7 +118,7 @@ class RedirectValidator {
 			}
 		}
 
-		if ( $this->normalise_path( $source->path() ) === $this->normalise_path( $destination_path ) ) {
+		if ( $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 			return ValidationResult::invalid(
 				'invalid-values',
 				__( '"Redirect From" and "Redirect To" values are required and should not match.', 'wpcom-legacy-redirector' )
@@ -334,12 +334,12 @@ class RedirectValidator {
 	}
 
 	/**
-	 * Normalise a path for comparison.
+	 * Normalize a path for comparison.
 	 *
 	 * @param string $path The path.
-	 * @return string Normalised path.
+	 * @return string Normalized path.
 	 */
-	private function normalise_path( string $path ): string {
+	private function normalize_path( string $path ): string {
 		return strtolower( trim( $path, '/' ) );
 	}
 

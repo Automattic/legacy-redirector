@@ -1,5 +1,5 @@
 /**
- * Redirect form behaviour: duplicate-source checking and destination
+ * Redirect form behavior: duplicate-source checking and destination
  * autocomplete for the Add/Edit Redirect admin pages.
  *
  * Configuration is provided by wp_localize_script() as

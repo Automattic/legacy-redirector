@@ -221,7 +221,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	 * Test exists returns false for a trashed redirect.
 	 *
 	 * WordPress appends __trashed to the post_name when trashing,
-	 * which breaks the hash-based lookup. This is expected behaviour.
+	 * which breaks the hash-based lookup. This is expected behavior.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
@@ -632,7 +632,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	 * Data provider of unicode source paths.
 	 *
 	 * Deliberately free of trailing slashes: these rows assert a byte-for-byte
-	 * round-trip, and a source is stored without one. Canonicalisation of a
+	 * round-trip, and a source is stored without one. Canonicalization of a
 	 * unicode path that does carry a slash is covered by
 	 * test_unicode_source_with_trailing_slash_is_stored_canonically().
 	 *
@@ -675,7 +675,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test a unicode source with a trailing slash stores and resolves canonically.
 	 *
-	 * The two canonicalisations meet here: the slash comes off the path and
+	 * The two canonicalizations meet here: the slash comes off the path and
 	 * the percent-encoding is decoded. Every spelling of the same old link
 	 * therefore has to reach one row, whichever combination of the two a
 	 * visitor's browser happens to send.

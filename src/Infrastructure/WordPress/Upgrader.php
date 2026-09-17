@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
 use Automattic\LegacyRedirector\Application\HomePath;
-use Automattic\LegacyRedirector\Application\InternalDestinationNormaliser;
+use Automattic\LegacyRedirector\Application\InternalDestinationNormalizer;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use WP_Post;
 use WP_Query;
@@ -43,17 +43,17 @@ use WP_Query;
  * Two further passes bring stored data into the canonical forms 2.0 writes,
  * and apply to any site, not only one coming from 1.x:
  *
- * 3. Destinations are canonicalised. An absolute destination pointing at this
+ * 3. Destinations are canonicalized. An absolute destination pointing at this
  *    site ('https://example.com/foo') is rewritten to the relative form
  *    ('/foo'), so anything left absolute is external by construction, and a
  *    relative destination stored as whichever of '/café' or '/caf%C3%A9' was
- *    typed is rewritten to the form the normaliser now produces on save
+ *    typed is rewritten to the form the normalizer now produces on save
  *    (path and fragment decoded, query kept percent-encoded).
  *
  * 4. Source paths lose their trailing slash, because 2.0 treats '/old-page'
  *    and '/old-page/' as one redirect rather than two. See
  *    SourceUrl::strip_trailing_slash(). Sites that worked around the old
- *    behaviour by storing both forms will have the two rows converge on one
+ *    behavior by storing both forms will have the two rows converge on one
  *    key; see migrate_post() for how that is resolved.
  *
  * Every pass is idempotent per redirect, so re-walking the set is safe.
@@ -77,17 +77,17 @@ use WP_Query;
 final class Upgrader {
 
 	/**
-	 * The internal destination normaliser.
+	 * The internal destination normalizer.
 	 *
-	 * @var InternalDestinationNormaliser
+	 * @var InternalDestinationNormalizer
 	 */
-	private InternalDestinationNormaliser $normaliser;
+	private InternalDestinationNormalizer $normalizer;
 
 	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->normaliser = new InternalDestinationNormaliser();
+		$this->normalizer = new InternalDestinationNormalizer();
 	}
 
 	/**
@@ -156,7 +156,7 @@ final class Upgrader {
 	 * Process one batch of redirects.
 	 *
 	 * @param int $size Maximum number of redirects to process.
-	 * @return array{processed: int, published: int, repathed: int, deduped: int, normalised: int, conflicts: string[], complete: bool}
+	 * @return array{processed: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], complete: bool}
 	 */
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
@@ -169,7 +169,7 @@ final class Upgrader {
 			'published'  => 0,
 			'repathed'   => 0,
 			'deduped'    => 0,
-			'normalised' => 0,
+			'normalized' => 0,
 			'conflicts'  => array(),
 			'complete'   => false,
 		);
@@ -231,7 +231,7 @@ final class Upgrader {
 	 * Walks the whole redirect set, so it is proportional to the number of
 	 * redirects rather than constant time.
 	 *
-	 * @return array{total: int, to_publish: int, to_repath: int, to_dedupe: int, to_normalise: int, conflicts: string[]}
+	 * @return array{total: int, to_publish: int, to_repath: int, to_dedupe: int, to_normalize: int, conflicts: string[]}
 	 */
 	public function count_pending(): array {
 		$started   = $this->started_at( false );
@@ -244,7 +244,7 @@ final class Upgrader {
 			'to_publish'   => 0,
 			'to_repath'    => 0,
 			'to_dedupe'    => 0,
-			'to_normalise' => 0,
+			'to_normalize' => 0,
 			'conflicts'    => array(),
 		);
 
@@ -281,8 +281,8 @@ final class Upgrader {
 					++$pending['to_publish'];
 				}
 
-				if ( null !== $this->normalised_excerpt( $post->post_excerpt ) ) {
-					++$pending['to_normalise'];
+				if ( null !== $this->normalized_excerpt( $post->post_excerpt ) ) {
+					++$pending['to_normalize'];
 				}
 
 				$new_path = $this->canonical_source( $post->post_title, $home_path );
@@ -350,7 +350,7 @@ final class Upgrader {
 				if ( $this->same_destination( $post, $existing ) ) {
 					// Both send visitors to the same place, so the loser is
 					// pure redundancy - typically a site that worked around
-					// the old trailing-slash behaviour by storing both forms.
+					// the old trailing-slash behavior by storing both forms.
 					// Trash rather than delete: an upgrade running quietly on
 					// someone's site should not destroy rows outright.
 					$update['post_status'] = 'trash';
@@ -383,10 +383,10 @@ final class Upgrader {
 			++$result['published'];
 		}
 
-		$normalised = $this->normalised_excerpt( $post->post_excerpt );
-		if ( null !== $normalised ) {
-			$update['post_excerpt'] = $normalised;
-			++$result['normalised'];
+		$normalized = $this->normalized_excerpt( $post->post_excerpt );
+		if ( null !== $normalized ) {
+			$update['post_excerpt'] = $normalized;
+			++$result['normalized'];
 		}
 
 		if ( array() === $update ) {
@@ -444,8 +444,8 @@ final class Upgrader {
 	/**
 	 * Whether two redirects send visitors to the same place.
 	 *
-	 * Compares post IDs and URLs in their normalised forms, so that a pair
-	 * differing only in an encoding this upgrade is about to canonicalise
+	 * Compares post IDs and URLs in their normalized forms, so that a pair
+	 * differing only in an encoding this upgrade is about to canonicalize
 	 * anyway is not mistaken for a genuine disagreement.
 	 *
 	 * @param WP_Post $a One redirect.
@@ -457,8 +457,8 @@ final class Upgrader {
 			return $a->post_parent === $b->post_parent;
 		}
 
-		return ( $this->normalised_excerpt( $a->post_excerpt ) ?? $a->post_excerpt )
-			=== ( $this->normalised_excerpt( $b->post_excerpt ) ?? $b->post_excerpt );
+		return ( $this->normalized_excerpt( $a->post_excerpt ) ?? $a->post_excerpt )
+			=== ( $this->normalized_excerpt( $b->post_excerpt ) ?? $b->post_excerpt );
 	}
 
 	/**
@@ -499,22 +499,22 @@ final class Upgrader {
 	 * The relative form of an internal absolute destination, or null when no rewrite is due.
 	 *
 	 * @param string $excerpt The stored destination.
-	 * @return string|null The normalised destination, or null when already canonical.
+	 * @return string|null The normalized destination, or null when already canonical.
 	 */
-	private function normalised_excerpt( string $excerpt ): ?string {
+	private function normalized_excerpt( string $excerpt ): ?string {
 		if ( str_starts_with( $excerpt, 'http' ) ) {
-			return $this->normaliser->to_internal_path( $excerpt );
+			return $this->normalizer->to_internal_path( $excerpt );
 		}
 
 		// A relative destination may have been stored in whichever encoding
-		// it was entered in; version 4 canonicalises it the same way saving
+		// it was entered in; version 4 canonicalizes it the same way saving
 		// does now. Null when nothing changes, so an already-canonical row is
 		// neither rewritten nor counted.
 		if ( ! str_starts_with( $excerpt, '/' ) ) {
 			return null;
 		}
 
-		$canonical = $this->normaliser->canonicalise( $excerpt );
+		$canonical = $this->normalizer->canonicalize( $excerpt );
 
 		return null === $canonical || $canonical === $excerpt ? null : $canonical;
 	}

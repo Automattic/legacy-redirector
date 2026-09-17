@@ -23,7 +23,7 @@ use WPDieException;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -92,7 +92,7 @@ final class StatusActionsHandlerTest extends TestCase {
 	 * Test a post of another type cannot be driven through the redirect row action.
 	 *
 	 * The handler and RedirectManager both reject the post, so this passes with
-	 * either check alone. It guards the behaviour, not one particular guard.
+	 * either check alone. It guards the behavior, not one particular guard.
 	 */
 	public function test_disable_redirect_rejects_a_post_of_another_type(): void {
 		$post_id = self::factory()->post->create(

@@ -121,7 +121,7 @@ final class ColumnsManagerTest extends MonkeyStubs {
 		$this->assertStringContainsString(
 			'<span style="color: #888;">' . $expected . '</span>',
 			$output,
-			'The grey home URL prefix should precede the source path wherever home is not the domain root.'
+			'The gray home URL prefix should precede the source path wherever home is not the domain root.'
 		);
 		$this->assertStringContainsString(
 			'>/old-page</a>',

@@ -29,7 +29,7 @@ in faster PHPUnit tests.
 
 Behat tests provide unique value for:
 
-1. **CLI argument parsing** - WP-CLI's own parsing behaviour
+1. **CLI argument parsing** - WP-CLI's own parsing behavior
 2. **Output format verification** - Exact text users see
 3. **File I/O operations** - CSV import/export with real files
 4. **WordPress filter contracts** - `allowed_redirect_hosts` etc.
@@ -40,8 +40,8 @@ Behat tests provide unique value for:
 | Feature | Scenario | Rationale |
 |---------|----------|-----------|
 | testing.feature | WP-CLI loads for your tests | Validates wp-env setup works |
-| testing.feature | WP-CLI recognises plugin commands | Validates plugin activation |
-| testing.feature | WP-CLI recognises wpcom-legacy-redirector commands | Validates command registration |
+| testing.feature | WP-CLI recognizes plugin commands | Validates plugin activation |
+| testing.feature | WP-CLI recognizes wpcom-legacy-redirector commands | Validates command registration |
 | create.feature | Create a redirect to a path | Smoke test for basic creation |
 | create.feature | Creating a duplicate redirect fails | Tests error contract and exit code |
 | list.feature | List all redirects | Smoke test for list output format |
@@ -85,7 +85,7 @@ If the answer to #1 or #2 is "no", write a PHPUnit test instead.
 
 - Error handling for invalid inputs
 - Testing different output formats (--format=json/csv/table)
-- Pagination behaviour
+- Pagination behavior
 - Search/filtering logic
 
 ## Running Behat Tests

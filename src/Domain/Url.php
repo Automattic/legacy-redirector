@@ -49,7 +49,7 @@ final class Url {
 	 * Parse a URL, returning its components percent-decoded.
 	 *
 	 * For callers that want the components as characters - a value object
-	 * normalising a path, or a comparison against something already decoded.
+	 * normalizing a path, or a comparison against something already decoded.
 	 *
 	 * @param string $url The URL to parse.
 	 * @return array<string, string>|null The components, or null when the URL

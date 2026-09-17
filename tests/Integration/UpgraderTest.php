@@ -24,7 +24,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  * @uses \Automattic\LegacyRedirector\Application\HomePath
- * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
@@ -238,7 +238,7 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A 1.x redirect is recognised by never having been published.
+	 * A 1.x redirect is recognized by never having been published.
 	 *
 	 * WordPress stores 0000-00-00 00:00:00 as the modified date for a draft
 	 * that was never published, which is exactly what 1.x produced.
@@ -304,12 +304,12 @@ final class UpgraderTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_internal_absolute_destination_is_normalised() {
+	public function test_internal_absolute_destination_is_normalized() {
 		$post_id = $this->create_legacy_redirect( '/old-page', home_url( '/new-page?a=1' ) );
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 1, $result['normalised'] );
+		$this->assertSame( 1, $result['normalized'] );
 		$this->assertSame( '/new-page?a=1', get_post( $post_id )->post_excerpt );
 
 		// The written value must survive the round trip back through the
@@ -324,7 +324,7 @@ final class UpgraderTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_double_slash_destination_is_not_normalised() {
+	public function test_double_slash_destination_is_not_normalized() {
 		// Built by concatenation: home_url( '//foo' ) would collapse the
 		// double slash this test exists to preserve.
 		$destination = untrailingslashit( home_url() ) . '//foo';
@@ -332,7 +332,7 @@ final class UpgraderTest extends TestCase {
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( 0, $result['normalized'] );
 		$this->assertSame( $destination, get_post( $post_id )->post_excerpt );
 	}
 
@@ -341,30 +341,30 @@ final class UpgraderTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_external_destination_is_not_normalised() {
+	public function test_external_destination_is_not_normalized() {
 		$post_id = $this->create_legacy_redirect( '/old-page', 'https://external.example.net/x' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( 0, $result['normalized'] );
 		$this->assertSame( 'https://external.example.net/x', get_post( $post_id )->post_excerpt );
 	}
 
 	/**
-	 * A relative destination stored percent-encoded is canonicalised.
+	 * A relative destination stored percent-encoded is canonicalized.
 	 *
 	 * Before version 4, whichever encoding was typed was what got stored, so
 	 * one target could be two different strings. Existing rows converge on
-	 * the decoded form the normaliser now produces on save.
+	 * the decoded form the normalizer now produces on save.
 	 *
 	 * @return void
 	 */
-	public function test_encoded_relative_destination_is_canonicalised() {
+	public function test_encoded_relative_destination_is_canonicalized() {
 		$post_id = $this->create_legacy_redirect( '/old-page', '/caf%C3%A9?q=a%26b' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 1, $result['normalised'] );
+		$this->assertSame( 1, $result['normalized'] );
 		// The path decodes; the query keeps its encoding, because its values
 		// have sub-structure a decode would corrupt.
 		$this->assertSame( '/café?q=a%26b', get_post( $post_id )->post_excerpt );
@@ -386,7 +386,7 @@ final class UpgraderTest extends TestCase {
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 0, $result['normalised'] );
+		$this->assertSame( 0, $result['normalized'] );
 		$this->assertSame( '/café', get_post( $post_id )->post_excerpt );
 	}
 
@@ -395,19 +395,19 @@ final class UpgraderTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_count_pending_reports_normalisation() {
+	public function test_count_pending_reports_normalization() {
 		$this->create_legacy_redirect( '/old-page', home_url( '/new-page' ) );
 
 		$pending = $this->upgrader->count_pending();
 
-		$this->assertSame( 1, $pending['to_normalise'] );
+		$this->assertSame( 1, $pending['to_normalize'] );
 	}
 	/**
 	 * A stored source with a trailing slash is re-keyed without one.
 	 *
 	 * @return void
 	 */
-	public function test_trailing_slash_source_is_canonicalised() {
+	public function test_trailing_slash_source_is_canonicalized() {
 		$post_id = $this->create_legacy_redirect( '/old-page/' );
 
 		$result = $this->upgrader->run_batch( 100 );
@@ -454,7 +454,7 @@ final class UpgraderTest extends TestCase {
 	 *
 	 * @return void
 	 */
-	public function test_root_source_survives_canonicalisation() {
+	public function test_root_source_survives_canonicalization() {
 		$post_id = $this->create_legacy_redirect( '/' );
 
 		$result = $this->upgrader->run_batch( 100 );
@@ -575,14 +575,14 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A canonicalised source is reachable by a request in either spelling.
+	 * A canonicalized source is reachable by a request in either spelling.
 	 *
 	 * The point of the migration: the stored row moves to the canonical key,
-	 * and lookups canonicalise the request the same way, so both forms land.
+	 * and lookups canonicalize the request the same way, so both forms land.
 	 *
 	 * @return void
 	 */
-	public function test_canonicalised_source_is_reachable_by_either_spelling() {
+	public function test_canonicalized_source_is_reachable_by_either_spelling() {
 		$this->create_legacy_redirect( '/old-page/' );
 
 		$this->upgrader->run_batch( 100 );

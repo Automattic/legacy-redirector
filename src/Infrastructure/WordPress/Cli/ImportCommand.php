@@ -260,7 +260,7 @@ final class ImportCommand extends WP_CLI_Command {
 		$is_table = 'table' === $format;
 		$errors   = array_filter( $results, fn( $r ) => 'error' === $r['action'] );
 
-		// Summarise by action for table output.
+		// Summarize by action for table output.
 		if ( $is_table ) {
 			$counts = array_count_values( array_column( $results, 'action' ) );
 			WP_CLI::line( '' );

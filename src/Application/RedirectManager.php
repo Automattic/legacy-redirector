@@ -42,11 +42,11 @@ class RedirectManager {
 	private ?RedirectValidator $validator;
 
 	/**
-	 * The internal destination normaliser.
+	 * The internal destination normalizer.
 	 *
-	 * @var InternalDestinationNormaliser
+	 * @var InternalDestinationNormalizer
 	 */
-	private InternalDestinationNormaliser $normaliser;
+	private InternalDestinationNormalizer $normalizer;
 
 	/**
 	 * Constructor.
@@ -57,7 +57,7 @@ class RedirectManager {
 	public function __construct( RedirectRepositoryInterface $repository, ?RedirectValidator $validator = null ) {
 		$this->repository = $repository;
 		$this->validator  = $validator;
-		$this->normaliser = new InternalDestinationNormaliser();
+		$this->normalizer = new InternalDestinationNormalizer();
 	}
 
 	/**
@@ -98,7 +98,7 @@ class RedirectManager {
 			}
 		}
 
-		$redirect = $this->with_normalised_destination( $redirect );
+		$redirect = $this->with_normalized_destination( $redirect );
 
 		// Apply custom status if provided.
 		if ( null !== $status ) {
@@ -263,7 +263,7 @@ class RedirectManager {
 			}
 		}
 
-		$updated = $this->with_normalised_destination( $updated );
+		$updated = $this->with_normalized_destination( $updated );
 
 		if ( null !== $new_status ) {
 			$updated = $updated->with_status( $new_status );
@@ -308,7 +308,7 @@ class RedirectManager {
 			}
 		}
 
-		$updated = $this->with_normalised_destination( $updated );
+		$updated = $this->with_normalized_destination( $updated );
 
 		if ( null !== $new_status ) {
 			$updated = $updated->with_status( $new_status );
@@ -388,7 +388,7 @@ class RedirectManager {
 			}
 		}
 
-		$updated = $this->with_normalised_destination( $updated );
+		$updated = $this->with_normalized_destination( $updated );
 
 		// Apply status change if provided.
 		if ( null !== $status ) {
@@ -416,18 +416,18 @@ class RedirectManager {
 	}
 
 	/**
-	 * Canonicalise a redirect's destination for storage.
+	 * Canonicalize a redirect's destination for storage.
 	 *
 	 * Validation runs against the destination as entered - an absolute URL is
 	 * validated as a URL, not routed into the published-post check that
-	 * relative paths get - so only the stored form is canonicalised, and only
+	 * relative paths get - so only the stored form is canonicalized, and only
 	 * after validation has had its say.
 	 *
-	 * @param Redirect $redirect The redirect to canonicalise.
+	 * @param Redirect $redirect The redirect to canonicalize.
 	 * @return Redirect The redirect with its destination in stored form.
 	 */
-	private function with_normalised_destination( Redirect $redirect ): Redirect {
-		return $redirect->with_destination( $this->normaliser->normalise( $redirect->destination() ) );
+	private function with_normalized_destination( Redirect $redirect ): Redirect {
+		return $redirect->with_destination( $this->normalizer->normalize( $redirect->destination() ) );
 	}
 
 	/**

@@ -202,7 +202,7 @@ final class DestinationUrlTest extends MonkeyStubs {
 	/**
 	 * Test single-slash scheme URLs are rejected.
 	 *
-	 * Browsers normalise `Location: https:/evil.com` to `https://evil.com`, so
+	 * Browsers normalize `Location: https:/evil.com` to `https://evil.com`, so
 	 * these must not pass validation with a null host.
 	 *
 	 * @dataProvider data_single_slash_scheme_urls
@@ -293,7 +293,7 @@ final class DestinationUrlTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test a unicode relative path is still recognised as relative.
+	 * Test a unicode relative path is still recognized as relative.
 	 *
 	 * The leading-slash test is a byte comparison, so a multibyte first
 	 * character must not confuse it into treating the path as absolute (which

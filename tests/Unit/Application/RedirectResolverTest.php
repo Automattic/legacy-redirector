@@ -359,11 +359,11 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data normalises an invalid filtered status code to the default.
+	 * Test get_redirect_data normalizes an invalid filtered status code to the default.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
-	public function test_get_redirect_data_normalises_invalid_status_code(): void {
+	public function test_get_redirect_data_normalizes_invalid_status_code(): void {
 		$this->stub_home_url();
 		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
@@ -545,7 +545,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 		// will cause an InvalidArgumentException because after parsing it has
 		// neither path nor query.
 		// We use 'http://example.com' - after esc_url_raw it remains, but when
-		// normalised in SourceUrl, it has no path (just scheme and host).
+		// normalized in SourceUrl, it has no path (just scheme and host).
 		// However the stub for esc_url_raw returns the input, and wp_parse_url
 		// will parse it correctly giving just host/scheme with no path.
 
@@ -560,7 +560,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->andReturn( array() );
 
 		// SourceUrl::from_string('http://example.com') should throw because
-		// after normalisation there's no path or query - just scheme and host.
+		// after normalization there's no path or query - just scheme and host.
 		$result = $this->resolver->get_redirect_data( '/some-input' );
 
 		$this->assertNull( $result );
@@ -774,7 +774,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * bytes in the 0x80-0x9F range with '_' whenever LC_CTYPE is a UTF-8
 	 * locale (those bytes are C1 controls there), which would make any
 	 * raw-UTF-8 assertion pass or fail on the runner's locale rather than on
-	 * this plugin's behaviour. SourceUrl sidesteps that by percent-encoding
+	 * this plugin's behavior. SourceUrl sidesteps that by percent-encoding
 	 * before it parses; extract_path() parses the request URL directly.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
@@ -940,7 +940,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * @param string      $request_url   The requested URL.
 	 * @param string      $extracted     The path handed to the request_path filter,
 	 *                                   still percent-encoded as the browser sent it.
-	 * @param string|null $source_path   The normalised path the repository is queried
+	 * @param string|null $source_path   The normalized path the repository is queried
 	 *                                   with, when decoding makes it differ from
 	 *                                   $extracted. Defaults to $extracted.
 	 * @return void

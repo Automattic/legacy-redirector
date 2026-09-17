@@ -20,14 +20,14 @@ use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 final class RedirectCreationResultTest extends MonkeyStubs {
 
 	/**
-	 * Test error result behaviour.
+	 * Test error result behavior.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::error
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::is_error
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::error_code
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::error_message
 	 */
-	public function test_error_result_behaviour(): void {
+	public function test_error_result_behavior(): void {
 		$result = RedirectCreationResult::error( 'test-code', 'Test error message' );
 
 		$this->assertTrue( $result->is_error() );
@@ -36,13 +36,13 @@ final class RedirectCreationResultTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test success result behaviour.
+	 * Test success result behavior.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::success
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::is_error
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::redirect_id
 	 */
-	public function test_success_result_behaviour(): void {
+	public function test_success_result_behavior(): void {
 		$result = RedirectCreationResult::success( 123 );
 
 		$this->assertFalse( $result->is_error() );

@@ -155,7 +155,7 @@ final class ColumnsManager {
 	/**
 	 * Render the "from" column.
 	 *
-	 * The source path is site-relative, so it gets the same grey home URL
+	 * The source path is site-relative, so it gets the same gray home URL
 	 * prefix as the "to" column. The prefix sits outside the anchor so the
 	 * clickable row title stays the path itself.
 	 *
@@ -222,10 +222,10 @@ final class ColumnsManager {
 	}
 
 	/**
-	 * Render a relative path with the site's base URL as a grey prefix.
+	 * Render a relative path with the site's base URL as a gray prefix.
 	 *
 	 * Where home is not the domain root, this clarifies that /path resolves
-	 * against the site's base URL. Shows the prefix in grey followed by the
+	 * against the site's base URL. Shows the prefix in gray followed by the
 	 * path in bold; where home is the root, the path is plain text, because
 	 * there is nothing to disambiguate.
 	 *
@@ -243,7 +243,7 @@ final class ColumnsManager {
 	}
 
 	/**
-	 * Render this site's base URL as a grey prefix ahead of a relative path.
+	 * Render this site's base URL as a gray prefix ahead of a relative path.
 	 *
 	 * Prints nothing where home is the domain root, and nothing for anything
 	 * that is not a site-relative path.

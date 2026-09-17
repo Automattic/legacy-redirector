@@ -146,7 +146,7 @@ final class RedirectResolver {
 	 * the site-relative path that matches stored redirects.
 	 *
 	 * The URL is deliberately left percent-encoded here: SourceUrl is the
-	 * single owner of decoding and normalisation, so creation and lookup
+	 * single owner of decoding and normalization, so creation and lookup
 	 * stay symmetric. Decoding first would decode twice at lookup (and so
 	 * miss sources containing %25), and would turn an encoded %23 or %3F
 	 * into a real fragment or query delimiter before parsing.

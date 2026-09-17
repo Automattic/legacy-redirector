@@ -1,6 +1,6 @@
 <?php
 /**
- * InternalDestinationNormaliser unit tests.
+ * InternalDestinationNormalizer unit tests.
  *
  * @package Automattic\LegacyRedirector\Tests\Unit\Application
  */
@@ -9,7 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Application;
 
-use Automattic\LegacyRedirector\Application\InternalDestinationNormaliser;
+use Automattic\LegacyRedirector\Application\InternalDestinationNormalizer;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
@@ -17,23 +17,23 @@ use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
 
 /**
- * InternalDestinationNormaliserTest class.
+ * InternalDestinationNormalizerTest class.
  *
- * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser
+ * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
-final class InternalDestinationNormaliserTest extends MonkeyStubs {
+final class InternalDestinationNormalizerTest extends MonkeyStubs {
 
 	/**
-	 * The normaliser under test.
+	 * The normalizer under test.
 	 *
-	 * @var InternalDestinationNormaliser
+	 * @var InternalDestinationNormalizer
 	 */
-	private InternalDestinationNormaliser $normaliser;
+	private InternalDestinationNormalizer $normalizer;
 
 	/**
 	 * Sets up test fixtures.
@@ -43,36 +43,36 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 	protected function set_up(): void {
 		parent::set_up();
 
-		$this->normaliser = new InternalDestinationNormaliser();
+		$this->normalizer = new InternalDestinationNormalizer();
 	}
 
 	/**
 	 * Test absolute URLs are rewritten to relative paths exactly when internal.
 	 *
-	 * @dataProvider data_normalise
+	 * @dataProvider data_normalize
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::normalise
-	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::to_internal_path
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::normalize
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::to_internal_path
 	 *
 	 * @param string $home_url The site's home URL.
 	 * @param string $input    The destination as entered.
 	 * @param string $expected The destination as stored.
 	 * @return void
 	 */
-	public function test_normalise( string $home_url, string $input, string $expected ): void {
+	public function test_normalize( string $home_url, string $input, string $expected ): void {
 		Functions\when( 'home_url' )->justReturn( $home_url );
 
 		$destination = Destination::from_url( DestinationUrl::from_string( $input ) );
 
-		$this->assertSame( $expected, $this->normaliser->normalise( $destination )->as_url()->value() );
+		$this->assertSame( $expected, $this->normalizer->normalize( $destination )->as_url()->value() );
 	}
 
 	/**
-	 * Data provider for test_normalise.
+	 * Data provider for test_normalize.
 	 *
 	 * @return array<string, array{string, string, string}>
 	 */
-	public function data_normalise(): array {
+	public function data_normalize(): array {
 		return array(
 			// Single site.
 			'relative path untouched'           => array( 'https://example.com', '/foo', '/foo' ),
@@ -99,7 +99,7 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 			'network root untouched'            => array( 'https://example.com/sub1', 'https://example.com/', 'https://example.com/' ),
 			'subsite double slash untouched'    => array( 'https://example.com/sub1', 'https://example.com/sub1//x', 'https://example.com/sub1//x' ),
 
-			// Unicode and encoding canonicalisation: '/café' and '/caf%C3%A9'
+			// Unicode and encoding canonicalization: '/café' and '/caf%C3%A9'
 			// are two spellings of one target, so both store as the decoded
 			// form. The query alone keeps its percent-encoding, because its
 			// values have sub-structure a decode would corrupt.
@@ -115,9 +115,9 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 			'unicode home path made relative'   => array( 'https://example.com/café', 'https://example.com/café/page', '/page' ),
 			'unicode home path boundary held'   => array( 'https://example.com/café', 'https://example.com/cafétéria/page', 'https://example.com/cafétéria/page' ),
 
-			// Encoding canonicalisation edges.
+			// Encoding canonicalization edges.
 			'matching port made relative'       => array( 'https://example.com:8080', 'https://example.com:8080/foo', '/foo' ),
-			'relative encoded canonicalised'    => array( 'https://example.com', '/caf%C3%A9', '/café' ),
+			'relative encoded canonicalized'    => array( 'https://example.com', '/caf%C3%A9', '/café' ),
 			'relative decoded untouched'        => array( 'https://example.com', '/café', '/café' ),
 			'raw query becomes encoded'         => array( 'https://example.com', 'https://example.com/foo?q=тест', '/foo?q=%D1%82%D0%B5%D1%81%D1%82' ),
 			'literal %26 in query preserved'    => array( 'https://example.com', 'https://example.com/foo?q=a%26b', '/foo?q=a%26b' ),
@@ -134,12 +134,12 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 	/**
 	 * Test both spellings of one internal destination reach one stored form.
 	 *
-	 * The inconsistency this canonicalisation exists to remove: before it,
+	 * The inconsistency this canonicalization exists to remove: before it,
 	 * whichever encoding the admin happened to type was what got stored, so
 	 * one target could be two different strings.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::normalise
-	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::canonicalise
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::normalize
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::canonicalize
 	 */
 	public function test_encoded_and_decoded_forms_converge(): void {
 		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
@@ -147,7 +147,7 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 		$stored = array();
 		foreach ( array( 'https://example.com/caf%C3%A9', 'https://example.com/café', '/caf%C3%A9', '/café' ) as $entered ) {
 			$destination = Destination::from_url( DestinationUrl::from_string( $entered ) );
-			$stored[]    = $this->normaliser->normalise( $destination )->as_url()->value();
+			$stored[]    = $this->normalizer->normalize( $destination )->as_url()->value();
 		}
 
 		$this->assertSame( array( '/café', '/café', '/café', '/café' ), $stored );
@@ -156,22 +156,22 @@ final class InternalDestinationNormaliserTest extends MonkeyStubs {
 	/**
 	 * Test post ID destinations pass through untouched.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::normalise
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::normalize
 	 */
-	public function test_normalise_leaves_post_id_destinations_alone(): void {
+	public function test_normalize_leaves_post_id_destinations_alone(): void {
 		$destination = Destination::from_post_id( DestinationPostId::from_int( 5 ) );
 
-		$this->assertSame( $destination, $this->normaliser->normalise( $destination ) );
+		$this->assertSame( $destination, $this->normalizer->normalize( $destination ) );
 	}
 
 	/**
 	 * Test external URLs are reported as not internal.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormaliser::to_internal_path
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::to_internal_path
 	 */
 	public function test_to_internal_path_returns_null_for_external_urls(): void {
 		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 
-		$this->assertNull( $this->normaliser->to_internal_path( 'https://google.com/x' ) );
+		$this->assertNull( $this->normalizer->to_internal_path( 'https://google.com/x' ) );
 	}
 }

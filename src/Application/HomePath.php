@@ -12,7 +12,7 @@ namespace Automattic\LegacyRedirector\Application;
 use Automattic\LegacyRedirector\Domain\Url;
 
 /**
- * Supplies the current site's home path for SourceUrl normalisation.
+ * Supplies the current site's home path for SourceUrl normalization.
  *
  * SourceUrl lives in the Domain layer, which cannot ask WordPress where
  * home is, so the home path is passed into SourceUrl::from_string() by its
