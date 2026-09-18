@@ -31,8 +31,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
- * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
@@ -324,6 +324,99 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_command_error();
 		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+	}
+
+	/**
+	 * Test an unpublished custom post type destination is reported.
+	 *
+	 * The destination resolver searches every registered post type, so a
+	 * redirect to a custom post type item is judged by that post's status
+	 * instead of being treated as unresolvable.
+	 */
+	public function test_validate_finds_unpublished_custom_post_type_destination(): void {
+		register_post_type( 'book', array( 'public' => true ) );
+
+		try {
+			$book_id = self::factory()->post->create(
+				array(
+					'post_type'   => 'book',
+					'post_status' => 'publish',
+					'post_name'   => 'audited-book',
+				)
+			);
+			$this->create_redirect( '/book-source', '/audited-book' );
+			wp_update_post(
+				array(
+					'ID'          => $book_id,
+					'post_status' => 'draft',
+				)
+			);
+
+			$this->invoke_command( $this->command, array( '/book-source' ), array() );
+		} finally {
+			unregister_post_type( 'book' );
+		}
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Post not published' );
+	}
+
+	/**
+	 * Test an unpublished destination behind a dated permalink is reported.
+	 *
+	 * A dated permalink cannot be walked as a hierarchical slug, so the
+	 * resolver falls back to url_to_postid() to find the post. That fallback
+	 * resolves an unpublished post only for a user who can edit it - which is
+	 * exactly who runs `validate` - so the check runs as an administrator.
+	 */
+	public function test_validate_finds_unpublished_dated_permalink_destination(): void {
+		$this->set_permalink_structure( '/%year%/%monthnum%/%day%/%postname%/' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'dated-target',
+				'post_date'   => '2020-01-15 12:00:00',
+			)
+		);
+
+		$permalink = get_permalink( $post_id );
+		$path      = wp_parse_url( $permalink, PHP_URL_PATH );
+		$this->assertStringContainsString( '2020', (string) $path );
+
+		$this->create_redirect( '/dated-source', $path );
+
+		// A published post behind the dated permalink resolves cleanly.
+		$this->invoke_command( $this->command, array( '/dated-source' ), array() );
+		$this->assert_success_contains( 'No issues found.' );
+
+		wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->invoke_command( $this->command, array( '/dated-source' ), array() );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Post not published' );
+	}
+
+	/**
+	 * Test a destination host missing from allowed_redirect_hosts is reported.
+	 *
+	 * At request time wp_safe_redirect() quietly sends visitors elsewhere,
+	 * so the redirect is broken without any HTTP request being needed.
+	 */
+	public function test_validate_reports_disallowed_external_host(): void {
+		$this->create_redirect( '/external-source', 'https://not-allowed.example.net/page' );
+
+		$this->invoke_command( $this->command, array( '/external-source' ), array() );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Destination host not allowed' );
 	}
 
 	/**

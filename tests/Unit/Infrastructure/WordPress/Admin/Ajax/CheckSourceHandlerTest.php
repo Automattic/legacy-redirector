@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Admin\Ajax;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
@@ -46,7 +47,7 @@ final class CheckSourceHandlerTest extends MonkeyStubs {
 		parent::set_up();
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
-		$this->handler    = new CheckSourceHandler( $this->repository );
+		$this->handler    = new CheckSourceHandler( $this->repository, new RedirectAuditor() );
 	}
 
 	/**

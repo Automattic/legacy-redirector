@@ -113,13 +113,13 @@ final class AdminBootstrapper {
 	 * @return void
 	 */
 	private function register_ajax_handlers(): void {
-		$check_source = new CheckSourceHandler( $this->repository );
+		$check_source = new CheckSourceHandler( $this->repository, $this->auditor );
 		$check_source->register();
 
 		$search_posts = new SearchPostsHandler();
 		$search_posts->register();
 
-		$validate = new ValidateRedirectHandler( $this->repository, $this->validator );
+		$validate = new ValidateRedirectHandler( $this->repository, $this->auditor );
 		$validate->register();
 	}
 
@@ -148,7 +148,7 @@ final class AdminBootstrapper {
 	 * @return void
 	 */
 	private function register_form_pages(): void {
-		$form_page = new RedirectFormPage( $this->repository, $this->manager, $this->validator );
+		$form_page = new RedirectFormPage( $this->repository, $this->manager, $this->validator, $this->auditor );
 		$form_page->register();
 
 		$form_screen_setup = new FormScreenSetup();
@@ -161,7 +161,7 @@ final class AdminBootstrapper {
 	 * @return void
 	 */
 	private function register_validation_notices(): void {
-		$notices = new ValidationNotices( $this->repository, $this->validator );
+		$notices = new ValidationNotices( $this->repository, $this->auditor );
 		$notices->register();
 	}
 }

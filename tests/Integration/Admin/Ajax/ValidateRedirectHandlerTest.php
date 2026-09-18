@@ -22,10 +22,11 @@ use WPAjaxDieStopException;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
- * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
- * @uses \Automattic\LegacyRedirector\Application\ValidationResult
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
@@ -53,7 +54,7 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		( new ValidateRedirectHandler( $this->repository(), $this->validator() ) )->register();
+		( new ValidateRedirectHandler( $this->repository(), $this->auditor() ) )->register();
 
 		// The reachability check would otherwise make a real request. Default
 		// to reachable; the 404 test adds its own filter, which runs later
@@ -126,9 +127,9 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 	}
 
 	/**
-	 * Test an ID with no redirect behind it reports the null status.
+	 * Test an ID with no redirect behind it reports the not-found status.
 	 */
-	public function test_unknown_redirect_id_reports_null_status(): void {
+	public function test_unknown_redirect_id_reports_not_found_status(): void {
 		$this->login_as_redirect_manager();
 
 		$response = $this->dispatch( ValidateRedirectHandler::get_action(), array( 'redirect_id' => '999999' ) );
@@ -137,8 +138,8 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 			array(
 				'success' => false,
 				'data'    => array(
-					'status'  => 'null',
-					'message' => 'The redirect is pointing to a Post ID that does not exist.',
+					'status'  => 'not-found',
+					'message' => 'Redirect not found.',
 				),
 			),
 			$response
@@ -191,8 +192,8 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 			array(
 				'success' => false,
 				'data'    => array(
-					'status'  => '404',
-					'message' => 'The redirect destination returns a 404 error.',
+					'status'  => 'url_not_found',
+					'message' => 'The destination URL returns a 404 Not Found response.',
 				),
 			),
 			$response

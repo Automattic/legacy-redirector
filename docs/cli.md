@@ -143,8 +143,8 @@ not allow is an error naming the domain. See [configuration.md](configuration.md
 
 `validate` inspects the destinations of redirects you already have, and reports the ones
 that no longer go anywhere: a post that has since been deleted, trashed, or unpublished; a
-relative path that does not resolve to published content; a row whose stored data is
-corrupt.
+relative path that does not resolve to published content; an external destination whose
+host is no longer in `allowed_redirect_hosts`; a row whose stored data is corrupt.
 
 It also flags any redirect whose source is a path WordPress itself serves: `/wp-admin` and
 everything beneath it, `/wp-login.php` and the other root `wp-*.php` files, `/xmlrpc.php`,

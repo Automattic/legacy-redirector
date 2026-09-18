@@ -9,7 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Admin\Notices;
 
-use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -57,12 +57,12 @@ final class ValidationNoticesTest extends MonkeyStubs {
 
 		Monkey\Functions\stubTranslationFunctions();
 		Monkey\Functions\stubEscapeFunctions();
-		Monkey\Functions\stubs( array( 'wp_kses_post' ) );
+		Monkey\Functions\stubs( array( 'wp_kses_post', 'sanitize_text_field', 'wp_unslash' ) );
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
 		$this->notices    = new ValidationNotices(
 			$this->repository,
-			Mockery::mock( RedirectValidator::class )
+			Mockery::mock( RedirectAuditor::class )
 		);
 	}
 

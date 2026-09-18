@@ -9,6 +9,8 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Application;
 
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
@@ -16,9 +18,13 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Domain\Url;
 
 /**
- * Service for validating redirects before persistence.
+ * The write gate: may this redirect be stored?
  *
- * Consolidates all validation rules for creating and updating redirects.
+ * Owns only the rules that exist for writes - the duplicate-source check
+ * (which needs the repository), the self-loop check, and URL format policy -
+ * plus the policy over RedirectAuditor's findings deciding which of them
+ * refuse a write. What is actually wrong with a redirect is the auditor's
+ * question; which findings block a save is answered here, in one place.
  */
 class RedirectValidator {
 
@@ -30,12 +36,21 @@ class RedirectValidator {
 	private RedirectRepositoryInterface $repository;
 
 	/**
+	 * The redirect auditor.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository The redirect repository.
+	 * @param RedirectAuditor|null        $auditor    The redirect auditor (optional, created if not provided).
 	 */
-	public function __construct( RedirectRepositoryInterface $repository ) {
+	public function __construct( RedirectRepositoryInterface $repository, ?RedirectAuditor $auditor = null ) {
 		$this->repository = $repository;
+		$this->auditor    = $auditor ?? new RedirectAuditor();
 	}
 
 	/**
@@ -73,8 +88,12 @@ class RedirectValidator {
 			return $same_result;
 		}
 
-		// Validate destination.
-		return $this->validate_destination( $redirect->destination() );
+		// No format check is needed here: DestinationUrl refuses a malformed
+		// absolute URL at construction, so no Redirect can carry one.
+
+		// Destination health is the auditor's question; which findings refuse
+		// a write is decided here.
+		return $this->refusal_for( $this->auditor->audit_destination( $redirect ) );
 	}
 
 	/**
@@ -129,208 +148,39 @@ class RedirectValidator {
 	}
 
 	/**
-	 * Validate a destination.
+	 * The write-gate policy over an audit finding.
 	 *
-	 * Checks that the destination is valid:
-	 * - For post IDs: post must exist and be published
-	 * - For URLs: must be allowed by wp_validate_redirect
+	 * The same fact carries a different weight when writing than when
+	 * auditing: an unpublished destination is merely reported on a stored
+	 * row, but refuses a new write. Warnings never block; they are reported
+	 * by the surfaces that asked the auditor directly.
 	 *
-	 * @param Destination $destination The destination to validate.
+	 * @param AuditFinding|null $finding The destination finding, if any.
 	 * @return ValidationResult The validation result.
 	 */
-	public function validate_destination( Destination $destination ): ValidationResult {
-		if ( $destination->is_post_id() ) {
-			return $this->validate_destination_post_id( $destination->as_post_id()->value() );
+	private function refusal_for( ?AuditFinding $finding ): ValidationResult {
+		if ( null === $finding || $finding->is_warning() ) {
+			return ValidationResult::valid();
 		}
 
-		return $this->validate_destination_url( $destination->as_url()->value() );
-	}
-
-	/**
-	 * Validate a destination post ID.
-	 *
-	 * @param int $post_id The post ID.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_destination_post_id( int $post_id ): ValidationResult {
-		$post = get_post( $post_id );
-
-		if ( ! $post instanceof \WP_Post ) {
-			return ValidationResult::invalid(
+		// phpcs:ignore PHPCompatibility.Variables.ForbiddenThisUseContexts.OutsideObjectContext -- Match on enum, not $this.
+		return match ( $finding->type() ) {
+			AuditFindingType::POST_DELETED => ValidationResult::invalid(
 				'empty-postid',
 				__( 'Redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' )
-			);
-		}
-
-		// Attachments store 'inherit', never 'publish'; get_post_status()
-		// resolves that against the parent, so a redirect to a media item is
-		// not rejected as unpublished.
-		if ( 'publish' !== get_post_status( $post ) ) {
-			return ValidationResult::invalid(
+			),
+			AuditFindingType::POST_TRASHED,
+			AuditFindingType::POST_UNPUBLISHED => ValidationResult::invalid(
 				'non-public',
-				__( 'You are trying to redirect to a post that is not published.', 'legacy-redirector' )
-			);
-		}
-
-		return ValidationResult::valid();
-	}
-
-	/**
-	 * Validate a destination URL.
-	 *
-	 * @param string $url The URL to validate.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_destination_url( string $url ): ValidationResult {
-		// Root path is always valid.
-		if ( '/' === $url ) {
-			return ValidationResult::valid();
-		}
-
-		// Relative paths are validated as internal redirects.
-		if ( str_starts_with( $url, '/' ) ) {
-			return $this->validate_relative_path( $url );
-		}
-
-		// External URLs - validate they have a valid format.
-		$parsed = wp_parse_url( $url );
-		if ( empty( $parsed['host'] ) || empty( $parsed['scheme'] ) ) {
-			return ValidationResult::invalid(
-				'invalid-url',
-				__( 'The URL is not valid. External URLs must include the scheme (http:// or https://).', 'legacy-redirector' )
-			);
-		}
-
-		// Ensure scheme is http or https.
-		if ( ! in_array( $parsed['scheme'], array( 'http', 'https' ), true ) ) {
-			return ValidationResult::invalid(
-				'invalid-scheme',
-				__( 'Only http and https URLs are supported.', 'legacy-redirector' )
-			);
-		}
-
-		// The host must be one WordPress will actually redirect to. Accepting it
-		// here and letting wp_safe_redirect() refuse it at request time is how
-		// 1.x behaved: the redirect stored cleanly and then quietly sent every
-		// visitor somewhere else. Refusing at creation puts the error in front
-		// of the person who can still do something about it.
-		if ( '' === wp_validate_redirect( $url, '' ) ) {
-			return ValidationResult::invalid(
+				__( 'You are trying to redirect to content that is not published.', 'legacy-redirector' )
+			),
+			// The finding's description, so the error names the refused host.
+			AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED => ValidationResult::invalid(
 				'external-url-not-allowed',
-				sprintf(
-					/* translators: %s: destination host name */
-					__( 'Redirects to %s are not allowed. Add the domain to the "allowed_redirect_hosts" filter first.', 'legacy-redirector' ),
-					(string) $parsed['host']
-				)
-			);
-		}
-
-		return ValidationResult::valid();
-	}
-
-	/**
-	 * Validate a relative path destination.
-	 *
-	 * When the path resolves to a post, its status is checked. A path that
-	 * resolves to no post at all is indeterminate rather than invalid:
-	 * archives, rewrite endpoints, dated permalinks with structures the slug
-	 * walk cannot follow, and URLs served outside WordPress are all real
-	 * destinations with no post to find. Reporting those as broken would be
-	 * wrong far more often than it would be right; the HTTP 404 check
-	 * (validate_destination_not_404()) is the authority on reachability, and
-	 * both admin validation flows run it directly after this check.
-	 *
-	 * @param string $path The relative path.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_relative_path( string $path ): ValidationResult {
-		// A query string or fragment can never be part of a slug match.
-		$slug_path = substr( $path, 0, strcspn( $path, '?#' ) );
-
-		// The home page has no slug to look up. get_page_by_path( '' ) matches
-		// any post with an empty post_name - every draft and pending post has
-		// one - so looking it up would judge this destination by an arbitrary,
-		// unrelated post's status.
-		if ( '' === trim( $slug_path, '/' ) ) {
-			return ValidationResult::valid();
-		}
-
-		$post_types = get_post_types();
-		$post       = get_page_by_path( ltrim( $slug_path, '/' ), OBJECT, $post_types );
-
-		// get_page_by_path() only walks hierarchical slugs; url_to_postid()
-		// resolves anything matching the site's permalink structure, such as
-		// dated permalinks.
-		if ( null === $post ) {
-			$post_id = url_to_postid( home_url( $slug_path ) );
-			$post    = 0 !== $post_id ? get_post( $post_id ) : null;
-		}
-
-		if ( null === $post ) {
-			return ValidationResult::valid();
-		}
-
-		if ( 'publish' !== get_post_status( $post ) ) {
-			return ValidationResult::invalid(
-				'non-public',
-				__( 'You are trying to redirect to a URL that is currently not public.', 'legacy-redirector' )
-			);
-		}
-
-		return ValidationResult::valid();
-	}
-
-	/**
-	 * Validate that the destination does not return a 404.
-	 *
-	 * Performs an HTTP request to check the destination is reachable.
-	 *
-	 * @param Destination $destination The destination to check.
-	 * @return ValidationResult The validation result.
-	 */
-	public function validate_destination_not_404( Destination $destination ): ValidationResult {
-		$url = $this->resolve_destination_url( $destination );
-
-		if ( null === $url ) {
-			return ValidationResult::invalid(
-				'404',
-				__( 'Redirect is pointing to a page with the HTTP status of 404.', 'legacy-redirector' )
-			);
-		}
-
-		$response_code = $this->get_response_code( $url );
-
-		if ( 404 === $response_code ) {
-			return ValidationResult::invalid(
-				'404',
-				__( 'Redirect is pointing to a page with the HTTP status of 404.', 'legacy-redirector' )
-			);
-		}
-
-		return ValidationResult::valid();
-	}
-
-	/**
-	 * Resolve a destination to a full URL.
-	 *
-	 * @param Destination $destination The destination.
-	 * @return string|null The resolved URL, or null if unresolvable.
-	 */
-	public function resolve_destination_url( Destination $destination ): ?string {
-		if ( $destination->is_post_id() ) {
-			$post_id   = $destination->as_post_id()->value();
-			$permalink = get_permalink( $post_id );
-			return false !== $permalink ? $permalink : null;
-		}
-
-		$url = $destination->as_url()->value();
-
-		// Relative paths need to be resolved against home URL.
-		if ( str_starts_with( $url, '/' ) ) {
-			return home_url( $url );
-		}
-
-		return $url;
+				$finding->description() . '.'
+			),
+			default => ValidationResult::valid(),
+		};
 	}
 
 	/**
@@ -341,25 +191,5 @@ class RedirectValidator {
 	 */
 	private function normalize_path( string $path ): string {
 		return strtolower( trim( $path, '/' ) );
-	}
-
-	/**
-	 * Get the HTTP response code for a URL.
-	 *
-	 * @param string $url The URL to check.
-	 * @return int The response code, or 0 on error.
-	 */
-	protected function get_response_code( string $url ): int {
-		if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
-			$response = vip_safe_wp_remote_get( $url, '', 3, 1, 20, array( 'reject_unsafe_urls' => true ) );
-		} else {
-			$response = wp_safe_remote_get( $url );
-		}
-
-		if ( is_wp_error( $response ) || ! is_array( $response ) ) {
-			return 0;
-		}
-
-		return (int) wp_remote_retrieve_response_code( $response );
 	}
 }

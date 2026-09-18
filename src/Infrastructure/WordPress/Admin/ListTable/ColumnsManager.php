@@ -13,7 +13,7 @@ use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\ValidationIssueType;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
@@ -185,15 +185,15 @@ final class ColumnsManager {
 	 * @return void
 	 */
 	private function render_to_column( Redirect $redirect ): void {
-		$issue      = $this->auditor->validate_redirect_destination( $redirect );
+		$issue      = $this->auditor->audit_destination( $redirect );
 		$issue_type = null !== $issue ? $issue->type() : null;
 
-		if ( ValidationIssueType::CORRUPT_DATA === $issue_type ) {
+		if ( AuditFindingType::CORRUPT_DATA === $issue_type ) {
 			echo '<em>' . esc_html( (string) $redirect->corruption() ) . '</em>';
 			return;
 		}
 
-		if ( ValidationIssueType::POST_DELETED === $issue_type ) {
+		if ( AuditFindingType::POST_DELETED === $issue_type ) {
 			echo '<em>' . esc_html__( 'Redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ) . '</em>';
 			return;
 		}
@@ -216,8 +216,12 @@ final class ColumnsManager {
 			$this->render_relative_path_with_prefix( $destination->as_url()->value() );
 		}
 
-		if ( ValidationIssueType::POST_TRASHED === $issue_type || ValidationIssueType::POST_UNPUBLISHED === $issue_type ) {
+		if ( AuditFindingType::POST_TRASHED === $issue_type || AuditFindingType::POST_UNPUBLISHED === $issue_type ) {
 			echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'legacy-redirector' ) . '</em>';
+		}
+
+		if ( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED === $issue_type ) {
+			echo '<br /><em>' . esc_html__( 'Warning: The destination domain is not allowed, so the redirect will not run. Add it to the "allowed_redirect_hosts" filter.', 'legacy-redirector' ) . '</em>';
 		}
 	}
 

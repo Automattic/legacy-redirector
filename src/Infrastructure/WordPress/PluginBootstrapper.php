@@ -216,7 +216,7 @@ final class PluginBootstrapper {
 		// The empty key is the parent command, registered for help text only.
 		$commands = array(
 			''                 => RedirectorCommand::class,
-			'create'           => new CreateCommand( $manager ),
+			'create'           => new CreateCommand( $manager, $this->container->auditor() ),
 			'migrate'          => new MigrateCommand( $this->container->upgrader() ),
 			'get'              => new GetCommand( $fetcher ),
 			'list'             => new ListCommand( $this->container->query_repository() ),
@@ -230,7 +230,7 @@ final class PluginBootstrapper {
 				$this->container->auditor(),
 				$manager
 			),
-			'import'           => new ImportCommand( $manager ),
+			'import'           => new ImportCommand( $manager, $this->container->auditor() ),
 			'import-from-meta' => new ImportFromMetaCommand(
 				$manager,
 				$this->container->repository()

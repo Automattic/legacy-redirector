@@ -13,7 +13,7 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\ValidationIssue;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
 /**
@@ -85,7 +85,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
-			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, and internal paths that no longer resolve. Also flags sources on paths WordPress itself serves, such as /wp-admin or /wp-login.php, which take over that path if it ever returns a 404. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
+			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, internal paths that no longer resolve, and external hosts missing from the allowed_redirect_hosts filter. Also flags sources on paths WordPress itself serves, such as /wp-admin or /wp-login.php, which take over that path if it ever returns a 404. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -195,7 +195,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			);
 		}
 
-		$issues = $this->auditor->validate_batch( $redirects, (bool) ( $input['check_urls'] ?? false ) );
+		$issues = $this->auditor->audit_batch( $redirects, (bool) ( $input['check_urls'] ?? false ) );
 
 		return array(
 			'checked' => count( $redirects ),
@@ -207,10 +207,10 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	/**
 	 * Format a validation issue for ability output.
 	 *
-	 * @param ValidationIssue $issue The issue.
+	 * @param AuditFinding $issue The finding.
 	 * @return array<string, mixed> The formatted issue.
 	 */
-	private function issue_to_array( ValidationIssue $issue ): array {
+	private function issue_to_array( AuditFinding $issue ): array {
 		return array_merge(
 			RedirectSchema::to_array( $issue->redirect() ),
 			array(

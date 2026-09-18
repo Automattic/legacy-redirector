@@ -10,8 +10,10 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages;
 
 use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
@@ -48,16 +50,25 @@ final class RedirectFormPage {
 	private RedirectValidator $validator;
 
 	/**
+	 * Redirect auditor.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository Redirect repository.
 	 * @param RedirectManager             $manager    Redirect manager.
 	 * @param RedirectValidator           $validator  Redirect validator.
+	 * @param RedirectAuditor             $auditor    Redirect auditor.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository, RedirectManager $manager, RedirectValidator $validator ) {
+	public function __construct( RedirectRepositoryInterface $repository, RedirectManager $manager, RedirectValidator $validator, RedirectAuditor $auditor ) {
 		$this->repository = $repository;
 		$this->manager    = $manager;
 		$this->validator  = $validator;
+		$this->auditor    = $auditor;
 	}
 
 	/**
@@ -270,7 +281,7 @@ final class RedirectFormPage {
 
 		// Accepted, but flagged every time the redirect is opened: see
 		// SourceUrl::is_reserved() for why this can lock the admin out.
-		$reserved_source  = $is_edit && $redirect->source()->is_reserved();
+		$reserved_source  = $is_edit && in_array( AuditFindingType::RESERVED_SOURCE, $this->auditor->source_warnings( $redirect->source() ), true );
 		$reserved_message = self::reserved_source_message();
 
 		// Sources are stored relative to this site's home URL, which on a
@@ -363,8 +374,8 @@ final class RedirectFormPage {
 		// pays for a network round-trip. Fails open - only an affirmative
 		// 404 rejects, so a transient network error never blocks a save.
 		if ( $destination->is_url() && $destination->as_url()->is_relative() && $this->should_check_reachability() ) {
-			$http_validation = $this->validator->validate_destination_not_404( $destination );
-			if ( $http_validation->is_invalid() ) {
+			$http_finding = $this->auditor->audit_destination( $proposed, true );
+			if ( null !== $http_finding && AuditFindingType::URL_NOT_FOUND === $http_finding->type() ) {
 				$this->redirect_with_error( $redirect_id, 'path_not_found', $redirect_from, $redirect_to, $redirect_status );
 			}
 		}

@@ -9,12 +9,16 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax;
 
-use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
 /**
  * Handles AJAX requests to validate redirect destinations.
+ *
+ * Reads from the auditor, so this action, the To column, and the `validate`
+ * CLI command report the same findings for the same redirect.
  */
 final class ValidateRedirectHandler {
 
@@ -28,21 +32,21 @@ final class ValidateRedirectHandler {
 	private RedirectRepositoryInterface $repository;
 
 	/**
-	 * Validator for redirect destinations.
+	 * Auditor for redirect health.
 	 *
-	 * @var RedirectValidator
+	 * @var RedirectAuditor
 	 */
-	private RedirectValidator $validator;
+	private RedirectAuditor $auditor;
 
 	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository Redirect repository.
-	 * @param RedirectValidator           $validator  Redirect validator.
+	 * @param RedirectAuditor             $auditor    Redirect auditor.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository, RedirectValidator $validator ) {
+	public function __construct( RedirectRepositoryInterface $repository, RedirectAuditor $auditor ) {
 		$this->repository = $repository;
-		$this->validator  = $validator;
+		$this->auditor    = $auditor;
 	}
 
 	/**
@@ -86,47 +90,26 @@ final class ValidateRedirectHandler {
 		if ( null === $redirect ) {
 			wp_send_json_error(
 				array(
-					'status'  => 'null',
-					'message' => __( 'The redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ),
+					'status'  => 'not-found',
+					'message' => __( 'Redirect not found.', 'legacy-redirector' ),
 				)
 			);
 		}
 
-		$destination = $redirect->destination();
+		// A warning does not fail the redirect: the row is already flagged by
+		// other means, and Validate answers "does this redirect work?".
+		$problems = array_filter(
+			$this->auditor->audit( $redirect, true ),
+			static fn( AuditFinding $finding ): bool => ! $finding->is_warning()
+		);
 
-		// Validate the destination exists and is accessible.
-		$validation_result = $this->validator->validate_destination( $destination );
-
-		if ( $validation_result->is_invalid() ) {
-			$error_code = $validation_result->error_code();
-
-			// Map validator error codes to user-friendly messages.
-			$messages = array(
-				'empty-postid'   => __( 'The redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ),
-				'non-public'     => __( 'The redirect is pointing to content that is not publicly accessible.', 'legacy-redirector' ),
-				'invalid-url'    => __( 'The URL is not valid. External URLs must include the scheme (http:// or https://).', 'legacy-redirector' ),
-				'invalid-scheme' => __( 'Only http and https URLs are supported.', 'legacy-redirector' ),
-				'invalid'        => __( 'The redirect destination URL does not exist.', 'legacy-redirector' ),
-			);
-
-			$message = $messages[ $error_code ] ?? __( 'The redirect is not valid.', 'legacy-redirector' );
+		if ( array() !== $problems ) {
+			$finding = reset( $problems );
 
 			wp_send_json_error(
 				array(
-					'status'  => $error_code,
-					'message' => $message,
-				)
-			);
-		}
-
-		// Check if destination returns 404 via HTTP request.
-		$http_result = $this->validator->validate_destination_not_404( $destination );
-
-		if ( $http_result->is_invalid() ) {
-			wp_send_json_error(
-				array(
-					'status'  => '404',
-					'message' => __( 'The redirect destination returns a 404 error.', 'legacy-redirector' ),
+					'status'  => $finding->type()->value,
+					'message' => $finding->description() . '.',
 				)
 			);
 		}

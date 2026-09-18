@@ -1,6 +1,6 @@
 <?php
 /**
- * ValidationIssueType enum.
+ * AuditFindingType enum.
  *
  * @package Automattic\LegacyRedirector\Domain
  */
@@ -10,12 +10,13 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Domain;
 
 /**
- * Types of validation issues that can be found when validating redirect destinations.
+ * Types of findings the auditor can report about a redirect.
  *
- * Used by the validate command to categorise and report issues with
- * redirect destinations.
+ * A finding is either a problem (the redirect is broken and will not do its
+ * job) or a warning (the redirect works but deserves a human look); see
+ * is_warning().
  */
-enum ValidationIssueType: string {
+enum AuditFindingType: string {
 
 	/**
 	 * The destination post has been trashed.
@@ -31,6 +32,11 @@ enum ValidationIssueType: string {
 	 * The destination post exists but is not published (draft, pending, private, etc).
 	 */
 	case POST_UNPUBLISHED = 'post_unpublished';
+
+	/**
+	 * The destination host is not in allowed_redirect_hosts, so wp_safe_redirect() refuses it.
+	 */
+	case EXTERNAL_HOST_NOT_ALLOWED = 'external_host_not_allowed';
 
 	/**
 	 * The destination URL returns a 404 response.
@@ -58,7 +64,21 @@ enum ValidationIssueType: string {
 	case RESERVED_SOURCE = 'reserved_source';
 
 	/**
-	 * Get a human-readable label for this issue type.
+	 * Whether this finding is a warning rather than a problem.
+	 *
+	 * A problem means the redirect is broken: its destination is gone or the
+	 * redirect will not run. A warning means it works but deserves a human
+	 * look, so automated fixes (like `validate --fix`) must leave it alone.
+	 *
+	 * @return bool
+	 */
+	public function is_warning(): bool {
+		// phpcs:ignore PHPCompatibility.Variables.ForbiddenThisUseContexts.OutsideObjectContext -- Valid enum syntax.
+		return self::RESERVED_SOURCE === $this;
+	}
+
+	/**
+	 * Get a human-readable label for this finding type.
 	 *
 	 * @return string
 	 */
@@ -68,6 +88,7 @@ enum ValidationIssueType: string {
 			self::POST_TRASHED     => 'Post trashed',
 			self::POST_DELETED     => 'Post deleted',
 			self::POST_UNPUBLISHED => 'Post not published',
+			self::EXTERNAL_HOST_NOT_ALLOWED => 'Destination host not allowed',
 			self::URL_NOT_FOUND    => 'Destination returns 404',
 			self::URL_SERVER_ERROR => 'Destination returns server error',
 			self::URL_REQUEST_FAILED => 'Request failed',
@@ -77,7 +98,7 @@ enum ValidationIssueType: string {
 	}
 
 	/**
-	 * Get a detailed description of this issue type.
+	 * Get a detailed description of this finding type.
 	 *
 	 * @param string|null $extra_info Optional extra information (e.g., status code, post status).
 	 * @return string
@@ -88,6 +109,7 @@ enum ValidationIssueType: string {
 			self::POST_TRASHED     => 'The destination post has been moved to trash',
 			self::POST_DELETED     => 'The destination post no longer exists',
 			self::POST_UNPUBLISHED => 'The destination post is not published',
+			self::EXTERNAL_HOST_NOT_ALLOWED => 'The destination host is not allowed, so the redirect will not run. Add the domain to the "allowed_redirect_hosts" filter',
 			self::URL_NOT_FOUND    => 'The destination URL returns a 404 Not Found response',
 			self::URL_SERVER_ERROR => 'The destination URL returns a server error',
 			self::URL_REQUEST_FAILED => 'Failed to connect to the destination URL',
