@@ -360,4 +360,93 @@ final class AbilitiesTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $write );
 		$this->assertSame( 'ability_invalid_permissions', $write->get_error_code() );
 	}
+
+	/**
+	 * Test the source check runs when the ability input asks for it.
+	 *
+	 * A source that answers with its own response never reaches visitors as a
+	 * redirect, and no amount of stored-data checking can see that.
+	 *
+	 * @return void
+	 */
+	public function test_validate_checks_the_source_when_asked(): void {
+		$destination = $this->path_to_new_post( 'source-check-target' );
+		$this->create_redirect( '/source-check', $destination );
+
+		$this->stub_source_request_ok();
+
+		$result = $this->ability( 'validate-redirects' )->execute(
+			array(
+				'redirects'    => array( '/source-check' ),
+				'check_source' => true,
+			)
+		);
+
+		$this->assertSame( 1, $result['checked'] );
+		$this->assertCount( 1, $result['issues'] );
+		$this->assertSame( 'Source does not redirect', $result['issues'][0]['issue'] );
+	}
+
+	/**
+	 * Test the source check does not run unless the ability input asks for it.
+	 *
+	 * @return void
+	 */
+	public function test_validate_does_not_check_the_source_by_default(): void {
+		$destination = $this->path_to_new_post( 'unchecked-target' );
+		$this->create_redirect( '/unchecked-source', $destination );
+
+		$requests = 0;
+		$this->stub_source_request(
+			static function () use ( &$requests ) {
+				++$requests;
+				return array(
+					'response' => array( 'code' => 200 ),
+					'headers'  => array(),
+				);
+			}
+		);
+
+		$result = $this->ability( 'validate-redirects' )->execute(
+			array( 'redirects' => array( '/unchecked-source' ) )
+		);
+
+		$this->assertSame( array(), $result['issues'] );
+		$this->assertSame( 0, $requests, 'No source should be requested without check_source.' );
+	}
+
+	/**
+	 * Answer source requests with a 200, so the source looks like it serves itself.
+	 *
+	 * @return void
+	 */
+	private function stub_source_request_ok(): void {
+		$this->stub_source_request(
+			static fn() => array(
+				'response' => array( 'code' => 200 ),
+				'headers'  => array(),
+			)
+		);
+	}
+
+	/**
+	 * Answer source requests with a canned response.
+	 *
+	 * The probe is told apart by not following redirects, so a destination
+	 * check that leaked through is not swallowed by the stub.
+	 *
+	 * @param callable $handler Returns the response or a WP_Error.
+	 * @return void
+	 */
+	private function stub_source_request( callable $handler ): void {
+		$stub = static function ( $preempt, $args, $url ) use ( $handler ) {
+			if ( 0 !== ( $args['redirection'] ?? 5 ) ) {
+				return $preempt;
+			}
+
+			return $handler( $url );
+		};
+
+		add_filter( 'pre_http_request', $stub, 10, 3 );
+	}
 }

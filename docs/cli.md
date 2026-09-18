@@ -173,9 +173,25 @@ with an error. It is slow, so it suits a scheduled audit rather than an interact
 wp legacy-redirector validate --check-urls --format=csv > broken.csv
 ```
 
-`--fix` disables everything it reports except reserved sources, which it leaves for you to
-judge. Disabling stops visitors being sent somewhere broken while leaving the redirects in
-place to repair:
+Everything above works from stored data, so it can tell you a destination is gone but not
+whether the redirect actually fires. `--check-source` requests each source and reads the
+first response without following it, which catches the two things stored data cannot show: a
+source that answers with its own content, because a real page or archive is winning over the
+redirect, and a source that redirects somewhere other than its destination. It makes an HTTP
+request per redirect, so it is slow:
+
+```bash
+wp legacy-redirector validate --check-source
+```
+
+A source that never redirects, or that redirects elsewhere, is a breakage, so `--fix`
+disables it. A request that fails outright (a timeout, a host that refuses the request) is only
+a warning: it says nothing about the redirect, and acting on it would switch off working
+redirects whenever the network hiccups. Re-run before treating one as broken.
+
+`--fix` disables everything it reports except reserved sources and failed source requests,
+which it leaves for you to judge. Disabling stops visitors being sent somewhere broken while
+leaving the redirects in place to repair:
 
 ```bash
 wp legacy-redirector validate --fix
