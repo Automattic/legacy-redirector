@@ -147,7 +147,53 @@ $long_url   = 'https://example.com/?q=' . str_repeat( 'x', 900 );
 
 /*
  * ---------------------------------------------------------------------------
- * 2. Redirects that should all be stored, validation bypassed so the
+ * 2. Allow the external fixture host.
+ *
+ * Destinations on example.com only redirect if the host is in core's
+ * allowed_redirect_hosts, and the auditor reports any host that is not. A
+ * filter added here would die with this WP-CLI process, so it is written as
+ * an mu-plugin instead - the same trick the Behat suite uses. This keeps the
+ * deliberately broken hosts (the .invalid domain and the IDN subdomain) as
+ * the only "Destination host not allowed" findings.
+ * ---------------------------------------------------------------------------
+ */
+
+$mu_file = WPMU_PLUGIN_DIR . '/legacy-redirector-seed-allowed-hosts.php';
+
+if ( ! file_exists( $mu_file ) ) {
+	if ( ! is_dir( WPMU_PLUGIN_DIR ) ) {
+		mkdir( WPMU_PLUGIN_DIR, 0755, true );
+	}
+
+	file_put_contents(
+		$mu_file,
+		<<<'PHP'
+<?php
+/**
+ * Allow the host the bin/seed-dev-data.php fixtures redirect to.
+ *
+ * Written by the seed script; delete freely.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+add_filter(
+	'allowed_redirect_hosts',
+	static function ( array $hosts ): array {
+		$hosts[] = 'example.com';
+		return $hosts;
+	}
+);
+
+PHP
+	);
+
+	WP_CLI::log( 'Wrote an mu-plugin allowing example.com in allowed_redirect_hosts.' );
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * 3. Redirects that should all be stored, validation bypassed so the
  *    deliberately broken ones survive to be found by `validate`.
  * ---------------------------------------------------------------------------
  */
@@ -409,7 +455,7 @@ if ( $bulk_count > 0 ) {
 
 /*
  * ---------------------------------------------------------------------------
- * 3. Rows the validator should reject. Imported with validation ON so you can
+ * 4. Rows the validator should reject. Imported with validation ON so you can
  *    see the guards fire; none of these should end up stored.
  * ---------------------------------------------------------------------------
  */
@@ -450,7 +496,7 @@ unlink( $csv );
 
 /*
  * ---------------------------------------------------------------------------
- * 4. Malformed rows the public API cannot produce, written directly. These
+ * 5. Malformed rows the public API cannot produce, written directly. These
  *    stand in for legacy data migrated from 1.x.
  * ---------------------------------------------------------------------------
  */
@@ -516,7 +562,7 @@ WP_CLI::log( sprintf( "\nWrote %d malformed legacy rows directly.", count( $malf
 
 /*
  * ---------------------------------------------------------------------------
- * 5. Summary.
+ * 6. Summary.
  * ---------------------------------------------------------------------------
  */
 
