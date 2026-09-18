@@ -189,6 +189,13 @@ final class RowActionsManager {
 			.validation-result.invalid .dashicons {
 				color: #d63638;
 			}
+			.validation-result.warning {
+				border-left-color: #dba617;
+				color: #1d2327;
+			}
+			.validation-result.warning .dashicons {
+				color: #dba617;
+			}
 			.validation-result .dashicons {
 				font-size: 14px;
 				width: 14px;
@@ -206,11 +213,8 @@ final class RowActionsManager {
 
 				var $link = $(this);
 				var $row = $link.closest('tr');
-				var $toColumn = $row.find('td.to');
+				var $healthColumn = $row.find('td.health');
 				var redirectId = $link.data('redirect-id');
-
-				// Remove any existing result in this row.
-				$toColumn.find('.validation-result').remove();
 
 				// Add loading state.
 				$link.addClass('validating').text('<?php echo esc_js( __( 'Validating...', 'legacy-redirector' ) ); ?>');
@@ -226,25 +230,25 @@ final class RowActionsManager {
 					success: function(response) {
 						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'legacy-redirector' ) ); ?>');
 
-						var resultClass = response.success ? 'valid' : 'invalid';
-						var icon = response.success ? 'dashicons-yes-alt' : 'dashicons-warning';
+						// Warnings ride along on either result: the redirect
+						// works (or is broken) regardless, but a person should
+						// look, so a clean pass with warnings shows amber.
+						var warnings = ( response.data && response.data.warnings ) || [];
+						var resultClass = response.success ? ( warnings.length ? 'warning' : 'valid' ) : 'invalid';
+						var icon = response.success ? ( warnings.length ? 'dashicons-flag' : 'dashicons-yes-alt' ) : 'dashicons-warning';
 						var message = response.data.message;
 
-						var $result = $('<div class="validation-result ' + resultClass + '">' +
-							'<span class="dashicons ' + icon + '"></span>' +
-							message +
-							'</div>');
-
-						$toColumn.append($result);
-
-						// Auto-hide success messages after 5 seconds.
-						if (response.success) {
-							setTimeout(function() {
-								$result.fadeOut(400, function() {
-									$(this).remove();
-								});
-							}, 5000);
+						if ( warnings.length ) {
+							message += ' ' + warnings.join( ' ' );
 						}
+
+						var $result = $('<div class="validation-result ' + resultClass + '"></div>')
+							.append( $('<span>', { 'class': 'dashicons ' + icon } ) )
+							.append( document.createTextNode( message ) );
+
+						// The fresh, HTTP-inclusive result replaces the
+						// render-time findings for this row.
+						$healthColumn.empty().append($result);
 					},
 					error: function() {
 						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'legacy-redirector' ) ); ?>');
@@ -254,7 +258,7 @@ final class RowActionsManager {
 							'<?php echo esc_js( __( 'Validation request failed.', 'legacy-redirector' ) ); ?>' +
 							'</div>');
 
-						$toColumn.append($result);
+						$healthColumn.append($result);
 					}
 				});
 			});

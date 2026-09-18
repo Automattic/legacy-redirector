@@ -218,6 +218,30 @@ final class UITest extends TestCase {
 	}
 
 	/**
+	 * Test warnings carried on the request render as warning notices.
+	 *
+	 * Only warning-severity types render: the query arg is uncontrolled, so a
+	 * crafted URL must not present a problem finding under warning styling.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_warnings_alongside_valid(): void {
+		$_GET['validate'] = 'valid';
+		$_GET['warnings'] = 'reserved_source,possible_loop,post_deleted,bogus';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-success', $output );
+		$this->assertStringContainsString( 'notice-warning', $output );
+		$this->assertStringContainsString( 'path WordPress itself serves', $output );
+		$this->assertStringContainsString( 'leads back to this one', $output );
+		// A problem type smuggled into the warnings arg must not render.
+		$this->assertStringNotContainsString( 'no longer exists', $output );
+	}
+
+	/**
 	 * Test display_validation_notices outputs nothing for an unrecognised result.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
