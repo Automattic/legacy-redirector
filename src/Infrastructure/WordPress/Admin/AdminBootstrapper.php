@@ -24,6 +24,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFil
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\FormScreenSetup;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\ValidatePage;
 
 /**
  * Initializes all admin components for the redirect management interface.
@@ -153,6 +154,9 @@ final class AdminBootstrapper {
 
 		$form_screen_setup = new FormScreenSetup();
 		$form_screen_setup->register();
+
+		$validate_page = new ValidatePage( $this->query_repository, $this->auditor );
+		$validate_page->register();
 	}
 
 	/**
