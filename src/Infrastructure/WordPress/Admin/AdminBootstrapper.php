@@ -14,6 +14,7 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDestinationHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
@@ -116,6 +117,9 @@ final class AdminBootstrapper {
 	private function register_ajax_handlers(): void {
 		$check_source = new CheckSourceHandler( $this->repository, $this->auditor );
 		$check_source->register();
+
+		$check_destination = new CheckDestinationHandler( $this->auditor );
+		$check_destination->register();
 
 		$search_posts = new SearchPostsHandler();
 		$search_posts->register();

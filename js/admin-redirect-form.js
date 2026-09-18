@@ -9,9 +9,14 @@
  * - checkNonce        Nonce for the source check.
  * - searchAction      AJAX action for destination post search.
  * - searchNonce       Nonce for destination post search.
+ * - checkDestAction   AJAX action for the destination check (allowed host).
+ * - checkDestNonce    Nonce for the destination check.
  * - duplicateMessage  Message shown when the source already redirects.
  * - reservedMessage   Warning shown when the source is a path WordPress
  *                     itself serves. The form still saves.
+ * - hostNotAllowedMessage  Error shown when the destination host is missing
+ *                          from allowed_redirect_hosts. Saving would be
+ *                          refused with the same message.
  */
 jQuery( document ).ready( function ( $ ) {
 	var settings = window.legacyRedirectorForm || {};
@@ -54,6 +59,37 @@ jQuery( document ).ready( function ( $ ) {
 						.show();
 				} else {
 					$( '#redirect_from_warning' ).hide();
+				}
+			}
+		} );
+	} );
+
+	// Check the destination on blur: a host missing from allowed_redirect_hosts
+	// will be refused at save, so it is flagged before anything is submitted.
+	$( '#redirect_to_display' ).on( 'blur', function () {
+		var destination = $( '#redirect_to' ).val().trim();
+
+		// Only absolute URLs have a host to check.
+		if ( ! /^https?:\/\//i.test( destination ) ) {
+			$( '#redirect_to_error' ).hide();
+			return;
+		}
+
+		$.ajax( {
+			url: ajaxurl,
+			type: 'POST',
+			data: {
+				action: settings.checkDestAction,
+				redirect_to: destination,
+				nonce: settings.checkDestNonce
+			},
+			success: function ( response ) {
+				if ( response.success && false === response.data.host_allowed ) {
+					$( '#redirect_to_error' )
+						.text( settings.hostNotAllowedMessage )
+						.show();
+				} else {
+					$( '#redirect_to_error' ).hide();
 				}
 			}
 		} );
