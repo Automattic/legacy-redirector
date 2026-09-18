@@ -39,28 +39,22 @@ A WordPress plugin for handling legacy redirects in a scalable manner. Designed 
 ### Adding Redirects via WP-CLI
 
 ```bash
-# Add a single redirect
+# Add a single redirect, or point one at an internal post by ID
 wp legacy-redirector create /old-page https://example.com/new-page
-
-# Redirect to an internal post by ID
 wp legacy-redirector create /old-page 123
 
-# Inspect, list, and manage redirects (by source path or ID)
+# Inspect and manage redirects, by source path or ID
 wp legacy-redirector get /old-page
 wp legacy-redirector list --status=disabled
 wp legacy-redirector update /old-page --to=/new-page
-wp legacy-redirector disable /old-page
-wp legacy-redirector delete /old-page
 
-# Find and disable broken redirects
-wp legacy-redirector validate --fix
-
-# Import redirects from CSV
+# Bulk import from a CSV file
 wp legacy-redirector import /path/to/redirects.csv
-
-# Export redirects to CSV
-wp legacy-redirector list --limit=100000 --format=csv > /path/to/export.csv
 ```
+
+Every command takes either a redirect ID or a source path. See **[docs/cli.md](docs/cli.md)**
+for the full command list and worked recipes — bulk imports, retiring a domain, auditing
+broken redirects, and migrating data created by 1.x.
 
 ### Programmatic Usage
 
@@ -104,14 +98,8 @@ The plugin works on WordPress multisite installations:
 - **No cross-site leakage**: Redirects on Site A do not affect Site B
 - **WP-CLI support**: Use `--url=site.example.com` to manage specific sites
 
-### WP-CLI Multisite Examples
-
 ```bash
-# Add redirect on specific site
 wp legacy-redirector create /old /new --url=site2.example.com
-
-# Export redirects from specific site
-wp legacy-redirector list --format=csv --url=site2.example.com > /path/to/export.csv
 ```
 
 ## Source Paths Are Site-Relative
@@ -163,120 +151,39 @@ The plugin intercepts 404 requests early (priority 0 on `template_redirect`) and
 
 ## Hooks and Filters
 
-All filters use the `legacy_redirector_` prefix. The four that shipped before 2.0 were prefixed `wpcom_legacy_redirector_`; those names still work and emit a deprecation notice naming the replacement. Where a callback is attached to both names, the current name wins. See [UPGRADING.md](UPGRADING.md) for the full mapping.
+Seven filters cover query-parameter preservation, the status code, the `Cache-Control`
+lifetime, the request path, the resolved destination, creation from code, and the admin
+form's reachability check. Two WordPress core filters matter too: `allowed_redirect_hosts`
+for external destinations, and `http_request_host_is_external` for validating internal
+ones.
 
-### Preserve Query Parameters
+All of them, with examples, are in **[docs/configuration.md](docs/configuration.md)**.
 
-By default, query parameters are stripped during redirect lookup. To preserve specific parameters (like UTM codes):
+## Permissions
 
-```php
-add_filter( 'legacy_redirector_preserve_query_params', function( $params, $url ) {
-    return array( 'utm_source', 'utm_medium', 'utm_campaign' );
-}, 10, 2 );
-```
+Redirect management is gated on a single custom capability, `manage_redirects`, granted to
+administrators and editors. See
+**[docs/configuration.md](docs/configuration.md#permissions)** for how to grant it to
+another role or user, and why read-only access is not separable.
 
-### Modify Redirect Status Code
+## Abilities and MCP Clients
 
-Change the HTTP status code (default: 301):
+On WordPress 6.9 and later the plugin registers eight abilities, so MCP clients and other
+agents can manage redirects through the same services, validation, and capability checks
+as the admin screens and WP-CLI. Nothing is registered on earlier versions.
 
-```php
-add_filter( 'legacy_redirector_redirect_status', function( $status, $url ) {
-    return 302; // Temporary redirect
-}, 10, 2 );
-```
-
-### Modify Redirect Cache Lifetime
-
-Redirect responses are sent with a `Cache-Control: max-age` header so browsers do not cache them indefinitely. The default is one day for 301 redirects and one minute otherwise:
-
-```php
-add_filter( 'legacy_redirector_redirect_max_age', function( $max_age, $url, $status ) {
-    return HOUR_IN_SECONDS;
-}, 10, 3 );
-```
-
-Return `0` to suppress the header, e.g. where an edge cache manages redirect caching instead.
-
-### Modify Request Path
-
-Alter the path before redirect lookup. The path is still percent-encoded at this point, since decoding happens during lookup:
-
-```php
-add_filter( 'legacy_redirector_request_path', function( $path ) {
-    return strtolower( $path ); // Case-insensitive matching
-} );
-```
-
-### Modify the Destination URL
-
-The counterpart to `legacy_redirector_request_path`: alter the resolved destination before the redirect is performed. Returning an empty string cancels the redirect.
-
-This is mainly useful where a path suffix is stripped for lookup and needs re-adding to the destination, such as the legacy `/amp/` paired URL structure:
-
-```php
-// Match /old-path/amp against the stored /old-path redirect, then re-append /amp.
-add_filter( 'legacy_redirector_request_path', function( $path ) {
-    return preg_replace( '#/amp/?$#', '', $path );
-} );
-
-add_filter( 'legacy_redirector_destination_url', function( $destination, $path, $url ) {
-    return preg_match( '#/amp/?$#', $url ) ? trailingslashit( $destination ) . 'amp/' : $destination;
-}, 10, 3 );
-```
-
-If your site uses the AMP plugin's default query parameter structure (`?amp=1`) rather than the path suffix, you don't need this filter — use `legacy_redirector_preserve_query_params` with `'amp'` instead.
-
-### Validate Destinations on Internal Hosts
-
-Destination validation (the admin "Validate" action and `validate --check-urls`) uses WordPress's safe HTTP functions, which refuse to request loopback, private, and reserved IP addresses. The site's own host is always allowed. If your redirects legitimately point at other internal hosts (e.g. on an intranet or staging network), allow them with WordPress core's filter:
-
-```php
-add_filter( 'http_request_host_is_external', function( $external, $host ) {
-    return 'internal.example.test' === $host ? true : $external;
-}, 10, 2 );
-```
-
-Note: even with this filter, safe requests only use ports 80, 443, and 8080 (plus the site's own port). Destinations on other ports will report as failed in validation; the redirects themselves still work.
-
-## WP-CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `create` | Add a single redirect |
-| `get` | Show a single redirect |
-| `list` | List, filter, and export redirects |
-| `update` | Change a redirect's destination and/or status |
-| `delete` | Delete one or more redirects |
-| `enable` / `disable` | Toggle one or more redirects |
-| `validate` | Find (and optionally disable) broken redirects |
-| `import` | Bulk import from CSV file |
-| `import-from-meta` | Import from post meta |
-| `find-domains` | List destination domains |
-
-For detailed command options, run `wp help legacy-redirector`.
-
-The pre-2.0 `wp wpcom-legacy-redirector` namespace is still registered so existing scripts keep working. Every invocation through it prints a deprecation warning to STDERR, naming the `wp legacy-redirector` equivalent, and it will be removed in a future major version. Because the warning goes to STDERR, piping `--porcelain` or `--format=csv` output is unaffected.
-
-## Abilities API
-
-On WordPress 6.9 and later, the plugin registers abilities so that MCP clients and other agents can manage redirects with the same validation, capability checks, and cache invalidation as the admin screens and WP-CLI. Nothing is registered on earlier versions, and abilities are only built when something asks for them, so front-end requests are unaffected.
-
-| Ability | Description |
-|---------|-------------|
-| `legacy-redirector/create-redirect` | Create a redirect |
-| `legacy-redirector/get-redirect` | Get one redirect, by ID or source path |
-| `legacy-redirector/list-redirects` | List redirects, with filters and paging |
-| `legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects |
-| `legacy-redirector/set-redirect-status` | Enable or disable one or more redirects |
-| `legacy-redirector/delete-redirect` | Delete one or more redirects |
-| `legacy-redirector/validate-redirects` | Report redirects with broken destinations |
-| `legacy-redirector/find-redirect-domains` | List the external domains redirects point at |
-
-Every ability requires the `manage_redirects` capability, including the read-only ones. Disabling a redirect keeps it and its destination, but stops serving it to visitors.
+See **[docs/abilities.md](docs/abilities.md)** for the ability list, their read-only and
+destructive annotations, how batch failures are reported, and what is deliberately left to
+WP-CLI.
 
 ## Documentation
 
-See the [Wiki](https://github.com/Automattic/legacy-redirector/wiki) for detailed documentation.
+- **[docs/cli.md](docs/cli.md)** — WP-CLI commands and recipes
+- **[docs/configuration.md](docs/configuration.md)** — capabilities and filters
+- **[docs/abilities.md](docs/abilities.md)** — abilities and MCP clients
+- **[UPGRADING.md](UPGRADING.md)** — upgrading from 1.x to 2.0
+- **[CHANGELOG.md](CHANGELOG.md)** — what changed, and when
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — development setup and standards
 
 ## Support
 
