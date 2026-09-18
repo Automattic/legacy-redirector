@@ -160,12 +160,46 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 			array(
 				'success' => true,
 				'data'    => array(
-					'status'  => 'valid',
-					'message' => 'Redirect is valid.',
+					'status'   => 'valid',
+					'message'  => 'Redirect is valid.',
+					'warnings' => array(),
 				),
 			),
 			$response
 		);
+	}
+
+	/**
+	 * Test a valid redirect with a reserved source reports success with the
+	 * warning riding along, instead of hiding it behind a clean pass.
+	 */
+	public function test_reserved_source_reports_valid_with_warning(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/wp-admin/', 'https://example.com/destination' );
+
+		$response = $this->dispatch( ValidateRedirectHandler::get_action(), array( 'redirect_id' => (string) $redirect_id ) );
+
+		$this->assertTrue( $response['success'] );
+		$this->assertSame( 'valid', $response['data']['status'] );
+		$this->assertCount( 1, $response['data']['warnings'] );
+		$this->assertSame( 'Reserved WordPress path', $response['data']['warnings'][0]['label'] );
+		$this->assertStringContainsString( 'path WordPress itself serves', $response['data']['warnings'][0]['description'] );
+	}
+
+	/**
+	 * Test a redirect closing a loop reports success with the loop warning.
+	 */
+	public function test_loop_member_reports_valid_with_warning(): void {
+		$this->login_as_redirect_manager();
+		$this->create_redirect( '/ajax-loop-a', '/ajax-loop-b' );
+		$redirect_id = $this->create_redirect( '/ajax-loop-b', '/ajax-loop-a' );
+
+		$response = $this->dispatch( ValidateRedirectHandler::get_action(), array( 'redirect_id' => (string) $redirect_id ) );
+
+		$this->assertTrue( $response['success'] );
+		$this->assertCount( 1, $response['data']['warnings'] );
+		$this->assertSame( 'Possible redirect loop', $response['data']['warnings'][0]['label'] );
+		$this->assertStringContainsString( 'leads back to this one', $response['data']['warnings'][0]['description'] );
 	}
 
 	/**
@@ -193,8 +227,9 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 			array(
 				'success' => false,
 				'data'    => array(
-					'status'  => 'url_not_found',
-					'message' => 'The destination URL returns a 404 Not Found response.',
+					'status'   => 'url_not_found',
+					'message'  => 'The destination URL returns a 404 Not Found response.',
+					'warnings' => array(),
 				),
 			),
 			$response

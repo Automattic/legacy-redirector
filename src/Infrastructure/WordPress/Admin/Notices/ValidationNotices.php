@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
-use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -67,6 +66,19 @@ final class ValidationNotices {
 	);
 
 	/**
+	 * Notice arguments for a warning riding along on a validation result.
+	 *
+	 * No `message` ID: the main result notice owns that slot, and these
+	 * render alongside it.
+	 *
+	 * @var array<string, bool|string>
+	 */
+	private const array WARNING_NOTICE_ARGS = array(
+		'type'        => 'warning',
+		'dismissible' => true,
+	);
+
+	/**
 	 * Redirect repository.
 	 *
 	 * @var RedirectRepositoryInterface
@@ -111,6 +123,7 @@ final class ValidationNotices {
 	public function add_removable_args( array $args ): array {
 		$args[] = 'validate';
 		$args[] = 'ids';
+		$args[] = 'warnings';
 		return $args;
 	}
 
@@ -152,6 +165,7 @@ final class ValidationNotices {
 			/* translators: %s: context showing which redirect (e.g. "for /old-page") */
 			$message = sprintf( __( 'Redirect is valid%s.', 'legacy-redirector' ), $redirect_context );
 			wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
+			$this->display_warning_notices( $redirect_context );
 			return;
 		}
 
@@ -169,6 +183,40 @@ final class ValidationNotices {
 			esc_html__( 'Redirect is not valid', 'legacy-redirector' ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $finding_type->description() . '.' ),
 			self::ERROR_NOTICE_ARGS
 		);
+		$this->display_warning_notices( $redirect_context );
+	}
+
+	/**
+	 * Display a notice per warning carried on the request.
+	 *
+	 * Only warning-severity finding types render: the query arg is
+	 * uncontrolled, and a crafted URL must not be able to present a problem
+	 * finding under warning styling.
+	 *
+	 * @param string $redirect_context The "for /path" context fragment, already escaped.
+	 * @return void
+	 */
+	private function display_warning_notices( string $redirect_context ): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
+		if ( ! isset( $_GET['warnings'] ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
+		$types = explode( ',', sanitize_text_field( wp_unslash( $_GET['warnings'] ) ) );
+
+		foreach ( $types as $type_value ) {
+			$type = AuditFindingType::tryFrom( $type_value );
+
+			if ( null === $type || ! $type->is_warning() ) {
+				continue;
+			}
+
+			wp_admin_notice(
+				esc_html( $type->label() ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $type->description() . '.' ),
+				self::WARNING_NOTICE_ARGS
+			);
+		}
 	}
 
 	/**
@@ -208,46 +256,52 @@ final class ValidationNotices {
 			return;
 		}
 
-		// A warning does not fail the redirect: the row is already flagged by
-		// other means, and Validate answers "does this redirect work?".
-		$problems = array_filter(
-			$this->auditor->audit( $redirect, true ),
-			static fn( AuditFinding $finding ): bool => ! $finding->is_warning()
-		);
+		$findings = $this->auditor->audit( $redirect, true );
+		$problems = array();
+		$warnings = array();
 
-		if ( array() !== $problems ) {
-			$finding = reset( $problems );
-			$this->redirect_with_result( $finding->type()->value, $post_id );
-			return;
+		foreach ( $findings as $finding ) {
+			if ( $finding->is_warning() ) {
+				$warnings[] = $finding->type()->value;
+			} else {
+				$problems[] = $finding;
+			}
 		}
 
-		// All checks passed - redirect is valid.
-		$this->redirect_with_result( self::RESULT_VALID, $post_id );
+		// A warning does not fail the redirect - it works, but a person should
+		// look - so it rides along rather than turning the result red.
+		$result = array() !== $problems
+			? reset( $problems )->type()->value
+			: self::RESULT_VALID;
+
+		$this->redirect_with_result( $result, $post_id, $warnings );
 	}
 
 	/**
 	 * Redirect back with validation result.
 	 *
-	 * @param string $validate Result status code.
-	 * @param int    $post_id  The post ID.
+	 * @param string   $validate Result status code.
+	 * @param int      $post_id  The post ID.
+	 * @param string[] $warnings Warning finding type values to carry along.
 	 * @return void
 	 */
-	private function redirect_with_result( string $validate, int $post_id ): void {
+	private function redirect_with_result( string $validate, int $post_id, array $warnings = array() ): void {
 		$referer = wp_get_referer();
 		if ( ! $referer ) {
 			$referer = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE );
 		}
-		$sendback = remove_query_arg( array( 'validate', 'ids' ), $referer );
+		$sendback = remove_query_arg( array( 'validate', 'ids', 'warnings' ), $referer );
 
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'validate' => $validate,
-					'ids'      => $post_id,
-				),
-				$sendback
-			)
+		$args = array(
+			'validate' => $validate,
+			'ids'      => $post_id,
 		);
+
+		if ( array() !== $warnings ) {
+			$args['warnings'] = implode( ',', $warnings );
+		}
+
+		wp_safe_redirect( add_query_arg( $args, $sendback ) );
 		exit();
 	}
 }

@@ -117,7 +117,8 @@ final class FormScreenSetup {
 			'<li><code>products/discontinued-item</code></li>' .
 			'</ul>' .
 			'<p>' . __( 'The path is relative to your site\'s root. Do not include the domain name.', 'legacy-redirector' ) . '</p>' .
-			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'Each source path can only have one redirect. Duplicate sources are not allowed.', 'legacy-redirector' ) . '</p>';
+			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'Each source path can only have one redirect. Duplicate sources are not allowed.', 'legacy-redirector' ) . '</p>' .
+			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'A source on a path WordPress itself serves, such as <code>wp-admin</code> or <code>wp-login.php</code>, is accepted with a warning: the redirect lies dormant while that path works, but takes over if the path ever returns a 404.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
@@ -153,7 +154,7 @@ final class FormScreenSetup {
 		return '<ul>' .
 			'<li>' . __( '<strong>Test your redirects</strong> &mdash; After saving, use the "Test it" link or visit the source URL to verify it works.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Use Post IDs for internal content</strong> &mdash; If redirecting to a post or page on your site, selecting it by Post ID ensures the redirect stays valid even if the slug changes.', 'legacy-redirector' ) . '</li>' .
-			'<li>' . __( '<strong>Avoid redirect chains</strong> &mdash; Don\'t create redirects where the destination is another redirect source. This slows down the user experience.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Avoid redirect chains and loops</strong> &mdash; Don\'t create redirects where the destination is another redirect source. A chain slows visitors down, and a set of redirects pointing back at each other is warned about as a possible loop.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Check for existing content</strong> &mdash; Redirects only work when the source URL returns a 404. If a page exists at that URL, delete or rename it first.', 'legacy-redirector' ) . '</li>' .
 			'</ul>';
 	}

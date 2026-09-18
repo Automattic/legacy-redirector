@@ -15,6 +15,12 @@ namespace Automattic\LegacyRedirector\Domain;
  * A finding is either a problem (the redirect is broken and will not do its
  * job) or a warning (the redirect works but deserves a human look); see
  * is_warning().
+ *
+ * Adding a case? The user-facing explanations live outside this enum and
+ * must be updated with it: the Validate page's contextual help
+ * (ValidatePage::add_contextual_help()), the Add/Edit form's contextual help
+ * (FormScreenSetup), the validate ability description, the ValidateCommand
+ * docblock, and docs/cli.md.
  */
 enum AuditFindingType: string {
 

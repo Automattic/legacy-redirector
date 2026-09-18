@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
-use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
@@ -96,29 +95,40 @@ final class ValidateRedirectHandler {
 			);
 		}
 
-		// A warning does not fail the redirect: the row is already flagged by
-		// other means, and Validate answers "does this redirect work?".
-		$problems = array_filter(
-			$this->auditor->audit( $redirect, true ),
-			static fn( AuditFinding $finding ): bool => ! $finding->is_warning()
-		);
+		$findings = $this->auditor->audit( $redirect, true );
+		$problems = array();
+		$warnings = array();
 
+		foreach ( $findings as $finding ) {
+			if ( $finding->is_warning() ) {
+				$warnings[] = array(
+					'label'       => $finding->label(),
+					'description' => $finding->description() . '.',
+				);
+			} else {
+				$problems[] = $finding;
+			}
+		}
+
+		// A warning does not fail the redirect - it works, but a person should
+		// look - so it rides along rather than turning the result red.
 		if ( array() !== $problems ) {
 			$finding = reset( $problems );
 
 			wp_send_json_error(
 				array(
-					'status'  => $finding->type()->value,
-					'message' => $finding->description() . '.',
+					'status'   => $finding->type()->value,
+					'message'  => $finding->description() . '.',
+					'warnings' => $warnings,
 				)
 			);
 		}
 
-		// All checks passed - redirect is valid.
 		wp_send_json_success(
 			array(
-				'status'  => 'valid',
-				'message' => __( 'Redirect is valid.', 'legacy-redirector' ),
+				'status'   => 'valid',
+				'message'  => __( 'Redirect is valid.', 'legacy-redirector' ),
+				'warnings' => $warnings,
 			)
 		);
 	}

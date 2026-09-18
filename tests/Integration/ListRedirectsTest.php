@@ -61,7 +61,7 @@ final class ListRedirectsTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
-		$this->columns_manager     = new ColumnsManager( $this->repository(), new RedirectAuditor() );
+		$this->columns_manager     = new ColumnsManager( $this->repository(), $this->auditor() );
 		$this->row_actions_manager = new RowActionsManager( $this->repository() );
 	}
 
@@ -77,9 +77,10 @@ final class ListRedirectsTest extends TestCase {
 		$this->assertArrayHasKey( 'cb', $columns );
 		$this->assertArrayHasKey( 'from', $columns );
 		$this->assertArrayHasKey( 'to', $columns );
+		$this->assertArrayHasKey( 'health', $columns );
 		$this->assertArrayHasKey( 'status', $columns );
 		$this->assertArrayHasKey( 'date', $columns );
-		$this->assertCount( 5, $columns );
+		$this->assertCount( 6, $columns );
 	}
 
 	/**
@@ -92,6 +93,7 @@ final class ListRedirectsTest extends TestCase {
 
 		$this->assertSame( 'Redirect From', $columns['from'] );
 		$this->assertSame( 'Redirect To', $columns['to'] );
+		$this->assertSame( 'Health', $columns['health'] );
 		$this->assertSame( 'Date', $columns['date'] );
 	}
 
@@ -276,10 +278,18 @@ final class ListRedirectsTest extends TestCase {
 
 		ob_start();
 		$this->columns_manager->render_column( 'to', $post_id );
-		$output = ob_get_clean();
+		$to_output = ob_get_clean();
 
-		$this->assertStringContainsString( 'Warning', $output );
-		$this->assertStringContainsString( 'not a public URL', $output );
+		ob_start();
+		$this->columns_manager->render_column( 'health', $post_id );
+		$health_output = ob_get_clean();
+
+		// The To column stays a stable read of where the redirect points; the
+		// finding lives in the Health column, as a problem: an unpublished
+		// destination is what the write gate refuses.
+		$this->assertStringNotContainsString( 'Post not published', $to_output );
+		$this->assertStringContainsString( 'Problem', $health_output );
+		$this->assertStringContainsString( 'Post not published', $health_output );
 	}
 
 	/**
@@ -302,10 +312,10 @@ final class ListRedirectsTest extends TestCase {
 		$post_id = $this->create_redirect( '/redirect-to-attachment', $attachment_id );
 
 		ob_start();
-		$this->columns_manager->render_column( 'to', $post_id );
+		$this->columns_manager->render_column( 'health', $post_id );
 		$output = ob_get_clean();
 
-		$this->assertStringNotContainsString( 'not a public URL', $output );
+		$this->assertStringContainsString( 'No issues found', $output );
 	}
 
 	/**
@@ -330,9 +340,87 @@ final class ListRedirectsTest extends TestCase {
 
 		ob_start();
 		$this->columns_manager->render_column( 'to', $redirect_post_id );
+		$to_output = ob_get_clean();
+
+		ob_start();
+		$this->columns_manager->render_column( 'health', $redirect_post_id );
+		$health_output = ob_get_clean();
+
+		// The To column names the post that was pointed at; the Health column
+		// carries the finding.
+		$this->assertStringContainsString( 'Post 999999999', $to_output );
+		$this->assertStringContainsString( 'Problem', $health_output );
+		$this->assertStringContainsString( 'Post deleted', $health_output );
+	}
+
+	/**
+	 * Test a destination only HTTP can judge is not shown as a clean pass.
+	 *
+	 * A relative path with no post behind it is indeterminate without a
+	 * request, so the Health column must say "not fully checked" rather than
+	 * showing the same tick as a conclusively healthy row.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_health_column_marks_http_only_destinations_as_not_fully_checked(): void {
+		$post_id = $this->create_redirect( '/needs-http-check', '/definitely-not-here' );
+
+		ob_start();
+		$this->columns_manager->render_column( 'health', $post_id );
 		$output = ob_get_clean();
 
-		$this->assertStringContainsString( 'Post ID that does not exist', $output );
+		$this->assertStringContainsString( 'Not fully checked', $output );
+		$this->assertStringNotContainsString( 'No issues found', $output );
+	}
+
+	/**
+	 * Test pagination is deterministic when many rows share one timestamp.
+	 *
+	 * An import creates hundreds of rows in the same second; without an ID
+	 * tiebreaker the database orders the ties arbitrarily per query, so
+	 * paginating could show one row twice and another never.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::handle_sorting
+	 */
+	public function test_pagination_covers_every_row_despite_identical_dates(): void {
+		$ids = array();
+		for ( $i = 1; $i <= 5; $i++ ) {
+			$redirect_id = $this->create_redirect( "/same-second-$i", '/target' );
+			wp_update_post(
+				array(
+					'ID'            => $redirect_id,
+					'post_date'     => '2026-01-01 00:00:00',
+					'post_date_gmt' => '2026-01-01 00:00:00',
+					'edit_date'     => true,
+				)
+			);
+			$ids[] = $redirect_id;
+		}
+
+		$this->columns_manager->register();
+
+		$seen = array();
+		for ( $page = 1; $page <= 5; $page++ ) {
+			$query = new \WP_Query();
+			// Mark it as the main query so handle_sorting applies; the shared
+			// TestCase already defines WP_ADMIN for is_admin().
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored by the test framework; main-query semantics need the real global.
+			$GLOBALS['wp_the_query'] = $query;
+
+			$query->query(
+				array(
+					'post_type'      => PostType::POST_TYPE,
+					'posts_per_page' => 1,
+					'paged'          => $page,
+					'fields'         => 'ids',
+				)
+			);
+
+			$seen = array_merge( $seen, $query->posts );
+		}
+
+		$this->assertSame( array(), array_diff( $ids, $seen ), 'Every same-second row must appear on exactly one page.' );
+		$this->assertSame( $seen, array_unique( $seen ), 'No row may appear on two pages.' );
 	}
 
 	/**
@@ -447,7 +535,7 @@ final class ListRedirectsTest extends TestCase {
 		remove_all_actions( 'manage_vip-legacy-redirect_posts_custom_column' );
 		remove_all_filters( 'post_row_actions' );
 
-		$columns_manager     = new ColumnsManager( $this->repository(), new RedirectAuditor() );
+		$columns_manager     = new ColumnsManager( $this->repository(), $this->auditor() );
 		$row_actions_manager = new RowActionsManager( $this->repository() );
 		$columns_manager->register();
 		$row_actions_manager->register();

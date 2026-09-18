@@ -13,7 +13,6 @@ use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
@@ -69,6 +68,7 @@ final class ColumnsManager {
 			'cb'     => '<input type="checkbox" />',
 			'from'   => __( 'Redirect From', 'legacy-redirector' ),
 			'to'     => __( 'Redirect To', 'legacy-redirector' ),
+			'health' => __( 'Health', 'legacy-redirector' ),
 			'status' => __( 'Status', 'legacy-redirector' ),
 			'date'   => __( 'Date', 'legacy-redirector' ),
 		);
@@ -124,6 +124,22 @@ final class ColumnsManager {
 		if ( 'to' === $orderby ) {
 			$query->set( 'orderby', 'post_excerpt' );
 		}
+
+		// The default date ordering needs an ID tiebreaker: an import creates
+		// hundreds of rows in the same second, and ties ordered arbitrarily by
+		// the database make pagination unstable - a row can appear on no page
+		// (and another on two) while the item count says otherwise.
+		if ( '' === $orderby || 'date' === $orderby ) {
+			$order = strtoupper( (string) $query->get( 'order' ) );
+			$order = 'ASC' === $order ? 'ASC' : 'DESC';
+			$query->set(
+				'orderby',
+				array(
+					'date' => $order,
+					'ID'   => $order,
+				)
+			);
+		}
 	}
 
 	/**
@@ -145,6 +161,9 @@ final class ColumnsManager {
 				break;
 			case 'to':
 				$this->render_to_column( $redirect );
+				break;
+			case 'health':
+				$this->render_health_column( $redirect );
 				break;
 			case 'status':
 				$this->render_status_column( $redirect );
@@ -176,34 +195,37 @@ final class ColumnsManager {
 	}
 
 	/**
-	 * Render the "to" column.
+	 * Render the "to" column: the destination, and nothing else.
 	 *
-	 * Destination-health warnings come from the auditor, so this column and
-	 * the `validate` CLI command report the same problems.
+	 * Findings about the destination live in the Health column, so this cell
+	 * stays a stable place to read where the redirect points.
 	 *
 	 * @param Redirect $redirect The redirect.
 	 * @return void
 	 */
 	private function render_to_column( Redirect $redirect ): void {
-		$issue      = $this->auditor->audit_destination( $redirect );
-		$issue_type = null !== $issue ? $issue->type() : null;
-
-		if ( AuditFindingType::CORRUPT_DATA === $issue_type ) {
-			echo '<em>' . esc_html( (string) $redirect->corruption() ) . '</em>';
-			return;
-		}
-
-		if ( AuditFindingType::POST_DELETED === $issue_type ) {
-			echo '<em>' . esc_html__( 'Redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ) . '</em>';
+		// A corrupt row's stored destination is a placeholder; showing it would
+		// present invented data as real. The Health column names the corruption.
+		if ( $redirect->is_corrupt() ) {
+			echo '&mdash;';
 			return;
 		}
 
 		$destination = $redirect->destination();
 
 		if ( $destination->is_post_id() ) {
-			$permalink     = get_permalink( $destination->as_post_id()->value() );
-			$relative_path = is_string( $permalink ) ? str_replace( home_url(), '', $permalink ) : '';
-			$this->render_relative_path_with_prefix( $relative_path );
+			$post_id   = $destination->as_post_id()->value();
+			$permalink = get_permalink( $post_id );
+
+			// A deleted destination has no permalink to show; name the post it
+			// pointed at so the row still reads.
+			if ( ! is_string( $permalink ) ) {
+				/* translators: %d: destination post ID */
+				echo esc_html( sprintf( __( 'Post %d', 'legacy-redirector' ), $post_id ) );
+				return;
+			}
+
+			$this->render_relative_path_with_prefix( str_replace( home_url(), '', $permalink ) );
 		} elseif ( $destination->as_url()->is_absolute() ) {
 			$url = $destination->as_url()->value();
 			// Bold for consistency with the prefixed relative paths alongside it.
@@ -215,13 +237,53 @@ final class ColumnsManager {
 		} else {
 			$this->render_relative_path_with_prefix( $destination->as_url()->value() );
 		}
+	}
 
-		if ( AuditFindingType::POST_TRASHED === $issue_type || AuditFindingType::POST_UNPUBLISHED === $issue_type ) {
-			echo '<br /><em>' . esc_html__( 'Warning: Redirect is not a public URL.', 'legacy-redirector' ) . '</em>';
+	/**
+	 * Render the "health" column: every finding the auditor can report
+	 * without HTTP requests, or a tick when there are none.
+	 *
+	 * The same auditor backs the `validate` CLI command, the Validate page,
+	 * and the per-row Validate action - whose fresh, HTTP-inclusive result
+	 * replaces this cell's content - so no surface can disagree.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return void
+	 */
+	private function render_health_column( Redirect $redirect ): void {
+		$findings = $this->auditor->audit( $redirect );
+
+		if ( array() === $findings ) {
+			// A tick must not overclaim: for a destination only an HTTP request
+			// can judge, "no findings" means "nothing conclusive", not "fine".
+			if ( $this->auditor->destination_needs_http( $redirect ) ) {
+				printf(
+					'<span class="dashicons dashicons-editor-help" style="color: #787c82;" aria-hidden="true"></span><span title="%1$s">%2$s</span>',
+					esc_attr__( 'No problems found without requesting the destination. Use Test to check it responds.', 'legacy-redirector' ),
+					esc_html__( 'Not fully checked', 'legacy-redirector' )
+				);
+				return;
+			}
+
+			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'No issues found', 'legacy-redirector' ) . '</span>';
+			return;
 		}
 
-		if ( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED === $issue_type ) {
-			echo '<br /><em>' . esc_html__( 'Warning: The destination domain is not allowed, so the redirect will not run. Add it to the "allowed_redirect_hosts" filter.', 'legacy-redirector' ) . '</em>';
+		foreach ( $findings as $index => $finding ) {
+			if ( $index > 0 ) {
+				echo '<br />';
+			}
+
+			$is_warning = $finding->is_warning();
+
+			printf(
+				'<span class="dashicons %1$s" style="color: %2$s;" aria-hidden="true"></span><span class="screen-reader-text">%3$s </span><span title="%4$s">%5$s</span>',
+				$is_warning ? 'dashicons-flag' : 'dashicons-warning',
+				$is_warning ? '#dba617' : '#d63638',
+				$is_warning ? esc_html__( 'Warning:', 'legacy-redirector' ) : esc_html__( 'Problem:', 'legacy-redirector' ),
+				esc_attr( $finding->description() . '.' ),
+				esc_html( $finding->label() )
+			);
 		}
 	}
 
