@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDestinationHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
@@ -68,6 +69,13 @@ final class AdminBootstrapper {
 	private RedirectAuditor $auditor;
 
 	/**
+	 * Stored audit results.
+	 *
+	 * @var AuditResults
+	 */
+	private AuditResults $audit_results;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface      $repository       Redirect repository.
@@ -75,19 +83,22 @@ final class AdminBootstrapper {
 	 * @param RedirectValidator                $validator        Redirect validator.
 	 * @param RedirectQueryRepositoryInterface $query_repository Redirect query repository.
 	 * @param RedirectAuditor                  $auditor          Redirect auditor.
+	 * @param AuditResults                     $audit_results    Stored audit results.
 	 */
 	public function __construct(
 		RedirectRepositoryInterface $repository,
 		RedirectManager $manager,
 		RedirectValidator $validator,
 		RedirectQueryRepositoryInterface $query_repository,
-		RedirectAuditor $auditor
+		RedirectAuditor $auditor,
+		AuditResults $audit_results
 	) {
 		$this->repository       = $repository;
 		$this->manager          = $manager;
 		$this->validator        = $validator;
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
+		$this->audit_results    = $audit_results;
 	}
 
 	/**
@@ -159,7 +170,7 @@ final class AdminBootstrapper {
 		$form_screen_setup = new FormScreenSetup();
 		$form_screen_setup->register();
 
-		$validate_page = new ValidatePage( $this->query_repository, $this->auditor );
+		$validate_page = new ValidatePage( $this->query_repository, $this->auditor, $this->audit_results );
 		$validate_page->register();
 	}
 

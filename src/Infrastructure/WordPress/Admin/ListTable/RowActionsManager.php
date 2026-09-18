@@ -184,13 +184,14 @@ final class RowActionsManager {
 			// One line in the Health cell, in the same visual language the
 			// column renders with: severity icon plus text.
 			function healthLine( icon, color, text, title ) {
+				// No text node between icon and label, matching the markup the
+				// column renders server-side, so a tested row reads identically.
 				var $line = $( '<div/>' )
 					.append( $( '<span>', {
 						'class': 'dashicons ' + icon,
 						'style': 'color: ' + color + ';',
 						'aria-hidden': 'true'
-					} ) )
-					.append( document.createTextNode( ' ' ) );
+					} ) );
 
 				var $text = $( '<span/>' ).text( text );
 				if ( title ) {

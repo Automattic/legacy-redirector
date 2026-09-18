@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Infrastructure\DI\Container;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\AdminBootstrapper;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\MenuBadge;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\StatusChangeNotices;
@@ -101,6 +102,15 @@ final class PluginBootstrapper {
 			$this->init_admin();
 		}
 
+		// Keep the recorded audit summary fresh with a daily scheduled run.
+		// Registered in every context: cron events fire wherever WP loads.
+		$scheduler = new AuditScheduler(
+			$this->container->query_repository(),
+			$this->container->auditor(),
+			$this->container->audit_results()
+		);
+		$scheduler->register();
+
 		// Register WP-CLI commands.
 		$this->register_cli_commands();
 
@@ -158,9 +168,14 @@ final class PluginBootstrapper {
 			$this->container->manager(),
 			$this->container->validator(),
 			$this->container->query_repository(),
-			$this->container->auditor()
+			$this->container->auditor(),
+			$this->container->audit_results()
 		);
 		$admin->init();
+
+		// The problem-count bubble on the Redirects menu.
+		$menu_badge = new MenuBadge( $this->container->audit_results() );
+		$menu_badge->register();
 
 		// Register bulk actions handler.
 		$bulk_actions = new BulkActionsHandler( $this->container->manager() );
@@ -228,7 +243,8 @@ final class PluginBootstrapper {
 				$batch,
 				$this->container->query_repository(),
 				$this->container->auditor(),
-				$manager
+				$manager,
+				$this->container->audit_results()
 			),
 			'import'           => new ImportCommand( $manager, $this->container->auditor() ),
 			'import-from-meta' => new ImportFromMetaCommand(

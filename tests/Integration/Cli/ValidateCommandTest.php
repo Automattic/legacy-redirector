@@ -35,6 +35,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -60,7 +61,8 @@ final class ValidateCommandTest extends CliTestCase {
 			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
 			$this->query_repository(),
 			$this->auditor(),
-			$this->manager()
+			$this->manager(),
+			$this->audit_results()
 		);
 	}
 
@@ -418,6 +420,32 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_warning_contains( 'Found 1 issue(s).' );
 		$this->assert_stdout_contains( 'Destination host not allowed' );
+	}
+
+	/**
+	 * Test a batch run records the summary, and a spot check does not.
+	 *
+	 * The recorded summary feeds the admin menu badge, so a check of one
+	 * named redirect must not overwrite the site-wide count.
+	 */
+	public function test_batch_run_records_summary_but_spot_check_does_not(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/summary-broken', $post_id );
+		$this->create_redirect( '/summary-fine', '/target-somewhere' );
+		wp_delete_post( $post_id, true );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$summary = $this->audit_results()->summary();
+		$this->assertNotNull( $summary );
+		$this->assertSame( 1, $summary['problems'] );
+		$this->assertSame( 2, $summary['checked'] );
+
+		delete_option( \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults::OPTION );
+
+		$this->invoke_command( $this->command, array( '/summary-broken' ), array() );
+
+		$this->assertNull( $this->audit_results()->summary() );
 	}
 
 	/**
