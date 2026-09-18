@@ -12,8 +12,12 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 /**
  * Manages custom capability registration for redirect management.
  *
- * Registers and unregisters the manage_redirects capability on
- * administrator and editor roles, with VIP platform support.
+ * Registers the manage_redirects capability on administrator and
+ * editor roles, with VIP platform support.
+ *
+ * The capability is deliberately left in place on deactivation, in line with
+ * WordPress core's own behavior for plugin role caps. Sites that want it gone
+ * can call remove_cap() themselves.
  */
 final class Capability {
 
@@ -79,29 +83,6 @@ final class Capability {
 	}
 
 	/**
-	 * Unregister the manage_redirects capability from configured roles.
-	 *
-	 * Uses VIP helper functions when available, with fallback to standard WordPress.
-	 *
-	 * @return bool True when unregistration completes.
-	 */
-	public function unregister(): bool {
-		$this->remove_capabilities();
-		$this->delete_version();
-
-		return true;
-	}
-
-	/**
-	 * Get the capability name.
-	 *
-	 * @return string The manage_redirects capability name.
-	 */
-	public function get_capability_name(): string {
-		return self::MANAGE_REDIRECTS_CAPABILITY;
-	}
-
-	/**
 	 * Check if the current version is already registered.
 	 *
 	 * @return bool True if capabilities are current.
@@ -118,17 +99,6 @@ final class Capability {
 	private function add_capabilities(): void {
 		foreach ( $this->roles as $role_name ) {
 			$this->add_capability_to_role( $role_name );
-		}
-	}
-
-	/**
-	 * Remove capabilities from configured roles.
-	 *
-	 * @return void
-	 */
-	private function remove_capabilities(): void {
-		foreach ( $this->roles as $role_name ) {
-			$this->remove_capability_from_role( $role_name );
 		}
 	}
 
@@ -151,38 +121,11 @@ final class Capability {
 	}
 
 	/**
-	 * Remove capability from a single role.
-	 *
-	 * @param string $role_name The role name.
-	 * @return void
-	 */
-	private function remove_capability_from_role( string $role_name ): void {
-		if ( function_exists( 'wpcom_vip_remove_role_caps' ) ) {
-			wpcom_vip_remove_role_caps( $role_name, self::MANAGE_REDIRECTS_CAPABILITY );
-			return;
-		}
-
-		$role = get_role( $role_name );
-		if ( $role instanceof \WP_Role ) {
-			$role->remove_cap( self::MANAGE_REDIRECTS_CAPABILITY );
-		}
-	}
-
-	/**
 	 * Update the stored version number.
 	 *
 	 * @return void
 	 */
 	private function update_version(): void {
 		update_option( self::VERSION_OPTION_KEY, self::CAPABILITIES_VERSION );
-	}
-
-	/**
-	 * Delete the stored version number.
-	 *
-	 * @return void
-	 */
-	private function delete_version(): void {
-		delete_option( self::VERSION_OPTION_KEY );
 	}
 }

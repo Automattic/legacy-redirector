@@ -101,32 +101,6 @@ final class CapabilityTest extends TestCase {
 	}
 
 	/**
-	 * Test unregister uses VIP functions when available.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::unregister
-	 */
-	public function test_unregister_uses_vip_functions_when_available(): void {
-		$capability = new Capability();
-
-		Functions\expect( 'wpcom_vip_remove_role_caps' )
-			->once()
-			->with( 'administrator', 'manage_redirects' );
-
-		Functions\expect( 'wpcom_vip_remove_role_caps' )
-			->once()
-			->with( 'editor', 'manage_redirects' );
-
-		Functions\expect( 'delete_option' )
-			->once()
-			->with( 'manage_redirects_capability_version' )
-			->andReturn( true );
-
-		$result = $capability->unregister();
-
-		$this->assertTrue( $result );
-	}
-
-	/**
 	 * Test custom roles can be configured via constructor with VIP functions.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::__construct
@@ -156,17 +130,6 @@ final class CapabilityTest extends TestCase {
 		$result = $capability->register();
 
 		$this->assertTrue( $result );
-	}
-
-	/**
-	 * Test get_capability_name returns correct value.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::get_capability_name
-	 */
-	public function test_get_capability_name_returns_correct_value(): void {
-		$capability = new Capability();
-
-		$this->assertSame( 'manage_redirects', $capability->get_capability_name() );
 	}
 
 	/**

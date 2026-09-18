@@ -48,7 +48,7 @@ abstract class AjaxHandlerTestCase extends WP_Ajax_UnitTestCase {
 	}
 
 	/**
-	 * Clean up request superglobals, user and capabilities.
+	 * Clean up request superglobals and the current user.
 	 *
 	 * @return void
 	 */
@@ -56,7 +56,6 @@ abstract class AjaxHandlerTestCase extends WP_Ajax_UnitTestCase {
 		$_POST = array();
 
 		wp_set_current_user( 0 );
-		( new Capability() )->unregister();
 
 		parent::tear_down();
 	}

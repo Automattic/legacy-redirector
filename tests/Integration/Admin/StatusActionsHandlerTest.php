@@ -64,7 +64,7 @@ final class StatusActionsHandlerTest extends TestCase {
 	}
 
 	/**
-	 * Clean up request superglobals and capabilities.
+	 * Clean up request superglobals and the current user.
 	 *
 	 * @return void
 	 */
@@ -72,7 +72,6 @@ final class StatusActionsHandlerTest extends TestCase {
 		$_GET = array();
 
 		wp_set_current_user( 0 );
-		( new Capability() )->unregister();
 
 		parent::tear_down();
 	}
