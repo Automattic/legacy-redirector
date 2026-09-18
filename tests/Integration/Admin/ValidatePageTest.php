@@ -32,6 +32,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
@@ -60,7 +61,7 @@ final class ValidatePageTest extends TestCase {
 		// The view uses submit_button(), which only admin requests load.
 		require_once ABSPATH . 'wp-admin/includes/template.php';
 
-		$this->page = new ValidatePage( $this->query_repository(), $this->auditor() );
+		$this->page = new ValidatePage( $this->query_repository(), $this->auditor(), $this->audit_results() );
 	}
 
 	/**
@@ -127,6 +128,23 @@ final class ValidatePageTest extends TestCase {
 		$this->assertStringContainsString( '0 problem(s), 1 warning(s)', $output );
 		$this->assertStringContainsString( 'Reserved WordPress path', $output );
 		$this->assertStringContainsString( 'Warning', $output );
+	}
+
+	/**
+	 * Test rendering the page records the run as the audit summary.
+	 */
+	public function test_render_records_the_summary(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/recorded-broken', $post_id );
+		wp_delete_post( $post_id, true );
+
+		$output = $this->render();
+
+		$summary = $this->audit_results()->summary();
+		$this->assertNotNull( $summary );
+		$this->assertSame( 1, $summary['problems'] );
+		$this->assertSame( 1, $summary['checked'] );
+		$this->assertStringContainsString( 'now the recorded audit', $output );
 	}
 
 	/**

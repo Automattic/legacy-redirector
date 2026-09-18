@@ -60,6 +60,8 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			array(
 				'is_wp_error'                      => static fn( $thing ) => $thing instanceof \WP_Error,
 				'wp_remote_retrieve_response_code' => static fn( $response ) => $response['response']['code'] ?? 0,
+				'wp_remote_retrieve_header'        => static fn( $response, $header ) => $response['headers'][ $header ] ?? '',
+				'untrailingslashit'                => static fn( $value ) => rtrim( (string) $value, '/' ),
 			)
 		);
 	}
@@ -390,6 +392,103 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test the probe confirms a source that redirects to its destination.
+	 *
+	 * A trailing-slash difference in the Location header is not a divergence.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_confirms_a_matching_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/target/' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status'   => 'confirmed',
+				'location' => 'https://example.com/target/',
+			),
+			$auditor->probe_source( $this->create_redirect( '/old', '/target' ) )
+		);
+	}
+
+	/**
+	 * Test the probe reports a redirect that goes somewhere else.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_a_diverted_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 302 ),
+				'headers'  => array( 'location' => 'https://example.com/elsewhere' ),
+			)
+		);
+
+		$probe = $auditor->probe_source( $this->create_redirect( '/old', '/target' ) );
+
+		$this->assertSame( 'diverted', $probe['status'] );
+		$this->assertSame( 'https://example.com/elsewhere', $probe['location'] );
+	}
+
+	/**
+	 * Test a hop back to the source itself is dormant, not diverted.
+	 *
+	 * Apache directory redirects and trailing-slash canonicals send the
+	 * visitor to the same path: the path is served, so the redirect never
+	 * fires - but nothing was diverted anywhere.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_treats_a_self_hop_as_dormant(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/old/' ),
+			)
+		);
+
+		$this->assertSame( array( 'status' => 'dormant' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the probe reports a source that serves content and one that 404s.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_dormant_and_not_firing_sources(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$serving = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+		$this->assertSame( array( 'status' => 'dormant' ), $serving->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+
+		$missing = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+		$this->assertSame( array( 'status' => 'not-firing' ), $missing->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the probe degrades gracefully when the site cannot reach itself.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_an_unreachable_site(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( new \WP_Error() );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
 	 * Test source_warnings flags a reserved source.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
@@ -457,7 +556,8 @@ final class RedirectAuditorTest extends MonkeyStubs {
 
 		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_post_id_redirect( 123 ) ) );
 		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', 'https://allowed.com/page' ) ) );
-		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/' ) ) );
+		// The front controller never 404s the home path, so '/' is conclusive.
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/' ) ) );
 
 		Functions\expect( 'get_page_by_path' )
 			->once()
@@ -471,6 +571,65 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 0 );
 		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/unresolved-page' ) ) );
+	}
+
+	/**
+	 * Test a chain landing on published content is conclusive without HTTP.
+	 *
+	 * A destination with no post behind it may be another redirect's source;
+	 * following the hops to a published end answers the question the same as
+	 * pointing at that content directly.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_follows_chains_to_content(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$start = $this->create_redirect( '/start', '/hop' );
+		$end   = $this->create_redirect( '/hop', '/landing-page' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector->shouldReceive( 'follow' )->with( $start )->andReturn( $end );
+
+		$auditor = new RedirectAuditor( $detector );
+
+		// /start's destination resolves to no post; /landing-page (the chain
+		// end) resolves to a published one.
+		Functions\expect( 'get_page_by_path' )
+			->twice()
+			->andReturn( null, $this->create_mock_post( 'publish' ) );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertFalse( $auditor->destination_needs_http( $start ) );
+	}
+
+	/**
+	 * Test a chain meeting a cycle stays inconclusive.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_stays_true_when_the_chain_cycles(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$start = $this->create_redirect( '/start', '/hop' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector->shouldReceive( 'follow' )->with( $start )->andReturn( null );
+
+		$auditor = new RedirectAuditor( $detector );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertTrue( $auditor->destination_needs_http( $start ) );
 	}
 
 	/**
@@ -661,5 +820,37 @@ class TestableRedirectAuditor extends RedirectAuditor {
 	 */
 	protected function remote_get( string $url ) {
 		return array( 'response' => array( 'code' => $this->response_code ) );
+	}
+}
+
+/**
+ * Testable subclass returning a canned probe response.
+ */
+class ProbeStubAuditor extends RedirectAuditor {
+
+	/**
+	 * The canned response.
+	 *
+	 * @var array|\WP_Error
+	 */
+	private $response;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param array|\WP_Error $response The response to return.
+	 */
+	public function __construct( $response ) {
+		$this->response = $response;
+	}
+
+	/**
+	 * Override to return the canned response.
+	 *
+	 * @param string $url The URL to request (ignored).
+	 * @return array|\WP_Error The canned response.
+	 */
+	protected function remote_get_without_redirects( string $url ) {
+		return $this->response;
 	}
 }

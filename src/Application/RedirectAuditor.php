@@ -251,7 +251,81 @@ class RedirectAuditor {
 
 		$slug = $this->lookup_slug( $url );
 
-		return '' === $slug || null === $this->resolve_path_to_post( $slug );
+		// WordPress always serves something for the home path - the front
+		// controller never 404s '/' - so landing there is conclusive.
+		if ( '' === $slug ) {
+			return false;
+		}
+
+		if ( null !== $this->resolve_path_to_post( $slug ) ) {
+			return false;
+		}
+
+		// No post behind the path, but it may be another redirect's source:
+		// a chain that lands on published content is just as conclusive as
+		// pointing at that content directly.
+		return ! $this->chain_lands_on_content( $redirect );
+	}
+
+	/**
+	 * Whether following the redirect chain from this redirect lands on
+	 * published content.
+	 *
+	 * @param Redirect $redirect The redirect whose chain to follow.
+	 * @return bool True when the chain's final destination is published content.
+	 */
+	private function chain_lands_on_content( Redirect $redirect ): bool {
+		if ( null === $this->loop_detector ) {
+			return false;
+		}
+
+		$end = $this->loop_detector->follow( $redirect );
+
+		// No hop was followed (the destination is no redirect's source), or
+		// the walk met a cycle: nothing conclusive either way.
+		if ( null === $end || $end === $redirect ) {
+			return false;
+		}
+
+		$destination = $end->destination();
+
+		if ( $destination->is_post_id() ) {
+			$post = get_post( $destination->as_post_id()->value() );
+
+			return null !== $post && $this->is_published( $post );
+		}
+
+		$end_url = $destination->as_url()->value();
+
+		// An external end still needs HTTP to judge.
+		if ( ! $this->is_relative_path( $end_url ) ) {
+			return false;
+		}
+
+		$end_slug = $this->lookup_slug( $end_url );
+
+		if ( '' === $end_slug ) {
+			return true;
+		}
+
+		$post = $this->resolve_path_to_post( $end_slug );
+
+		return null !== $post && $this->is_published( $post );
+	}
+
+	/**
+	 * Whether a destination post counts as published.
+	 *
+	 * The same rules check_post_status() reports findings from: the raw
+	 * property for trash (so attachments of trashed parents are not resolved
+	 * to their pre-trash status), get_post_status() otherwise (so
+	 * attachments' 'inherit' resolves against the parent).
+	 *
+	 * @param \WP_Post $post The destination post.
+	 * @return bool True when published.
+	 */
+	private function is_published( \WP_Post $post ): bool {
+		return 'trash' !== $post->post_status && 'publish' === get_post_status( $post );
 	}
 
 	/**
@@ -400,6 +474,129 @@ class RedirectAuditor {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Probe the source end to end: request it and see what actually happens.
+	 *
+	 * The audit answers "would this redirect send visitors somewhere real?";
+	 * this answers "does visiting the source actually redirect?". A source
+	 * can serve content (so the redirect lies dormant), 404 without the
+	 * redirect firing, or redirect somewhere other than the stored
+	 * destination - none of which any static check can see.
+	 *
+	 * @param Redirect $redirect The redirect whose source to request.
+	 * @return array{status: string, location?: string} The outcome:
+	 *         'confirmed'   the source redirects to the stored destination;
+	 *         'diverted'    the source redirects somewhere else ('location');
+	 *         'dormant'     the source serves content, so the redirect never fires;
+	 *         'not-firing'  the source 404s without redirecting;
+	 *         'unreachable' the site could not request itself.
+	 */
+	public function probe_source( Redirect $redirect ): array {
+		$source_url = home_url( $redirect->source()->path() );
+		$response   = $this->remote_get_without_redirects( $source_url );
+
+		if ( is_wp_error( $response ) ) {
+			return array( 'status' => 'unreachable' );
+		}
+
+		$code     = (int) wp_remote_retrieve_response_code( $response );
+		$location = (string) wp_remote_retrieve_header( $response, 'location' );
+
+		if ( $code >= 300 && $code < 400 ) {
+			// A hop back to the source itself (a trailing-slash canonical, a
+			// directory redirect) means the path is served, not diverted: the
+			// 404 our redirect would answer never happens.
+			if ( $this->urls_equivalent( $location, $source_url ) ) {
+				return array( 'status' => 'dormant' );
+			}
+
+			$expected = $this->expected_destination_url( $redirect );
+
+			if ( null !== $expected && $this->urls_equivalent( $location, $expected ) ) {
+				return array(
+					'status'   => 'confirmed',
+					'location' => $location,
+				);
+			}
+
+			return array(
+				'status'   => 'diverted',
+				'location' => $location,
+			);
+		}
+
+		if ( 404 === $code ) {
+			return array( 'status' => 'not-firing' );
+		}
+
+		return array( 'status' => 'dormant' );
+	}
+
+	/**
+	 * The absolute URL the stored destination should send a visitor to.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return string|null The URL, or null when it cannot be resolved.
+	 */
+	private function expected_destination_url( Redirect $redirect ): ?string {
+		$destination = $redirect->destination();
+
+		if ( $destination->is_post_id() ) {
+			$permalink = get_permalink( $destination->as_post_id()->value() );
+
+			return is_string( $permalink ) ? $permalink : null;
+		}
+
+		$url = $destination->as_url()->value();
+
+		return $this->is_relative_path( $url ) ? home_url( $url ) : $url;
+	}
+
+	/**
+	 * Whether two URLs are the same destination for probing purposes.
+	 *
+	 * A trailing slash difference is not a divergence.
+	 *
+	 * @param string $a One URL.
+	 * @param string $b The other URL.
+	 * @return bool True when equivalent.
+	 */
+	private function urls_equivalent( string $a, string $b ): bool {
+		return untrailingslashit( $a ) === untrailingslashit( $b );
+	}
+
+	/**
+	 * Request a URL without following redirects.
+	 *
+	 * Protected so tests can stub the network.
+	 *
+	 * @param string $url The URL to request.
+	 * @return array|\WP_Error The response or error.
+	 */
+	protected function remote_get_without_redirects( string $url ) {
+		if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
+			return vip_safe_wp_remote_get(
+				$url,
+				'',
+				3,
+				1,
+				20,
+				array(
+					'redirection'        => 0,
+					'reject_unsafe_urls' => true,
+				)
+			);
+		}
+
+		return wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'     => 5,
+				'redirection' => 0,
+			)
+		);
 	}
 
 	/**

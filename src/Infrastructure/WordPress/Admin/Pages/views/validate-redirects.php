@@ -11,6 +11,7 @@
  * @var int                                                 $problems   How many findings are problems.
  * @var int                                                 $warnings   How many findings are warnings.
  * @var \Automattic\LegacyRedirector\Domain\AuditFinding[]  $findings   The findings to render.
+ * @var array<string, int|bool>|null                        $summary    The recorded summary this run just refreshed.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -71,6 +72,18 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 		);
 		?>
 	</h2>
+
+	<?php if ( null !== $summary ) : ?>
+		<p class="description">
+			<?php
+			printf(
+				/* translators: 1: number of problems found */
+				esc_html__( 'This run is now the recorded audit: the Redirects menu badge shows its %1$d problem(s), and a scheduled daily audit keeps the count fresh between visits here.', 'legacy-redirector' ),
+				(int) ( $summary['problems'] ?? 0 )
+			);
+			?>
+		</p>
+	<?php endif; ?>
 
 	<?php if ( array() === $findings ) : ?>
 		<div class="notice notice-success inline"><p><?php esc_html_e( 'No issues found.', 'legacy-redirector' ); ?></p></div>

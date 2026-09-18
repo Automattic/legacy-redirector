@@ -104,6 +104,47 @@ class LoopDetector {
 	}
 
 	/**
+	 * Follow the redirect chain to its last member.
+	 *
+	 * Walks the same hops as find_cycle() and returns the final redirect
+	 * whose destination is not another stored redirect's source - the one
+	 * whose destination decides where the whole chain actually lands. Returns
+	 * null when the walk meets a cycle or exceeds the hop cap, since such a
+	 * chain lands nowhere.
+	 *
+	 * @param Redirect $redirect The redirect to start from.
+	 * @return Redirect|null The chain's last member (the start itself when its
+	 *                       destination is no redirect's source), or null.
+	 */
+	public function follow( Redirect $redirect ): ?Redirect {
+		$trail   = array( $redirect->source()->path() );
+		$current = $redirect;
+
+		for ( $hop = 0; $hop < self::MAX_HOPS; $hop++ ) {
+			$next_source = $this->destination_as_source( $current );
+
+			if ( null === $next_source ) {
+				return $current;
+			}
+
+			if ( in_array( $next_source->path(), $trail, true ) ) {
+				return null;
+			}
+
+			$next = $this->repository->find_by_source( $next_source );
+
+			if ( null === $next || $next->is_corrupt() ) {
+				return $current;
+			}
+
+			$trail[] = $next_source->path();
+			$current = $next;
+		}
+
+		return null;
+	}
+
+	/**
 	 * Convert a redirect's destination into the source form a request for it
 	 * would be looked up by.
 	 *

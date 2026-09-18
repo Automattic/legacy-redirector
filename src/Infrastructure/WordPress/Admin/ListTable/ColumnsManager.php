@@ -257,9 +257,15 @@ final class ColumnsManager {
 			// A tick must not overclaim: for a destination only an HTTP request
 			// can judge, "no findings" means "nothing conclusive", not "fine".
 			if ( $this->auditor->destination_needs_http( $redirect ) ) {
+				$is_external = ! $redirect->destination()->is_post_id() && $redirect->destination()->as_url()->is_absolute();
+
 				printf(
 					'<span class="dashicons dashicons-editor-help" style="color: #787c82;" aria-hidden="true"></span><span title="%1$s">%2$s</span>',
-					esc_attr__( 'No problems found without requesting the destination. Use Test to check it responds.', 'legacy-redirector' ),
+					esc_attr(
+						$is_external
+							? __( 'External destination: only a request can tell whether it responds. Use Test.', 'legacy-redirector' )
+							: __( 'No post serves this path, but it may be an archive, a rewrite endpoint, or served outside WordPress. Use Test to check it responds.', 'legacy-redirector' )
+					),
 					esc_html__( 'Not fully checked', 'legacy-redirector' )
 				);
 				return;

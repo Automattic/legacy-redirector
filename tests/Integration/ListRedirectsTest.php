@@ -374,6 +374,51 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test a destination reachable through a redirect chain is conclusive.
+	 *
+	 * The destination has no post behind it, but it is another redirect's
+	 * source, and that chain ends at published content - as good as pointing
+	 * at the content directly, so no grey "not fully checked".
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_health_column_follows_chains_to_published_content(): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'chain-landing',
+			)
+		);
+		$start = $this->create_redirect( '/chain-start', '/chain-middle' );
+		$this->create_redirect( '/chain-middle', '/chain-landing' );
+
+		ob_start();
+		$this->columns_manager->render_column( 'health', $start );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'No issues found', $output );
+		$this->assertStringNotContainsString( 'Not fully checked', $output );
+	}
+
+	/**
+	 * Test a redirect to the home path is conclusive.
+	 *
+	 * The front controller never 404s '/', so landing there needs no HTTP
+	 * request to judge.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_health_column_treats_home_destination_as_conclusive(): void {
+		$post_id = $this->create_redirect( '/to-home', '/' );
+
+		ob_start();
+		$this->columns_manager->render_column( 'health', $post_id );
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'No issues found', $output );
+	}
+
+	/**
 	 * Test pagination is deterministic when many rows share one timestamp.
 	 *
 	 * An import creates hundreds of rows in the same second; without an ID

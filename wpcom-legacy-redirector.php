@@ -59,6 +59,13 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 // Initialize the plugin.
 ( new PluginBootstrapper( Container::instance() ) )->init();
 
+// Deactivation must clear the scheduled audit, or the cron event keeps
+// firing into a void.
+register_deactivation_hook(
+	__FILE__,
+	array( \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditScheduler::class, 'unschedule' )
+);
+
 /**
  * Get the plugin's DI container instance.
  *

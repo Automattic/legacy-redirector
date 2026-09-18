@@ -110,6 +110,11 @@ final class ValidateRedirectHandler {
 			}
 		}
 
+		// The live probe: request the source and see what actually happens,
+		// which no static check can - a source serving content, a redirect
+		// not firing, or a hop to somewhere other than the stored destination.
+		$probe = $this->probe( $redirect );
+
 		// A warning does not fail the redirect - it works, but a person should
 		// look - so it rides along rather than turning the result red.
 		if ( array() !== $problems ) {
@@ -120,6 +125,7 @@ final class ValidateRedirectHandler {
 					'status'   => $finding->type()->value,
 					'message'  => $finding->description() . '.',
 					'warnings' => $warnings,
+					'probe'    => $probe,
 				)
 			);
 		}
@@ -129,7 +135,34 @@ final class ValidateRedirectHandler {
 				'status'   => 'valid',
 				'message'  => __( 'Redirect is valid.', 'legacy-redirector' ),
 				'warnings' => $warnings,
+				'probe'    => $probe,
 			)
+		);
+	}
+
+	/**
+	 * Probe the source and phrase the outcome for display.
+	 *
+	 * @param \Automattic\LegacyRedirector\Domain\Redirect $redirect The redirect to probe.
+	 * @return array{status: string, message: string} The probe outcome and its message.
+	 */
+	private function probe( $redirect ): array {
+		$probe    = $this->auditor->probe_source( $redirect );
+		$location = $probe['location'] ?? '';
+
+		$message = match ( $probe['status'] ) {
+			/* translators: %s: the URL the source redirected to */
+			'confirmed'  => sprintf( __( 'Confirmed live: the source redirects to %s.', 'legacy-redirector' ), $location ),
+			/* translators: %s: the URL the source redirected to */
+			'diverted'   => sprintf( __( 'The source redirects, but to %s rather than the stored destination.', 'legacy-redirector' ), $location ),
+			'dormant'    => __( 'The source currently serves content, so the redirect lies dormant and did not fire.', 'legacy-redirector' ),
+			'not-firing' => __( 'The source returns a 404 without redirecting: the redirect did not fire.', 'legacy-redirector' ),
+			default      => __( 'Could not confirm live behaviour: the site could not request itself.', 'legacy-redirector' ),
+		};
+
+		return array(
+			'status'  => $probe['status'],
+			'message' => $message,
 		);
 	}
 }

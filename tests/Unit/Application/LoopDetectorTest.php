@@ -185,6 +185,41 @@ final class LoopDetectorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test follow returns the chain's last member.
+	 */
+	public function test_follow_returns_the_last_chain_member(): void {
+		$middle = $this->create_redirect( '/b', '/c' );
+		$end    = $this->create_redirect( '/c', '/landing' );
+
+		$this->expect_lookup( '/b', $middle );
+		$this->expect_lookup( '/c', $end );
+		$this->expect_lookup( '/landing', null );
+
+		$this->assertSame( $end, $this->detector->follow( $this->create_redirect( '/a', '/b' ) ) );
+	}
+
+	/**
+	 * Test follow returns the start itself when its destination is no
+	 * redirect's source.
+	 */
+	public function test_follow_returns_the_start_when_there_is_no_chain(): void {
+		$start = $this->create_redirect( '/a', '/plain-page' );
+
+		$this->expect_lookup( '/plain-page', null );
+
+		$this->assertSame( $start, $this->detector->follow( $start ) );
+	}
+
+	/**
+	 * Test follow returns null when the walk meets a cycle.
+	 */
+	public function test_follow_returns_null_on_a_cycle(): void {
+		$this->expect_lookup( '/b', $this->create_redirect( '/b', '/a' ) );
+
+		$this->assertNull( $this->detector->follow( $this->create_redirect( '/a', '/b' ) ) );
+	}
+
+	/**
 	 * Test the walk stops at the hop cap on a long non-cyclic chain.
 	 */
 	public function test_the_walk_stops_at_the_hop_cap(): void {

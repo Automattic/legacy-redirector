@@ -18,6 +18,7 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
@@ -166,6 +167,18 @@ final class Container {
 			$this->services['auditor'] = new RedirectAuditor( new LoopDetector( $this->repository() ) );
 		}
 		return $this->services['auditor'];
+	}
+
+	/**
+	 * Get the stored audit results.
+	 *
+	 * @return AuditResults
+	 */
+	public function audit_results(): AuditResults {
+		if ( ! isset( $this->services['audit_results'] ) ) {
+			$this->services['audit_results'] = new AuditResults();
+		}
+		return $this->services['audit_results'];
 	}
 
 	/**

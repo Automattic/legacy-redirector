@@ -19,6 +19,7 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
@@ -98,6 +99,15 @@ trait RedirectTestHelper {
 	 */
 	protected function auditor(): RedirectAuditor {
 		return $this->services['auditor'] ??= new RedirectAuditor( new LoopDetector( $this->repository() ) );
+	}
+
+	/**
+	 * Get the stored audit results.
+	 *
+	 * @return AuditResults The stored results.
+	 */
+	protected function audit_results(): AuditResults {
+		return $this->services['audit_results'] ??= new AuditResults();
 	}
 
 	/**

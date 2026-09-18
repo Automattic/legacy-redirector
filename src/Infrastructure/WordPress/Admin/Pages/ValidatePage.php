@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -56,14 +57,23 @@ final class ValidatePage {
 	private RedirectAuditor $auditor;
 
 	/**
+	 * The stored audit results.
+	 *
+	 * @var AuditResults
+	 */
+	private AuditResults $results;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
 	 * @param RedirectAuditor                  $auditor          The redirect auditor.
+	 * @param AuditResults                     $results          The stored audit results.
 	 */
-	public function __construct( RedirectQueryRepositoryInterface $query_repository, RedirectAuditor $auditor ) {
+	public function __construct( RedirectQueryRepositoryInterface $query_repository, RedirectAuditor $auditor, AuditResults $results ) {
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
+		$this->results          = $results;
 	}
 
 	/**
@@ -205,6 +215,11 @@ final class ValidatePage {
 		}
 
 		$checked = count( $redirects );
+
+		// This run becomes the recorded summary the menu badge reads, and
+		// the scheduled daily run keeps it fresh between visits here.
+		$this->results->record( $findings, $checked, $check_urls );
+		$summary = $this->results->summary();
 
 		include __DIR__ . '/views/validate-redirects.php';
 	}

@@ -351,6 +351,11 @@ final class SourceUrl {
 	 * dormant while the path works - and answers it the moment the path
 	 * breaks, which for wp-admin or wp-login.php locks the admin out.
 	 *
+	 * Also covers paths core answers before the 404 decision is ever made:
+	 * robots.txt and favicon.ico (served virtually when no file exists), the
+	 * wp-sitemap files, and the site feeds. A redirect from those is not
+	 * merely dormant - it can never fire at all.
+	 *
 	 * Such a source is still allowed: a site migrated from another platform
 	 * can have real legacy URLs here. Callers warn rather than refuse.
 	 *
@@ -359,7 +364,7 @@ final class SourceUrl {
 	public function is_reserved(): bool {
 		$path = substr( $this->path, 0, strcspn( $this->path, '?' ) );
 
-		return 1 === preg_match( '#^/(?:xmlrpc\.php|wp-[^/]*\.php|wp-(?:admin|json|content|includes)(?:/.*)?)$#', $path );
+		return 1 === preg_match( '#^/(?:xmlrpc\.php|robots\.txt|favicon\.ico|wp-[^/]*\.php|wp-sitemap[^/]*\.(?:xml|xsl)|feed(?:/.*)?|wp-(?:admin|json|content|includes)(?:/.*)?)$#', $path );
 	}
 
 	/**
