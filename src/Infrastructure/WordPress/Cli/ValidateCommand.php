@@ -15,8 +15,7 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\ValidationIssue;
-use Automattic\LegacyRedirector\Domain\ValidationIssueType;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -82,6 +81,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * Checks for:
 	 * - Destinations pointing to deleted or trashed posts
 	 * - Destinations pointing to unpublished posts
+	 * - External destinations whose host is not in allowed_redirect_hosts
 	 * - Sources on a path WordPress itself serves, such as /wp-admin or
 	 *   /wp-login.php (reported, never disabled by --fix)
 	 * - Optionally checks if destination URLs return 404
@@ -177,7 +177,7 @@ final class ValidateCommand extends WP_CLI_Command {
 		$total    = count( $redirects );
 		$progress = $is_table ? \WP_CLI\Utils\make_progress_bar( 'Validating redirects', $total ) : null;
 
-		$issues = $this->auditor->validate_batch(
+		$issues = $this->auditor->audit_batch(
 			$redirects,
 			$check_urls,
 			function () use ( $progress ): void {
@@ -215,7 +215,7 @@ final class ValidateCommand extends WP_CLI_Command {
 
 		// Convert issues to array format for display.
 		$items = array_map(
-			fn( ValidationIssue $issue ) => $this->redirect_row( $issue->redirect() ) + array( 'issue' => $issue->label() ),
+			fn( AuditFinding $issue ) => $this->redirect_row( $issue->redirect() ) + array( 'issue' => $issue->label() ),
 			$issues
 		);
 
@@ -273,7 +273,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	/**
 	 * Disable the redirects behind the given issues.
 	 *
-	 * @param ValidationIssue[] $issues The issues to fix.
+	 * @param AuditFinding[] $issues The issues to fix.
 	 */
 	private function fix_issues( array $issues ): void {
 		WP_CLI::line( '' );
@@ -281,9 +281,9 @@ final class ValidateCommand extends WP_CLI_Command {
 		$corrupt = 0;
 
 		foreach ( $issues as $issue ) {
-			// A reserved source is a warning, not a breakage: the redirect may be a
-			// legitimate legacy URL, so it is left for a person to judge.
-			if ( ValidationIssueType::RESERVED_SOURCE === $issue->type() ) {
+			// A warning is not a breakage: the redirect may be a legitimate
+			// legacy URL, so it is left for a person to judge.
+			if ( $issue->is_warning() ) {
 				continue;
 			}
 

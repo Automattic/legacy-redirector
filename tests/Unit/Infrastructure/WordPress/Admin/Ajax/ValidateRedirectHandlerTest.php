@@ -9,7 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Admin\Ajax;
 
-use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
@@ -31,11 +31,11 @@ final class ValidateRedirectHandlerTest extends MonkeyStubs {
 	private $repository;
 
 	/**
-	 * The mock validator.
+	 * The mock auditor.
 	 *
-	 * @var RedirectValidator&Mockery\MockInterface
+	 * @var RedirectAuditor&Mockery\MockInterface
 	 */
-	private $validator;
+	private $auditor;
 
 	/**
 	 * The handler under test.
@@ -53,8 +53,8 @@ final class ValidateRedirectHandlerTest extends MonkeyStubs {
 		parent::set_up();
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
-		$this->validator  = Mockery::mock( RedirectValidator::class );
-		$this->handler    = new ValidateRedirectHandler( $this->repository, $this->validator );
+		$this->auditor    = Mockery::mock( RedirectAuditor::class );
+		$this->handler    = new ValidateRedirectHandler( $this->repository, $this->auditor );
 	}
 
 	/**

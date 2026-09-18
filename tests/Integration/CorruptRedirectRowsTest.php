@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectPersistenceException;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Domain\ValidationIssueType;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 
 /**
  * Tests the whole corrupt-row story: a vip-legacy-redirect row whose stored
@@ -33,7 +33,10 @@ use Automattic\LegacyRedirector\Domain\ValidationIssueType;
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
@@ -41,8 +44,8 @@ use Automattic\LegacyRedirector\Domain\ValidationIssueType;
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
- * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class CorruptRedirectRowsTest extends TestCase {
@@ -132,10 +135,10 @@ final class CorruptRedirectRowsTest extends TestCase {
 		$post_id  = $this->insert_redirect_post( array( 'post_title' => '' ) );
 		$redirect = $this->repository()->find_by_id( $post_id );
 
-		$issue = ( new RedirectAuditor() )->validate_redirect_destination( $redirect );
+		$issue = ( new RedirectAuditor() )->audit_destination( $redirect );
 
 		$this->assertNotNull( $issue );
-		$this->assertSame( ValidationIssueType::CORRUPT_DATA, $issue->type() );
+		$this->assertSame( AuditFindingType::CORRUPT_DATA, $issue->type() );
 		$this->assertStringContainsString( 'Invalid source', $issue->extra_info() );
 	}
 

@@ -1,6 +1,6 @@
 <?php
 /**
- * ValidationIssue value object.
+ * AuditFinding value object.
  *
  * @package Automattic\LegacyRedirector\Domain
  */
@@ -10,29 +10,29 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Domain;
 
 /**
- * Represents a validation issue found with a redirect's destination.
+ * Represents something the auditor found wrong with a redirect.
  *
- * Immutable value object that captures what redirect has an issue,
- * what type of issue it is, and any additional details.
+ * Immutable value object that captures which redirect has the finding,
+ * what type of finding it is, and any additional details.
  */
-final class ValidationIssue {
+final class AuditFinding {
 
 	/**
-	 * The redirect that has the issue.
+	 * The redirect the finding is about.
 	 *
 	 * @var Redirect
 	 */
 	private Redirect $redirect;
 
 	/**
-	 * The type of issue.
+	 * The type of finding.
 	 *
-	 * @var ValidationIssueType
+	 * @var AuditFindingType
 	 */
-	private ValidationIssueType $type;
+	private AuditFindingType $type;
 
 	/**
-	 * Optional extra information about the issue.
+	 * Optional extra information about the finding.
 	 *
 	 * @var string|null
 	 */
@@ -41,13 +41,13 @@ final class ValidationIssue {
 	/**
 	 * Constructor.
 	 *
-	 * @param Redirect            $redirect   The redirect with the issue.
-	 * @param ValidationIssueType $type       The type of issue.
-	 * @param string|null         $extra_info Optional extra information (e.g., HTTP status code, post status).
+	 * @param Redirect         $redirect   The redirect the finding is about.
+	 * @param AuditFindingType $type       The type of finding.
+	 * @param string|null      $extra_info Optional extra information (e.g., HTTP status code, post status).
 	 */
 	public function __construct(
 		Redirect $redirect,
-		ValidationIssueType $type,
+		AuditFindingType $type,
 		?string $extra_info = null
 	) {
 		$this->redirect   = $redirect;
@@ -65,11 +65,11 @@ final class ValidationIssue {
 	}
 
 	/**
-	 * Get the issue type.
+	 * Get the finding type.
 	 *
-	 * @return ValidationIssueType
+	 * @return AuditFindingType
 	 */
-	public function type(): ValidationIssueType {
+	public function type(): AuditFindingType {
 		return $this->type;
 	}
 
@@ -83,7 +83,16 @@ final class ValidationIssue {
 	}
 
 	/**
-	 * Get the human-readable issue label.
+	 * Whether this finding is a warning rather than a problem.
+	 *
+	 * @return bool
+	 */
+	public function is_warning(): bool {
+		return $this->type->is_warning();
+	}
+
+	/**
+	 * Get the human-readable finding label.
 	 *
 	 * @return string
 	 */
@@ -92,7 +101,7 @@ final class ValidationIssue {
 	}
 
 	/**
-	 * Get the detailed issue description.
+	 * Get the detailed finding description.
 	 *
 	 * @return string
 	 */

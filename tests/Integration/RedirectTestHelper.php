@@ -12,6 +12,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
@@ -86,7 +87,16 @@ trait RedirectTestHelper {
 	 * @return RedirectValidator The validator.
 	 */
 	protected function validator(): RedirectValidator {
-		return $this->services['validator'] ??= new RedirectValidator( $this->repository() );
+		return $this->services['validator'] ??= new RedirectValidator( $this->repository(), $this->auditor() );
+	}
+
+	/**
+	 * Get the redirect auditor.
+	 *
+	 * @return RedirectAuditor The auditor.
+	 */
+	protected function auditor(): RedirectAuditor {
+		return $this->services['auditor'] ??= new RedirectAuditor();
 	}
 
 	/**

@@ -10,10 +10,10 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Domain\ValidationIssueType;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -30,12 +30,21 @@ final class CreateCommand extends WP_CLI_Command {
 	private RedirectManager $manager;
 
 	/**
+	 * The redirect auditor, which owns the source warning rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
+	 * @param RedirectAuditor $auditor The redirect auditor.
 	 */
-	public function __construct( RedirectManager $manager ) {
+	public function __construct( RedirectManager $manager, RedirectAuditor $auditor ) {
 		$this->manager = $manager;
+		$this->auditor = $auditor;
 	}
 
 	/**
@@ -108,8 +117,8 @@ final class CreateCommand extends WP_CLI_Command {
 			return;
 		}
 
-		if ( $source->is_reserved() ) {
-			WP_CLI::warning( ValidationIssueType::RESERVED_SOURCE->description() . '.' );
+		foreach ( $this->auditor->source_warnings( $source ) as $warning ) {
+			WP_CLI::warning( $warning->description() . '.' );
 		}
 
 		if ( $porcelain ) {

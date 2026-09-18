@@ -22,6 +22,7 @@ use WPAjaxDieStopException;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -44,7 +45,7 @@ final class CheckSourceHandlerTest extends AjaxHandlerTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		( new CheckSourceHandler( $this->repository() ) )->register();
+		( new CheckSourceHandler( $this->repository(), $this->auditor() ) )->register();
 	}
 
 	/**

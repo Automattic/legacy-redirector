@@ -19,7 +19,10 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
@@ -50,7 +53,7 @@ final class UITest extends TestCase {
 
 		$this->notices = new ValidationNotices(
 			$this->repository(),
-			$this->validator()
+			$this->auditor()
 		);
 
 		// Register capabilities for tests.
@@ -121,29 +124,12 @@ final class UITest extends TestCase {
 	}
 
 	/**
-	 * Test display_validation_notices outputs correct notice for invalid validation.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
-	 */
-	public function test_validate_redirects_notices_shows_invalid_notice(): void {
-		$_GET['validate'] = 'invalid';
-
-		ob_start();
-		$this->notices->display_validation_notices();
-		$output = ob_get_clean();
-
-		$this->assertStringContainsString( 'notice-error', $output );
-		$this->assertStringContainsString( 'not valid', $output );
-		$this->assertStringContainsString( 'site-relative path', $output );
-	}
-
-	/**
-	 * Test display_validation_notices names the filter when the host is not allowed.
+	 * Test display_validation_notices renders an audit finding as an error notice.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
 	public function test_validate_redirects_notices_shows_host_not_allowed_notice(): void {
-		$_GET['validate'] = 'host-not-allowed';
+		$_GET['validate'] = 'external_host_not_allowed';
 
 		ob_start();
 		$this->notices->display_validation_notices();
@@ -160,7 +146,7 @@ final class UITest extends TestCase {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
 	public function test_validate_redirects_notices_shows_404_notice(): void {
-		$_GET['validate'] = '404';
+		$_GET['validate'] = 'url_not_found';
 
 		ob_start();
 		$this->notices->display_validation_notices();
@@ -187,35 +173,66 @@ final class UITest extends TestCase {
 	}
 
 	/**
-	 * Test display_validation_notices outputs correct notice for private.
+	 * Test display_validation_notices outputs correct notice for an unpublished destination.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
-	public function test_validate_redirects_notices_shows_private_notice(): void {
-		$_GET['validate'] = 'private';
+	public function test_validate_redirects_notices_shows_unpublished_notice(): void {
+		$_GET['validate'] = 'post_unpublished';
 
 		ob_start();
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
 		$this->assertStringContainsString( 'notice-error', $output );
-		$this->assertStringContainsString( 'not publicly accessible', $output );
+		$this->assertStringContainsString( 'not published', $output );
 	}
 
 	/**
-	 * Test display_validation_notices outputs correct notice for null post.
+	 * Test display_validation_notices outputs correct notice for a deleted destination post.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
 	 */
-	public function test_validate_redirects_notices_shows_null_notice(): void {
-		$_GET['validate'] = 'null';
+	public function test_validate_redirects_notices_shows_deleted_post_notice(): void {
+		$_GET['validate'] = 'post_deleted';
 
 		ob_start();
 		$this->notices->display_validation_notices();
 		$output = ob_get_clean();
 
 		$this->assertStringContainsString( 'notice-error', $output );
-		$this->assertStringContainsString( 'does not exist', $output );
+		$this->assertStringContainsString( 'no longer exists', $output );
+	}
+
+	/**
+	 * Test display_validation_notices reports a redirect ID that no longer resolves.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_not_found_notice(): void {
+		$_GET['validate'] = 'not-found';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( 'Redirect not found', $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs nothing for an unrecognised result.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_outputs_nothing_for_unknown_result(): void {
+		$_GET['validate'] = 'something-else';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertEmpty( $output );
 	}
 
 	/**

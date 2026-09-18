@@ -10,6 +10,8 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax;
 
 use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -30,12 +32,21 @@ final class CheckSourceHandler {
 	private RedirectRepositoryInterface $repository;
 
 	/**
+	 * Auditor, which owns the source warning rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository Redirect repository.
+	 * @param RedirectAuditor             $auditor    Redirect auditor.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository ) {
+	public function __construct( RedirectRepositoryInterface $repository, RedirectAuditor $auditor ) {
 		$this->repository = $repository;
+		$this->auditor    = $auditor;
 	}
 
 	/**
@@ -89,7 +100,7 @@ final class CheckSourceHandler {
 			wp_send_json_success(
 				array(
 					'exists'   => $exists,
-					'reserved' => $source->is_reserved(),
+					'reserved' => in_array( AuditFindingType::RESERVED_SOURCE, $this->auditor->source_warnings( $source ), true ),
 				)
 			);
 		} catch ( \InvalidArgumentException $e ) {

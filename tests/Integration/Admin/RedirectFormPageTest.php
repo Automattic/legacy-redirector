@@ -30,7 +30,10 @@ use WPDieException;
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
@@ -69,7 +72,8 @@ final class RedirectFormPageTest extends TestCase {
 		$this->page = new RedirectFormPage(
 			$this->repository(),
 			$this->manager(),
-			$this->validator()
+			$this->validator(),
+			$this->auditor()
 		);
 
 		// The reachability check on save would otherwise make a real request

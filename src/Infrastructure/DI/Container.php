@@ -90,7 +90,7 @@ final class Container {
 	 */
 	public function validator(): RedirectValidator {
 		if ( ! isset( $this->services['validator'] ) ) {
-			$this->services['validator'] = new RedirectValidator( $this->repository() );
+			$this->services['validator'] = new RedirectValidator( $this->repository(), $this->auditor() );
 		}
 		return $this->services['validator'];
 	}

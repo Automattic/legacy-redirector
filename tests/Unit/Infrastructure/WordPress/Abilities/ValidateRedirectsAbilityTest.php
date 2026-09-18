@@ -17,8 +17,8 @@ use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Domain\ValidationIssue;
-use Automattic\LegacyRedirector\Domain\ValidationIssueType;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
@@ -35,8 +35,8 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Domain\ValidationIssue
- * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
@@ -125,7 +125,7 @@ final class ValidateRedirectsAbilityTest extends MonkeyStubs {
 			)
 			->andReturn( array( $this->redirect( 1 ), $this->redirect( 2 ) ) );
 
-		$this->auditor->shouldReceive( 'validate_batch' )->once()->andReturn( array() );
+		$this->auditor->shouldReceive( 'audit_batch' )->once()->andReturn( array() );
 
 		$result = $this->ability->execute( array() );
 
@@ -144,7 +144,7 @@ final class ValidateRedirectsAbilityTest extends MonkeyStubs {
 		$this->repository->shouldReceive( 'find_by_id' )->with( 8 )->andReturn( null );
 		$this->query_repository->shouldNotReceive( 'find_matching' );
 
-		$this->auditor->shouldReceive( 'validate_batch' )
+		$this->auditor->shouldReceive( 'audit_batch' )
 			->once()
 			->with( Mockery::type( 'array' ), true )
 			->andReturn( array() );
@@ -170,8 +170,8 @@ final class ValidateRedirectsAbilityTest extends MonkeyStubs {
 		$redirect = $this->redirect( 3 );
 
 		$this->query_repository->shouldReceive( 'find_matching' )->andReturn( array( $redirect ) );
-		$this->auditor->shouldReceive( 'validate_batch' )->andReturn(
-			array( new ValidationIssue( $redirect, ValidationIssueType::POST_DELETED ) )
+		$this->auditor->shouldReceive( 'audit_batch' )->andReturn(
+			array( new AuditFinding( $redirect, AuditFindingType::POST_DELETED ) )
 		);
 
 		$result = $this->ability->execute( array() );

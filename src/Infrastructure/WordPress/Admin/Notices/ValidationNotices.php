@@ -9,15 +9,37 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices;
 
-use Automattic\LegacyRedirector\Application\RedirectValidator;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
  * Handles validation notices and the fallback validation action.
+ *
+ * Reads from the auditor, so this action, the To column, and the `validate`
+ * CLI command report the same findings for the same redirect.
  */
 final class ValidationNotices {
+
+	/**
+	 * The query value for a redirect that passed validation.
+	 *
+	 * Every other value carried by the `validate` query arg is an
+	 * AuditFindingType backing value.
+	 *
+	 * @var string
+	 */
+	private const string RESULT_VALID = 'valid';
+
+	/**
+	 * The query value for a redirect ID that no longer exists.
+	 *
+	 * @var string
+	 */
+	private const string RESULT_NOT_FOUND = 'not-found';
 
 	/**
 	 * Notice arguments for a failed validation.
@@ -52,21 +74,21 @@ final class ValidationNotices {
 	private RedirectRepositoryInterface $repository;
 
 	/**
-	 * Redirect validator.
+	 * Redirect auditor.
 	 *
-	 * @var RedirectValidator
+	 * @var RedirectAuditor
 	 */
-	private RedirectValidator $validator;
+	private RedirectAuditor $auditor;
 
 	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository Redirect repository.
-	 * @param RedirectValidator           $validator  Redirect validator.
+	 * @param RedirectAuditor             $auditor    Redirect auditor.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository, RedirectValidator $validator ) {
+	public function __construct( RedirectRepositoryInterface $repository, RedirectAuditor $auditor ) {
 		$this->repository = $repository;
-		$this->validator  = $validator;
+		$this->auditor    = $auditor;
 	}
 
 	/**
@@ -107,6 +129,9 @@ final class ValidationNotices {
 			return;
 		}
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
+		$result = sanitize_text_field( wp_unslash( $_GET['validate'] ) );
+
 		// Get redirect details for context in the notice. The repository
 		// returns null for IDs of other post types, so no foreign title leaks.
 		$redirect_context = '';
@@ -123,31 +148,27 @@ final class ValidationNotices {
 			}
 		}
 
-		$redirect_not_valid_text = __( 'Redirect is not valid', 'legacy-redirector' );
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
-		switch ( $_GET['validate'] ) {
-			case 'invalid':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination must be a site-relative path beginning with a slash, or a full URL beginning with http:// or https://.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
-				break;
-			case 'host-not-allowed':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The destination domain is not allowed. Add it to the "allowed_redirect_hosts" filter, or the redirect will not run.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
-				break;
-			case '404':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'Redirect is pointing to a page with the HTTP status of 404.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
-				break;
-			case 'valid':
-				/* translators: %s: context showing which redirect (e.g. "for /old-page") */
-				$message = sprintf( __( 'Redirect is valid%s.', 'legacy-redirector' ), $redirect_context );
-				wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
-				break;
-			case 'private':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to content that is not publicly accessible.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
-				break;
-			case 'null':
-				wp_admin_notice( esc_html( $redirect_not_valid_text ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html__( 'The redirect is pointing to a Post ID that does not exist.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
-				break;
+		if ( self::RESULT_VALID === $result ) {
+			/* translators: %s: context showing which redirect (e.g. "for /old-page") */
+			$message = sprintf( __( 'Redirect is valid%s.', 'legacy-redirector' ), $redirect_context );
+			wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
+			return;
 		}
+
+		if ( self::RESULT_NOT_FOUND === $result ) {
+			wp_admin_notice( esc_html__( 'Redirect not found.', 'legacy-redirector' ), self::ERROR_NOTICE_ARGS );
+			return;
+		}
+
+		$finding_type = AuditFindingType::tryFrom( $result );
+		if ( null === $finding_type ) {
+			return;
+		}
+
+		wp_admin_notice(
+			esc_html__( 'Redirect is not valid', 'legacy-redirector' ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $finding_type->description() . '.' ),
+			self::ERROR_NOTICE_ARGS
+		);
 	}
 
 	/**
@@ -183,41 +204,25 @@ final class ValidationNotices {
 		$redirect = $this->repository->find_by_id( $post_id );
 
 		if ( null === $redirect ) {
-			$this->redirect_with_result( 'null', $post_id );
+			$this->redirect_with_result( self::RESULT_NOT_FOUND, $post_id );
 			return;
 		}
 
-		$destination = $redirect->destination();
+		// A warning does not fail the redirect: the row is already flagged by
+		// other means, and Validate answers "does this redirect work?".
+		$problems = array_filter(
+			$this->auditor->audit( $redirect, true ),
+			static fn( AuditFinding $finding ): bool => ! $finding->is_warning()
+		);
 
-		// Validate the destination exists and is accessible.
-		$validation_result = $this->validator->validate_destination( $destination );
-
-		if ( $validation_result->is_invalid() ) {
-			$error_code = $validation_result->error_code();
-
-			// Map validator error codes to UI status codes.
-			$status_map = array(
-				'empty-postid'             => 'null',
-				'non-public'               => 'private',
-				'external-url-not-allowed' => 'host-not-allowed',
-				'invalid'                  => 'invalid',
-			);
-
-			$ui_status = $status_map[ $error_code ] ?? 'invalid';
-			$this->redirect_with_result( $ui_status, $post_id );
-			return;
-		}
-
-		// Check if destination returns 404 via HTTP request.
-		$http_result = $this->validator->validate_destination_not_404( $destination );
-
-		if ( $http_result->is_invalid() ) {
-			$this->redirect_with_result( '404', $post_id );
+		if ( array() !== $problems ) {
+			$finding = reset( $problems );
+			$this->redirect_with_result( $finding->type()->value, $post_id );
 			return;
 		}
 
 		// All checks passed - redirect is valid.
-		$this->redirect_with_result( 'valid', $post_id );
+		$this->redirect_with_result( self::RESULT_VALID, $post_id );
 	}
 
 	/**
