@@ -14,7 +14,7 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDuplicateHandler;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
@@ -113,8 +113,8 @@ final class AdminBootstrapper {
 	 * @return void
 	 */
 	private function register_ajax_handlers(): void {
-		$check_duplicate = new CheckDuplicateHandler( $this->repository );
-		$check_duplicate->register();
+		$check_source = new CheckSourceHandler( $this->repository );
+		$check_source->register();
 
 		$search_posts = new SearchPostsHandler();
 		$search_posts->register();

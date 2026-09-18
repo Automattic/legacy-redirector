@@ -1,6 +1,6 @@
 <?php
 /**
- * CheckDuplicateHandler AJAX integration tests.
+ * CheckSourceHandler AJAX integration tests.
  *
  * @package Automattic\LegacyRedirector\Tests\Integration\Admin\Ajax
  */
@@ -9,17 +9,17 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Admin\Ajax;
 
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDuplicateHandler;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
 use WPAjaxDieStopException;
 
 /**
- * Integration tests for the duplicate source check AJAX endpoint.
+ * Integration tests for the source check AJAX endpoint.
  *
  * The response shapes asserted here are the exact contract consumed by
- * js/admin-redirect-form.js, which reads response.success and
- * response.data.exists.
+ * js/admin-redirect-form.js, which reads response.success,
+ * response.data.exists and response.data.reserved.
  *
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDuplicateHandler
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
@@ -34,7 +34,7 @@ use WPAjaxDieStopException;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
-final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
+final class CheckSourceHandlerTest extends AjaxHandlerTestCase {
 
 	/**
 	 * Set up the handler under test.
@@ -44,7 +44,7 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		( new CheckDuplicateHandler( $this->repository() ) )->register();
+		( new CheckSourceHandler( $this->repository() ) )->register();
 	}
 
 	/**
@@ -57,7 +57,7 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 		$this->expectException( WPAjaxDieStopException::class );
 		$this->expectExceptionMessage( '-1' );
 
-		$this->_handleAjax( CheckDuplicateHandler::get_action() );
+		$this->_handleAjax( CheckSourceHandler::get_action() );
 	}
 
 	/**
@@ -66,7 +66,7 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 	public function test_request_without_capability_is_rejected(): void {
 		$this->login_without_manage_capability();
 
-		$response = $this->dispatch( CheckDuplicateHandler::get_action(), array( 'redirect_from' => '/old-page' ) );
+		$response = $this->dispatch( CheckSourceHandler::get_action(), array( 'redirect_from' => '/old-page' ) );
 
 		$this->assertSame(
 			array(
@@ -84,12 +84,15 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 		$this->login_as_redirect_manager();
 		$this->create_redirect( '/duplicated-page', 'https://example.com/destination' );
 
-		$response = $this->dispatch( CheckDuplicateHandler::get_action(), array( 'redirect_from' => '/duplicated-page' ) );
+		$response = $this->dispatch( CheckSourceHandler::get_action(), array( 'redirect_from' => '/duplicated-page' ) );
 
 		$this->assertSame(
 			array(
 				'success' => true,
-				'data'    => array( 'exists' => true ),
+				'data'    => array(
+					'exists'   => true,
+					'reserved' => false,
+				),
 			),
 			$response
 		);
@@ -101,12 +104,15 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 	public function test_unknown_source_reports_no_duplicate(): void {
 		$this->login_as_redirect_manager();
 
-		$response = $this->dispatch( CheckDuplicateHandler::get_action(), array( 'redirect_from' => '/never-redirected' ) );
+		$response = $this->dispatch( CheckSourceHandler::get_action(), array( 'redirect_from' => '/never-redirected' ) );
 
 		$this->assertSame(
 			array(
 				'success' => true,
-				'data'    => array( 'exists' => false ),
+				'data'    => array(
+					'exists'   => false,
+					'reserved' => false,
+				),
 			),
 			$response
 		);
@@ -123,7 +129,7 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 		$redirect_id = $this->create_redirect( '/edited-page', 'https://example.com/destination' );
 
 		$response = $this->dispatch(
-			CheckDuplicateHandler::get_action(),
+			CheckSourceHandler::get_action(),
 			array(
 				'redirect_from' => '/edited-page',
 				'exclude_id'    => (string) $redirect_id,
@@ -133,7 +139,10 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 		$this->assertSame(
 			array(
 				'success' => true,
-				'data'    => array( 'exists' => false ),
+				'data'    => array(
+					'exists'   => false,
+					'reserved' => false,
+				),
 			),
 			$response
 		);
@@ -145,12 +154,37 @@ final class CheckDuplicateHandlerTest extends AjaxHandlerTestCase {
 	public function test_empty_source_reports_no_duplicate(): void {
 		$this->login_as_redirect_manager();
 
-		$response = $this->dispatch( CheckDuplicateHandler::get_action(), array( 'redirect_from' => '' ) );
+		$response = $this->dispatch( CheckSourceHandler::get_action(), array( 'redirect_from' => '' ) );
 
 		$this->assertSame(
 			array(
 				'success' => true,
-				'data'    => array( 'exists' => false ),
+				'data'    => array(
+					'exists'   => false,
+					'reserved' => false,
+				),
+			),
+			$response
+		);
+	}
+
+	/**
+	 * Test a source WordPress itself serves is flagged as reserved.
+	 *
+	 * It is a warning, not a duplicate: the form can still save it.
+	 */
+	public function test_reserved_source_is_flagged(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->dispatch( CheckSourceHandler::get_action(), array( 'redirect_from' => 'wp-admin/' ) );
+
+		$this->assertSame(
+			array(
+				'success' => true,
+				'data'    => array(
+					'exists'   => false,
+					'reserved' => true,
+				),
 			),
 			$response
 		);

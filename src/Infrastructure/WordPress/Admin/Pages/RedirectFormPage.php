@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDuplicateHandler;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
@@ -105,11 +105,12 @@ final class RedirectFormPage {
 			'legacyRedirectorForm',
 			array(
 				'postId'           => $redirect_id,
-				'checkAction'      => CheckDuplicateHandler::get_action(),
-				'checkNonce'       => wp_create_nonce( CheckDuplicateHandler::get_action() ),
+				'checkAction'      => CheckSourceHandler::get_action(),
+				'checkNonce'       => wp_create_nonce( CheckSourceHandler::get_action() ),
 				'searchAction'     => SearchPostsHandler::get_action(),
 				'searchNonce'      => wp_create_nonce( SearchPostsHandler::get_action() ),
 				'duplicateMessage' => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
+				'reservedMessage'  => self::reserved_source_message(),
 			)
 		);
 	}
@@ -269,7 +270,8 @@ final class RedirectFormPage {
 
 		// Accepted, but flagged every time the redirect is opened: see
 		// SourceUrl::is_reserved() for why this can lock the admin out.
-		$reserved_source = $is_edit && $redirect->source()->is_reserved();
+		$reserved_source  = $is_edit && $redirect->source()->is_reserved();
+		$reserved_message = self::reserved_source_message();
 
 		// Sources are stored relative to this site's home URL, which on a
 		// subdirectory subsite is not the domain root. Showing the home URL
@@ -412,6 +414,18 @@ final class RedirectFormPage {
 		 * @param bool $check Whether to perform the check. Default true.
 		 */
 		return (bool) apply_filters( 'legacy_redirector_check_destination_reachability', true );
+	}
+
+	/**
+	 * The warning for a source WordPress itself serves.
+	 *
+	 * Shown as soon as the source field loses focus, before anything is saved,
+	 * and again whenever such a redirect is opened for editing.
+	 *
+	 * @return string The translated warning.
+	 */
+	private static function reserved_source_message(): string {
+		return __( 'This is a path WordPress itself serves. The redirect stays dormant while that path works, but takes over if the path ever returns a 404. For wp-admin or wp-login.php, that locks you out of the dashboard. Keep it only if this is a genuine legacy URL.', 'legacy-redirector' );
 	}
 
 	/**

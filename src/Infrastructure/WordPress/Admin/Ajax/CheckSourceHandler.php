@@ -1,6 +1,6 @@
 <?php
 /**
- * AJAX handler for checking duplicate source URLs.
+ * AJAX handler for checking a redirect source as it is entered.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -15,11 +15,12 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
 /**
- * Handles AJAX requests to check if a source URL already has a redirect.
+ * Handles AJAX requests to check if a source URL already has a redirect,
+ * or is a path WordPress itself serves.
  */
-final class CheckDuplicateHandler {
+final class CheckSourceHandler {
 
-	private const string ACTION = 'check_redirect_duplicate';
+	private const string ACTION = 'check_redirect_source';
 
 	/**
 	 * Repository for redirect lookups.
@@ -71,7 +72,12 @@ final class CheckDuplicateHandler {
 		$exclude_id    = isset( $_POST['exclude_id'] ) ? absint( $_POST['exclude_id'] ) : 0;
 
 		if ( empty( $redirect_from ) ) {
-			wp_send_json_success( array( 'exists' => false ) );
+			wp_send_json_success(
+				array(
+					'exists'   => false,
+					'reserved' => false,
+				)
+			);
 		}
 
 		try {
@@ -79,9 +85,20 @@ final class CheckDuplicateHandler {
 			$existing = $this->repository->get_id_by_source( $source );
 
 			$exists = $existing > 0 && $existing !== $exclude_id;
-			wp_send_json_success( array( 'exists' => $exists ) );
+			// Reserved is a warning, not a refusal: the form still saves.
+			wp_send_json_success(
+				array(
+					'exists'   => $exists,
+					'reserved' => $source->is_reserved(),
+				)
+			);
 		} catch ( \InvalidArgumentException $e ) {
-			wp_send_json_success( array( 'exists' => false ) );
+			wp_send_json_success(
+				array(
+					'exists'   => false,
+					'reserved' => false,
+				)
+			);
 		}
 	}
 }
