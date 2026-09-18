@@ -343,6 +343,30 @@ final class ImportCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a row longer than 2,000 bytes imports intact.
+	 *
+	 * @see https://linear.app/a8c/issue/VIPPLUG-149
+	 */
+	public function test_import_does_not_truncate_long_rows(): void {
+		$destination = 'https://example.com/new-page?utm_campaign=' . str_repeat( 'x', 2500 );
+		$file        = $this->create_csv( "/import-long,$destination\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array( 'skip-validation' => true )
+		);
+
+		$this->assert_success_contains( 'Processed 1 redirects.' );
+
+		$repository = $this->repository();
+		$redirect   = $repository->find_by_id(
+			$repository->get_id_by_source( SourceUrl::from_string( '/import-long' ) )
+		);
+		$this->assertSame( $destination, $redirect->destination()->as_url()->value() );
+	}
+
+	/**
 	 * Test error for a file that does not exist.
 	 */
 	public function test_import_missing_file(): void {
