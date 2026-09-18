@@ -61,7 +61,8 @@ final class RedirectAuditorTest extends MonkeyStubs {
 				'is_wp_error'                      => static fn( $thing ) => $thing instanceof \WP_Error,
 				'wp_remote_retrieve_response_code' => static fn( $response ) => $response['response']['code'] ?? 0,
 				'wp_remote_retrieve_header'        => static fn( $response, $header ) => $response['headers'][ $header ] ?? '',
-				'untrailingslashit'                => static fn( $value ) => rtrim( (string) $value, '/' ),
+				// Mirrors core: strip one or more trailing slashes.
+				'untrailingslashit'                => static fn( $value ) => rtrim( $value, '/\\' ),
 			)
 		);
 	}
@@ -203,7 +204,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
 	 */
 	public function test_audit_destination_resolves_dated_permalinks(): void {
-		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
 
 		Functions\expect( 'get_page_by_path' )
@@ -234,7 +235,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
 	 */
 	public function test_audit_destination_reports_a_trashed_slug(): void {
-		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
 
 		Functions\expect( 'get_page_by_path' )
@@ -282,7 +283,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
 	 */
 	public function test_audit_destination_accepts_a_path_with_no_post(): void {
-		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
 
 		Functions\expect( 'get_page_by_path' )
@@ -551,7 +552,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
 	 */
 	public function test_destination_needs_http_flags_only_http_judgeable_destinations(): void {
-		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
 
 		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_post_id_redirect( 123 ) ) );
@@ -583,7 +584,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
 	 */
 	public function test_destination_needs_http_follows_chains_to_content(): void {
-		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
 
 		$start = $this->create_redirect( '/start', '/hop' );
@@ -612,7 +613,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
 	 */
 	public function test_destination_needs_http_stays_true_when_the_chain_cycles(): void {
-		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
 
 		$start = $this->create_redirect( '/start', '/hop' );
@@ -786,6 +787,266 @@ final class RedirectAuditorTest extends MonkeyStubs {
 		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $findings[0]->type() );
 		$this->assertSame( array( 1, 2 ), $progress );
 	}
+
+	/**
+	 * Test audit_batch passes the source check down to audit.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_batch
+	 */
+	public function test_audit_batch_passes_the_source_check_down(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+
+		// The destination is a published post, so only the source is reported.
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+		Functions\when( 'get_page_by_path' )->justReturn( $this->create_mock_post( 'publish' ) );
+
+		$findings = $auditor->audit_batch( array( $this->create_redirect() ), false, null, true );
+
+		$this->assertCount( 1, $findings );
+		$this->assertSame( AuditFindingType::SOURCE_DID_NOT_REDIRECT, $findings[0]->type() );
+	}
+
+	/**
+	 * Test audit_source reports a source that serves its own response.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_source_that_did_not_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+		$finding = $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::SOURCE_DID_NOT_REDIRECT, $finding->type() );
+		$this->assertFalse( $finding->is_warning() );
+	}
+
+	/**
+	 * Test a source that 404s is reported with its status.
+	 *
+	 * A 404 means the redirect did not fire either, but the extra info tells
+	 * the two cases apart at a glance.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_missing_source(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+		$finding = $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::SOURCE_DID_NOT_REDIRECT, $finding->type() );
+		$this->assertSame( 'status: 404', $finding->extra_info() );
+	}
+
+	/**
+	 * Test audit_source accepts a source that redirects to its destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_accepts_a_matching_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/new-page' ),
+			)
+		);
+
+		$this->assertNull( $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) ) );
+	}
+
+	/**
+	 * Test a trailing slash is not treated as a mismatch.
+	 *
+	 * WordPress picks one slash form and redirects the other, so the two are
+	 * the same landing place.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_ignores_a_trailing_slash_difference(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/new-page/' ),
+			)
+		);
+
+		$this->assertNull( $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) ) );
+	}
+
+	/**
+	 * Test audit_source reports a redirect that lands somewhere else.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_mismatch(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/somewhere-else' ),
+			)
+		);
+		$finding = $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::REDIRECT_MISMATCH, $finding->type() );
+		$this->assertSame( 'to: https://example.com/somewhere-else', $finding->extra_info() );
+	}
+
+	/**
+	 * Test a 3xx with no Location is reported as a mismatch.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_redirect_with_no_location(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 302 ) ) );
+		$finding = $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::REDIRECT_MISMATCH, $finding->type() );
+		$this->assertNull( $finding->extra_info() );
+	}
+
+	/**
+	 * Test a failed source request is a warning.
+	 *
+	 * A timeout or a refused HEAD says nothing about whether the redirect
+	 * works, so --fix must leave the redirect alone.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_failed_request_as_a_warning(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( new \WP_Error( 'http_request_failed', 'Connection refused' ) );
+		$finding = $auditor->audit_source( $this->create_redirect( '/old-page', '/new-page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::SOURCE_REQUEST_FAILED, $finding->type() );
+		$this->assertTrue( $finding->is_warning() );
+	}
+
+	/**
+	 * Test audit_source matches a post ID destination through its permalink.
+	 *
+	 * A post ID destination has no URL to compare against, so the expected
+	 * location has to come from get_permalink().
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_matches_a_post_id_destination(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\when( 'get_permalink' )->justReturn( 'https://example.com/the-post/' );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/the-post/' ),
+			)
+		);
+
+		$this->assertNull( $auditor->audit_source( $this->create_post_id_redirect( 123 ) ) );
+	}
+
+	/**
+	 * Test audit_source skips a disabled redirect.
+	 *
+	 * A disabled redirect does not fire by design, so reporting that would
+	 * flag every disabled redirect on the site.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_skips_a_disabled_redirect(): void {
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertNull( $auditor->audit_source( $this->create_redirect()->with_status( 'draft' ) ) );
+	}
+
+	/**
+	 * Test audit_source skips a reserved source.
+	 *
+	 * A reserved source is already reported, and a legacy URL there is
+	 * legitimate, so requesting it adds nothing.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_skips_a_reserved_source(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertNull( $auditor->audit_source( $this->create_redirect( '/wp-admin', '/new-page' ) ) );
+	}
+
+	/**
+	 * Test audit_source skips a corrupt row.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_skips_a_corrupt_row(): void {
+		$corrupt = Redirect::reconstitute(
+			123,
+			SourceUrl::from_string( '/corrupt-123' ),
+			Destination::from_url( DestinationUrl::from_string( '/' ) ),
+			'publish',
+			null,
+			'Stored source is not a valid path'
+		);
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertNull( $auditor->audit_source( $corrupt ) );
+	}
+
+	/**
+	 * Test audit includes the source finding when the source check is on.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 */
+	public function test_audit_includes_the_source_finding_when_enabled(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+
+		$findings = $auditor->audit( $this->create_redirect( '/old-page', '/new-page' ), false, true );
+
+		$this->assertCount( 1, $findings );
+		$this->assertSame( AuditFindingType::SOURCE_DID_NOT_REDIRECT, $findings[0]->type() );
+	}
+
+	/**
+	 * Test audit omits the source finding when the source check is off.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 */
+	public function test_audit_omits_the_source_finding_when_disabled(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertSame( array(), $auditor->audit( $this->create_redirect( '/old-page', '/new-page' ) ) );
+	}
 }
 
 /**
@@ -841,6 +1102,8 @@ class ProbeStubAuditor extends RedirectAuditor {
 	 * @param array|\WP_Error $response The response to return.
 	 */
 	public function __construct( $response ) {
+		parent::__construct();
+
 		$this->response = $response;
 	}
 
@@ -852,5 +1115,15 @@ class ProbeStubAuditor extends RedirectAuditor {
 	 */
 	protected function remote_get_without_redirects( string $url ) {
 		return $this->response;
+	}
+
+	/**
+	 * Override so enabling both checks does not reach the network.
+	 *
+	 * @param string $url The URL to request (ignored).
+	 * @return array The canned response.
+	 */
+	protected function remote_get( string $url ) {
+		return array( 'response' => array( 'code' => 200 ) );
 	}
 }

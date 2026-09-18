@@ -85,35 +85,40 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
-			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, internal paths that no longer resolve, and external hosts missing from the allowed_redirect_hosts filter. Also flags sources on paths WordPress itself serves, such as /wp-admin or /wp-login.php, which take over that path if it ever returns a 404, and possible loops, where following the destination through other redirects leads back to the start. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
+			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, internal paths that no longer resolve, and external hosts missing from the allowed_redirect_hosts filter. Also flags sources on paths WordPress itself serves, such as /wp-admin or /wp-login.php, which take over that path if it ever returns a 404, and possible loops, where following the destination through other redirects leads back to the start. Given check_source, it also requests each source to confirm the redirect actually fires there, which catches a source serving its own content and one redirecting somewhere else. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
-					'redirects'  => array(
+					'redirects'    => array(
 						'type'        => 'array',
 						'items'       => array(
 							'type' => array( 'string', 'integer' ),
 						),
 						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, a batch is selected using the status and limit.', 'legacy-redirector' ),
 					),
-					'status'     => array(
+					'status'       => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'enabled', 'disabled' ),
 						'default'     => 'enabled',
 						'description' => __( 'Which redirects to select when none are given. Defaults to enabled, the ones visitors can reach.', 'legacy-redirector' ),
 					),
-					'limit'      => array(
+					'limit'        => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'maximum'     => self::MAX_LIMIT,
 						'default'     => 100,
 						'description' => __( 'How many redirects to check when none are given.', 'legacy-redirector' ),
 					),
-					'check_urls' => array(
+					'check_urls'   => array(
 						'type'        => 'boolean',
 						'default'     => false,
 						'description' => __( 'Also request absolute URL destinations to see whether they respond. Slow, because it makes an HTTP request per redirect.', 'legacy-redirector' ),
+					),
+					'check_source' => array(
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => __( 'Also request each source to check the redirect actually fires to the expected destination. Catches a source that serves its own content and one that redirects elsewhere. Slow, because it makes an HTTP request per redirect.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -195,7 +200,12 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			);
 		}
 
-		$issues = $this->auditor->audit_batch( $redirects, (bool) ( $input['check_urls'] ?? false ) );
+		$issues = $this->auditor->audit_batch(
+			$redirects,
+			(bool) ( $input['check_urls'] ?? false ),
+			null,
+			(bool) ( $input['check_source'] ?? false )
+		);
 
 		return array(
 			'checked' => count( $redirects ),

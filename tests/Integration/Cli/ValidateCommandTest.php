@@ -518,4 +518,182 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
 		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
 	}
+
+	/**
+	 * Test a source that serves its own response is reported.
+	 */
+	public function test_validate_check_source_reports_a_source_that_does_not_redirect(): void {
+		$this->create_target_post( 'source-target' );
+		$this->create_redirect( '/silent-source', '/source-target' );
+
+		$this->stub_source_request(
+			static fn() => array(
+				'response' => array( 'code' => 200 ),
+				'headers'  => array(),
+			)
+		);
+
+		$this->invoke_command( $this->command, array(), array( 'check-source' => true ) );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Source does not redirect' );
+	}
+
+	/**
+	 * Test a source that redirects where it should is not reported.
+	 */
+	public function test_validate_check_source_accepts_a_firing_redirect(): void {
+		$this->create_target_post( 'firing-target' );
+		$this->create_redirect( '/firing-source', '/firing-target' );
+
+		$this->stub_source_request(
+			static fn() => array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => home_url( '/firing-target' ) ),
+			)
+		);
+
+		$this->invoke_command( $this->command, array(), array( 'check-source' => true ) );
+
+		$this->assert_success_contains( 'No issues found.' );
+	}
+
+	/**
+	 * Test a source that redirects somewhere else is reported.
+	 */
+	public function test_validate_check_source_reports_a_misdirected_redirect(): void {
+		$this->create_target_post( 'intended-target' );
+		$this->create_redirect( '/misdirected-source', '/intended-target' );
+
+		$this->stub_source_request(
+			static fn() => array(
+				'response' => array( 'code' => 302 ),
+				'headers'  => array( 'location' => home_url( '/somewhere-else' ) ),
+			)
+		);
+
+		$this->invoke_command( $this->command, array(), array( 'check-source' => true ) );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Redirect goes elsewhere' );
+	}
+
+	/**
+	 * Test a source that does not redirect is disabled by --fix.
+	 */
+	public function test_validate_check_source_fix_disables_a_source_that_does_not_redirect(): void {
+		$this->create_target_post( 'fix-target' );
+		$redirect_id = $this->create_redirect( '/fix-silent-source', '/fix-target' );
+
+		$this->stub_source_request(
+			static fn() => array(
+				'response' => array( 'code' => 200 ),
+				'headers'  => array(),
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'check-source' => true,
+				'fix'          => true,
+			)
+		);
+
+		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test a failed source request is reported but never disabled by --fix.
+	 *
+	 * A timeout or a refused connection says nothing about the redirect, so
+	 * acting on it would switch off working redirects whenever the network
+	 * hiccups.
+	 */
+	public function test_validate_check_source_fix_leaves_a_failed_request_alone(): void {
+		$this->create_target_post( 'flaky-target' );
+		$redirect_id = $this->create_redirect( '/flaky-source', '/flaky-target' );
+
+		$this->stub_source_request(
+			static fn() => new \WP_Error( 'http_request_failed', 'Connection refused' )
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'check-source' => true,
+				'fix'          => true,
+			)
+		);
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Source request failed' );
+		$this->assert_stdout_contains( 'Disabled 0 broken redirect(s).' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test the source check runs only when asked for.
+	 */
+	public function test_validate_does_not_check_sources_by_default(): void {
+		$this->create_target_post( 'unchecked-target' );
+		$this->create_redirect( '/unchecked-source', '/unchecked-target' );
+
+		$requests = 0;
+		$this->stub_source_request(
+			static function () use ( &$requests ) {
+				++$requests;
+				return array(
+					'response' => array( 'code' => 200 ),
+					'headers'  => array(),
+				);
+			}
+		);
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_success_contains( 'No issues found.' );
+		$this->assertSame( 0, $requests, 'No source should be requested without --check-source.' );
+	}
+
+	/**
+	 * Create a published post for a redirect to point at.
+	 *
+	 * @param string $slug The post slug, which is also its path.
+	 * @return void
+	 */
+	private function create_target_post( string $slug ): void {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => $slug,
+			)
+		);
+	}
+
+	/**
+	 * Answer source requests with a canned response.
+	 *
+	 * The source check would otherwise make a real request to the test site,
+	 * which no test can predict. Only the probe is answered, told apart by not
+	 * following redirects: a destination check that leaked through would still
+	 * hit the network and fail loudly rather than quietly pass.
+	 *
+	 * @param callable $handler Returns the response or a WP_Error.
+	 * @return void
+	 */
+	private function stub_source_request( callable $handler ): void {
+		$stub = static function ( $preempt, $args, $url ) use ( $handler ) {
+			if ( 0 !== ( $args['redirection'] ?? 5 ) ) {
+				return $preempt;
+			}
+
+			return $handler( $url );
+		};
+
+		add_filter( 'pre_http_request', $stub, 10, 3 );
+	}
 }
