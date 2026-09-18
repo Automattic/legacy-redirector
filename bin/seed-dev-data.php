@@ -278,6 +278,10 @@ $rows = array(
 	array( '/status-disabled-external', 'https://example.com/gone', 'disabled' ),
 
 	// --- Broken destinations, for `validate` to find ------------------------
+	// example.com is allowed by the mu-plugin written above; example.net is
+	// deliberately not, so this pair shows an external destination that
+	// redirects next to one wp_safe_redirect() refuses.
+	array( '/broken-disallowed-host', 'https://not-allowed.example.net/page' ),
 	array( '/broken-draft', $draft_id ),
 	array( '/broken-private', $private_id ),
 	array( '/broken-pending', $pending_id ),
