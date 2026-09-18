@@ -73,8 +73,10 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 					<td>
 						<div style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%;">
 							<span class="code" style="color: #646970; white-space: nowrap;"><?php echo esc_html( $home_prefix ); ?></span>
-							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" aria-describedby="redirect_from_description redirect_from_error redirect_from_warning" />
+							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" aria-describedby="redirect_from_error redirect_from_warning redirect_from_description" />
 						</div>
+						<p id="redirect_from_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
+						<p id="redirect_from_warning" class="notice notice-warning inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
 						<p class="description" id="redirect_from_description">
 							<?php
 							printf(
@@ -93,8 +95,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 							);
 							?>
 						</p>
-						<p id="redirect_from_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;"></p>
-						<p id="redirect_from_warning" class="notice notice-warning inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
 					</td>
 				</tr>
 				<tr class="form-field form-required">
