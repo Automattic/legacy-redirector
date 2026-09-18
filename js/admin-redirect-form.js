@@ -1,15 +1,17 @@
 /**
- * Redirect form behavior: duplicate-source checking and destination
- * autocomplete for the Add/Edit Redirect admin pages.
+ * Redirect form behavior: duplicate and reserved-source checking, and
+ * destination autocomplete for the Add/Edit Redirect admin pages.
  *
  * Configuration is provided by wp_localize_script() as
  * `legacyRedirectorForm`:
  * - postId            Redirect post ID being edited (0 on the Add page).
- * - checkAction       AJAX action for the duplicate-source check.
- * - checkNonce        Nonce for the duplicate-source check.
+ * - checkAction       AJAX action for the source check (duplicate and reserved path).
+ * - checkNonce        Nonce for the source check.
  * - searchAction      AJAX action for destination post search.
  * - searchNonce       Nonce for destination post search.
  * - duplicateMessage  Message shown when the source already redirects.
+ * - reservedMessage   Warning shown when the source is a path WordPress
+ *                     itself serves. The form still saves.
  */
 jQuery( document ).ready( function ( $ ) {
 	var settings = window.legacyRedirectorForm || {};
@@ -18,11 +20,13 @@ jQuery( document ).ready( function ( $ ) {
 	var searchTimeout;
 	var selectedIndex = -1;
 
-	// Check for duplicate source URL on blur.
+	// Check the source on blur: a duplicate blocks the save, a reserved path
+	// only warns, so both are known before anything is submitted.
 	$( '#redirect_from' ).on( 'blur', function () {
 		var newFrom = $( this ).val().trim();
 		if ( newFrom === originalFrom || newFrom === '' ) {
 			$( '#redirect_from_error' ).hide();
+			$( '#redirect_from_warning' ).hide();
 			return;
 		}
 
@@ -42,6 +46,14 @@ jQuery( document ).ready( function ( $ ) {
 						.show();
 				} else {
 					$( '#redirect_from_error' ).hide();
+				}
+
+				if ( response.success && response.data.reserved ) {
+					$( '#redirect_from_warning' )
+						.text( settings.reservedMessage )
+						.show();
+				} else {
+					$( '#redirect_from_warning' ).hide();
 				}
 			}
 		} );

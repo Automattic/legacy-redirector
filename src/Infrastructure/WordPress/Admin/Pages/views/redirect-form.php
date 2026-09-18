@@ -15,6 +15,7 @@
  * @var string   $message             Success message code ('created', 'updated', or '').
  * @var string   $error_message       Resolved error message, or '' if none.
  * @var bool     $reserved_source     Whether the source is a path WordPress itself serves.
+ * @var string   $reserved_message    The warning shown for a reserved source.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -51,7 +52,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 	<?php if ( $reserved_source ) : ?>
 		<div class="notice notice-warning">
-			<p><?php esc_html_e( 'This redirect is from a path WordPress itself serves. It stays dormant while that path works, but takes over if the path ever returns a 404. For wp-admin or wp-login.php, that locks you out of the dashboard. Keep it only if this is a genuine legacy URL.', 'legacy-redirector' ); ?></p>
+			<p><?php echo esc_html( $reserved_message ); ?></p>
 		</div>
 	<?php endif; ?>
 
@@ -72,7 +73,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 					<td>
 						<div style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%;">
 							<span class="code" style="color: #646970; white-space: nowrap;"><?php echo esc_html( $home_prefix ); ?></span>
-							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" aria-describedby="redirect_from_description redirect_from_error" />
+							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" aria-describedby="redirect_from_description redirect_from_error redirect_from_warning" />
 						</div>
 						<p class="description" id="redirect_from_description">
 							<?php
@@ -93,6 +94,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 							?>
 						</p>
 						<p id="redirect_from_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;"></p>
+						<p id="redirect_from_warning" class="notice notice-warning inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
 					</td>
 				</tr>
 				<tr class="form-field form-required">
