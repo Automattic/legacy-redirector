@@ -135,7 +135,7 @@ final class ImportCommand extends WP_CLI_Command {
 		$results = array();
 
 		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- Standard CSV reading pattern.
-		while ( ( $data = fgetcsv( $handle, 2000, ',', '"', '\\' ) ) !== false ) {
+		while ( ( $data = fgetcsv( $handle, 0, ',', '"', '\\' ) ) !== false ) {
 			++$row;
 			$redirect_from = trim( $data[0] ?? '' );
 			$redirect_to   = trim( $data[1] ?? '' );

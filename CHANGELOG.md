@@ -73,6 +73,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - A redirect created for `/old-page` now also fires for a request to `/old-page/`, and vice versa. 1.x required an exact match, so the documented workaround was to store both forms. Reported in https://github.com/Automattic/legacy-redirector/issues/50; the approach follows the analysis by @bdtech in that thread and in https://github.com/Automattic/legacy-redirector/pull/54
 - Negative ("no redirect exists") object cache entries now expire after five minutes. 1.x cached them indefinitely, so 404 traffic could fill the object cache with permanent entries.
 - Whitespace around the CSV file path is trimmed, so a path dragged and dropped into the terminal is accepted.
+- CSV import no longer truncates rows longer than 2,000 bytes. 1.x cut the line at that limit, silently storing a shortened destination and reporting the leftover fragment as a separate row with a missing destination. Long destinations, typically ones carrying campaign parameters, now import exactly as written.
 
 ### Removed
 
