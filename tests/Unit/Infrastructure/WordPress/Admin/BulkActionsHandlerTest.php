@@ -94,6 +94,9 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 		$this->assertArrayHasKey( 'disable_redirects', $result );
 		$this->assertSame( 'Enable', $result['enable_redirects'] );
 		$this->assertSame( 'Disable', $result['disable_redirects'] );
+		// The Test bulk action is handled client-side; the server keeps it a
+		// no-op, so it must at least be offered here.
+		$this->assertSame( 'Test', $result['test_redirects'] );
 	}
 
 	/**

@@ -182,7 +182,8 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 		$this->assertTrue( $response['success'] );
 		$this->assertSame( 'valid', $response['data']['status'] );
 		$this->assertCount( 1, $response['data']['warnings'] );
-		$this->assertStringContainsString( 'path WordPress itself serves', $response['data']['warnings'][0] );
+		$this->assertSame( 'Reserved WordPress path', $response['data']['warnings'][0]['label'] );
+		$this->assertStringContainsString( 'path WordPress itself serves', $response['data']['warnings'][0]['description'] );
 	}
 
 	/**
@@ -197,7 +198,8 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 
 		$this->assertTrue( $response['success'] );
 		$this->assertCount( 1, $response['data']['warnings'] );
-		$this->assertStringContainsString( 'leads back to this one', $response['data']['warnings'][0] );
+		$this->assertSame( 'Possible redirect loop', $response['data']['warnings'][0]['label'] );
+		$this->assertStringContainsString( 'leads back to this one', $response['data']['warnings'][0]['description'] );
 	}
 
 	/**

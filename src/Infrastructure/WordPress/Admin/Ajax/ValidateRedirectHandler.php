@@ -101,7 +101,10 @@ final class ValidateRedirectHandler {
 
 		foreach ( $findings as $finding ) {
 			if ( $finding->is_warning() ) {
-				$warnings[] = $finding->description() . '.';
+				$warnings[] = array(
+					'label'       => $finding->label(),
+					'description' => $finding->description() . '.',
+				);
 			} else {
 				$problems[] = $finding;
 			}

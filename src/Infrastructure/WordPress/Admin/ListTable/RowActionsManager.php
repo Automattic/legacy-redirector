@@ -134,7 +134,7 @@ final class RowActionsManager {
 			esc_url( $validate_link ),
 			$post->ID,
 			esc_attr( $redirect->source()->path() ),
-			esc_html__( 'Validate', 'legacy-redirector' )
+			esc_html__( 'Test', 'legacy-redirector' )
 		);
 
 		// Follow link - use home_url() so the stored home-relative path is
@@ -170,98 +170,112 @@ final class RowActionsManager {
 				opacity: 0.5;
 				pointer-events: none;
 			}
-			.validation-result {
-				padding-left: 6px;
-				border-left: 3px solid;
-				font-size: 12px;
-			}
-			.validation-result.valid {
-				border-left-color: #00a32a;
-				color: #1d2327;
-			}
-			.validation-result.valid .dashicons {
-				color: #00a32a;
-			}
-			.validation-result.invalid {
-				border-left-color: #d63638;
-				color: #1d2327;
-			}
-			.validation-result.invalid .dashicons {
-				color: #d63638;
-			}
-			.validation-result.warning {
-				border-left-color: #dba617;
-				color: #1d2327;
-			}
-			.validation-result.warning .dashicons {
-				color: #dba617;
-			}
-			.validation-result .dashicons {
-				font-size: 14px;
-				width: 14px;
-				height: 14px;
-				vertical-align: middle;
-				margin-right: 3px;
-			}
 		</style>
 		<script>
 		jQuery(document).ready(function($) {
 			var validateNonce = '<?php echo esc_js( wp_create_nonce( ValidateRedirectHandler::get_action() ) ); ?>';
+			var i18n = {
+				testing: '<?php echo esc_js( __( 'Testing...', 'legacy-redirector' ) ); ?>',
+				test: '<?php echo esc_js( __( 'Test', 'legacy-redirector' ) ); ?>',
+				noIssues: '<?php echo esc_js( __( 'No issues found', 'legacy-redirector' ) ); ?>',
+				requestFailed: '<?php echo esc_js( __( 'Test request failed.', 'legacy-redirector' ) ); ?>'
+			};
 
-			$(document).on('click', '.validate-redirect', function(e) {
-				e.preventDefault();
+			// One line in the Health cell, in the same visual language the
+			// column renders with: severity icon plus text.
+			function healthLine( icon, color, text, title ) {
+				var $line = $( '<div/>' )
+					.append( $( '<span>', {
+						'class': 'dashicons ' + icon,
+						'style': 'color: ' + color + ';',
+						'aria-hidden': 'true'
+					} ) )
+					.append( document.createTextNode( ' ' ) );
 
-				var $link = $(this);
-				var $row = $link.closest('tr');
-				var $healthColumn = $row.find('td.health');
-				var redirectId = $link.data('redirect-id');
+				var $text = $( '<span/>' ).text( text );
+				if ( title ) {
+					$text.attr( 'title', title );
+				}
 
-				// Add loading state.
-				$link.addClass('validating').text('<?php echo esc_js( __( 'Validating...', 'legacy-redirector' ) ); ?>');
+				return $line.append( $text );
+			}
 
-				$.ajax({
+			// Replace the row's Health cell with the fresh, HTTP-inclusive
+			// result: the grey "not fully checked" state resolves to a real
+			// answer once the destination has actually been requested.
+			function renderResult( $row, response ) {
+				var $healthColumn = $row.find( 'td.health' ).empty();
+				var data = ( response && response.data ) || {};
+				var warnings = data.warnings || [];
+
+				if ( response.success ) {
+					if ( ! warnings.length ) {
+						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
+					}
+				} else {
+					$healthColumn.append( healthLine( 'dashicons-warning', '#d63638', data.message || i18n.requestFailed ) );
+				}
+
+				$.each( warnings, function ( i, warning ) {
+					$healthColumn.append( healthLine( 'dashicons-flag', '#dba617', warning.label, warning.description ) );
+				} );
+			}
+
+			// Test one row; returns the AJAX promise so callers can chain.
+			function testRow( $row ) {
+				var $link = $row.find( '.validate-redirect' );
+				var redirectId = $link.data( 'redirect-id' );
+
+				$link.addClass( 'validating' ).text( i18n.testing );
+
+				return $.ajax( {
 					url: ajaxurl,
 					type: 'POST',
 					data: {
 						action: '<?php echo esc_js( ValidateRedirectHandler::get_action() ); ?>',
 						redirect_id: redirectId,
 						nonce: validateNonce
-					},
-					success: function(response) {
-						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'legacy-redirector' ) ); ?>');
-
-						// Warnings ride along on either result: the redirect
-						// works (or is broken) regardless, but a person should
-						// look, so a clean pass with warnings shows amber.
-						var warnings = ( response.data && response.data.warnings ) || [];
-						var resultClass = response.success ? ( warnings.length ? 'warning' : 'valid' ) : 'invalid';
-						var icon = response.success ? ( warnings.length ? 'dashicons-flag' : 'dashicons-yes-alt' ) : 'dashicons-warning';
-						var message = response.data.message;
-
-						if ( warnings.length ) {
-							message += ' ' + warnings.join( ' ' );
-						}
-
-						var $result = $('<div class="validation-result ' + resultClass + '"></div>')
-							.append( $('<span>', { 'class': 'dashicons ' + icon } ) )
-							.append( document.createTextNode( message ) );
-
-						// The fresh, HTTP-inclusive result replaces the
-						// render-time findings for this row.
-						$healthColumn.empty().append($result);
-					},
-					error: function() {
-						$link.removeClass('validating').text('<?php echo esc_js( __( 'Validate', 'legacy-redirector' ) ); ?>');
-
-						var $result = $('<div class="validation-result invalid">' +
-							'<span class="dashicons dashicons-warning"></span>' +
-							'<?php echo esc_js( __( 'Validation request failed.', 'legacy-redirector' ) ); ?>' +
-							'</div>');
-
-						$healthColumn.append($result);
 					}
-				});
+				} ).done( function ( response ) {
+					renderResult( $row, response );
+				} ).fail( function () {
+					renderResult( $row, { success: false, data: { message: i18n.requestFailed } } );
+				} ).always( function () {
+					$link.removeClass( 'validating' ).text( i18n.test );
+				} );
+			}
+
+			$(document).on('click', '.validate-redirect', function(e) {
+				e.preventDefault();
+				testRow( $( this ).closest( 'tr' ) );
 			});
+
+			// The Test bulk action runs the same per-row check for every
+			// ticked row, one at a time so a full-page selection does not
+			// fire a burst of HTTP checks at the server.
+			$( '#posts-filter' ).on( 'submit', function ( e ) {
+				var action = $( '#bulk-action-selector-top' ).val();
+				var action2 = $( '#bulk-action-selector-bottom' ).val();
+
+				if ( 'test_redirects' !== action && 'test_redirects' !== action2 ) {
+					return;
+				}
+
+				e.preventDefault();
+
+				var rows = $( 'input[name="post[]"]:checked' ).map( function () {
+					return $( this ).closest( 'tr' )[ 0 ];
+				} ).get();
+
+				( function next() {
+					var row = rows.shift();
+					if ( row ) {
+						testRow( $( row ) ).always( next );
+					}
+				} )();
+
+				$( '#bulk-action-selector-top, #bulk-action-selector-bottom' ).val( '-1' );
+			} );
 		});
 		</script>
 		<?php

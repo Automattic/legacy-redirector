@@ -124,6 +124,22 @@ final class ColumnsManager {
 		if ( 'to' === $orderby ) {
 			$query->set( 'orderby', 'post_excerpt' );
 		}
+
+		// The default date ordering needs an ID tiebreaker: an import creates
+		// hundreds of rows in the same second, and ties ordered arbitrarily by
+		// the database make pagination unstable - a row can appear on no page
+		// (and another on two) while the item count says otherwise.
+		if ( '' === $orderby || 'date' === $orderby ) {
+			$order = strtoupper( (string) $query->get( 'order' ) );
+			$order = 'ASC' === $order ? 'ASC' : 'DESC';
+			$query->set(
+				'orderby',
+				array(
+					'date' => $order,
+					'ID'   => $order,
+				)
+			);
+		}
 	}
 
 	/**
@@ -238,6 +254,17 @@ final class ColumnsManager {
 		$findings = $this->auditor->audit( $redirect );
 
 		if ( array() === $findings ) {
+			// A tick must not overclaim: for a destination only an HTTP request
+			// can judge, "no findings" means "nothing conclusive", not "fine".
+			if ( $this->auditor->destination_needs_http( $redirect ) ) {
+				printf(
+					'<span class="dashicons dashicons-editor-help" style="color: #787c82;" aria-hidden="true"></span><span title="%1$s">%2$s</span>',
+					esc_attr__( 'No problems found without requesting the destination. Use Test to check it responds.', 'legacy-redirector' ),
+					esc_html__( 'Not fully checked', 'legacy-redirector' )
+				);
+				return;
+			}
+
 			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'No issues found', 'legacy-redirector' ) . '</span>';
 			return;
 		}

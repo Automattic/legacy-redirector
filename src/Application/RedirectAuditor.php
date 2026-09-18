@@ -227,6 +227,34 @@ class RedirectAuditor {
 	}
 
 	/**
+	 * Whether only an HTTP request can judge this redirect's destination.
+	 *
+	 * True for absolute URLs (an allowed host says nothing about whether the
+	 * page responds), the home page, and relative paths that resolve to no
+	 * post - all cases audit_destination() treats as indeterminate without
+	 * check_urls. Lets a display distinguish "checked and fine" from "nothing
+	 * conclusive without a request", so a clean result does not overclaim.
+	 *
+	 * @param Redirect $redirect The redirect to check.
+	 * @return bool True when the destination is only judgeable over HTTP.
+	 */
+	public function destination_needs_http( Redirect $redirect ): bool {
+		if ( $redirect->is_corrupt() || $redirect->destination()->is_post_id() ) {
+			return false;
+		}
+
+		$url = $redirect->destination()->as_url()->value();
+
+		if ( ! $this->is_relative_path( $url ) ) {
+			return true;
+		}
+
+		$slug = $this->lookup_slug( $url );
+
+		return '' === $slug || null === $this->resolve_path_to_post( $slug );
+	}
+
+	/**
 	 * Check if a relative path destination is valid.
 	 *
 	 * When the path resolves to a post, its status decides. A path that
@@ -241,8 +269,7 @@ class RedirectAuditor {
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
 	private function check_relative_path_destination( Redirect $redirect, string $path, bool $check_urls ): ?AuditFinding {
-		// A query string or fragment can never be part of a slug match.
-		$slug = trim( substr( $path, 0, strcspn( $path, '?#' ) ), '/' );
+		$slug = $this->lookup_slug( $path );
 
 		// The home page has no slug to look up. get_page_by_path( '' ) matches
 		// any post with an empty post_name - every draft and pending post has
@@ -275,6 +302,18 @@ class RedirectAuditor {
 
 		// Can't determine without HTTP check - assume OK.
 		return null;
+	}
+
+	/**
+	 * The slug form of a relative path, ready for a post lookup.
+	 *
+	 * A query string or fragment can never be part of a slug match.
+	 *
+	 * @param string $path The relative path.
+	 * @return string The path with surrounding slashes, query, and fragment removed.
+	 */
+	private function lookup_slug( string $path ): string {
+		return trim( substr( $path, 0, strcspn( $path, '?#' ) ), '/' );
 	}
 
 	/**

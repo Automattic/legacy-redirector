@@ -443,6 +443,37 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test destination_needs_http distinguishes conclusive from indeterminate.
+	 *
+	 * A clean audit of a post ID or a resolved path really means "fine"; for
+	 * an absolute URL, the home page, or a path with no post behind it, only
+	 * an HTTP request can judge, and a display must not claim otherwise.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_flags_only_http_judgeable_destinations(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_post_id_redirect( 123 ) ) );
+		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', 'https://allowed.com/page' ) ) );
+		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/' ) ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/resolved-page' ) ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/unresolved-page' ) ) );
+	}
+
+	/**
 	 * Test audit reports a possible loop from the detector as a warning.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
