@@ -343,6 +343,26 @@ final class SourceUrl {
 	}
 
 	/**
+	 * Whether this source is a path WordPress itself serves.
+	 *
+	 * Covers the admin, login and other root-level wp-*.php files,
+	 * xmlrpc.php, and everything beneath wp-admin, wp-json, wp-content and
+	 * wp-includes. The resolver only runs on a 404, so a redirect here lies
+	 * dormant while the path works - and answers it the moment the path
+	 * breaks, which for wp-admin or wp-login.php locks the admin out.
+	 *
+	 * Such a source is still allowed: a site migrated from another platform
+	 * can have real legacy URLs here. Callers warn rather than refuse.
+	 *
+	 * @return bool True if the path is reserved by WordPress.
+	 */
+	public function is_reserved(): bool {
+		$path = substr( $this->path, 0, strcspn( $this->path, '?' ) );
+
+		return 1 === preg_match( '#^/(?:xmlrpc\.php|wp-[^/]*\.php|wp-(?:admin|json|content|includes)(?:/.*)?)$#', $path );
+	}
+
+	/**
 	 * Check equality with another SourceUrl.
 	 *
 	 * @param self $other The other SourceUrl to compare.

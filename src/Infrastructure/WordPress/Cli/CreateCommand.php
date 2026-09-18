@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Domain\ValidationIssueType;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -105,6 +106,10 @@ final class CreateCommand extends WP_CLI_Command {
 		if ( $result->is_error() ) {
 			WP_CLI::error( sprintf( "Couldn't create %s -> %s (%s)", $from_url, $to_value, $result->error_message() ?? 'Unknown error' ) );
 			return;
+		}
+
+		if ( $source->is_reserved() ) {
+			WP_CLI::warning( ValidationIssueType::RESERVED_SOURCE->description() . '.' );
 		}
 
 		if ( $porcelain ) {

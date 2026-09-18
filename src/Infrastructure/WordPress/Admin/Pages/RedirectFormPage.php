@@ -267,6 +267,10 @@ final class RedirectFormPage {
 		$post_id       = $is_edit ? (int) $redirect->id() : 0;
 		$error_message = '' !== $error ? $this->get_error_message( $error ) : '';
 
+		// Accepted, but flagged every time the redirect is opened: see
+		// SourceUrl::is_reserved() for why this can lock the admin out.
+		$reserved_source = $is_edit && $redirect->source()->is_reserved();
+
 		// Sources are stored relative to this site's home URL, which on a
 		// subdirectory subsite is not the domain root. Showing the home URL
 		// against the field makes which root the path hangs off self-evident,

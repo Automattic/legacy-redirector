@@ -85,7 +85,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
-			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, and internal paths that no longer resolve. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
+			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, and internal paths that no longer resolve. Also flags sources on paths WordPress itself serves, such as /wp-admin or /wp-login.php, which take over that path if it ever returns a 404. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',

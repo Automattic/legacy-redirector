@@ -145,6 +145,14 @@ that no longer go anywhere: a post that has since been deleted, trashed, or unpu
 relative path that does not resolve to published content; a row whose stored data is
 corrupt.
 
+It also flags any redirect whose source is a path WordPress itself serves: `/wp-admin` and
+everything beneath it, `/wp-login.php` and the other root `wp-*.php` files, `/xmlrpc.php`,
+and anything under `/wp-json`, `/wp-content` or `/wp-includes`. Such a redirect does nothing
+while the path works, because redirects only answer 404s, but it takes over the moment the path
+breaks. For `/wp-admin` or `/wp-login.php`, that locks you out of the dashboard. They are
+allowed, since a site migrated from another platform can have real legacy URLs there, and
+`create` and `import` warn when you add one.
+
 ```bash
 wp legacy-redirector validate
 ```
@@ -157,8 +165,9 @@ with an error. It is slow, so it suits a scheduled audit rather than an interact
 wp legacy-redirector validate --check-urls --format=csv > broken.csv
 ```
 
-`--fix` disables everything it reports, which stops visitors being sent somewhere broken
-while leaving the redirects in place to repair:
+`--fix` disables everything it reports except reserved sources, which it leaves for you to
+judge. Disabling stops visitors being sent somewhere broken while leaving the redirects in
+place to repair:
 
 ```bash
 wp legacy-redirector validate --fix

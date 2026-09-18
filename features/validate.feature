@@ -27,5 +27,5 @@ Feature: Validate redirects
     When I run `wp legacy-redirector validate /validate-trashed`
     Then STDOUT should contain:
       """
-      broken redirect
+      Found 1 issue
       """

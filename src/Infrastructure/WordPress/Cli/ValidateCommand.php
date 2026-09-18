@@ -16,6 +16,7 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\ValidationIssue;
+use Automattic\LegacyRedirector\Domain\ValidationIssueType;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -81,6 +82,8 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * Checks for:
 	 * - Destinations pointing to deleted or trashed posts
 	 * - Destinations pointing to unpublished posts
+	 * - Sources on a path WordPress itself serves, such as /wp-admin or
+	 *   /wp-login.php (reported, never disabled by --fix)
 	 * - Optionally checks if destination URLs return 404
 	 *
 	 * With no arguments, validates redirects matching --status/--limit.
@@ -206,7 +209,7 @@ final class ValidateCommand extends WP_CLI_Command {
 		}
 
 		if ( $is_table ) {
-			WP_CLI::warning( sprintf( 'Found %d broken redirect(s).', count( $issues ) ) );
+			WP_CLI::warning( sprintf( 'Found %d issue(s).', count( $issues ) ) );
 			WP_CLI::line( '' );
 		}
 
@@ -278,6 +281,12 @@ final class ValidateCommand extends WP_CLI_Command {
 		$corrupt = 0;
 
 		foreach ( $issues as $issue ) {
+			// A reserved source is a warning, not a breakage: the redirect may be a
+			// legitimate legacy URL, so it is left for a person to judge.
+			if ( ValidationIssueType::RESERVED_SOURCE === $issue->type() ) {
+				continue;
+			}
+
 			// A corrupt row cannot be re-saved, so it cannot be auto-disabled.
 			if ( $issue->redirect()->is_corrupt() ) {
 				++$corrupt;

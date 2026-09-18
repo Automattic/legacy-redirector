@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Domain\ValidationIssueType;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -198,7 +199,7 @@ final class ImportCommand extends WP_CLI_Command {
 
 		if ( $dry_run ) {
 			$action = 'upsert' === $mode ? 'would update/create' : 'would create';
-			return $this->result_row( $redirect_from, $redirect_to, $action, 'Dry run - no change made' );
+			return $this->accepted_row( $source, $redirect_from, $redirect_to, $action, 'Dry run - no change made' );
 		}
 
 		// In upsert mode, try updating an existing redirect first. Only a
@@ -208,7 +209,7 @@ final class ImportCommand extends WP_CLI_Command {
 			$update = $this->manager->update_by_source( $source, $destination, $post_status, $validate );
 
 			if ( $update->is_success() ) {
-				return $this->result_row( $redirect_from, $redirect_to, 'updated', 'Updated existing redirect' );
+				return $this->accepted_row( $source, $redirect_from, $redirect_to, 'updated', 'Updated existing redirect' );
 			}
 
 			if ( 'not-found' !== $update->error_code() ) {
@@ -222,7 +223,26 @@ final class ImportCommand extends WP_CLI_Command {
 			return $this->result_row( $redirect_from, $redirect_to, 'error', $result->error_message() ?? 'Could not create redirect' );
 		}
 
-		return $this->result_row( $redirect_from, $redirect_to, 'created', 'Successfully imported' );
+		return $this->accepted_row( $source, $redirect_from, $redirect_to, 'created', 'Successfully imported' );
+	}
+
+	/**
+	 * Build the result row for an accepted redirect, warning if its source is
+	 * a path WordPress itself serves.
+	 *
+	 * @param SourceUrl $source_url The parsed source.
+	 * @param string    $source     The source path.
+	 * @param string    $dest       The destination.
+	 * @param string    $action     The action taken.
+	 * @param string    $message    The result message.
+	 * @return array{source: string, dest: string, action: string, message: string}
+	 */
+	private function accepted_row( SourceUrl $source_url, string $source, string $dest, string $action, string $message ): array {
+		if ( $source_url->is_reserved() ) {
+			WP_CLI::warning( $source . ': ' . ValidationIssueType::RESERVED_SOURCE->description() . '.' );
+		}
+
+		return $this->result_row( $source, $dest, $action, $message );
 	}
 
 	/**

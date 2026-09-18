@@ -644,4 +644,43 @@ final class SourceUrlTest extends YoastTestCase {
 
 		$this->assertSame( '/', $source->path() );
 	}
+
+	/**
+	 * Test paths WordPress itself serves are reported as reserved.
+	 *
+	 * @dataProvider data_reserved_sources
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::is_reserved
+	 *
+	 * @param string $source   The source as entered.
+	 * @param bool   $reserved Whether it is reserved.
+	 */
+	public function test_is_reserved( string $source, bool $reserved ): void {
+		$this->assertSame( $reserved, SourceUrl::from_string( $source )->is_reserved() );
+	}
+
+	/**
+	 * Data provider for test_is_reserved.
+	 *
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function data_reserved_sources(): array {
+		return array(
+			'admin'                      => array( '/wp-admin/', true ),
+			'admin screen'               => array( '/wp-admin/edit.php?post_type=page', true ),
+			'login'                      => array( '/wp-login.php', true ),
+			'login with query'           => array( '/wp-login.php?action=lostpassword', true ),
+			'cron'                       => array( '/wp-cron.php', true ),
+			'xmlrpc'                     => array( '/xmlrpc.php', true ),
+			'rest route'                 => array( '/wp-json/wp/v2/posts', true ),
+			'content'                    => array( '/wp-content/uploads/a.jpg', true ),
+			'includes'                   => array( '/wp-includes/js/x.js', true ),
+			'full url'                   => array( 'https://example.com/wp-admin', true ),
+			'ordinary page'              => array( '/old-page', false ),
+			'lookalike prefix'           => array( '/wp-administration', false ),
+			'nested wp file'             => array( '/blog/wp-login.php', false ),
+			'reserved text in the query' => array( '/search?q=/wp-admin', false ),
+			'root'                       => array( '/', false ),
+		);
+	}
 }
