@@ -204,13 +204,26 @@ final class RowActionsManager {
 			// Replace the row's Health cell with the fresh, HTTP-inclusive
 			// result: the grey "not fully checked" state resolves to a real
 			// answer once the destination has actually been requested.
+			// How each live-probe outcome renders: confirmed subsumes the plain
+			// tick, dormant is a judgement call, the rest mean it is not doing
+			// its job right now.
+			var probeStyles = {
+				'confirmed': { icon: 'dashicons-yes-alt', color: '#46b450' },
+				'dormant': { icon: 'dashicons-flag', color: '#dba617' },
+				'diverted': { icon: 'dashicons-warning', color: '#d63638' },
+				'not-firing': { icon: 'dashicons-warning', color: '#d63638' },
+				'unreachable': { icon: 'dashicons-editor-help', color: '#787c82' }
+			};
+
 			function renderResult( $row, response ) {
 				var $healthColumn = $row.find( 'td.health' ).empty();
 				var data = ( response && response.data ) || {};
 				var warnings = data.warnings || [];
+				var probe = data.probe || null;
+				var confirmed = probe && 'confirmed' === probe.status;
 
 				if ( response.success ) {
-					if ( ! warnings.length ) {
+					if ( ! warnings.length && ! confirmed ) {
 						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
 					}
 				} else {
@@ -220,6 +233,11 @@ final class RowActionsManager {
 				$.each( warnings, function ( i, warning ) {
 					$healthColumn.append( healthLine( 'dashicons-flag', '#dba617', warning.label, warning.description ) );
 				} );
+
+				if ( probe && probeStyles[ probe.status ] ) {
+					var style = probeStyles[ probe.status ];
+					$healthColumn.append( healthLine( style.icon, style.color, probe.message ) );
+				}
 			}
 
 			// Test one row; returns the AJAX promise so callers can chain.

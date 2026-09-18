@@ -192,6 +192,60 @@ PHP
 }
 
 /*
+ * In wp-env the site cannot request its own published home URL from inside
+ * the container, which breaks anything probing the site over HTTP (the Test
+ * action's live source probe, --check-urls against internal paths). This
+ * mu-plugin rewrites loopback requests to the container's own web server.
+ */
+
+$loopback_file = WPMU_PLUGIN_DIR . '/legacy-redirector-seed-loopback.php';
+
+if ( ! file_exists( $loopback_file ) ) {
+	file_put_contents(
+		$loopback_file,
+		<<<'PHP'
+<?php
+/**
+ * Route requests for this site's own home URL to the container-local server.
+ *
+ * Written by the seed script for wp-env, where the published port is not
+ * reachable from inside the container; delete freely.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+add_filter(
+	'pre_http_request',
+	static function ( $preempt, array $args, string $url ) {
+		static $busy = false;
+
+		$home = home_url();
+
+		if ( false !== $preempt || $busy || 0 !== strpos( $url, $home ) ) {
+			return $preempt;
+		}
+
+		$busy = true;
+
+		$args['reject_unsafe_urls'] = false;
+
+		$response = wp_remote_request( 'http://localhost' . substr( $url, strlen( $home ) ), $args );
+
+		$busy = false;
+
+		return $response;
+	},
+	10,
+	3
+);
+
+PHP
+	);
+
+	WP_CLI::log( 'Wrote an mu-plugin routing loopback requests inside the container.' );
+}
+
+/*
  * ---------------------------------------------------------------------------
  * 3. Redirects that should all be stored, validation bypassed so the
  *    deliberately broken ones survive to be found by `validate`.

@@ -60,6 +60,8 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			array(
 				'is_wp_error'                      => static fn( $thing ) => $thing instanceof \WP_Error,
 				'wp_remote_retrieve_response_code' => static fn( $response ) => $response['response']['code'] ?? 0,
+				'wp_remote_retrieve_header'        => static fn( $response, $header ) => $response['headers'][ $header ] ?? '',
+				'untrailingslashit'                => static fn( $value ) => rtrim( (string) $value, '/' ),
 			)
 		);
 	}
@@ -387,6 +389,81 @@ final class RedirectAuditorTest extends MonkeyStubs {
 		$auditor = new TestableRedirectAuditor( 200 );
 
 		$this->assertNull( $auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/page' ), true ) );
+	}
+
+	/**
+	 * Test the probe confirms a source that redirects to its destination.
+	 *
+	 * A trailing-slash difference in the Location header is not a divergence.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_confirms_a_matching_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/target/' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status'   => 'confirmed',
+				'location' => 'https://example.com/target/',
+			),
+			$auditor->probe_source( $this->create_redirect( '/old', '/target' ) )
+		);
+	}
+
+	/**
+	 * Test the probe reports a redirect that goes somewhere else.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_a_diverted_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 302 ),
+				'headers'  => array( 'location' => 'https://example.com/elsewhere' ),
+			)
+		);
+
+		$probe = $auditor->probe_source( $this->create_redirect( '/old', '/target' ) );
+
+		$this->assertSame( 'diverted', $probe['status'] );
+		$this->assertSame( 'https://example.com/elsewhere', $probe['location'] );
+	}
+
+	/**
+	 * Test the probe reports a source that serves content and one that 404s.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_dormant_and_not_firing_sources(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$serving = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+		$this->assertSame( array( 'status' => 'dormant' ), $serving->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+
+		$missing = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+		$this->assertSame( array( 'status' => 'not-firing' ), $missing->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the probe degrades gracefully when the site cannot reach itself.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_an_unreachable_site(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( new \WP_Error() );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
 	}
 
 	/**
@@ -721,5 +798,37 @@ class TestableRedirectAuditor extends RedirectAuditor {
 	 */
 	protected function remote_get( string $url ) {
 		return array( 'response' => array( 'code' => $this->response_code ) );
+	}
+}
+
+/**
+ * Testable subclass returning a canned probe response.
+ */
+class ProbeStubAuditor extends RedirectAuditor {
+
+	/**
+	 * The canned response.
+	 *
+	 * @var array|\WP_Error
+	 */
+	private $response;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param array|\WP_Error $response The response to return.
+	 */
+	public function __construct( $response ) {
+		$this->response = $response;
+	}
+
+	/**
+	 * Override to return the canned response.
+	 *
+	 * @param string $url The URL to request (ignored).
+	 * @return array|\WP_Error The canned response.
+	 */
+	protected function remote_get_without_redirects( string $url ) {
+		return $this->response;
 	}
 }

@@ -163,10 +163,78 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 					'status'   => 'valid',
 					'message'  => 'Redirect is valid.',
 					'warnings' => array(),
+					// The blanket 200 mock means the probe sees the source
+					// serving content rather than redirecting.
+					'probe'    => array(
+						'status'  => 'dormant',
+						'message' => 'The source currently serves content, so the redirect lies dormant and did not fire.',
+					),
 				),
 			),
 			$response
 		);
+	}
+
+	/**
+	 * Test the probe confirms a source that live-redirects to its destination.
+	 */
+	public function test_probe_confirms_a_live_redirect(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/probe-source', 'https://example.com/destination' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( (string) $url, '/probe-source' ) ) {
+				return array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/destination' ),
+				);
+			}
+
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond, 20, 3 );
+
+		try {
+			$response = $this->dispatch( ValidateRedirectHandler::get_action(), array( 'redirect_id' => (string) $redirect_id ) );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 20 );
+		}
+
+		$this->assertTrue( $response['success'] );
+		$this->assertSame( 'confirmed', $response['data']['probe']['status'] );
+		$this->assertStringContainsString( 'Confirmed live', $response['data']['probe']['message'] );
+	}
+
+	/**
+	 * Test the probe reports a redirect that is not firing.
+	 */
+	public function test_probe_reports_a_redirect_that_does_not_fire(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/probe-missing', 'https://example.com/destination' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( (string) $url, '/probe-missing' ) ) {
+				return array( 'response' => array( 'code' => 404 ) );
+			}
+
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond, 20, 3 );
+
+		try {
+			$response = $this->dispatch( ValidateRedirectHandler::get_action(), array( 'redirect_id' => (string) $redirect_id ) );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 20 );
+		}
+
+		$this->assertSame( 'not-firing', $response['data']['probe']['status'] );
+		$this->assertStringContainsString( 'did not fire', $response['data']['probe']['message'] );
 	}
 
 	/**
@@ -230,6 +298,12 @@ final class ValidateRedirectHandlerTest extends AjaxHandlerTestCase {
 					'status'   => 'url_not_found',
 					'message'  => 'The destination URL returns a 404 Not Found response.',
 					'warnings' => array(),
+					// The blanket 404 mock means the probed source 404s
+					// without redirecting, too.
+					'probe'    => array(
+						'status'  => 'not-firing',
+						'message' => 'The source returns a 404 without redirecting: the redirect did not fire.',
+					),
 				),
 			),
 			$response

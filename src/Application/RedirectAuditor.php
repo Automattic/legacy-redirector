@@ -477,6 +477,121 @@ class RedirectAuditor {
 	}
 
 	/**
+	 * Probe the source end to end: request it and see what actually happens.
+	 *
+	 * The audit answers "would this redirect send visitors somewhere real?";
+	 * this answers "does visiting the source actually redirect?". A source
+	 * can serve content (so the redirect lies dormant), 404 without the
+	 * redirect firing, or redirect somewhere other than the stored
+	 * destination - none of which any static check can see.
+	 *
+	 * @param Redirect $redirect The redirect whose source to request.
+	 * @return array{status: string, location?: string} The outcome:
+	 *         'confirmed'   the source redirects to the stored destination;
+	 *         'diverted'    the source redirects somewhere else ('location');
+	 *         'dormant'     the source serves content, so the redirect never fires;
+	 *         'not-firing'  the source 404s without redirecting;
+	 *         'unreachable' the site could not request itself.
+	 */
+	public function probe_source( Redirect $redirect ): array {
+		$response = $this->remote_get_without_redirects( home_url( $redirect->source()->path() ) );
+
+		if ( is_wp_error( $response ) ) {
+			return array( 'status' => 'unreachable' );
+		}
+
+		$code     = (int) wp_remote_retrieve_response_code( $response );
+		$location = (string) wp_remote_retrieve_header( $response, 'location' );
+
+		if ( $code >= 300 && $code < 400 ) {
+			$expected = $this->expected_destination_url( $redirect );
+
+			if ( null !== $expected && $this->urls_equivalent( $location, $expected ) ) {
+				return array(
+					'status'   => 'confirmed',
+					'location' => $location,
+				);
+			}
+
+			return array(
+				'status'   => 'diverted',
+				'location' => $location,
+			);
+		}
+
+		if ( 404 === $code ) {
+			return array( 'status' => 'not-firing' );
+		}
+
+		return array( 'status' => 'dormant' );
+	}
+
+	/**
+	 * The absolute URL the stored destination should send a visitor to.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return string|null The URL, or null when it cannot be resolved.
+	 */
+	private function expected_destination_url( Redirect $redirect ): ?string {
+		$destination = $redirect->destination();
+
+		if ( $destination->is_post_id() ) {
+			$permalink = get_permalink( $destination->as_post_id()->value() );
+
+			return is_string( $permalink ) ? $permalink : null;
+		}
+
+		$url = $destination->as_url()->value();
+
+		return $this->is_relative_path( $url ) ? home_url( $url ) : $url;
+	}
+
+	/**
+	 * Whether two URLs are the same destination for probing purposes.
+	 *
+	 * A trailing slash difference is not a divergence.
+	 *
+	 * @param string $a One URL.
+	 * @param string $b The other URL.
+	 * @return bool True when equivalent.
+	 */
+	private function urls_equivalent( string $a, string $b ): bool {
+		return untrailingslashit( $a ) === untrailingslashit( $b );
+	}
+
+	/**
+	 * Request a URL without following redirects.
+	 *
+	 * Protected so tests can stub the network.
+	 *
+	 * @param string $url The URL to request.
+	 * @return array|\WP_Error The response or error.
+	 */
+	protected function remote_get_without_redirects( string $url ) {
+		if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
+			return vip_safe_wp_remote_get(
+				$url,
+				'',
+				3,
+				1,
+				20,
+				array(
+					'redirection'        => 0,
+					'reject_unsafe_urls' => true,
+				)
+			);
+		}
+
+		return wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'     => 5,
+				'redirection' => 0,
+			)
+		);
+	}
+
+	/**
 	 * Request a URL.
 	 *
 	 * Protected so tests can stub the network.
