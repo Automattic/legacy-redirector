@@ -53,6 +53,11 @@ enum ValidationIssueType: string {
 	case CORRUPT_DATA = 'corrupt_data';
 
 	/**
+	 * The source is a path WordPress itself serves (wp-admin, wp-login.php, ...).
+	 */
+	case RESERVED_SOURCE = 'reserved_source';
+
+	/**
 	 * Get a human-readable label for this issue type.
 	 *
 	 * @return string
@@ -67,6 +72,7 @@ enum ValidationIssueType: string {
 			self::URL_SERVER_ERROR => 'Destination returns server error',
 			self::URL_REQUEST_FAILED => 'Request failed',
 			self::CORRUPT_DATA     => 'Corrupt stored data',
+			self::RESERVED_SOURCE  => 'Reserved WordPress path',
 		};
 	}
 
@@ -86,6 +92,7 @@ enum ValidationIssueType: string {
 			self::URL_SERVER_ERROR => 'The destination URL returns a server error',
 			self::URL_REQUEST_FAILED => 'Failed to connect to the destination URL',
 			self::CORRUPT_DATA     => 'The stored row cannot be read as a valid redirect; delete it, or update it with a new source and destination',
+			self::RESERVED_SOURCE  => 'The source is a path WordPress itself serves. The redirect lies dormant while that path works, but answers it if the path ever returns a 404; for /wp-admin or /wp-login.php that locks you out of the dashboard',
 		};
 
 		if ( null !== $extra_info && '' !== $extra_info ) {

@@ -26,6 +26,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\ValidationIssueType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -68,6 +69,20 @@ final class CreateCommandTest extends CliTestCase {
 		);
 
 		$this->assert_success_contains( '/old-page -> /target-page' );
+	}
+
+	/**
+	 * Test a source WordPress itself serves is created, with a warning.
+	 */
+	public function test_create_reserved_source_warns(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/wp-login.php', '/' ),
+			array()
+		);
+
+		$this->assert_warning_contains( 'locks you out of the dashboard' );
+		$this->assert_success_contains( '/wp-login.php -> /' );
 	}
 
 	/**

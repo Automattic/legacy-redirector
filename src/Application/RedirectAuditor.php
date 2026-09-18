@@ -19,7 +19,8 @@ use Automattic\LegacyRedirector\Domain\ValidationIssueType;
  * Where RedirectValidator gatekeeps proposed redirects before persistence,
  * this service inspects redirects that are already stored and reports broken
  * destinations (deleted, trashed, or unpublished posts; unreachable URLs) as
- * ValidationIssue records. Used by the `validate` WP-CLI command.
+ * ValidationIssue records, along with any source on a path WordPress itself
+ * serves. Used by the `validate` WP-CLI command.
  */
 class RedirectAuditor {
 
@@ -230,6 +231,10 @@ class RedirectAuditor {
 			$issue = $this->validate_redirect_destination( $redirect, $check_urls );
 			if ( null !== $issue ) {
 				$issues[] = $issue;
+			}
+
+			if ( ! $redirect->is_corrupt() && $redirect->source()->is_reserved() ) {
+				$issues[] = new ValidationIssue( $redirect, ValidationIssueType::RESERVED_SOURCE );
 			}
 
 			if ( null !== $progress_callback ) {

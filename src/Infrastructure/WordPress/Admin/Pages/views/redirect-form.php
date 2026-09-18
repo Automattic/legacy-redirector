@@ -14,6 +14,7 @@
  * @var string   $destination_display Human-readable destination for the display field.
  * @var string   $message             Success message code ('created', 'updated', or '').
  * @var string   $error_message       Resolved error message, or '' if none.
+ * @var bool     $reserved_source     Whether the source is a path WordPress itself serves.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -45,6 +46,12 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 	<?php if ( '' !== $error_message ) : ?>
 		<div id="message" class="error notice is-dismissible">
 			<p><?php echo esc_html( $error_message ); ?></p>
+		</div>
+	<?php endif; ?>
+
+	<?php if ( $reserved_source ) : ?>
+		<div class="notice notice-warning">
+			<p><?php esc_html_e( 'This redirect is from a path WordPress itself serves. It stays dormant while that path works, but takes over if the path ever returns a 404. For wp-admin or wp-login.php, that locks you out of the dashboard. Keep it only if this is a genuine legacy URL.', 'legacy-redirector' ); ?></p>
 		</div>
 	<?php endif; ?>
 

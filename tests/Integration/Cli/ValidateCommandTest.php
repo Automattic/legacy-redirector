@@ -110,7 +110,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
 		$this->assert_stdout_contains( '/broken-redirect' );
 		$this->assert_stdout_contains( 'Post trashed' );
 	}
@@ -125,7 +125,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
 		$this->assert_stdout_contains( 'Post deleted' );
 	}
 
@@ -155,6 +155,24 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
 		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test a reserved source is reported, but --fix leaves it enabled.
+	 *
+	 * It may be a genuine legacy URL, so it is a warning for a person to
+	 * judge, not a breakage to switch off.
+	 */
+	public function test_validate_reports_reserved_source_without_fixing_it(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/wp-admin/', $post_id );
+
+		$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Reserved WordPress path' );
+		$this->assert_stdout_contains( 'Disabled 0 broken redirect(s).' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
 	}
 
 	/**
@@ -192,7 +210,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array( 'status' => 'any' ) );
 
-		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
 	}
 
 	/**
@@ -217,7 +235,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/single-broken' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
 		$this->assert_stdout_contains( 'Post trashed' );
 	}
 
@@ -249,7 +267,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/single-disabled' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
 	}
 
 	/**
@@ -274,7 +292,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/trashed-path-source' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 broken redirect(s).' );
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
 		$this->assert_stdout_contains( 'Post trashed' );
 	}
 
