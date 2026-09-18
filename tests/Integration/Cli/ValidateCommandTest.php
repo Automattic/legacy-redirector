@@ -20,6 +20,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
@@ -58,7 +59,7 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->command = new ValidateCommand(
 			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
 			$this->query_repository(),
-			new RedirectAuditor(),
+			$this->auditor(),
 			$this->manager()
 		);
 	}
@@ -417,6 +418,63 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_warning_contains( 'Found 1 issue(s).' );
 		$this->assert_stdout_contains( 'Destination host not allowed' );
+	}
+
+	/**
+	 * Test a loop across two redirects is reported on both members.
+	 */
+	public function test_validate_reports_a_possible_loop(): void {
+		$this->create_redirect( '/loop-a', '/loop-b' );
+		$this->create_redirect( '/loop-b', '/loop-a' );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_warning_contains( 'Found 2 issue(s).' );
+		$this->assert_stdout_contains( 'Possible redirect loop' );
+	}
+
+	/**
+	 * Test a stored self-loop is reported.
+	 *
+	 * The write gate refuses these, but --skip-validation and legacy data can
+	 * still store them.
+	 */
+	public function test_validate_reports_a_stored_self_loop(): void {
+		$this->create_redirect( '/self-loop', '/self-loop' );
+
+		$this->invoke_command( $this->command, array( '/self-loop' ), array() );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Possible redirect loop' );
+	}
+
+	/**
+	 * Test a redirect chain that ends free is not reported as a loop.
+	 */
+	public function test_validate_does_not_report_a_chain_as_a_loop(): void {
+		$this->create_redirect( '/hop-one', '/hop-two' );
+		$this->create_redirect( '/hop-two', '/somewhere-final' );
+
+		$this->invoke_command( $this->command, array( '/hop-one', '/hop-two' ), array() );
+
+		$this->assert_success_contains( 'No issues found.' );
+	}
+
+	/**
+	 * Test --fix leaves loop members enabled.
+	 *
+	 * A loop is a warning: it may be dormant behind live pages, and disabling
+	 * every member would be the wrong fix even when it is live.
+	 */
+	public function test_validate_fix_leaves_loop_members_enabled(): void {
+		$a = $this->create_redirect( '/loop-fix-a', '/loop-fix-b' );
+		$b = $this->create_redirect( '/loop-fix-b', '/loop-fix-a' );
+
+		$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
+
+		$this->assert_stdout_contains( 'Disabled 0 broken redirect(s).' );
+		$this->assertSame( 'publish', get_post_status( $a ) );
+		$this->assertSame( 'publish', get_post_status( $b ) );
 	}
 
 	/**

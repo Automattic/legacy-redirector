@@ -19,6 +19,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
@@ -86,6 +87,25 @@ final class CreateCommandTest extends CliTestCase {
 
 		$this->assert_warning_contains( 'locks you out of the dashboard' );
 		$this->assert_success_contains( '/wp-login.php -> /' );
+	}
+
+	/**
+	 * Test creating a redirect that closes a loop warns, but still creates.
+	 *
+	 * The other hop may be dormant behind a live page, so a cycle is a
+	 * warning for a person, not a refusal.
+	 */
+	public function test_create_warns_when_closing_a_loop(): void {
+		$this->create_redirect( '/loop-first', '/loop-second' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/loop-second', '/loop-first' ),
+			array()
+		);
+
+		$this->assert_warning_contains( 'leads back to this one' );
+		$this->assert_success_contains( '/loop-second -> /loop-first' );
 	}
 
 	/**

@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use WP_CLI;
 use WP_CLI_Command;
@@ -117,7 +118,7 @@ final class CreateCommand extends WP_CLI_Command {
 			return;
 		}
 
-		foreach ( $this->auditor->source_warnings( $source ) as $warning ) {
+		foreach ( $this->auditor->warnings( Redirect::create( $source, $destination ) ) as $warning ) {
 			WP_CLI::warning( $warning->description() . '.' );
 		}
 

@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Application;
 
 // phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Test file includes testable subclass.
 
+use Automattic\LegacyRedirector\Application\LoopDetector;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
@@ -407,6 +408,70 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 */
 	public function test_source_warnings_is_empty_for_an_ordinary_source(): void {
 		$this->assertSame( array(), $this->auditor->source_warnings( SourceUrl::from_string( '/old-page' ) ) );
+	}
+
+	/**
+	 * Test audit reports a possible loop from the detector as a warning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_audit_reports_a_possible_loop(): void {
+		$redirect = $this->create_redirect( '/loop-a', '/loop-b' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector
+			->shouldReceive( 'find_cycle' )
+			->once()
+			->with( $redirect )
+			->andReturn( array( '/loop-a', '/loop-b', '/loop-a' ) );
+
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$findings = ( new RedirectAuditor( $detector ) )->audit( $redirect );
+
+		$this->assertCount( 1, $findings );
+		$this->assertSame( AuditFindingType::POSSIBLE_LOOP, $findings[0]->type() );
+		$this->assertTrue( $findings[0]->is_warning() );
+		$this->assertSame( '/loop-a -> /loop-b -> /loop-a', $findings[0]->extra_info() );
+	}
+
+	/**
+	 * Test audits without a detector carry no loop findings.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_audit_without_a_detector_skips_loop_checks(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$this->assertSame( array(), $this->auditor->audit( $this->create_redirect( '/loop-a', '/loop-b' ) ) );
+	}
+
+	/**
+	 * Test warnings combines the reserved-source and loop rules.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_warnings_combines_reserved_source_and_loop(): void {
+		$redirect = $this->create_redirect( '/wp-admin', '/wp-admin' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector
+			->shouldReceive( 'find_cycle' )
+			->once()
+			->andReturn( array( '/wp-admin', '/wp-admin' ) );
+
+		$warnings = ( new RedirectAuditor( $detector ) )->warnings( $redirect );
+
+		$this->assertCount( 2, $warnings );
+		$this->assertSame( AuditFindingType::RESERVED_SOURCE, $warnings[0]->type() );
+		$this->assertSame( AuditFindingType::POSSIBLE_LOOP, $warnings[1]->type() );
 	}
 
 	/**

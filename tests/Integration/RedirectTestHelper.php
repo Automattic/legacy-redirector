@@ -12,6 +12,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\LoopDetector;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectResolver;
 use Automattic\LegacyRedirector\Application\RedirectManager;
@@ -96,7 +97,7 @@ trait RedirectTestHelper {
 	 * @return RedirectAuditor The auditor.
 	 */
 	protected function auditor(): RedirectAuditor {
-		return $this->services['auditor'] ??= new RedirectAuditor();
+		return $this->services['auditor'] ??= new RedirectAuditor( new LoopDetector( $this->repository() ) );
 	}
 
 	/**
