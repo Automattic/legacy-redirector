@@ -15,16 +15,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  */
 final class PostTypeTest extends TestCase {
 	/**
-	 * Tear down method to be called after each test.
-	 *
-	 * @return void
-	 */
-	public function tear_down() {
-		( new Capability() )->unregister();
-		parent::tear_down();
-	}
-
-	/**
 	 * Test that the post type exists.
 	 *
 	 * @coversNothing

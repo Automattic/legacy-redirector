@@ -7,6 +7,7 @@
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Yoast\WPTestUtils\WPIntegration\TestCase as WPTestUtilsTestCase;
 
 /**
@@ -32,5 +33,34 @@ abstract class TestCase extends WPTestUtilsTestCase {
 		}
 
 		$this->allow_fixture_hosts();
+	}
+
+	/**
+	 * Undoes any capability registration a test triggered.
+	 *
+	 * Production code never removes the capability, so tests that let
+	 * Capability::register() run need this to get back to a clean slate.
+	 */
+	public function tear_down() {
+		$this->reset_manage_redirects_capability();
+
+		parent::tear_down();
+	}
+
+	/**
+	 * Strips the manage_redirects capability and its version option.
+	 *
+	 * @return void
+	 */
+	protected function reset_manage_redirects_capability(): void {
+		foreach ( array( 'administrator', 'editor' ) as $role_name ) {
+			$role = get_role( $role_name );
+			if ( $role instanceof \WP_Role ) {
+				$role->remove_cap( Capability::MANAGE_REDIRECTS_CAPABILITY );
+			}
+		}
+
+		// Mirrors Capability::VERSION_OPTION_KEY, which is private.
+		delete_option( Capability::MANAGE_REDIRECTS_CAPABILITY . '_capability_version' );
 	}
 }

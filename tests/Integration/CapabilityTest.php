@@ -18,15 +18,6 @@ use WP_User;
 final class CapabilityTest extends TestCase {
 
 	/**
-	 * Tear down method to be called after each test.
-	 *
-	 * @return void
-	 */
-	public function tear_down() {
-		( new Capability() )->unregister();
-	}
-
-	/**
 	 * Test capabilities for Capability::MANAGE_REDIRECTS_CAPABILITY.
 	 *
 	 * @return void
@@ -35,7 +26,7 @@ final class CapabilityTest extends TestCase {
 		$capability = new Capability();
 
 		// We need to force clear capabilities here as the wp_options `roles` option might not get cleared after a failed test.
-		$capability->unregister();
+		$this->reset_manage_redirects_capability();
 
 		// in WP_User class, if multisite and user is administrator, all capabilities are allowed, so this test is not useful.
 		if ( ! is_multisite() ) {
@@ -58,23 +49,17 @@ final class CapabilityTest extends TestCase {
 	}
 
 	/**
-	 * Test the Capability unregister method.
+	 * Test registration is skipped once the stored version is current.
 	 *
 	 * @return void
 	 */
-	public function test_capability_can_be_unregistered() {
+	public function test_capability_registration_is_idempotent() {
 		$capability = new Capability();
-		$capability->register();
 
+		$this->assertTrue( $capability->register() );
 		$this->assertFalse( $capability->register() );
 
 		$this->assertRoleHasRedirectsCapability( 'administrator' );
-
-		$capability->unregister();
-
-		$this->assertRoleNotHasRedirectsCapability( 'administrator' );
-
-		$this->assertTrue( $capability->register() );
 	}
 
 	/**

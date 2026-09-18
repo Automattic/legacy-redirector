@@ -341,8 +341,7 @@ final class ListRedirectsTest extends TestCase {
 	 */
 	public function test_modify_list_row_actions_adds_custom_actions(): void {
 		// Register capabilities first.
-		$capability = new Capability();
-		$capability->register();
+		( new Capability() )->register();
 
 		// Create an admin user with the capability.
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
@@ -388,9 +387,6 @@ final class ListRedirectsTest extends TestCase {
 		// Follow link should contain the from URL.
 		$this->assertStringContainsString( $from_url, $actions['follow'] );
 		$this->assertStringContainsString( 'target="_blank"', $actions['follow'] );
-
-		// Clean up.
-		$capability->unregister();
 	}
 
 	/**

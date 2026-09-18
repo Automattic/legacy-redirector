@@ -8,7 +8,8 @@ gated on a single custom capability, `manage_redirects`.
 The plugin grants it to the **administrator** and **editor** roles on the first admin
 request after installation. The grant is version-gated, so it runs once rather than on
 every request, and it is written to the roles in the database — which means deactivating
-the plugin leaves it in place. Remove it explicitly if you need it gone.
+the plugin leaves it in place, as WordPress core does for any plugin's role capabilities.
+See [Revoking it](#revoking-it) if you need it gone.
 
 Because the grant happens on `admin_init`, a site that is only ever driven by WP-CLI will
 not have the capability on its roles until someone loads an admin page. That does not stop
@@ -51,11 +52,48 @@ if ( $user instanceof WP_User ) {
 
 ### Revoking it
 
+The plugin never removes the capability itself, so revoking it is the same `WP_Role` call in
+reverse:
+
 ```php
-get_role( 'editor' )->remove_cap( 'manage_redirects' );
-// On VIP:
+$role = get_role( 'editor' );
+
+if ( $role instanceof WP_Role ) {
+	$role->remove_cap( 'manage_redirects' );
+}
+```
+
+On WordPress VIP, use the platform helper:
+
+```php
 wpcom_vip_remove_role_caps( 'editor', 'manage_redirects' );
 ```
+
+From WP-CLI, core's `cap` command does the same without any code:
+
+```bash
+wp cap remove editor manage_redirects
+```
+
+A revocation sticks. The plugin records that it has granted the capability in the
+`manage_redirects_capability_version` option, and while that option is current it does not
+grant it again, so an editor you have revoked stays revoked across later admin requests. The
+exception is a future release that bumps that version to grant something new, which would
+grant it to both default roles again.
+
+To clear everything the plugin wrote to the roles — before deleting the plugin, say — revoke
+it from both default roles and delete that option:
+
+```bash
+wp cap remove administrator manage_redirects
+wp cap remove editor manage_redirects
+wp option delete manage_redirects_capability_version
+```
+
+Delete the option only if the plugin is going away. With the plugin still active, the next
+admin request sees no option and grants the capability to administrators and editors again.
+On a multisite network, roles are stored per site, so run the commands against each site with
+`--url`.
 
 ### Read-only access is not separable
 
