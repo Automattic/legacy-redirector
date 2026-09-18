@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Application;
 
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
+use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 
@@ -110,6 +111,31 @@ class RedirectAuditor {
 	 */
 	public function source_warnings( SourceUrl $source ): array {
 		return $source->is_reserved() ? array( AuditFindingType::RESERVED_SOURCE ) : array();
+	}
+
+	/**
+	 * The checks a destination value deserves as it is typed, before any
+	 * redirect exists for it.
+	 *
+	 * The destination-side mirror of source_warnings(): the form's blur check
+	 * has only the field value, so only rules needing no stored context belong
+	 * here. Today that is the allowed-host rule for absolute URLs, which the
+	 * write gate will refuse - surfacing it at blur time puts the fix in front
+	 * of the admin before they hit Save.
+	 *
+	 * @param Destination $destination The destination to check.
+	 * @return AuditFindingType[] The finding types, empty if none.
+	 */
+	public function destination_checks( Destination $destination ): array {
+		if ( $destination->is_post_id() || $destination->as_url()->is_relative() ) {
+			return array();
+		}
+
+		if ( '' === wp_validate_redirect( $destination->as_url()->value(), '' ) ) {
+			return array( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED );
+		}
+
+		return array();
 	}
 
 	/**
@@ -286,7 +312,7 @@ class RedirectAuditor {
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
 	private function check_absolute_url_destination( Redirect $redirect, string $url, bool $check_urls ): ?AuditFinding {
-		if ( '' === wp_validate_redirect( $url, '' ) ) {
+		if ( array() !== $this->destination_checks( $redirect->destination() ) ) {
 			$host = wp_parse_url( $url, PHP_URL_HOST );
 			return new AuditFinding(
 				$redirect,

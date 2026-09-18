@@ -18,6 +18,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDestinationHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -115,13 +116,16 @@ final class RedirectFormPage {
 			'legacy-redirector-form',
 			'legacyRedirectorForm',
 			array(
-				'postId'           => $redirect_id,
-				'checkAction'      => CheckSourceHandler::get_action(),
-				'checkNonce'       => wp_create_nonce( CheckSourceHandler::get_action() ),
-				'searchAction'     => SearchPostsHandler::get_action(),
-				'searchNonce'      => wp_create_nonce( SearchPostsHandler::get_action() ),
-				'duplicateMessage' => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
-				'reservedMessage'  => self::reserved_source_message(),
+				'postId'                => $redirect_id,
+				'checkAction'           => CheckSourceHandler::get_action(),
+				'checkNonce'            => wp_create_nonce( CheckSourceHandler::get_action() ),
+				'checkDestAction'       => CheckDestinationHandler::get_action(),
+				'checkDestNonce'        => wp_create_nonce( CheckDestinationHandler::get_action() ),
+				'searchAction'          => SearchPostsHandler::get_action(),
+				'searchNonce'           => wp_create_nonce( SearchPostsHandler::get_action() ),
+				'duplicateMessage'      => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
+				'reservedMessage'       => self::reserved_source_message(),
+				'hostNotAllowedMessage' => self::host_not_allowed_message(),
 			)
 		);
 	}
@@ -440,6 +444,18 @@ final class RedirectFormPage {
 	}
 
 	/**
+	 * The error for a destination host missing from allowed_redirect_hosts.
+	 *
+	 * Shown as soon as the destination field loses focus, and again if the
+	 * save is attempted anyway.
+	 *
+	 * @return string The translated error.
+	 */
+	private static function host_not_allowed_message(): string {
+		return __( 'The destination domain is not allowed, so the redirect would never run. Add the domain to the "allowed_redirect_hosts" filter first.', 'legacy-redirector' );
+	}
+
+	/**
 	 * Translate an application error code into a form error code.
 	 *
 	 * @param string|null $error_code The validator or manager error code.
@@ -447,14 +463,15 @@ final class RedirectFormPage {
 	 */
 	private static function form_error_for( ?string $error_code ): string {
 		$map = array(
-			'duplicate-redirect-uri' => 'duplicate',
-			'invalid-values'         => 'same_source_destination',
-			'empty-postid'           => 'post_not_found',
-			'non-public'             => 'post_not_public',
-			'insert-not-allowed'     => 'save_failed',
-			'save-failed'            => 'save_failed',
-			'not-found'              => 'save_failed',
-			'invalid-source'         => 'invalid_source',
+			'duplicate-redirect-uri'   => 'duplicate',
+			'invalid-values'           => 'same_source_destination',
+			'empty-postid'             => 'post_not_found',
+			'non-public'               => 'post_not_public',
+			'insert-not-allowed'       => 'save_failed',
+			'save-failed'              => 'save_failed',
+			'not-found'                => 'save_failed',
+			'invalid-source'           => 'invalid_source',
+			'external-url-not-allowed' => 'host_not_allowed',
 		);
 
 		return $map[ (string) $error_code ] ?? 'invalid_destination';
@@ -508,6 +525,7 @@ final class RedirectFormPage {
 			'post_not_found'          => __( 'The destination post ID does not exist.', 'legacy-redirector' ),
 			'post_not_public'         => __( 'The destination post is not published.', 'legacy-redirector' ),
 			'path_not_found'          => __( 'The destination path does not exist.', 'legacy-redirector' ),
+			'host_not_allowed'        => self::host_not_allowed_message(),
 		);
 
 		return $messages[ $error ] ?? __( 'An error occurred.', 'legacy-redirector' );

@@ -411,6 +411,38 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test destination_checks flags an absolute URL on a disallowed host.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_checks
+	 */
+	public function test_destination_checks_flags_a_disallowed_host(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->with( 'https://external.com/page', '' )
+			->andReturn( '' );
+
+		$this->assertSame(
+			array( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED ),
+			$this->auditor->destination_checks( $this->create_redirect( '/old', 'https://external.com/page' )->destination() )
+		);
+	}
+
+	/**
+	 * Test destination_checks passes an allowed host, and skips hostless forms.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_checks
+	 */
+	public function test_destination_checks_passes_allowed_and_hostless_destinations(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->andReturnFirstArg();
+
+		$this->assertSame( array(), $this->auditor->destination_checks( $this->create_redirect( '/old', 'https://allowed.com/page' )->destination() ) );
+		$this->assertSame( array(), $this->auditor->destination_checks( $this->create_redirect( '/old', '/relative-page' )->destination() ) );
+		$this->assertSame( array(), $this->auditor->destination_checks( $this->create_post_id_redirect( 123 )->destination() ) );
+	}
+
+	/**
 	 * Test audit reports a possible loop from the detector as a warning.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit

@@ -102,8 +102,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 						<label for="redirect_to_display"><?php esc_html_e( 'Redirect To', 'legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td style="position: relative;">
-						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" class="regular-text" autocomplete="off" required />
+						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" class="regular-text" autocomplete="off" required aria-describedby="redirect_to_error" />
 						<input type="hidden" name="redirect_to" id="redirect_to" value="<?php echo esc_attr( (string) $destination_value ); ?>" />
+						<p id="redirect_to_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
 						<p class="description"><?php esc_html_e( 'Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts.', 'legacy-redirector' ); ?></p>
 						<div id="redirect_to_suggestions" style="display: none; position: absolute; background: #fff; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; z-index: 100; width: 25em; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>
 					</td>
