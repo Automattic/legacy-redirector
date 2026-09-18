@@ -222,6 +222,13 @@ final class RowActionsManager {
 				var probe = data.probe || null;
 				var confirmed = probe && 'confirmed' === probe.status;
 
+				// The live behaviour leads - "the redirect works" - and any
+				// problem or warning follows as the "but...".
+				if ( probe && probeStyles[ probe.status ] ) {
+					var style = probeStyles[ probe.status ];
+					$healthColumn.append( healthLine( style.icon, style.color, probe.message ) );
+				}
+
 				if ( response.success ) {
 					if ( ! warnings.length && ! confirmed ) {
 						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
@@ -233,11 +240,6 @@ final class RowActionsManager {
 				$.each( warnings, function ( i, warning ) {
 					$healthColumn.append( healthLine( 'dashicons-flag', '#dba617', warning.label, warning.description ) );
 				} );
-
-				if ( probe && probeStyles[ probe.status ] ) {
-					var style = probeStyles[ probe.status ];
-					$healthColumn.append( healthLine( style.icon, style.color, probe.message ) );
-				}
 			}
 
 			// Test one row; returns the AJAX promise so callers can chain.

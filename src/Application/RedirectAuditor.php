@@ -494,7 +494,8 @@ class RedirectAuditor {
 	 *         'unreachable' the site could not request itself.
 	 */
 	public function probe_source( Redirect $redirect ): array {
-		$response = $this->remote_get_without_redirects( home_url( $redirect->source()->path() ) );
+		$source_url = home_url( $redirect->source()->path() );
+		$response   = $this->remote_get_without_redirects( $source_url );
 
 		if ( is_wp_error( $response ) ) {
 			return array( 'status' => 'unreachable' );
@@ -504,6 +505,13 @@ class RedirectAuditor {
 		$location = (string) wp_remote_retrieve_header( $response, 'location' );
 
 		if ( $code >= 300 && $code < 400 ) {
+			// A hop back to the source itself (a trailing-slash canonical, a
+			// directory redirect) means the path is served, not diverted: the
+			// 404 our redirect would answer never happens.
+			if ( $this->urls_equivalent( $location, $source_url ) ) {
+				return array( 'status' => 'dormant' );
+			}
+
 			$expected = $this->expected_destination_url( $redirect );
 
 			if ( null !== $expected && $this->urls_equivalent( $location, $expected ) ) {

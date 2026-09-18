@@ -439,6 +439,28 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test a hop back to the source itself is dormant, not diverted.
+	 *
+	 * Apache directory redirects and trailing-slash canonicals send the
+	 * visitor to the same path: the path is served, so the redirect never
+	 * fires - but nothing was diverted anywhere.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_treats_a_self_hop_as_dormant(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/old/' ),
+			)
+		);
+
+		$this->assertSame( array( 'status' => 'dormant' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
 	 * Test the probe reports a source that serves content and one that 404s.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source

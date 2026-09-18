@@ -229,6 +229,15 @@ add_filter(
 
 		$args['reject_unsafe_urls'] = false;
 
+		// Keep the public host on the rewritten request, so Apache and
+		// WordPress build Location headers against it - including the port,
+		// which a bare in-container host would drop.
+		$parts           = wp_parse_url( $home );
+		$args['headers'] = array_merge(
+			(array) ( $args['headers'] ?? array() ),
+			array( 'Host' => $parts['host'] . ( isset( $parts['port'] ) ? ':' . $parts['port'] : '' ) )
+		);
+
 		$response = wp_remote_request( 'http://localhost' . substr( $url, strlen( $home ) ), $args );
 
 		$busy = false;
