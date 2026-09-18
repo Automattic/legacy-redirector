@@ -140,6 +140,38 @@ final class ImportCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test our own CSV export header row is skipped.
+	 */
+	public function test_import_skips_export_header_row(): void {
+		$file = $this->create_csv( "from,to,status\n/import-header,https://example.com/a,enabled\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array( 'skip-validation' => true )
+		);
+
+		$this->assert_success_contains( 'Processed 1 redirects.' );
+		$this->assertTrue( $this->redirect_exists( '/import-header' ) );
+	}
+
+	/**
+	 * Test a malformed first row is still reported rather than skipped.
+	 */
+	public function test_import_reports_malformed_first_row(): void {
+		$file = $this->create_csv( "http://example.com,https://example.com/a\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array( 'skip-validation' => true )
+		);
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( 'Invalid source' );
+	}
+
+	/**
 	 * Test the optional status column creates disabled redirects.
 	 */
 	public function test_import_respects_status_column(): void {

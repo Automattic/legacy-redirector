@@ -77,7 +77,8 @@ See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and wh
 
 ### Bulk import from an old CMS export
 
-The CSV takes one redirect per row, with no header row:
+The CSV takes one redirect per row. A header row is skipped only when its first column is
+`from`, as in the export below; any other first row is read as a redirect:
 
 ```csv
 /old/legacy/path,/shiny/new/path
@@ -193,11 +194,10 @@ not, so an export is the one place this bites. Pass a number larger than your re
 — `wp legacy-redirector list --format=count` tells you what that is, and reports the true
 total regardless of `--limit`.
 
-**Restoring an export needs the header row removed**, because `import` treats every line
-as data:
+Restore it as is; `import` skips the header row:
 
 ```bash
-tail -n +2 redirects.csv | wp legacy-redirector import - --mode=upsert
+wp legacy-redirector import redirects.csv --mode=upsert
 ```
 
 ### Act on a filtered set

@@ -47,6 +47,10 @@ final class ImportCommand extends WP_CLI_Command {
 	 * The optional status column can be 'enabled' or 'disabled'. If omitted,
 	 * new redirects are created enabled.
 	 *
+	 * A leading header row is skipped when its first column is `from`, so the
+	 * output of `wp legacy-redirector list --fields=from,to,status --format=csv`
+	 * can be imported unedited.
+	 *
 	 * ## OPTIONS
 	 *
 	 * <file>
@@ -143,6 +147,14 @@ final class ImportCommand extends WP_CLI_Command {
 			$status        = $data[2] ?? null; // Optional: 'enabled' or 'disabled'.
 
 			if ( '' === $redirect_from ) {
+				continue;
+			}
+
+			// Skip our own export header, so `list --format=csv` output can be
+			// re-imported unedited. Deliberately narrow: only an exact `from`
+			// in the first column of the first row, so a genuinely malformed
+			// first row is still reported as an error.
+			if ( 1 === $row && 0 === strcasecmp( $redirect_from, 'from' ) ) {
 				continue;
 			}
 
