@@ -50,6 +50,15 @@ WP_CLI::log( sprintf( 'Seeding %s (home path: %s)', $home, '' === $home_path ? '
  */
 
 $fixtures = array(
+	// The page behind the '/target' destination most seeded redirects point
+	// at, so following a source legitimately lands on real content instead
+	// of a 404.
+	'target'    => array(
+		'post_type'   => 'page',
+		'post_status' => 'publish',
+		'post_title'  => 'Seed Target: Landing Page',
+		'post_name'   => 'target',
+	),
 	'published' => array(
 		'post_type'   => 'post',
 		'post_status' => 'publish',
@@ -240,6 +249,9 @@ $rows = array(
 	array( '/normalise-internal-scheme-mismatch', str_replace( 'http://', 'https://', $home ) . '/target' ),
 
 	// --- Loops and chains ---------------------------------------------------
+	// The /chain-* rows are the legit chain: every hop 404s into the next
+	// redirect and the end is a published post, so following /chain-1 lands
+	// on real content. The loops and cycles are deliberately unresolvable.
 	array( '/self-referential', '/self-referential' ),
 	array( '/loop-a', '/loop-b' ),
 	array( '/loop-b', '/loop-a' ),
@@ -355,6 +367,45 @@ WP_CLI::runcommand(
 	)
 );
 unlink( $csv );
+
+/*
+ * The bulk filler gets old dates so it sinks to the end of the date-sorted
+ * list table, keeping the interesting rows on the first pages. The stored
+ * post_name is the md5 of the source path, the same convention the
+ * malformed-row pass below relies on.
+ */
+$bulk_epoch = strtotime( '2020-01-01 00:00:00' );
+
+for ( $i = 1; $i <= $bulk_count; $i++ ) {
+	$bulk_hash  = md5( sprintf( '/bulk/article-%04d', $i ) );
+	$bulk_posts = get_posts(
+		array(
+			'post_type'        => 'vip-legacy-redirect',
+			'name'             => $bulk_hash,
+			'post_status'      => 'any',
+			'posts_per_page'   => 1,
+			'fields'           => 'ids',
+			'suppress_filters' => false,
+		)
+	);
+
+	if ( empty( $bulk_posts ) ) {
+		continue;
+	}
+
+	wp_update_post(
+		array(
+			'ID'            => $bulk_posts[0],
+			'post_date'     => gmdate( 'Y-m-d H:i:s', $bulk_epoch + $i ),
+			'post_date_gmt' => gmdate( 'Y-m-d H:i:s', $bulk_epoch + $i ),
+			'edit_date'     => true,
+		)
+	);
+}
+
+if ( $bulk_count > 0 ) {
+	WP_CLI::log( sprintf( 'Backdated %d bulk redirect(s) to 2020 so they paginate last.', $bulk_count ) );
+}
 
 /*
  * ---------------------------------------------------------------------------
@@ -480,9 +531,9 @@ foreach ( $counts as $count_status => $count ) {
 	}
 }
 
-// Duplicate source hashes should never happen, but `import --mode=upsert` cannot
-// update a disabled redirect (find_by_source() is publish-only), so re-running
-// the seed with --skip-validation will duplicate the disabled rows.
+// Duplicate source hashes should never happen: upsert matches sources in any
+// status, so re-running the seed updates rows in place. This check is a
+// tripwire - any hit is a real bug worth seeing.
 $duplicates = $wpdb->get_results(
 	$wpdb->prepare(
 		"SELECT post_title, COUNT(*) AS total FROM {$wpdb->posts}
