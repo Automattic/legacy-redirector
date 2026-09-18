@@ -10,16 +10,17 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\ValidatePage;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
- * Shows the last recorded audit's problem count on the Redirects menu item,
- * the way core shows pending comments and plugin updates.
+ * Shows the last recorded audit's problem count beside the Validate submenu
+ * item, the way core badges the Updates submenu.
  *
  * Problems only: a warning is a judgement call for a person who is already
  * looking, but a problem means visitors are hitting broken redirects, and the
- * badge is what tells an admin who was not looking. Reads the recorded
- * summary rather than auditing, because it renders on every admin page.
+ * badge points at the page that explains them. Reads the recorded summary
+ * rather than auditing, because it renders on every admin page.
  */
 final class MenuBadge {
 
@@ -50,7 +51,7 @@ final class MenuBadge {
 	}
 
 	/**
-	 * Append the problem count to the Redirects menu label.
+	 * Append the problem count to the Validate submenu label.
 	 *
 	 * @return void
 	 */
@@ -61,21 +62,21 @@ final class MenuBadge {
 			return;
 		}
 
-		global $menu;
+		global $submenu;
 
-		if ( ! is_array( $menu ) ) {
+		$parent = 'edit.php?post_type=' . PostType::POST_TYPE;
+
+		if ( ! isset( $submenu[ $parent ] ) || ! is_array( $submenu[ $parent ] ) ) {
 			return;
 		}
 
-		$slug = 'edit.php?post_type=' . PostType::POST_TYPE;
-
-		foreach ( $menu as $index => $item ) {
-			if ( ( $item[2] ?? '' ) !== $slug ) {
+		foreach ( $submenu[ $parent ] as $index => $item ) {
+			if ( ( $item[2] ?? '' ) !== ValidatePage::PAGE_SLUG ) {
 				continue;
 			}
 
-			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Appending a count bubble to our own menu entry, the same way core badges pending comments.
-			$menu[ $index ][0] .= sprintf(
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Appending a count bubble to our own submenu entry, the same way core badges the Updates submenu.
+			$submenu[ $parent ][ $index ][0] .= sprintf(
 				' <span class="awaiting-mod count-%1$d"><span class="pending-count" aria-hidden="true">%2$s</span><span class="screen-reader-text">%3$s</span></span>',
 				$problems,
 				esc_html( number_format_i18n( $problems ) ),

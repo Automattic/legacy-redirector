@@ -251,7 +251,81 @@ class RedirectAuditor {
 
 		$slug = $this->lookup_slug( $url );
 
-		return '' === $slug || null === $this->resolve_path_to_post( $slug );
+		// WordPress always serves something for the home path - the front
+		// controller never 404s '/' - so landing there is conclusive.
+		if ( '' === $slug ) {
+			return false;
+		}
+
+		if ( null !== $this->resolve_path_to_post( $slug ) ) {
+			return false;
+		}
+
+		// No post behind the path, but it may be another redirect's source:
+		// a chain that lands on published content is just as conclusive as
+		// pointing at that content directly.
+		return ! $this->chain_lands_on_content( $redirect );
+	}
+
+	/**
+	 * Whether following the redirect chain from this redirect lands on
+	 * published content.
+	 *
+	 * @param Redirect $redirect The redirect whose chain to follow.
+	 * @return bool True when the chain's final destination is published content.
+	 */
+	private function chain_lands_on_content( Redirect $redirect ): bool {
+		if ( null === $this->loop_detector ) {
+			return false;
+		}
+
+		$end = $this->loop_detector->follow( $redirect );
+
+		// No hop was followed (the destination is no redirect's source), or
+		// the walk met a cycle: nothing conclusive either way.
+		if ( null === $end || $end === $redirect ) {
+			return false;
+		}
+
+		$destination = $end->destination();
+
+		if ( $destination->is_post_id() ) {
+			$post = get_post( $destination->as_post_id()->value() );
+
+			return null !== $post && $this->is_published( $post );
+		}
+
+		$end_url = $destination->as_url()->value();
+
+		// An external end still needs HTTP to judge.
+		if ( ! $this->is_relative_path( $end_url ) ) {
+			return false;
+		}
+
+		$end_slug = $this->lookup_slug( $end_url );
+
+		if ( '' === $end_slug ) {
+			return true;
+		}
+
+		$post = $this->resolve_path_to_post( $end_slug );
+
+		return null !== $post && $this->is_published( $post );
+	}
+
+	/**
+	 * Whether a destination post counts as published.
+	 *
+	 * The same rules check_post_status() reports findings from: the raw
+	 * property for trash (so attachments of trashed parents are not resolved
+	 * to their pre-trash status), get_post_status() otherwise (so
+	 * attachments' 'inherit' resolves against the parent).
+	 *
+	 * @param \WP_Post $post The destination post.
+	 * @return bool True when published.
+	 */
+	private function is_published( \WP_Post $post ): bool {
+		return 'trash' !== $post->post_status && 'publish' === get_post_status( $post );
 	}
 
 	/**

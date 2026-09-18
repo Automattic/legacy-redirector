@@ -457,7 +457,8 @@ final class RedirectAuditorTest extends MonkeyStubs {
 
 		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_post_id_redirect( 123 ) ) );
 		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', 'https://allowed.com/page' ) ) );
-		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/' ) ) );
+		// The front controller never 404s the home path, so '/' is conclusive.
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/' ) ) );
 
 		Functions\expect( 'get_page_by_path' )
 			->once()
@@ -471,6 +472,65 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			->once()
 			->andReturn( 0 );
 		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/unresolved-page' ) ) );
+	}
+
+	/**
+	 * Test a chain landing on published content is conclusive without HTTP.
+	 *
+	 * A destination with no post behind it may be another redirect's source;
+	 * following the hops to a published end answers the question the same as
+	 * pointing at that content directly.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_follows_chains_to_content(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$start = $this->create_redirect( '/start', '/hop' );
+		$end   = $this->create_redirect( '/hop', '/landing-page' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector->shouldReceive( 'follow' )->with( $start )->andReturn( $end );
+
+		$auditor = new RedirectAuditor( $detector );
+
+		// /start's destination resolves to no post; /landing-page (the chain
+		// end) resolves to a published one.
+		Functions\expect( 'get_page_by_path' )
+			->twice()
+			->andReturn( null, $this->create_mock_post( 'publish' ) );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertFalse( $auditor->destination_needs_http( $start ) );
+	}
+
+	/**
+	 * Test a chain meeting a cycle stays inconclusive.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_stays_true_when_the_chain_cycles(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$start = $this->create_redirect( '/start', '/hop' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector->shouldReceive( 'follow' )->with( $start )->andReturn( null );
+
+		$auditor = new RedirectAuditor( $detector );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertTrue( $auditor->destination_needs_http( $start ) );
 	}
 
 	/**
