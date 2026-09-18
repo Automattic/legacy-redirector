@@ -447,14 +447,15 @@ final class RedirectFormPage {
 	 */
 	private static function form_error_for( ?string $error_code ): string {
 		$map = array(
-			'duplicate-redirect-uri' => 'duplicate',
-			'invalid-values'         => 'same_source_destination',
-			'empty-postid'           => 'post_not_found',
-			'non-public'             => 'post_not_public',
-			'insert-not-allowed'     => 'save_failed',
-			'save-failed'            => 'save_failed',
-			'not-found'              => 'save_failed',
-			'invalid-source'         => 'invalid_source',
+			'duplicate-redirect-uri'   => 'duplicate',
+			'invalid-values'           => 'same_source_destination',
+			'empty-postid'             => 'post_not_found',
+			'non-public'               => 'post_not_public',
+			'insert-not-allowed'       => 'save_failed',
+			'save-failed'              => 'save_failed',
+			'not-found'                => 'save_failed',
+			'invalid-source'           => 'invalid_source',
+			'external-url-not-allowed' => 'host_not_allowed',
 		);
 
 		return $map[ (string) $error_code ] ?? 'invalid_destination';
@@ -508,6 +509,7 @@ final class RedirectFormPage {
 			'post_not_found'          => __( 'The destination post ID does not exist.', 'legacy-redirector' ),
 			'post_not_public'         => __( 'The destination post is not published.', 'legacy-redirector' ),
 			'path_not_found'          => __( 'The destination path does not exist.', 'legacy-redirector' ),
+			'host_not_allowed'        => __( 'The destination domain is not allowed, so the redirect would never run. Add the domain to the "allowed_redirect_hosts" filter first.', 'legacy-redirector' ),
 		);
 
 		return $messages[ $error ] ?? __( 'An error occurred.', 'legacy-redirector' );

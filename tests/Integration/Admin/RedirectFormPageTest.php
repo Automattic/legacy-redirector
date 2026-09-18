@@ -301,6 +301,28 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
+	 * Test a destination on a disallowed host is refused with its own error.
+	 *
+	 * The generic "destination is not valid" message gives the admin nothing
+	 * to act on; this failure has a fix - the allowed_redirect_hosts filter -
+	 * so the error must name it.
+	 */
+	public function test_disallowed_host_destination_redirects_with_named_error(): void {
+		$this->login_as_redirect_manager();
+		$this->submit(
+			array(
+				'redirect_from' => '/form-disallowed-host',
+				'redirect_to'   => 'https://not-allowed.example.net/page',
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		$this->assertStringContainsString( 'error=host_not_allowed', $location );
+		$this->assertSame( 0, $this->redirect_id_for( '/form-disallowed-host' ) );
+	}
+
+	/**
 	 * Test a destination post ID that does not exist is rejected.
 	 */
 	public function test_missing_destination_post_redirects_with_error(): void {
