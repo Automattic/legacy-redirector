@@ -146,6 +146,13 @@ that no longer go anywhere: a post that has since been deleted, trashed, or unpu
 relative path that does not resolve to published content; an external destination whose
 host is no longer in `allowed_redirect_hosts`; a row whose stored data is corrupt.
 
+It also reports possible loops: a destination that is itself another redirect's source,
+with the hops leading back to where they started. A loop only runs while every source in
+it returns a 404 — any member serving real content keeps it dormant — so it is reported
+as a warning for a person to judge, and `--fix` never disables loop members. Break a
+cycle by re-pointing or disabling one member. `create` and `import` give the same warning
+at the moment a new redirect closes a cycle.
+
 It also flags any redirect whose source is a path WordPress itself serves: `/wp-admin` and
 everything beneath it, `/wp-login.php` and the other root `wp-*.php` files, `/xmlrpc.php`,
 and anything under `/wp-json`, `/wp-content` or `/wp-includes`. Such a redirect does nothing

@@ -19,6 +19,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\ValidatePage
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager

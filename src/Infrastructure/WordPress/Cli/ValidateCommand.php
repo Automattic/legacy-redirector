@@ -84,6 +84,8 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * - External destinations whose host is not in allowed_redirect_hosts
 	 * - Sources on a path WordPress itself serves, such as /wp-admin or
 	 *   /wp-login.php (reported, never disabled by --fix)
+	 * - Redirects whose destinations lead back to themselves through other
+	 *   redirects (reported, never disabled by --fix)
 	 * - Optionally checks if destination URLs return 404
 	 *
 	 * With no arguments, validates redirects matching --status/--limit.

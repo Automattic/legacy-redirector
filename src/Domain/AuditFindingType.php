@@ -64,17 +64,24 @@ enum AuditFindingType: string {
 	case RESERVED_SOURCE = 'reserved_source';
 
 	/**
+	 * Following the destination through stored redirects leads back to this one.
+	 */
+	case POSSIBLE_LOOP = 'possible_loop';
+
+	/**
 	 * Whether this finding is a warning rather than a problem.
 	 *
 	 * A problem means the redirect is broken: its destination is gone or the
 	 * redirect will not run. A warning means it works but deserves a human
 	 * look, so automated fixes (like `validate --fix`) must leave it alone.
+	 * A loop is a warning because it is only live while every source in it
+	 * returns a 404; any member serving real content keeps it dormant.
 	 *
 	 * @return bool
 	 */
 	public function is_warning(): bool {
 		// phpcs:ignore PHPCompatibility.Variables.ForbiddenThisUseContexts.OutsideObjectContext -- Valid enum syntax.
-		return self::RESERVED_SOURCE === $this;
+		return in_array( $this, array( self::RESERVED_SOURCE, self::POSSIBLE_LOOP ), true );
 	}
 
 	/**
@@ -94,6 +101,7 @@ enum AuditFindingType: string {
 			self::URL_REQUEST_FAILED => 'Request failed',
 			self::CORRUPT_DATA     => 'Corrupt stored data',
 			self::RESERVED_SOURCE  => 'Reserved WordPress path',
+			self::POSSIBLE_LOOP    => 'Possible redirect loop',
 		};
 	}
 
@@ -115,6 +123,7 @@ enum AuditFindingType: string {
 			self::URL_REQUEST_FAILED => 'Failed to connect to the destination URL',
 			self::CORRUPT_DATA     => 'The stored row cannot be read as a valid redirect; delete it, or update it with a new source and destination',
 			self::RESERVED_SOURCE  => 'The source is a path WordPress itself serves. The redirect lies dormant while that path works, but answers it if the path ever returns a 404; for /wp-admin or /wp-login.php that locks you out of the dashboard',
+			self::POSSIBLE_LOOP    => 'Following the destination through the stored redirects leads back to this one. The loop only runs while every source in it returns a 404; break it by re-pointing or disabling one member',
 		};
 
 		if ( null !== $extra_info && '' !== $extra_info ) {

@@ -28,10 +28,30 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
 class RedirectAuditor {
 
 	/**
+	 * The loop detector, the one audit rule needing the repository.
+	 *
+	 * Optional so the write gate, which never asks about loops, can build an
+	 * auditor without wiring a repository through; without it, audits simply
+	 * carry no loop findings.
+	 *
+	 * @var LoopDetector|null
+	 */
+	private ?LoopDetector $loop_detector;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param LoopDetector|null $loop_detector The loop detector (optional).
+	 */
+	public function __construct( ?LoopDetector $loop_detector = null ) {
+		$this->loop_detector = $loop_detector;
+	}
+
+	/**
 	 * Audit a redirect, stored or proposed.
 	 *
-	 * Returns every finding: destination problems and source warnings alike.
-	 * A corrupt row carries placeholder values, so checking them would report
+	 * Returns every finding: destination problems and warnings alike. A
+	 * corrupt row carries placeholder values, so checking them would report
 	 * nonsense; the corruption itself is the only finding.
 	 *
 	 * @param Redirect $redirect   The redirect to audit.
@@ -50,19 +70,40 @@ class RedirectAuditor {
 			$findings[] = $destination_finding;
 		}
 
+		return array_merge( $findings, $this->warnings( $redirect ) );
+	}
+
+	/**
+	 * The warnings a redirect deserves, stored or proposed.
+	 *
+	 * Everything that flags a working redirect for a human look: reserved
+	 * sources and possible loops. Create and import report these after a
+	 * successful write.
+	 *
+	 * @param Redirect $redirect The redirect to check.
+	 * @return AuditFinding[] The warnings, empty if none.
+	 */
+	public function warnings( Redirect $redirect ): array {
+		$warnings = array();
+
 		foreach ( $this->source_warnings( $redirect->source() ) as $type ) {
-			$findings[] = new AuditFinding( $redirect, $type );
+			$warnings[] = new AuditFinding( $redirect, $type );
 		}
 
-		return $findings;
+		$cycle = null !== $this->loop_detector ? $this->loop_detector->find_cycle( $redirect ) : array();
+		if ( array() !== $cycle ) {
+			$warnings[] = new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, implode( ' -> ', $cycle ) );
+		}
+
+		return $warnings;
 	}
 
 	/**
 	 * The warnings a source path deserves, before any redirect exists for it.
 	 *
-	 * Takes a bare SourceUrl so the surfaces that check a source as it is
-	 * typed (the form's blur check, create, import) share the same rules as
-	 * the audit of a stored row.
+	 * Takes a bare SourceUrl so the form's blur check, which sees only the
+	 * source as it is typed, shares the same rules as the audit of a stored
+	 * row. Rules needing the destination too (loops) live in warnings().
 	 *
 	 * @param SourceUrl $source The source to check.
 	 * @return AuditFindingType[] The warning types, empty if none.
