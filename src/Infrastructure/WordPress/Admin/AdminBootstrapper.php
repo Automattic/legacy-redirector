@@ -13,8 +13,9 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ScanButton;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup;
@@ -22,7 +23,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFil
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\FormScreenSetup;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\ValidatePage;
 
 /**
  * Initializes all admin components for the redirect management interface.
@@ -65,11 +65,11 @@ final class AdminBootstrapper {
 	private RedirectAuditor $auditor;
 
 	/**
-	 * Stored audit results.
+	 * Per-row audit flags.
 	 *
-	 * @var AuditResults
+	 * @var AuditFlags
 	 */
-	private AuditResults $audit_results;
+	private AuditFlags $audit_flags;
 
 	/**
 	 * Constructor.
@@ -79,7 +79,7 @@ final class AdminBootstrapper {
 	 * @param RedirectValidator                $validator        Redirect validator.
 	 * @param RedirectQueryRepositoryInterface $query_repository Redirect query repository.
 	 * @param RedirectAuditor                  $auditor          Redirect auditor.
-	 * @param AuditResults                     $audit_results    Stored audit results.
+	 * @param AuditFlags                       $audit_flags      Per-row audit flags.
 	 */
 	public function __construct(
 		RedirectRepositoryInterface $repository,
@@ -87,14 +87,14 @@ final class AdminBootstrapper {
 		RedirectValidator $validator,
 		RedirectQueryRepositoryInterface $query_repository,
 		RedirectAuditor $auditor,
-		AuditResults $audit_results
+		AuditFlags $audit_flags
 	) {
 		$this->repository       = $repository;
 		$this->manager          = $manager;
 		$this->validator        = $validator;
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
-		$this->audit_results    = $audit_results;
+		$this->audit_flags      = $audit_flags;
 	}
 
 	/**
@@ -125,11 +125,14 @@ final class AdminBootstrapper {
 		$row_actions = new RowActionsManager( $this->repository );
 		$row_actions->register();
 
-		$view_filters = new ViewFilters( $this->query_repository );
+		$view_filters = new ViewFilters( $this->query_repository, $this->audit_flags );
 		$view_filters->register();
 
 		$list_screen_setup = new ListScreenSetup();
 		$list_screen_setup->register();
+
+		$scan_button = new ScanButton();
+		$scan_button->register();
 	}
 
 	/**
@@ -143,9 +146,6 @@ final class AdminBootstrapper {
 
 		$form_screen_setup = new FormScreenSetup();
 		$form_screen_setup->register();
-
-		$validate_page = new ValidatePage( $this->query_repository, $this->auditor, $this->audit_results );
-		$validate_page->register();
 	}
 
 	/**

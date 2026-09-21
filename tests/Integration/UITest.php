@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -24,6 +25,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
@@ -50,7 +52,7 @@ final class UITest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->view_filters = new ViewFilters( $this->query_repository() );
+		$this->view_filters = new ViewFilters( $this->query_repository(), new AuditFlags() );
 
 		$this->notices = new ValidationNotices(
 			$this->repository(),

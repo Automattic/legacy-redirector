@@ -15,11 +15,11 @@ use Automattic\LegacyRedirector\Domain\AuditFinding;
  * The recorded outcome of the most recent batch audit.
  *
  * Findings are computed live wherever they are displayed, but surfaces that
- * cannot afford to compute - the menu badge on every admin page, and later a
- * findings filter - read this summary instead. Batch audits (the Validate
- * page, `validate` over a batch, and the scheduled daily run) record here;
- * audits of explicitly named redirects do not, so a spot check of one row
- * cannot masquerade as the site-wide count.
+ * cannot afford to compute - the menu badge on every admin page - read this
+ * summary instead. Batch audits (the admin scan, `validate` over a batch,
+ * and the scheduled daily run) record here; audits of explicitly named
+ * redirects do not, so a spot check of one row cannot masquerade as the
+ * site-wide count.
  */
 final class AuditResults {
 
@@ -52,6 +52,22 @@ final class AuditResults {
 			}
 		}
 
+		$this->record_counts( $problems, $warnings, $checked, $with_urls );
+	}
+
+	/**
+	 * Record a batch audit's outcome from already-tallied counts.
+	 *
+	 * For runs whose findings never exist as one in-memory array, such as the
+	 * batched scan, which counts from the per-row flags it stored.
+	 *
+	 * @param int  $problems  How many problems the audit found.
+	 * @param int  $warnings  How many warnings the audit found.
+	 * @param int  $checked   How many redirects were checked.
+	 * @param bool $with_urls Whether URL destinations were requested over HTTP.
+	 * @return void
+	 */
+	public function record_counts( int $problems, int $warnings, int $checked, bool $with_urls ): void {
 		update_option(
 			self::OPTION,
 			array(

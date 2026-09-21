@@ -33,6 +33,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  */
 final class MultisiteTest extends TestCase {
 

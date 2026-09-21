@@ -48,6 +48,7 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  */
 final class CorruptRedirectRowsTest extends TestCase {
 

@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\MenuBadge;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\ValidatePage;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditScheduler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
@@ -36,6 +35,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -51,7 +51,7 @@ final class AuditResultsTest extends TestCase {
 	 */
 	public function tear_down(): void {
 		delete_option( AuditResults::OPTION );
-		unset( $GLOBALS['submenu'] );
+		unset( $GLOBALS['menu'] );
 		AuditScheduler::unschedule();
 
 		parent::tear_down();
@@ -120,25 +120,21 @@ final class AuditResultsTest extends TestCase {
 	}
 
 	/**
-	 * Prime the submenu global with a Validate entry.
+	 * Prime the menu global with the Redirects entry.
 	 *
-	 * @return string The parent menu slug.
+	 * @return int The menu index of the entry.
 	 */
-	private function prime_submenu(): string {
-		$parent = 'edit.php?post_type=' . PostType::POST_TYPE;
-
-		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored in tear_down; the badge writes to the real submenu global.
-		$GLOBALS['submenu'] = array(
-			$parent => array(
-				5 => array( 'Validate', 'manage_redirects', ValidatePage::PAGE_SLUG ),
-			),
+	private function prime_menu(): int {
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored in tear_down; the badge writes to the real menu global.
+		$GLOBALS['menu'] = array(
+			5 => array( 'Redirects', 'manage_redirects', 'edit.php?post_type=' . PostType::POST_TYPE ),
 		);
 
-		return $parent;
+		return 5;
 	}
 
 	/**
-	 * Test the badge shows the recorded problem count beside Validate, problems only.
+	 * Test the badge shows the recorded problem count on the Redirects menu, problems only.
 	 */
 	public function test_menu_badge_appends_problem_count(): void {
 		update_option(
@@ -152,12 +148,12 @@ final class AuditResultsTest extends TestCase {
 			)
 		);
 
-		$parent = $this->prime_submenu();
+		$index = $this->prime_menu();
 
 		( new MenuBadge( $this->audit_results() ) )->add_badge();
 
-		$this->assertStringContainsString( 'awaiting-mod count-3', $GLOBALS['submenu'][ $parent ][5][0] );
-		$this->assertStringContainsString( '3 redirects with problems', $GLOBALS['submenu'][ $parent ][5][0] );
+		$this->assertStringContainsString( 'awaiting-mod count-3', $GLOBALS['menu'][ $index ][0] );
+		$this->assertStringContainsString( '3 redirects with problems', $GLOBALS['menu'][ $index ][0] );
 	}
 
 	/**
@@ -166,10 +162,10 @@ final class AuditResultsTest extends TestCase {
 	public function test_menu_badge_absent_without_problems(): void {
 		$this->audit_results()->record( array(), 5, false );
 
-		$parent = $this->prime_submenu();
+		$index = $this->prime_menu();
 
 		( new MenuBadge( $this->audit_results() ) )->add_badge();
 
-		$this->assertSame( 'Validate', $GLOBALS['submenu'][ $parent ][5][0] );
+		$this->assertSame( 'Redirects', $GLOBALS['menu'][ $index ][0] );
 	}
 }
