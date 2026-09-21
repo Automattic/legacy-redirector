@@ -14,7 +14,7 @@ The rename itself touches no stored redirect data, and you do not need to reinst
 |------|-----|-----|
 | Plugin name | WPCOM Legacy Redirector | Legacy Redirector |
 | Main file | `wpcom-legacy-redirector.php` | unchanged, so the plugin stays active across the upgrade |
-| WP-CLI namespace | `wp wpcom-legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias |
+| WP-CLI namespace | `wp wpcom-legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias for the pre-2.0 commands |
 | Filter prefix | `wpcom_legacy_redirector_*` | `legacy_redirector_*`, with the old names kept as deprecated aliases |
 | Text domain | `wpcom-legacy-redirector` | `legacy-redirector` |
 | Composer package | `automattic/wpcom-legacy-redirector` | unchanged, so your `require` entry keeps working |
@@ -198,7 +198,7 @@ $id = $result->redirect_id();
 
 ### WP-CLI Command Changes
 
-The WP-CLI command set has been redesigned. The command *namespace* is aliased, so `wp wpcom-legacy-redirector <subcommand>` still reaches `wp legacy-redirector <subcommand>` with a deprecation warning on STDERR. The *subcommands* below have no aliases, so any scripts, runbooks, or cron jobs calling them must be updated:
+The WP-CLI command set has been redesigned. The old `wp wpcom-legacy-redirector` namespace still reaches `find-domains` and `import-from-meta`, with a deprecation warning on STDERR. Commands added in 2.0 are only available under `wp legacy-redirector`. The *subcommands* below have no aliases, so any scripts, runbooks, or cron jobs calling them must be updated. The removed ones stay registered under the old namespace only to fail with an error that names their replacement:
 
 Version 1.3.0 shipped three commands. All three change:
 

@@ -39,12 +39,18 @@ wp legacy-redirector disable /old-page 456 /another-old-page
 
 ## The deprecated namespace
 
-The pre-2.0 `wp wpcom-legacy-redirector` namespace is still registered, so existing
-scripts keep working. Each invocation through it prints a deprecation warning naming the
-`wp legacy-redirector` equivalent, and it will be removed in a future major version.
+The pre-2.0 `wp wpcom-legacy-redirector` namespace is still registered for the commands
+that existed before 2.0, so existing scripts keep reaching them:
 
-The warning goes to STDERR, so piping `--porcelain` or `--format=csv` output through the
-old namespace still produces clean data on STDOUT.
+- `find-domains` and `import-from-meta` run as before, with a deprecation warning naming
+  the `wp legacy-redirector` equivalent. The warning goes to STDERR, so `--format`
+  output piped through the old namespace stays clean on STDOUT. Note that
+  `import-from-meta` flags are now kebab-case.
+- `insert-redirect`, `import-from-csv`, and `export-to-csv` were removed in 2.0. Calling
+  one fails with an error that names its replacement.
+
+Commands added in 2.0, such as `create` and `list`, are only available under
+`wp legacy-redirector`. The old namespace will be removed in a future major version.
 
 ## Recipes
 
