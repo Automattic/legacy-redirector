@@ -32,6 +32,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectReposito
  * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class LookupTest extends TestCase {

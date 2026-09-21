@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 
@@ -26,12 +27,21 @@ final class ViewFilters {
 	private RedirectQueryRepositoryInterface $query_repository;
 
 	/**
+	 * The per-row audit flags.
+	 *
+	 * @var AuditFlags
+	 */
+	private AuditFlags $flags;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectQueryRepositoryInterface $query_repository The redirect query repository.
+	 * @param AuditFlags                       $flags            The per-row audit flags.
 	 */
-	public function __construct( RedirectQueryRepositoryInterface $query_repository ) {
+	public function __construct( RedirectQueryRepositoryInterface $query_repository, AuditFlags $flags ) {
 		$this->query_repository = $query_repository;
+		$this->flags            = $flags;
 	}
 
 	/**
@@ -42,6 +52,7 @@ final class ViewFilters {
 	public function register(): void {
 		add_filter( 'views_edit-' . PostType::POST_TYPE, array( $this, 'customize_views' ) );
 		add_action( 'pre_get_posts', array( $this, 'filter_by_destination_type' ) );
+		add_action( 'pre_get_posts', array( $this, 'filter_by_audit_flag' ) );
 		add_filter( 'posts_where', array( $this, 'add_destination_type_where_clause' ), 10, 2 );
 	}
 
@@ -81,6 +92,9 @@ final class ViewFilters {
 
 		// Add destination type filters.
 		$views = $this->add_destination_type_views( $views );
+
+		// Add the "Has issues" view once a Check all run has completed.
+		$views = $this->add_audit_flag_view( $views );
 
 		// Re-add Trash at the end.
 		if ( null !== $trash ) {
@@ -153,6 +167,79 @@ final class ViewFilters {
 	 */
 	private function get_destination_type_counts(): array {
 		return $this->query_repository->count_by_destination_type();
+	}
+
+	/**
+	 * Add the "Has issues" view reading the stored per-row flags.
+	 *
+	 * Only shown once a Check all run has completed - before that there are
+	 * no flags to read. Shown even at zero, because "checked and clean" is an
+	 * answer, not an absence. The label carries the run's check time: the
+	 * flags are a snapshot, and the time is what makes that honest.
+	 *
+	 * @param array<string, string> $views Existing views.
+	 * @return array<string, string> Modified views.
+	 */
+	private function add_audit_flag_view( array $views ): array {
+		$checked_at = $this->flags->checked_at();
+
+		if ( null === $checked_at ) {
+			return $views;
+		}
+
+		$counts = $this->flags->counts();
+		$url    = add_query_arg(
+			'audit_flagged',
+			'1',
+			admin_url( 'edit.php?post_type=' . PostType::POST_TYPE )
+		);
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
+		$current = isset( $_GET['audit_flagged'] ) ? 'current' : '';
+
+		$views['audit_flagged'] = sprintf(
+			'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
+			esc_url( $url ),
+			esc_attr( $current ),
+			esc_html(
+				sprintf(
+					/* translators: %s: how long ago the last Check all run completed, e.g. "2 hours" */
+					__( 'Has issues (checked %s ago)', 'legacy-redirector' ),
+					human_time_diff( $checked_at )
+				)
+			),
+			number_format_i18n( $counts['problem'] + $counts['warning'] )
+		);
+
+		return $views;
+	}
+
+	/**
+	 * Restrict the admin list to flagged rows when the "Has issues" view is active.
+	 *
+	 * Setting meta_key alone joins postmeta on the flag key: only flagged rows
+	 * carry it, so the join stays proportional to the number of problem rows,
+	 * not the table size, and the ordinary bulk actions apply to the result.
+	 *
+	 * @param \WP_Query $query The query object.
+	 * @return void
+	 */
+	public function filter_by_audit_flag( \WP_Query $query ): void {
+		if ( ! is_admin() || ! $query->is_main_query() ) {
+			return;
+		}
+
+		if ( PostType::POST_TYPE !== $query->get( 'post_type' ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filtering.
+		if ( ! isset( $_GET['audit_flagged'] ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Only flagged rows carry the key; admin list screen only.
+		$query->set( 'meta_key', AuditFlags::META_KEY );
 	}
 
 	/**

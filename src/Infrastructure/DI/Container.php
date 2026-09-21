@@ -18,6 +18,7 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
@@ -179,6 +180,18 @@ final class Container {
 			$this->services['audit_results'] = new AuditResults();
 		}
 		return $this->services['audit_results'];
+	}
+
+	/**
+	 * Get the per-row audit flags.
+	 *
+	 * @return AuditFlags
+	 */
+	public function audit_flags(): AuditFlags {
+		if ( ! isset( $this->services['audit_flags'] ) ) {
+			$this->services['audit_flags'] = new AuditFlags();
+		}
+		return $this->services['audit_flags'];
 	}
 
 	/**

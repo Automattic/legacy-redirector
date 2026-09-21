@@ -13,8 +13,10 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\CheckAllButton;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup;
@@ -72,6 +74,13 @@ final class AdminBootstrapper {
 	private AuditResults $audit_results;
 
 	/**
+	 * Per-row audit flags.
+	 *
+	 * @var AuditFlags
+	 */
+	private AuditFlags $audit_flags;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface      $repository       Redirect repository.
@@ -80,6 +89,7 @@ final class AdminBootstrapper {
 	 * @param RedirectQueryRepositoryInterface $query_repository Redirect query repository.
 	 * @param RedirectAuditor                  $auditor          Redirect auditor.
 	 * @param AuditResults                     $audit_results    Stored audit results.
+	 * @param AuditFlags                       $audit_flags      Per-row audit flags.
 	 */
 	public function __construct(
 		RedirectRepositoryInterface $repository,
@@ -87,7 +97,8 @@ final class AdminBootstrapper {
 		RedirectValidator $validator,
 		RedirectQueryRepositoryInterface $query_repository,
 		RedirectAuditor $auditor,
-		AuditResults $audit_results
+		AuditResults $audit_results,
+		AuditFlags $audit_flags
 	) {
 		$this->repository       = $repository;
 		$this->manager          = $manager;
@@ -95,6 +106,7 @@ final class AdminBootstrapper {
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
 		$this->audit_results    = $audit_results;
+		$this->audit_flags      = $audit_flags;
 	}
 
 	/**
@@ -125,11 +137,14 @@ final class AdminBootstrapper {
 		$row_actions = new RowActionsManager( $this->repository );
 		$row_actions->register();
 
-		$view_filters = new ViewFilters( $this->query_repository );
+		$view_filters = new ViewFilters( $this->query_repository, $this->audit_flags );
 		$view_filters->register();
 
 		$list_screen_setup = new ListScreenSetup();
 		$list_screen_setup->register();
+
+		$check_all_button = new CheckAllButton();
+		$check_all_button->register();
 	}
 
 	/**
