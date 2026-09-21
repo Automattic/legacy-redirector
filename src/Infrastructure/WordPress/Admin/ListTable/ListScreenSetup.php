@@ -160,7 +160,7 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'To Paths', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'To External URLs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'The <strong>Check all</strong> button next to the page title audits every redirect (enabled and disabled) in batches, without making HTTP requests. Afterwards, a <strong>Has issues</strong> filter shows only the redirects whose last check found a problem or warning, so bulk actions can be applied straight to them. The filter is a snapshot labelled with its check time: editing a redirect clears its flag until the next check.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'The <strong>Check all</strong> button in the toolbar above the list audits every redirect (enabled and disabled) in batches, without making HTTP requests. Afterwards, a <strong>Has issues</strong> filter shows only the redirects whose last check found a problem or warning, so bulk actions can be applied straight to them. The filter is a snapshot labelled with its check time: editing a redirect clears its flag until the next check.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**

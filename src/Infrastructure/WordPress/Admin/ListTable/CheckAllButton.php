@@ -13,9 +13,12 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
- * Renders a page-title button that audits every redirect in paged batches
+ * Renders a toolbar button that audits every redirect in paged batches
  * against the check-all REST route, with a native progress element, then
  * reloads so the "Has issues" view and its counts reflect the finished run.
+ *
+ * Lives in the list table's top toolbar, to the right of the bulk actions
+ * and date filter controls, where the other whole-table operations are.
  */
 final class CheckAllButton {
 
@@ -25,10 +28,22 @@ final class CheckAllButton {
 	 * @return void
 	 */
 	public function register(): void {
-		// Priority 1: after ListScreenSetup injects the Add New button at 0,
-		// so this button lands to its right.
-		add_action( 'admin_notices', array( $this, 'render' ), 1 );
+		add_action( 'manage_posts_extra_tablenav', array( $this, 'render' ) );
+		add_action( 'admin_footer-edit.php', array( $this, 'render_script' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+	}
+
+	/**
+	 * Whether the current screen is the redirects list for a managing user.
+	 *
+	 * @return bool
+	 */
+	private function should_render(): bool {
+		$screen = get_current_screen();
+
+		return $screen
+			&& 'edit-' . PostType::POST_TYPE === $screen->id
+			&& current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY );
 	}
 
 	/**
@@ -44,50 +59,53 @@ final class CheckAllButton {
 	}
 
 	/**
-	 * Render the button, the progress bar, and the batch loop script.
+	 * Render the button and progress bar in the top toolbar.
+	 *
+	 * Fires after the bulk actions and date filter controls, so the button
+	 * sits to their right in the same row.
+	 *
+	 * @param string $which Which toolbar is rendering: 'top' or 'bottom'.
+	 * @return void
+	 */
+	public function render( string $which ): void {
+		if ( 'top' !== $which || ! $this->should_render() ) {
+			return;
+		}
+		?>
+		<div class="alignleft actions" id="legacy-redirector-check-all">
+			<button type="button" class="button"><?php esc_html_e( 'Check all', 'legacy-redirector' ); ?></button>
+			<progress max="1" value="0" hidden></progress>
+			<span role="status"></span>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the batch loop script.
 	 *
 	 * @return void
 	 */
-	public function render(): void {
-		$screen = get_current_screen();
-		if ( ! $screen || 'edit-' . PostType::POST_TYPE !== $screen->id ) {
-			return;
-		}
-
-		if ( ! current_user_can( Capability::MANAGE_REDIRECTS_CAPABILITY ) ) {
+	public function render_script(): void {
+		if ( ! $this->should_render() ) {
 			return;
 		}
 
 		$config = array(
-			'path'       => '/legacy-redirector/v1/check-all',
-			'buttonText' => __( 'Check all', 'legacy-redirector' ),
+			'path'     => '/legacy-redirector/v1/check-all',
 			/* translators: 1: redirects checked so far, 2: total redirects */
-			'progress'   => __( 'Checked %1$s of %2$s redirects…', 'legacy-redirector' ),
-			'failed'     => __( 'Checking failed; the flags cover the redirects checked so far. Reload and try again.', 'legacy-redirector' ),
+			'progress' => __( 'Checked %1$s of %2$s redirects…', 'legacy-redirector' ),
+			'failed'   => __( 'Checking failed; the flags cover the redirects checked so far. Reload and try again.', 'legacy-redirector' ),
 		);
 		?>
-		<div id="legacy-redirector-check-all-progress" hidden>
-			<progress max="1" value="0"></progress>
-			<span role="status"></span>
-		</div>
 		<script>
 		document.addEventListener('DOMContentLoaded', function () {
 			var config = <?php echo wp_json_encode( $config ); ?>;
-			var title = document.querySelector('.wp-heading-inline');
-			var box = document.getElementById('legacy-redirector-check-all-progress');
-			if (!title || !box) {
+			var box = document.getElementById('legacy-redirector-check-all');
+			if (!box) {
 				return;
 			}
 
-			var button = document.createElement('button');
-			button.type = 'button';
-			button.className = 'page-title-action';
-			button.textContent = config.buttonText;
-			// After the Add New button when ListScreenSetup has injected it.
-			var actions = title.parentNode.querySelectorAll('.page-title-action');
-			var anchor = actions.length ? actions[actions.length - 1] : title;
-			anchor.parentNode.insertBefore(button, anchor.nextSibling);
-
+			var button = box.querySelector('button');
 			var bar = box.querySelector('progress');
 			var status = box.querySelector('span');
 
@@ -107,7 +125,7 @@ final class CheckAllButton {
 
 			button.addEventListener('click', async function () {
 				button.disabled = true;
-				box.hidden = false;
+				bar.hidden = false;
 				var offset = 0;
 
 				try {
