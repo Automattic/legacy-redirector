@@ -71,6 +71,22 @@ final class ListScreenSetup {
 			)
 		);
 
+		$screen->add_help_tab(
+			array(
+				'id'      => 'scan-and-test',
+				'title'   => __( 'Scan and Test', 'legacy-redirector' ),
+				'content' => $this->get_scan_and_test_help(),
+			)
+		);
+
+		$screen->add_help_tab(
+			array(
+				'id'      => 'checks',
+				'title'   => __( 'What is checked', 'legacy-redirector' ),
+				'content' => $this->get_checks_help(),
+			)
+		);
+
 		// Two separate questions, deliberately gated separately. Per-site
 		// independence is a multisite fact. The base URL prefix is a home-path
 		// one: it shows wherever home is not the domain root, which includes a
@@ -160,7 +176,44 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'To Paths', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'To External URLs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( '<strong>Scan for issues</strong>, in the toolbar above the list, checks the stored details of every redirect (enabled and disabled) in batches. A scan never requests a URL, so it is safe at any size but cannot see problems only a live request reveals; use the <strong>Test</strong> action for that. After a scan, a <strong>Has issues</strong> filter shows only the redirects it flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with its scan time: editing a redirect clears its flag until the next scan.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'After <strong>Scan for issues</strong> has run, a <strong>Has issues</strong> filter shows only the redirects the scan flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with its scan time: editing a redirect clears its flag until the next scan. See the Scan and Test help tab for what a scan can and cannot see.', 'legacy-redirector' ) . '</p>';
+	}
+
+	/**
+	 * Get the Scan and Test help content.
+	 *
+	 * The one place the two kinds of check are set side by side, so nobody
+	 * reads a clean scan as a guarantee the redirects work live.
+	 *
+	 * @return string Help content HTML.
+	 */
+	private function get_scan_and_test_help(): string {
+		return '<p>' . __( 'There are two ways to check redirects, and they look at different evidence:', 'legacy-redirector' ) . '</p>' .
+			'<ul>' .
+			'<li>' . __( '<strong>Scan for issues</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. A scan never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored.', 'legacy-redirector' ) . '</li>' .
+			'</ul>' .
+			'<p>' . __( 'So a clean scan does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector validate --check-urls</code>) can see that. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look, and nothing automated will ever disable it. A row whose stored data cannot be read as a redirect at all is reported as corrupt: delete it, or edit it with a full new source and destination.', 'legacy-redirector' ) . '</p>';
+	}
+
+	/**
+	 * Get the help content describing every check a scan runs.
+	 *
+	 * @return string Help content HTML.
+	 */
+	private function get_checks_help(): string {
+		return '<p>' . __( 'The source path (Redirect From) is checked for:', 'legacy-redirector' ) . '</p>' .
+			'<ul>' .
+			'<li>' . __( '<strong>Reserved WordPress paths</strong> (warning): a source WordPress itself serves, such as <code>/wp-admin</code>, <code>/wp-login.php</code>, the other root <code>wp-*.php</code> files, <code>/xmlrpc.php</code>, or anything under <code>/wp-json</code>, <code>/wp-content</code> or <code>/wp-includes</code>. Such a redirect lies dormant while the path works, because redirects only answer 404s, but it takes over the moment that path breaks; for <code>/wp-admin</code> or <code>/wp-login.php</code> that locks you out of the dashboard. Keep it only if it is a genuine legacy URL.', 'legacy-redirector' ) . '</li>' .
+			'</ul>' .
+			'<p>' . __( 'The destination (Redirect To) is checked according to its form:', 'legacy-redirector' ) . '</p>' .
+			'<ul>' .
+			'<li>' . __( '<strong>Post ID destinations</strong>: the post must still exist, not be in the trash, and be published. Media attachments count as published.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Relative path destinations</strong>: the path is resolved to a post of any registered post type, including via dated permalinks, and that post must be published. A path whose post was trashed is recognised even though trashing renames the slug. A path that resolves to no post at all - an archive, a rewrite endpoint, a page served outside WordPress - is not reported, because only a live request can judge it.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>External URL destinations</strong>: the host must be in the <code>allowed_redirect_hosts</code> filter, or WordPress will refuse the redirect at request time and the visitor gets a 404.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Possible loops</strong> (warning): a destination that is itself another redirect\'s source, with the hops leading back to where they started. A loop only runs while every source in it returns a 404 - any member serving real content keeps it dormant - so a person should judge it; break a cycle by re-pointing or disabling one member.', 'legacy-redirector' ) . '</li>' .
+			'</ul>' .
+			'<p>' . __( 'Whether a URL destination actually responds, and whether the redirect fires for a visitor, are live questions: the Test action answers them for one redirect, and <code>wp legacy-redirector validate --check-urls</code> answers them in bulk from the command line.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**

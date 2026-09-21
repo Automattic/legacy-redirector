@@ -15,11 +15,11 @@ use Automattic\LegacyRedirector\Domain\AuditFinding;
  * The recorded outcome of the most recent batch audit.
  *
  * Findings are computed live wherever they are displayed, but surfaces that
- * cannot afford to compute - the menu badge on every admin page, and later a
- * findings filter - read this summary instead. Batch audits (the Validate
- * page, `validate` over a batch, and the scheduled daily run) record here;
- * audits of explicitly named redirects do not, so a spot check of one row
- * cannot masquerade as the site-wide count.
+ * cannot afford to compute - the menu badge on every admin page - read this
+ * summary instead. Batch audits (the admin scan, `validate` over a batch,
+ * and the scheduled daily run) record here; audits of explicitly named
+ * redirects do not, so a spot check of one row cannot masquerade as the
+ * site-wide count.
  */
 final class AuditResults {
 

@@ -17,8 +17,8 @@ namespace Automattic\LegacyRedirector\Domain;
  * is_warning().
  *
  * Adding a case? The user-facing explanations live outside this enum and
- * must be updated with it: the Validate page's contextual help
- * (ValidatePage::add_contextual_help()), the Add/Edit form's contextual help
+ * must be updated with it: the list screen's contextual help
+ * (ListScreenSetup::get_checks_help()), the Add/Edit form's contextual help
  * (FormScreenSetup), the validate ability description, the ValidateCommand
  * docblock, and docs/cli.md.
  */
