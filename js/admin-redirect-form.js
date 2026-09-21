@@ -2,15 +2,13 @@
  * Redirect form behavior: duplicate and reserved-source checking, and
  * destination autocomplete for the Add/Edit Redirect admin pages.
  *
+ * Requests go through wp.apiFetch, which handles the REST nonce: the source
+ * and destination checks call the plugin's legacy-redirector/v1 routes, and
+ * the autocomplete searches with core's /wp/v2/search endpoint.
+ *
  * Configuration is provided by wp_localize_script() as
  * `legacyRedirectorForm`:
  * - postId            Redirect post ID being edited (0 on the Add page).
- * - checkAction       AJAX action for the source check (duplicate and reserved path).
- * - checkNonce        Nonce for the source check.
- * - searchAction      AJAX action for destination post search.
- * - searchNonce       Nonce for destination post search.
- * - checkDestAction   AJAX action for the destination check (allowed host).
- * - checkDestNonce    Nonce for the destination check.
  * - duplicateMessage  Message shown when the source already redirects.
  * - reservedMessage   Warning shown when the source is a path WordPress
  *                     itself serves. The form still saves.
@@ -24,6 +22,46 @@ jQuery( document ).ready( function ( $ ) {
 	var postId = parseInt( settings.postId, 10 ) || 0;
 	var searchTimeout;
 	var selectedIndex = -1;
+	var entityDecoder = document.createElement( 'textarea' );
+
+	// Core's search endpoint returns titles with texturized HTML entities
+	// (e.g. &#8217; for an apostrophe), which .text() would show literally.
+	// A textarea decodes without executing anything.
+	function decodeEntities( text ) {
+		entityDecoder.innerHTML = text;
+		return entityDecoder.value;
+	}
+
+	// Render search results into the suggestions dropdown; the fetch code
+	// decides when to call this, this decides what the results look like.
+	function renderSuggestions( posts ) {
+		if ( ! posts.length ) {
+			$( '#redirect_to_suggestions' ).hide();
+			return;
+		}
+
+		// Build via DOM APIs, not string concatenation: titles and
+		// type labels are attacker-influenced and must be escaped
+		// in both attribute and text positions.
+		var $container = $( '#redirect_to_suggestions' ).empty();
+		$.each( posts, function ( i, post ) {
+			var title = decodeEntities( post.title );
+			$( '<div>', {
+				'class': 'redirect-suggestion',
+				'data-id': post.id,
+				'data-title': title,
+				'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
+			} )
+				.append(
+					$( '<strong>' ).text( title ),
+					'<br>',
+					$( '<small>' ).css( 'color', '#666' ).text( post.subtype + ' (ID: ' + post.id + ')' )
+				)
+				.appendTo( $container );
+		} );
+		$container.show();
+		selectedIndex = -1; // Reset selection when new results appear.
+	}
 
 	// Check the source on blur: a duplicate blocks the save, a reserved path
 	// only warns, so both are known before anything is submitted.
@@ -35,32 +73,27 @@ jQuery( document ).ready( function ( $ ) {
 			return;
 		}
 
-		$.ajax( {
-			url: ajaxurl,
-			type: 'POST',
-			data: {
-				action: settings.checkAction,
-				redirect_from: newFrom,
-				exclude_id: postId,
-				nonce: settings.checkNonce
-			},
-			success: function ( response ) {
-				if ( response.success && response.data.exists ) {
-					$( '#redirect_from_error' )
-						.text( settings.duplicateMessage )
-						.show();
-				} else {
-					$( '#redirect_from_error' ).hide();
-				}
-
-				if ( response.success && response.data.reserved ) {
-					$( '#redirect_from_warning' )
-						.text( settings.reservedMessage )
-						.show();
-				} else {
-					$( '#redirect_from_warning' ).hide();
-				}
+		wp.apiFetch( {
+			path: '/legacy-redirector/v1/check-source?source=' + encodeURIComponent( newFrom ) + '&exclude_id=' + postId
+		} ).then( function ( result ) {
+			if ( result.exists ) {
+				$( '#redirect_from_error' )
+					.text( settings.duplicateMessage )
+					.show();
+			} else {
+				$( '#redirect_from_error' ).hide();
 			}
+
+			if ( result.reserved ) {
+				$( '#redirect_from_warning' )
+					.text( settings.reservedMessage )
+					.show();
+			} else {
+				$( '#redirect_from_warning' ).hide();
+			}
+		} ).catch( function () {
+			$( '#redirect_from_error' ).hide();
+			$( '#redirect_from_warning' ).hide();
 		} );
 	} );
 
@@ -75,23 +108,18 @@ jQuery( document ).ready( function ( $ ) {
 			return;
 		}
 
-		$.ajax( {
-			url: ajaxurl,
-			type: 'POST',
-			data: {
-				action: settings.checkDestAction,
-				redirect_to: destination,
-				nonce: settings.checkDestNonce
-			},
-			success: function ( response ) {
-				if ( response.success && false === response.data.host_allowed ) {
-					$( '#redirect_to_error' )
-						.text( settings.hostNotAllowedMessage )
-						.show();
-				} else {
-					$( '#redirect_to_error' ).hide();
-				}
+		wp.apiFetch( {
+			path: '/legacy-redirector/v1/check-destination?destination=' + encodeURIComponent( destination )
+		} ).then( function ( result ) {
+			if ( false === result.host_allowed ) {
+				$( '#redirect_to_error' )
+					.text( settings.hostNotAllowedMessage )
+					.show();
+			} else {
+				$( '#redirect_to_error' ).hide();
 			}
+		} ).catch( function () {
+			$( '#redirect_to_error' ).hide();
 		} );
 	} );
 
@@ -163,40 +191,10 @@ jQuery( document ).ready( function ( $ ) {
 		}
 
 		searchTimeout = setTimeout( function () {
-			$.ajax( {
-				url: ajaxurl,
-				type: 'POST',
-				data: {
-					action: settings.searchAction,
-					search: val,
-					nonce: settings.searchNonce
-				},
-				success: function ( response ) {
-					if ( response.success && response.data.posts.length > 0 ) {
-						// Build via DOM APIs, not string concatenation: titles and
-						// type labels are attacker-influenced and must be escaped
-						// in both attribute and text positions.
-						var $container = $( '#redirect_to_suggestions' ).empty();
-						$.each( response.data.posts, function ( i, post ) {
-							$( '<div>', {
-								'class': 'redirect-suggestion',
-								'data-id': post.id,
-								'data-title': post.title,
-								'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
-							} )
-								.append(
-									$( '<strong>' ).text( post.title ),
-									'<br>',
-									$( '<small>' ).css( 'color', '#666' ).text( post.type + ' (ID: ' + post.id + ')' )
-								)
-								.appendTo( $container );
-						} );
-						$container.show();
-						selectedIndex = -1; // Reset selection when new results appear.
-					} else {
-						$( '#redirect_to_suggestions' ).hide();
-					}
-				}
+			wp.apiFetch( {
+				path: '/wp/v2/search?search=' + encodeURIComponent( val ) + '&subtype=post,page&per_page=10'
+			} ).then( renderSuggestions ).catch( function () {
+				$( '#redirect_to_suggestions' ).hide();
 			} );
 		}, 300 );
 	} );

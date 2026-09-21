@@ -31,6 +31,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectorCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ChecksController;
 
 /**
  * Bootstraps the plugin by registering all hooks and initializing components.
@@ -94,13 +95,18 @@ final class PluginBootstrapper {
 		add_filter( 'template_redirect', array( $this, 'maybe_do_redirect' ), 0 );
 
 		// Initialize admin components. All of them hook admin-only surfaces
-		// (admin screens, admin-post.php, admin-ajax.php — all define WP_ADMIN),
+		// (admin screens and admin-post.php — both define WP_ADMIN),
 		// so skip registration entirely on the front end. This keeps the
 		// global query hooks (pre_get_posts, posts_where, wp_redirect) out of
 		// front-end requests.
 		if ( is_admin() ) {
 			$this->init_admin();
 		}
+
+		// REST routes backing the admin form and list table checks. Registered
+		// in every context: REST requests do not define WP_ADMIN.
+		$checks = new ChecksController( $this->container->repository(), $this->container->auditor() );
+		$checks->register();
 
 		// Keep the recorded audit summary fresh with a daily scheduled run.
 		// Registered in every context: cron events fire wherever WP loads.
@@ -162,7 +168,7 @@ final class PluginBootstrapper {
 	 * @return void
 	 */
 	private function init_admin(): void {
-		// Initialize the main admin bootstrapper (AJAX handlers, list table, form pages).
+		// Initialize the main admin bootstrapper (list table, form pages).
 		$admin = new AdminBootstrapper(
 			$this->container->repository(),
 			$this->container->manager(),
