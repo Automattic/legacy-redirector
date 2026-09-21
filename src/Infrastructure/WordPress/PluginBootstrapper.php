@@ -257,6 +257,12 @@ final class PluginBootstrapper {
 		foreach ( $commands as $subcommand => $command ) {
 			\WP_CLI::add_command( rtrim( self::CLI_NAMESPACE . ' ' . $subcommand ), $command );
 
+			// Only commands that existed before 2.0 are aliased, so the old
+			// namespace never gains commands nobody could have scripted.
+			if ( ! in_array( $subcommand, array( '', 'find-domains', 'import-from-meta' ), true ) ) {
+				continue;
+			}
+
 			// The 1.x command namespace still works, so existing runbooks and
 			// deploy scripts do not break on upgrade. WP_CLI::warning() writes
 			// to STDERR, leaving piped --porcelain and --format output intact.
@@ -283,6 +289,33 @@ final class PluginBootstrapper {
 				rtrim( self::CLI_NAMESPACE_DEPRECATED . ' ' . $subcommand ),
 				$command,
 				$args
+			);
+		}
+
+		// Commands removed in the 2.0 redesign stay registered under the old
+		// namespace only to fail with the replacement, rather than WP-CLI's
+		// generic "not a registered subcommand" error.
+		$removed = array(
+			'insert-redirect' => 'create <from> <to>',
+			'import-from-csv' => 'import <file>',
+			'export-to-csv'   => 'list --format=csv',
+		);
+
+		foreach ( $removed as $subcommand => $replacement ) {
+			\WP_CLI::add_command(
+				self::CLI_NAMESPACE_DEPRECATED . ' ' . $subcommand,
+				static function () use ( $subcommand, $replacement ): void {
+					\WP_CLI::error(
+						sprintf(
+							'`wp %1$s %2$s` was removed in 2.0.0. Use `wp %3$s %4$s` instead. See UPGRADING.md for the flags that changed.',
+							self::CLI_NAMESPACE_DEPRECATED,
+							$subcommand,
+							self::CLI_NAMESPACE,
+							$replacement
+						)
+					);
+				},
+				array( 'shortdesc' => sprintf( 'Removed in 2.0.0. Use `%s` instead.', strtok( $replacement, ' ' ) ) )
 			);
 		}
 	}
