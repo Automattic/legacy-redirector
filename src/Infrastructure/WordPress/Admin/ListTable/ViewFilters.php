@@ -93,7 +93,7 @@ final class ViewFilters {
 		// Add destination type filters.
 		$views = $this->add_destination_type_views( $views );
 
-		// Add the "Has issues" view once a Check all run has completed.
+		// Add the "Has issues" view once a scan has completed.
 		$views = $this->add_audit_flag_view( $views );
 
 		// Re-add Trash at the end.
@@ -172,7 +172,7 @@ final class ViewFilters {
 	/**
 	 * Add the "Has issues" view reading the stored per-row flags.
 	 *
-	 * Only shown once a Check all run has completed - before that there are
+	 * Only shown once a scan has completed - before that there are
 	 * no flags to read. Shown even at zero, because "checked and clean" is an
 	 * answer, not an absence. The label carries the run's check time: the
 	 * flags are a snapshot, and the time is what makes that honest.
@@ -203,8 +203,8 @@ final class ViewFilters {
 			esc_attr( $current ),
 			esc_html(
 				sprintf(
-					/* translators: %s: how long ago the last Check all run completed, e.g. "2 hours" */
-					__( 'Has issues (checked %s ago)', 'legacy-redirector' ),
+					/* translators: %s: how long ago the last scan completed, e.g. "2 hours" */
+					__( 'Has issues (scanned %s ago)', 'legacy-redirector' ),
 					human_time_diff( $checked_at )
 				)
 			),

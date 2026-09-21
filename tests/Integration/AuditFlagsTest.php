@@ -182,7 +182,7 @@ final class AuditFlagsTest extends TestCase {
 		$views = $this->view_filters()->customize_views( array() );
 
 		$this->assertArrayHasKey( 'audit_flagged', $views );
-		$this->assertStringContainsString( 'Has issues (checked ', $views['audit_flagged'] );
+		$this->assertStringContainsString( 'Has issues (scanned ', $views['audit_flagged'] );
 		$this->assertStringContainsString( '(1)', $views['audit_flagged'] );
 		$this->assertStringContainsString( 'audit_flagged=1', $views['audit_flagged'] );
 	}

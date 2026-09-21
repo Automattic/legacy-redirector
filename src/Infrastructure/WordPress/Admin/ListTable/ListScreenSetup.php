@@ -135,7 +135,7 @@ final class ListScreenSetup {
 			'<ul>' .
 			'<li><strong>' . __( 'Edit', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Modify the redirect source or destination.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Enable/Disable', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Toggle whether the redirect is active.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Validate', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Check if the redirect works correctly and the destination is accessible.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'Test', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The full, live check of one redirect: runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Follow', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Test the redirect by visiting the source URL in a new tab.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Trash', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Move the redirect to the trash.', 'legacy-redirector' ) . '</li>' .
 			'</ul>';
@@ -160,7 +160,7 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'To Paths', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'To External URLs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'The <strong>Check all</strong> button in the toolbar above the list audits every redirect (enabled and disabled) in batches, without making HTTP requests. Afterwards, a <strong>Has issues</strong> filter shows only the redirects whose last check found a problem or warning, so bulk actions can be applied straight to them. The filter is a snapshot labelled with its check time: editing a redirect clears its flag until the next check.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( '<strong>Scan for issues</strong>, in the toolbar above the list, checks the stored details of every redirect (enabled and disabled) in batches. A scan never requests a URL, so it is safe at any size but cannot see problems only a live request reveals; use the <strong>Test</strong> action for that. After a scan, a <strong>Has issues</strong> filter shows only the redirects it flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with its scan time: editing a redirect clears its flag until the next scan.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**

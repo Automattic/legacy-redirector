@@ -1,6 +1,6 @@
 <?php
 /**
- * The "Check all" button on the redirects list screen.
+ * The "Scan for issues" button on the redirects list screen.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -13,14 +13,19 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
- * Renders a toolbar button that audits every redirect in paged batches
- * against the check-all REST route, with a native progress element, then
- * reloads so the "Has issues" view and its counts reflect the finished run.
+ * Renders a toolbar button that scans every redirect in paged batches
+ * against the scan REST route, with a native progress element, then reloads
+ * so the "Has issues" view and its counts reflect the finished run.
+ *
+ * "Scan" (stored data only, whole table, no requests) is deliberately a
+ * different word from the Test row action (requests the source live): a
+ * scan is the partial, safe check, and the button must not read as the
+ * complete one.
  *
  * Lives in the list table's top toolbar, to the right of the bulk actions
  * and date filter controls, where the other whole-table operations are.
  */
-final class CheckAllButton {
+final class ScanButton {
 
 	/**
 	 * Register hooks.
@@ -72,8 +77,8 @@ final class CheckAllButton {
 			return;
 		}
 		?>
-		<div class="alignleft actions" id="legacy-redirector-check-all">
-			<button type="button" class="button"><?php esc_html_e( 'Check all', 'legacy-redirector' ); ?></button>
+		<div class="alignleft actions" id="legacy-redirector-scan">
+			<button type="button" class="button" title="<?php esc_attr_e( 'Checks every redirect’s stored details for problems, without requesting any URLs. Use the Test action on a row to check live behavior.', 'legacy-redirector' ); ?>"><?php esc_html_e( 'Scan for issues', 'legacy-redirector' ); ?></button>
 			<progress max="1" value="0" hidden></progress>
 			<span role="status"></span>
 		</div>
@@ -91,16 +96,16 @@ final class CheckAllButton {
 		}
 
 		$config = array(
-			'path'     => '/legacy-redirector/v1/check-all',
-			/* translators: 1: redirects checked so far, 2: total redirects */
-			'progress' => __( 'Checked %1$s of %2$s redirects…', 'legacy-redirector' ),
-			'failed'   => __( 'Checking failed; the flags cover the redirects checked so far. Reload and try again.', 'legacy-redirector' ),
+			'path'     => '/legacy-redirector/v1/scan',
+			/* translators: 1: redirects scanned so far, 2: total redirects */
+			'progress' => __( 'Scanned %1$s of %2$s redirects…', 'legacy-redirector' ),
+			'failed'   => __( 'The scan failed; the flags cover the redirects scanned so far. Reload and try again.', 'legacy-redirector' ),
 		);
 		?>
 		<script>
 		document.addEventListener('DOMContentLoaded', function () {
 			var config = <?php echo wp_json_encode( $config ); ?>;
-			var box = document.getElementById('legacy-redirector-check-all');
+			var box = document.getElementById('legacy-redirector-scan');
 			if (!box) {
 				return;
 			}

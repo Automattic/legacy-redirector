@@ -41,7 +41,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\CheckAllController
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController
  */
 final class ChecksControllerTest extends TestCase {
 

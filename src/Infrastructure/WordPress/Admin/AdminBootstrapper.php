@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\CheckAllButton;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ScanButton;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup;
@@ -143,8 +143,8 @@ final class AdminBootstrapper {
 		$list_screen_setup = new ListScreenSetup();
 		$list_screen_setup->register();
 
-		$check_all_button = new CheckAllButton();
-		$check_all_button->register();
+		$scan_button = new ScanButton();
+		$scan_button->register();
 	}
 
 	/**

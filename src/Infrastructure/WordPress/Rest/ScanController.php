@@ -1,6 +1,6 @@
 <?php
 /**
- * REST route for the batched "Check all" audit.
+ * REST route for the batched scan.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -19,7 +19,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 /**
  * Audits every redirect in paged batches, one request per batch.
  *
- * The list screen's Check all button calls this repeatedly with a rising
+ * The list screen's Scan button calls this repeatedly with a rising
  * offset, so a site with 100k+ redirects is never audited in one request.
  * Each row's outcome lands in a per-row flag (AuditFlags) that the "Has
  * issues" view reads; the final batch stamps the run time and records the
@@ -29,7 +29,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
  * admin session is slow and hard to bound, so this runs the auditor's
  * non-HTTP checks only.
  */
-final class CheckAllController {
+final class ScanController {
 
 	private const string ROUTE_NAMESPACE = 'legacy-redirector/v1';
 
@@ -108,7 +108,7 @@ final class CheckAllController {
 	public function register_routes(): void {
 		register_rest_route(
 			self::ROUTE_NAMESPACE,
-			'/check-all',
+			'/scan',
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( $this, 'run_batch_request' ),

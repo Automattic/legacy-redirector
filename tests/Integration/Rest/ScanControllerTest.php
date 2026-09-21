@@ -1,6 +1,6 @@
 <?php
 /**
- * CheckAllController REST integration tests.
+ * ScanController REST integration tests.
  *
  * @package Automattic\LegacyRedirector\Tests\Integration\Rest
  */
@@ -12,19 +12,19 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Rest;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\CheckAllController;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 
 /**
- * Integration tests for the batched "Check all" audit route.
+ * Integration tests for the batched scan route.
  *
  * Requests are dispatched through a real WP_REST_Server, so the route,
  * argument handling, the permission callback, and the response shape
- * consumed by the CheckAllButton batch loop (checked, total, done) are all
+ * consumed by the ScanButton batch loop (checked, total, done) are all
  * exercised end to end. The route is registered by the plugin's own
  * rest_api_init hook, wired in PluginBootstrapper.
  *
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\CheckAllController
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults
  * @uses \Automattic\LegacyRedirector\Application\HomePath
@@ -50,7 +50,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType
  */
-final class CheckAllControllerTest extends TestCase {
+final class ScanControllerTest extends TestCase {
 
 	/**
 	 * Spin up a REST server.
@@ -102,7 +102,7 @@ final class CheckAllControllerTest extends TestCase {
 	 * @return \WP_REST_Response The dispatched response.
 	 */
 	private function do_request( int $offset = 0 ): \WP_REST_Response {
-		$request = new \WP_REST_Request( 'POST', '/legacy-redirector/v1/check-all' );
+		$request = new \WP_REST_Request( 'POST', '/legacy-redirector/v1/scan' );
 		$request->set_param( 'offset', $offset );
 
 		return rest_get_server()->dispatch( $request );
@@ -132,8 +132,8 @@ final class CheckAllControllerTest extends TestCase {
 		$this->login_as_redirect_manager();
 
 		$post_id   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$broken_id = $this->create_redirect( '/check-all-broken', $post_id );
-		$clean_id  = $this->create_redirect( '/check-all-clean', 'https://example.com/fine' );
+		$broken_id = $this->create_redirect( '/scan-broken', $post_id );
+		$clean_id  = $this->create_redirect( '/scan-clean', 'https://example.com/fine' );
 		wp_delete_post( $post_id, true );
 
 		$response = $this->do_request();
@@ -168,7 +168,7 @@ final class CheckAllControllerTest extends TestCase {
 		$this->login_as_redirect_manager();
 
 		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$disabled_id = $this->create_redirect( '/check-all-disabled', $post_id );
+		$disabled_id = $this->create_redirect( '/scan-disabled', $post_id );
 		wp_update_post(
 			array(
 				'ID'          => $disabled_id,
@@ -190,11 +190,11 @@ final class CheckAllControllerTest extends TestCase {
 	public function test_batches_page_through_on_rising_offsets(): void {
 		$this->login_as_redirect_manager();
 
-		$total = CheckAllController::BATCH_SIZE + 1;
+		$total = ScanController::BATCH_SIZE + 1;
 		for ( $i = 1; $i <= $total; $i++ ) {
 			$this->insert_redirect_post(
 				array(
-					'post_title'   => "/check-all-batch-{$i}",
+					'post_title'   => "/scan-batch-{$i}",
 					'post_excerpt' => 'https://example.com/fine',
 				)
 			);
@@ -202,12 +202,12 @@ final class CheckAllControllerTest extends TestCase {
 
 		$first = $this->do_request()->get_data();
 
-		$this->assertSame( CheckAllController::BATCH_SIZE, $first['checked'] );
+		$this->assertSame( ScanController::BATCH_SIZE, $first['checked'] );
 		$this->assertSame( $total, $first['total'] );
 		$this->assertFalse( $first['done'] );
 		$this->assertNull( ( new AuditFlags() )->checked_at() );
 
-		$second = $this->do_request( CheckAllController::BATCH_SIZE )->get_data();
+		$second = $this->do_request( ScanController::BATCH_SIZE )->get_data();
 
 		$this->assertSame( 1, $second['checked'] );
 		$this->assertTrue( $second['done'] );

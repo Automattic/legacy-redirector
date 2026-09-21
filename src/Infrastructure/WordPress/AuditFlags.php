@@ -12,7 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 
 /**
- * The per-row outcome of the last "Check all" run, stored as post meta.
+ * The per-row outcome of the last scan, stored as post meta.
  *
  * A flag is a snapshot, not a live judgement: whether a row has a problem
  * depends on other data (a destination post being unpublished, another

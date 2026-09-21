@@ -59,7 +59,7 @@ final class AuditResults {
 	 * Record a batch audit's outcome from already-tallied counts.
 	 *
 	 * For runs whose findings never exist as one in-memory array, such as the
-	 * batched Check all run, which counts from the per-row flags it stored.
+	 * batched scan, which counts from the per-row flags it stored.
 	 *
 	 * @param int  $problems  How many problems the audit found.
 	 * @param int  $warnings  How many warnings the audit found.
