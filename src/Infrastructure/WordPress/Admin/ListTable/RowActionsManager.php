@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -42,7 +41,20 @@ final class RowActionsManager {
 	 */
 	public function register(): void {
 		add_filter( 'post_row_actions', array( $this, 'modify_row_actions' ), 10, 2 );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_footer-edit.php', array( $this, 'render_validate_script' ) );
+	}
+
+	/**
+	 * Enqueue apiFetch for the inline Test script on the redirects list page.
+	 *
+	 * @return void
+	 */
+	public function enqueue_assets(): void {
+		$screen = get_current_screen();
+		if ( $screen && 'edit-' . PostType::POST_TYPE === $screen->id ) {
+			wp_enqueue_script( 'wp-api-fetch' );
+		}
 	}
 
 	/**
@@ -117,7 +129,7 @@ final class RowActionsManager {
 			);
 		}
 
-		// Validate link (uses AJAX with PHP fallback).
+		// Validate link (tested over REST, with a PHP fallback).
 		$validate_link       = wp_nonce_url(
 			add_query_arg(
 				array(
@@ -173,7 +185,6 @@ final class RowActionsManager {
 		</style>
 		<script>
 		jQuery(document).ready(function($) {
-			var validateNonce = '<?php echo esc_js( wp_create_nonce( ValidateRedirectHandler::get_action() ) ); ?>';
 			var i18n = {
 				testing: '<?php echo esc_js( __( 'Testing...', 'legacy-redirector' ) ); ?>',
 				test: '<?php echo esc_js( __( 'Test', 'legacy-redirector' ) ); ?>',
@@ -215,11 +226,10 @@ final class RowActionsManager {
 				'unreachable': { icon: 'dashicons-editor-help', color: '#787c82' }
 			};
 
-			function renderResult( $row, response ) {
+			function renderResult( $row, result ) {
 				var $healthColumn = $row.find( 'td.health' ).empty();
-				var data = ( response && response.data ) || {};
-				var warnings = data.warnings || [];
-				var probe = data.probe || null;
+				var warnings = result.warnings || [];
+				var probe = result.probe || null;
 				var confirmed = probe && 'confirmed' === probe.status;
 
 				// The live behaviour leads - "the redirect works" - and any
@@ -229,12 +239,12 @@ final class RowActionsManager {
 					$healthColumn.append( healthLine( style.icon, style.color, probe.message ) );
 				}
 
-				if ( response.success ) {
+				if ( result.valid ) {
 					if ( ! warnings.length && ! confirmed ) {
 						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
 					}
 				} else {
-					$healthColumn.append( healthLine( 'dashicons-warning', '#d63638', data.message || i18n.requestFailed ) );
+					$healthColumn.append( healthLine( 'dashicons-warning', '#d63638', result.message || i18n.requestFailed ) );
 				}
 
 				$.each( warnings, function ( i, warning ) {
@@ -242,26 +252,21 @@ final class RowActionsManager {
 				} );
 			}
 
-			// Test one row; returns the AJAX promise so callers can chain.
+			// Test one row; returns the request promise so callers can chain.
 			function testRow( $row ) {
 				var $link = $row.find( '.validate-redirect' );
 				var redirectId = $link.data( 'redirect-id' );
 
 				$link.addClass( 'validating' ).text( i18n.testing );
 
-				return $.ajax( {
-					url: ajaxurl,
-					type: 'POST',
-					data: {
-						action: '<?php echo esc_js( ValidateRedirectHandler::get_action() ); ?>',
-						redirect_id: redirectId,
-						nonce: validateNonce
-					}
-				} ).done( function ( response ) {
-					renderResult( $row, response );
-				} ).fail( function () {
-					renderResult( $row, { success: false, data: { message: i18n.requestFailed } } );
-				} ).always( function () {
+				return wp.apiFetch( {
+					path: '/legacy-redirector/v1/redirects/' + redirectId + '/test',
+					method: 'POST'
+				} ).then( function ( result ) {
+					renderResult( $row, result );
+				} ).catch( function ( error ) {
+					renderResult( $row, { valid: false, message: ( error && error.message ) || i18n.requestFailed } );
+				} ).then( function () {
 					$link.removeClass( 'validating' ).text( i18n.test );
 				} );
 			}
@@ -291,7 +296,7 @@ final class RowActionsManager {
 				( function next() {
 					var row = rows.shift();
 					if ( row ) {
-						testRow( $( row ) ).always( next );
+						testRow( $( row ) ).then( next, next );
 					}
 				} )();
 

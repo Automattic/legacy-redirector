@@ -18,9 +18,6 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDestinationHandler;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -104,7 +101,7 @@ final class RedirectFormPage {
 		wp_enqueue_script(
 			'legacy-redirector-form',
 			plugins_url( 'js/admin-redirect-form.js', \Automattic\LegacyRedirector\PLUGIN_FILE ),
-			array( 'jquery' ),
+			array( 'jquery', 'wp-api-fetch' ),
 			\Automattic\LegacyRedirector\VERSION,
 			true
 		);
@@ -117,12 +114,6 @@ final class RedirectFormPage {
 			'legacyRedirectorForm',
 			array(
 				'postId'                => $redirect_id,
-				'checkAction'           => CheckSourceHandler::get_action(),
-				'checkNonce'            => wp_create_nonce( CheckSourceHandler::get_action() ),
-				'checkDestAction'       => CheckDestinationHandler::get_action(),
-				'checkDestNonce'        => wp_create_nonce( CheckDestinationHandler::get_action() ),
-				'searchAction'          => SearchPostsHandler::get_action(),
-				'searchNonce'           => wp_create_nonce( SearchPostsHandler::get_action() ),
 				'duplicateMessage'      => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
 				'reservedMessage'       => self::reserved_source_message(),
 				'hostNotAllowedMessage' => self::host_not_allowed_message(),

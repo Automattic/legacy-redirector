@@ -15,10 +15,6 @@ use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDestinationHandler;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\ValidateRedirectHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ListScreenSetup;
@@ -107,9 +103,6 @@ final class AdminBootstrapper {
 	 * @return void
 	 */
 	public function init(): void {
-		// AJAX handlers.
-		$this->register_ajax_handlers();
-
 		// List table customization.
 		$this->register_list_table_components();
 
@@ -118,25 +111,6 @@ final class AdminBootstrapper {
 
 		// Validation notices.
 		$this->register_validation_notices();
-	}
-
-	/**
-	 * Register AJAX handlers.
-	 *
-	 * @return void
-	 */
-	private function register_ajax_handlers(): void {
-		$check_source = new CheckSourceHandler( $this->repository, $this->auditor );
-		$check_source->register();
-
-		$check_destination = new CheckDestinationHandler( $this->auditor );
-		$check_destination->register();
-
-		$search_posts = new SearchPostsHandler();
-		$search_posts->register();
-
-		$validate = new ValidateRedirectHandler( $this->repository, $this->auditor );
-		$validate->register();
 	}
 
 	/**
