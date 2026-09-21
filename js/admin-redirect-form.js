@@ -22,6 +22,15 @@ jQuery( document ).ready( function ( $ ) {
 	var postId = parseInt( settings.postId, 10 ) || 0;
 	var searchTimeout;
 	var selectedIndex = -1;
+	var entityDecoder = document.createElement( 'textarea' );
+
+	// Core's search endpoint returns titles with texturized HTML entities
+	// (e.g. &#8217; for an apostrophe), which .text() would show literally.
+	// A textarea decodes without executing anything.
+	function decodeEntities( text ) {
+		entityDecoder.innerHTML = text;
+		return entityDecoder.value;
+	}
 
 	// Check the source on blur: a duplicate blocks the save, a reserved path
 	// only warns, so both are known before anything is submitted.
@@ -160,14 +169,15 @@ jQuery( document ).ready( function ( $ ) {
 					// in both attribute and text positions.
 					var $container = $( '#redirect_to_suggestions' ).empty();
 					$.each( posts, function ( i, post ) {
+						var title = decodeEntities( post.title );
 						$( '<div>', {
 							'class': 'redirect-suggestion',
 							'data-id': post.id,
-							'data-title': post.title,
+							'data-title': title,
 							'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
 						} )
 							.append(
-								$( '<strong>' ).text( post.title ),
+								$( '<strong>' ).text( title ),
 								'<br>',
 								$( '<small>' ).css( 'color', '#666' ).text( post.subtype + ' (ID: ' + post.id + ')' )
 							)
