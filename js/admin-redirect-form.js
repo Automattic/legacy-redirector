@@ -32,6 +32,37 @@ jQuery( document ).ready( function ( $ ) {
 		return entityDecoder.value;
 	}
 
+	// Render search results into the suggestions dropdown; the fetch code
+	// decides when to call this, this decides what the results look like.
+	function renderSuggestions( posts ) {
+		if ( ! posts.length ) {
+			$( '#redirect_to_suggestions' ).hide();
+			return;
+		}
+
+		// Build via DOM APIs, not string concatenation: titles and
+		// type labels are attacker-influenced and must be escaped
+		// in both attribute and text positions.
+		var $container = $( '#redirect_to_suggestions' ).empty();
+		$.each( posts, function ( i, post ) {
+			var title = decodeEntities( post.title );
+			$( '<div>', {
+				'class': 'redirect-suggestion',
+				'data-id': post.id,
+				'data-title': title,
+				'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
+			} )
+				.append(
+					$( '<strong>' ).text( title ),
+					'<br>',
+					$( '<small>' ).css( 'color', '#666' ).text( post.subtype + ' (ID: ' + post.id + ')' )
+				)
+				.appendTo( $container );
+		} );
+		$container.show();
+		selectedIndex = -1; // Reset selection when new results appear.
+	}
+
 	// Check the source on blur: a duplicate blocks the save, a reserved path
 	// only warns, so both are known before anything is submitted.
 	$( '#redirect_from' ).on( 'blur', function () {
@@ -162,33 +193,7 @@ jQuery( document ).ready( function ( $ ) {
 		searchTimeout = setTimeout( function () {
 			wp.apiFetch( {
 				path: '/wp/v2/search?search=' + encodeURIComponent( val ) + '&subtype=post,page&per_page=10'
-			} ).then( function ( posts ) {
-				if ( posts.length > 0 ) {
-					// Build via DOM APIs, not string concatenation: titles and
-					// type labels are attacker-influenced and must be escaped
-					// in both attribute and text positions.
-					var $container = $( '#redirect_to_suggestions' ).empty();
-					$.each( posts, function ( i, post ) {
-						var title = decodeEntities( post.title );
-						$( '<div>', {
-							'class': 'redirect-suggestion',
-							'data-id': post.id,
-							'data-title': title,
-							'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
-						} )
-							.append(
-								$( '<strong>' ).text( title ),
-								'<br>',
-								$( '<small>' ).css( 'color', '#666' ).text( post.subtype + ' (ID: ' + post.id + ')' )
-							)
-							.appendTo( $container );
-					} );
-					$container.show();
-					selectedIndex = -1; // Reset selection when new results appear.
-				} else {
-					$( '#redirect_to_suggestions' ).hide();
-				}
-			} ).catch( function () {
+			} ).then( renderSuggestions ).catch( function () {
 				$( '#redirect_to_suggestions' ).hide();
 			} );
 		}, 300 );
