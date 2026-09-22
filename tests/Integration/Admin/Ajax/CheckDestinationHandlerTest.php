@@ -16,7 +16,7 @@ use WPAjaxDieStopException;
  * Integration tests for the destination check AJAX endpoint.
  *
  * The response shape asserted here is the exact contract consumed by
- * js/admin-redirect-form.js, which reads response.success and
+ * assets/src/redirect-form.js, which reads response.success and
  * response.data.host_allowed.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckDestinationHandler

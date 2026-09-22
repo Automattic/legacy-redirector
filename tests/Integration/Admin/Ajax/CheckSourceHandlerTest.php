@@ -16,7 +16,7 @@ use WPAjaxDieStopException;
  * Integration tests for the source check AJAX endpoint.
  *
  * The response shapes asserted here are the exact contract consumed by
- * js/admin-redirect-form.js, which reads response.success,
+ * assets/src/redirect-form.js, which reads response.success,
  * response.data.exists and response.data.reserved.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\CheckSourceHandler

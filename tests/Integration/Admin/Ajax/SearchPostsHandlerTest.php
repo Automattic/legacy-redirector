@@ -16,7 +16,7 @@ use WPAjaxDieStopException;
  * Integration tests for the post search autocomplete AJAX endpoint.
  *
  * The response shapes asserted here are the exact contract consumed by
- * js/admin-redirect-form.js, which reads response.success and iterates
+ * assets/src/redirect-form.js, which reads response.success and iterates
  * response.data.posts expecting id, title and type on each entry.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Ajax\SearchPostsHandler

@@ -101,33 +101,17 @@ final class RedirectFormPage {
 			return;
 		}
 
+		$asset = require \dirname( \Automattic\LegacyRedirector\PLUGIN_FILE ) . '/build/redirect-form.asset.php';
+
 		wp_enqueue_script(
 			'legacy-redirector-form',
-			plugins_url( 'js/admin-redirect-form.js', \Automattic\LegacyRedirector\PLUGIN_FILE ),
-			array( 'jquery' ),
-			\Automattic\LegacyRedirector\VERSION,
+			plugins_url( 'build/redirect-form.js', \Automattic\LegacyRedirector\PLUGIN_FILE ),
+			$asset['dependencies'],
+			$asset['version'],
 			true
 		);
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading redirect_id for the duplicate-check exclusion only.
-		$redirect_id = isset( $_GET['redirect_id'] ) ? absint( $_GET['redirect_id'] ) : 0;
-
-		wp_localize_script(
-			'legacy-redirector-form',
-			'legacyRedirectorForm',
-			array(
-				'postId'                => $redirect_id,
-				'checkAction'           => CheckSourceHandler::get_action(),
-				'checkNonce'            => wp_create_nonce( CheckSourceHandler::get_action() ),
-				'checkDestAction'       => CheckDestinationHandler::get_action(),
-				'checkDestNonce'        => wp_create_nonce( CheckDestinationHandler::get_action() ),
-				'searchAction'          => SearchPostsHandler::get_action(),
-				'searchNonce'           => wp_create_nonce( SearchPostsHandler::get_action() ),
-				'duplicateMessage'      => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
-				'reservedMessage'       => self::reserved_source_message(),
-				'hostNotAllowedMessage' => self::host_not_allowed_message(),
-			)
-		);
+		wp_set_script_translations( 'legacy-redirector-form', 'legacy-redirector' );
+		wp_enqueue_style( 'wp-components' );
 	}
 
 	/**
@@ -239,6 +223,7 @@ final class RedirectFormPage {
 		$redirect_status     = 'publish';
 		$destination_value   = '';
 		$destination_display = '';
+		$destination_post    = null;
 
 		if ( $is_edit ) {
 			// Editing existing redirect - render from the entity.
@@ -250,7 +235,16 @@ final class RedirectFormPage {
 				$destination_value = $destination->as_post_id()->value();
 				$parent_post       = get_post( $destination_value );
 				if ( $parent_post ) {
-					$destination_display = get_the_title( $parent_post ) . ' (ID: ' . $destination_value . ')';
+					$destination_post    = array(
+						'id'    => $destination_value,
+						'title' => html_entity_decode( get_the_title( $parent_post ), ENT_QUOTES, 'UTF-8' ),
+					);
+					$destination_display = sprintf(
+						/* translators: 1: post title, 2: post ID. */
+						__( '%1$s (ID: %2$d)', 'legacy-redirector' ),
+						$destination_post['title'],
+						$destination_value
+					);
 				} else {
 					$destination_display = (string) $destination_value;
 				}
@@ -280,21 +274,51 @@ final class RedirectFormPage {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Just reading error params for display.
 		$error = isset( $_GET['error'] ) ? sanitize_text_field( wp_unslash( $_GET['error'] ) ) : '';
 
-		$post_id       = $is_edit ? (int) $redirect->id() : 0;
-		$error_message = '' !== $error ? $this->get_error_message( $error ) : '';
+		$saved_messages = array(
+			'created' => __( 'Redirect created successfully.', 'legacy-redirector' ),
+			'updated' => __( 'Redirect updated successfully.', 'legacy-redirector' ),
+		);
 
-		// Accepted, but flagged every time the redirect is opened: see
-		// SourceUrl::is_reserved() for why this can lock the admin out.
-		$reserved_source  = $is_edit && in_array( AuditFindingType::RESERVED_SOURCE, $this->auditor->source_warnings( $redirect->source() ), true );
-		$reserved_message = self::reserved_source_message();
+		$settings = array(
+			'redirectId'            => $is_edit ? (int) $redirect->id() : 0,
+			'source'                => ltrim( $redirect_from, '/' ),
+			'status'                => $redirect_status,
+			'destinationDisplay'    => $destination_display,
+			'destinationPost'       => $destination_post,
+			// Sources are stored relative to this site's home URL, which on a
+			// subdirectory subsite is not the domain root. Showing the home URL
+			// against the field makes which root the path hangs off self-evident,
+			// and matches the "Test it" link, which is built the same way.
+			'homePrefix'            => trailingslashit( home_url() ),
+			'testUrl'               => home_url( $redirect_from ),
+			'listUrl'               => admin_url( 'edit.php?post_type=' . PostType::POST_TYPE ),
+			'adminPostUrl'          => admin_url( 'admin-post.php' ),
+			'ajaxUrl'               => admin_url( 'admin-ajax.php' ),
+			'saveNonce'             => wp_create_nonce( 'save_redirect' ),
+			'savedMessage'          => $is_edit ? ( $saved_messages[ $message ] ?? '' ) : '',
+			'errorMessage'          => '' !== $error ? $this->get_error_message( $error ) : '',
+			// Accepted, but flagged every time the redirect is opened: see
+			// SourceUrl::is_reserved() for why this can lock the admin out.
+			'reservedSource'        => $is_edit && in_array( AuditFindingType::RESERVED_SOURCE, $this->auditor->source_warnings( $redirect->source() ), true ),
+			'checkAction'           => CheckSourceHandler::get_action(),
+			'checkNonce'            => wp_create_nonce( CheckSourceHandler::get_action() ),
+			'checkDestAction'       => CheckDestinationHandler::get_action(),
+			'checkDestNonce'        => wp_create_nonce( CheckDestinationHandler::get_action() ),
+			'searchAction'          => SearchPostsHandler::get_action(),
+			'searchNonce'           => wp_create_nonce( SearchPostsHandler::get_action() ),
+			'duplicateMessage'      => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
+			'reservedMessage'       => self::reserved_source_message(),
+			'hostNotAllowedMessage' => self::host_not_allowed_message(),
+		);
 
-		// Sources are stored relative to this site's home URL, which on a
-		// subdirectory subsite is not the domain root. Showing the home URL
-		// against the field makes which root the path hangs off self-evident,
-		// and matches the "Test it" link, which is built the same way.
-		$home_prefix = trailingslashit( home_url() );
+		// The script is enqueued for the footer, so data added while the page
+		// renders still prints ahead of it.
+		wp_add_inline_script( 'legacy-redirector-form', 'window.legacyRedirectorForm = ' . wp_json_encode( $settings ) . ';', 'before' );
 
-		include __DIR__ . '/views/redirect-form.php';
+		printf(
+			'<div class="wrap"><h1>%s</h1><div id="legacy-redirector-form"></div></div>',
+			esc_html( $title )
+		);
 	}
 
 
