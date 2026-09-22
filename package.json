@@ -4,9 +4,22 @@
   "description": "WordPress plugin for handling large volumes of legacy redirects in a scalable manner.",
   "private": true,
   "scripts": {
+    "build": "wp-scripts build redirect-form=./assets/src/redirect-form.js",
+    "start": "wp-scripts start redirect-form=./assets/src/redirect-form.js",
+    "lint:js": "wp-scripts lint-js assets/src",
     "wp-env": "wp-env"
   },
   "devDependencies": {
-    "@wordpress/env": "^11.15.0"
+    "@wordpress/env": "^11.15.0",
+    "@wordpress/scripts": "^35.0.0"
+  },
+  "dependencies": {
+    "@wordpress/api-fetch": "^7.55.0",
+    "@wordpress/components": "^40.1.0",
+    "@wordpress/dataviews": "^19.0.0",
+    "@wordpress/element": "^8.7.0",
+    "@wordpress/i18n": "^6.28.0",
+    "@wordpress/theme": "^2.1.0",
+    "@wordpress/ui": "^0.22.0"
   }
 }

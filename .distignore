@@ -24,6 +24,7 @@ CHANGELOG.md
 composer.json
 composer.lock
 CONTRIBUTING.md
+loupe.config.json
 package.json
 package-lock.json
 phpunit-integration.xml.dist

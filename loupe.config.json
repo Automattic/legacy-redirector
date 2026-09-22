@@ -1,0 +1,9 @@
+{
+	"extends": "wpds",
+	"designSystem": {
+		"tokenSources": [ "node_modules/@wordpress/theme/prebuilt/css/design-tokens.css" ]
+	},
+	"namespaces": {
+		"project": [ "legacy-redirector-" ]
+	}
+}
