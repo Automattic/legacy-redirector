@@ -122,13 +122,47 @@ final class InternalDestinationNormalizerTest extends MonkeyStubs {
 			'raw query becomes encoded'         => array( 'https://example.com', 'https://example.com/foo?q=тест', '/foo?q=%D1%82%D0%B5%D1%81%D1%82' ),
 			'literal %26 in query preserved'    => array( 'https://example.com', 'https://example.com/foo?q=a%26b', '/foo?q=a%26b' ),
 			'encoded fragment decoded'          => array( 'https://example.com', 'https://example.com/foo#caf%C3%A9', '/foo#café' ),
-			// An encoded slash decodes to a real one, exactly as SourceUrl
-			// treats sources; a destination relying on the distinction was
-			// ambiguous to begin with.
-			'encoded slash in path decodes'     => array( 'https://example.com', 'https://example.com/a%2Fb', '/a/b' ),
-			// Unless decoding would make the path scheme-relative.
-			'decoding to double slash refused'  => array( 'https://example.com', '/%2F%2Fx', '/%2F%2Fx' ),
+			// An encoded slash belongs inside one path segment; decoding it
+			// would split the segment in two.
+			'encoded slash in path kept'        => array( 'https://example.com', 'https://example.com/a%2Fb', '/a%2Fb' ),
+			'leading encoded slashes kept'      => array( 'https://example.com', '/%2F%2Fx', '/%2F%2Fx' ),
+
+			// Escapes whose decoded form would mean something else, or could
+			// not be stored, stay encoded - in upper case, so one target
+			// still has one spelling.
+			'encoded question mark kept'        => array( 'https://example.com', '/a%3Fb', '/a%3Fb' ),
+			'encoded hash kept'                 => array( 'https://example.com', '/a%23b', '/a%23b' ),
+			'encoded percent kept'              => array( 'https://example.com', '/100%25', '/100%25' ),
+			'encoded NUL kept'                  => array( 'https://example.com', '/a%00b', '/a%00b' ),
+			'encoded newline kept'              => array( 'https://example.com', '/a%0Ab', '/a%0Ab' ),
+			'invalid UTF-8 byte kept'           => array( 'https://example.com', '/%FF/x', '/%FF/x' ),
+			'truncated UTF-8 sequence kept'     => array( 'https://example.com', '/caf%C3', '/caf%C3' ),
+			'overlong UTF-8 sequence kept'      => array( 'https://example.com', '/%C0%AF', '/%C0%AF' ),
+			'kept escapes upper-cased'          => array( 'https://example.com', '/a%3fb', '/a%3Fb' ),
+			'safe decoded beside kept'          => array( 'https://example.com', '/caf%C3%A9%3F', '/café%3F' ),
+			'kept escape in fragment'           => array( 'https://example.com', 'https://example.com/foo#a%23b', '/foo#a%23b' ),
+			'encoded plus kept'                 => array( 'https://example.com', '/a%2Bb', '/a%2Bb' ),
+			// Url::parse_encoded() encodes a raw space as '+', so a literal
+			// '+' reaches the normalizer indistinguishable from a space.
+			'literal plus read as a space'      => array( 'https://example.com', '/a+b', '/a b' ),
 		);
+	}
+
+	/**
+	 * Test canonicalizing an already canonical destination changes nothing.
+	 *
+	 * The migration re-walks stored destinations on every version bump, so a
+	 * second pass must not decode what the first deliberately kept - '%2541'
+	 * once became '%41', then 'A'.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::canonicalize
+	 */
+	public function test_canonicalize_is_idempotent(): void {
+		foreach ( array( '/a%2541', '/100%25', '/a%3Fb', '/caf%C3%A9%3F', '/%FF/x', '/a+b', '/a%20b', '/a%2Bb', '/a%2Fb', '/foo?q=a%26b#caf%C3%A9' ) as $relative ) {
+			$once = $this->normalizer->canonicalize( $relative );
+
+			$this->assertSame( $once, $this->normalizer->canonicalize( (string) $once ), $relative . ' should canonicalize the same way twice.' );
+		}
 	}
 
 	/**
