@@ -6,8 +6,20 @@ Feature: Migrating 1.x redirect data
   Background:
     Given a WP installation with the Legacy Redirector plugin
 
-  # Smoke test: the command is registered and a current site is a safe no-op.
-  Scenario: Migrating an already-current site reports nothing to do
+  # Smoke test: the command is registered, and a site with no redirects
+  # migrates cleanly and is then a safe no-op. A fresh install only records
+  # its data version once a migration has run - on its first page load, or
+  # here, since WP-CLI never runs one on bootstrap. The database reset between
+  # scenarios leaves options alone, so start from a fresh install's state.
+  Scenario: Migrating a site with no redirects, then running it again
+    Given I run `wp eval 'delete_option( "wpcom_legacy_redirector_db_version" );'`
+
+    When I run `wp legacy-redirector migrate`
+    Then STDOUT should contain:
+      """
+      Success: Migration complete. 0 redirect(s) inspected
+      """
+
     When I run `wp legacy-redirector migrate`
     Then STDOUT should contain:
       """
