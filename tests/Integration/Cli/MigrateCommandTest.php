@@ -58,6 +58,7 @@ final class MigrateCommandTest extends CliTestCase {
 		delete_option( 'wpcom_legacy_redirector_upgrade_cursor' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
 		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_retry' );
 
 		$this->upgrader = new Upgrader();
 		$this->command  = new MigrateCommand( $this->upgrader );
@@ -175,7 +176,7 @@ final class MigrateCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
 
 		$this->assert_warning_contains( '21 source path(s) would collide' );
-		$this->assert_stdout_contains( '  ...and 1 more. Run again with --debug=legacy-redirector to list them all.' );
+		$this->assert_stdout_contains( '  ...and 1 more. To list every one, repeat this dry run with --debug=legacy-redirector; like this one, it changes nothing.' );
 		$this->assertSame( 20, substr_count( $this->get_stdout(), 'would be drafted' ) );
 
 		$debugged = array_filter( \WP_CLI::$calls, static fn( array $call ): bool => 'debug' === $call[0] && 'legacy-redirector' === $call[2] );
@@ -185,21 +186,99 @@ final class MigrateCommandTest extends CliTestCase {
 	/**
 	 * Redirects the database refuses to write are listed, and the run fails.
 	 */
-	public function test_failed_writes_fail_the_run(): void {
+	public function test_failed_writes_fail_the_run_then_are_retried(): void {
 		global $wpdb;
 
-		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => preg_match( "/^UPDATE `?{$wpdb->posts}`? /", $query ) ? '' : $query;
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
 
 		add_filter( 'query', $refuse );
 		$this->invoke_command( $this->command, array(), array() );
 		remove_filter( 'query', $refuse );
 
 		$this->assert_warning_contains( '1 redirect(s) could not be written' );
-		$this->assert_stdout_contains( '  #' . $post_id . ': ' );
+		$this->assert_stdout_contains( '  #' . $post_id . ' (/old-page/): ' );
 		$this->assert_stdout_contains( '0 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 1 could not be written.' );
-		$this->assert_error_contains( 'not every redirect could be migrated' );
+		$this->assert_error_contains( '1 redirect(s) are waiting to be retried. Once the cause is fixed, run `wp legacy-redirector migrate` again: it retries just those, without walking the rest again.' );
 		$this->assertFalse( $this->output->had_success() );
+
+		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
+		$this->assert_stdout_contains( '1 redirect(s) could not be written in an earlier run. Running `wp legacy-redirector migrate` without --dry-run retries just those.' );
+
+		$this->invoke_command( $this->command, array(), array() );
+		$this->assert_stdout_contains( 'Retrying the 1 redirect(s) that could not be written in an earlier run.' );
+		$this->assert_success_contains( 'Retry complete. 1 redirect(s) inspected in this run: 1 changed' );
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
+
+		$this->invoke_command( $this->command, array(), array() );
+		$this->assert_success_contains( 'Redirect data is already up to date; nothing to migrate.' );
+	}
+
+	/**
+	 * A database failure stops the run with a message saying it is safe to rerun.
+	 */
+	public function test_database_failure_stops_the_run_safely(): void {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$refuse = static fn( string $query ): string => str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$this->invoke_command( $this->command, array(), array() );
+		remove_filter( 'query', $refuse );
+
+		$this->assert_error_contains( 'Stopped because the database could not read the redirects' );
+		$this->assert_error_contains( 'It is safe to run the same command again' );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
+	 * The conflicts can be listed after the run, in any of the usual formats.
+	 */
+	public function test_list_conflicts_after_the_run(): void {
+		$kept_id  = $this->create_legacy_redirect( '/clash', 'https://external.example.net/one' );
+		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://external.example.net/two' );
+
+		$this->invoke_command( $this->command, array(), array() );
+		$this->assert_success_contains( 'Migration complete.' );
+
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'list-conflicts' => true,
+				'format'         => 'csv',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'csv',
+					array(
+						array(
+							'id'                   => $loser_id,
+							'source'               => '/clash/',
+							'collides_with'        => $kept_id,
+							'collides_with_source' => '/clash',
+						),
+					),
+					array( 'id', 'source', 'collides_with', 'collides_with_source' ),
+				),
+			),
+			$GLOBALS['wp_cli_format_items_calls']
+		);
+	}
+
+	/**
+	 * With no conflicts, listing them says so.
+	 */
+	public function test_list_conflicts_with_none(): void {
+		$this->invoke_command( $this->command, array(), array( 'list-conflicts' => true ) );
+
+		$this->assert_success_contains( 'No redirects are disabled as migration conflicts.' );
 	}
 
 	/**

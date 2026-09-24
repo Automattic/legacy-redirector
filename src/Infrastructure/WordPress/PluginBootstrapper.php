@@ -129,6 +129,10 @@ final class PluginBootstrapper {
 		// too, and a flag must never outlive the save it described.
 		$this->container->audit_flags()->register();
 
+		// Likewise the migration's conflict marker: saving the row is how a
+		// person settles the conflict, in any context.
+		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_conflict' ) );
+
 		// Keep the recorded audit summary fresh with a daily scheduled run.
 		// Registered in every context: cron events fire wherever WP loads.
 		$scheduler = new AuditScheduler(

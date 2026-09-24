@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\InternalDestinationNormalizer;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use RuntimeException;
 use WP_Post;
 use WP_Query;
 
@@ -148,6 +149,25 @@ final class Upgrader {
 	private const string CLI_LOCK = 'wpcom_legacy_redirector_upgrade_cli';
 
 	/**
+	 * Option holding redirects whose migration write failed, for a later run to retry.
+	 *
+	 * Keyed by the start time of the walk that failed them, each with whether
+	 * that walk published 1.x drafts: a retry has to apply the same passes,
+	 * and after completion the version gate would otherwise forbid publishing.
+	 * Kept past completion, until every one has been written.
+	 */
+	private const string RETRY_OPTION = 'wpcom_legacy_redirector_upgrade_retry';
+
+	/**
+	 * Meta key marking a redirect drafted as a conflict.
+	 *
+	 * Holds the ID of the redirect it collided with, so the conflicts can be
+	 * listed long after the run that found them. Saving the row clears it: a
+	 * person has acted on it. See forget_conflict().
+	 */
+	public const string CONFLICT_META_KEY = '_legacy_redirector_migration_conflict';
+
+	/**
 	 * Redirects processed per batch when running on a web request.
 	 *
 	 * Deliberately modest: this runs on `init`, so the cost lands on whichever
@@ -164,6 +184,13 @@ final class Upgrader {
 	 * @var array<int, string>
 	 */
 	private array $publish_queue = array();
+
+	/**
+	 * IDs of redirects whose write failed in the batch being processed.
+	 *
+	 * @var int[]
+	 */
+	private array $failed_ids = array();
 
 	/**
 	 * Whether this site still has upgrade work outstanding.
@@ -187,7 +214,13 @@ final class Upgrader {
 			return;
 		}
 
-		$this->run_batch( self::BATCH_SIZE );
+		try {
+			$this->run_batch( self::BATCH_SIZE );
+		} catch ( RuntimeException $e ) {
+			// The batch stopped without advancing the cursor, so the next
+			// request picks it up again. Nothing to tell a visitor.
+			return;
+		}
 	}
 
 	/**
@@ -235,8 +268,15 @@ final class Upgrader {
 	 * those four add up to 'processed'. The per-pass counts break 'changed'
 	 * down and can overlap: one redirect can be published and re-keyed.
 	 *
+	 * A redirect whose write fails is recorded for retry_failed(). A failed
+	 * read or bulk write is a database problem rather than a problem with one
+	 * row, so it throws instead, leaving the cursor where it was so the next
+	 * run redoes the batch.
+	 *
 	 * @param int $size Maximum number of redirects to process.
 	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 *
+	 * @throws RuntimeException When the database refuses the batch's read or bulk write.
 	 */
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
@@ -244,30 +284,126 @@ final class Upgrader {
 		$cursor    = (int) get_option( self::CURSOR_OPTION, 0 );
 		$publish   = $this->from_pre_2_0_data();
 		$home_path = $publish ? $this->home_path() : '';
-
-		$result = array(
-			'processed'  => 0,
-			'changed'    => 0,
-			'unchanged'  => 0,
-			'skipped'    => 0,
-			'published'  => 0,
-			'repathed'   => 0,
-			'deduped'    => 0,
-			'normalized' => 0,
-			'conflicts'  => array(),
-			'failed'     => array(),
-			'complete'   => false,
-		);
+		$result    = self::empty_result();
 
 		$posts = $this->query_batch( $cursor, $ceiling, $size );
 
+		foreach ( $posts as $post ) {
+			if ( $post instanceof WP_Post ) {
+				$cursor = $post->ID;
+			}
+		}
+
+		$this->process( $posts, $started, $home_path, $publish, $result );
+		$this->remember_failures( $started, $publish );
+
+		update_option( self::CURSOR_OPTION, $cursor, false );
+
+		if ( $result['processed'] < $size ) {
+			$this->complete();
+			$result['complete'] = true;
+		}
+
+		return $result;
+	}
+
+	/**
+	 * How many redirects are waiting to have their failed write retried.
+	 *
+	 * @return int The number of redirects.
+	 */
+	public function pending_retries(): int {
+		return array_sum( array_map( static fn( array $set ): int => count( $set['ids'] ), $this->retry_sets() ) );
+	}
+
+	/**
+	 * Retry every redirect whose migration write failed, and only those.
+	 *
+	 * Each is planned again with the passes of the walk that failed it, so a
+	 * 1.x draft is still published even though the upgrade has since
+	 * completed. Those that fail again stay recorded for the next retry;
+	 * those deleted in the meantime drop out.
+	 *
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 *
+	 * @throws RuntimeException When the database refuses a read or bulk write.
+	 */
+	public function retry_failed(): array {
+		$result = self::empty_result();
+
+		foreach ( $this->retry_sets() as $started => $set ) {
+			$home_path = $set['publish'] ? $this->home_path() : '';
+
+			foreach ( array_chunk( $set['ids'], 2000 ) as $ids ) {
+				$this->process( $this->query_ids( $ids ), $started, $home_path, $set['publish'], $result );
+			}
+
+			$this->replace_failures( $started, $set['publish'] );
+		}
+
+		$result['complete'] = true;
+
+		return $result;
+	}
+
+	/**
+	 * The redirects the migration disabled as conflicts, and what each collided with.
+	 *
+	 * @return array<int, array{id: int, source: string, collides_with: int, collides_with_source: string}>
+	 */
+	public function conflicts(): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only conflict rows carry the key.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, m.meta_value FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_key = %s ORDER BY p.ID", self::CONFLICT_META_KEY ) );
+
+		return array_map(
+			static function ( object $row ): array {
+				$rival = get_post( (int) $row->meta_value );
+
+				return array(
+					'id'                   => (int) $row->ID,
+					'source'               => (string) $row->post_title,
+					'collides_with'        => (int) $row->meta_value,
+					'collides_with_source' => $rival instanceof WP_Post ? $rival->post_title : '(deleted)',
+				);
+			},
+			$rows
+		);
+	}
+
+	/**
+	 * Drop a redirect's conflict marker once someone has saved it.
+	 *
+	 * Hooked to every save of a redirect, as re-pointing, enabling or
+	 * trashing the row are all ways of settling the conflict.
+	 *
+	 * @param int $post_id The redirect post ID.
+	 * @return void
+	 */
+	public static function forget_conflict( int $post_id ): void {
+		delete_post_meta( $post_id, self::CONFLICT_META_KEY );
+	}
+
+	/**
+	 * Apply every pass to a set of redirects, then flush the bulk publish.
+	 *
+	 * @param array<WP_Post|null>  $posts     The redirects.
+	 * @param string               $started   The GMT timestamp at which the walk began.
+	 * @param string               $home_path The home path to strip, or ''.
+	 * @param bool                 $publish   Whether draft redirects should be published.
+	 * @param array<string, mixed> $result    Running totals, updated by reference.
+	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses the bulk write.
+	 */
+	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
 		foreach ( $posts as $post ) {
 			if ( ! $post instanceof WP_Post ) {
 				continue;
 			}
 
 			++$result['processed'];
-			$cursor = $post->ID;
 
 			// A redirect touched since the upgrade began was acted on by a user
 			// under 2.0 rules, where 'draft' means "deliberately disabled".
@@ -284,15 +420,87 @@ final class Upgrader {
 		}
 
 		$this->flush_publish_queue( $started, $result );
+	}
 
-		update_option( self::CURSOR_OPTION, $cursor, false );
+	/**
+	 * Totals with nothing counted yet.
+	 *
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 */
+	private static function empty_result(): array {
+		return array(
+			'processed'  => 0,
+			'changed'    => 0,
+			'unchanged'  => 0,
+			'skipped'    => 0,
+			'published'  => 0,
+			'repathed'   => 0,
+			'deduped'    => 0,
+			'normalized' => 0,
+			'conflicts'  => array(),
+			'failed'     => array(),
+			'complete'   => false,
+		);
+	}
 
-		if ( $result['processed'] < $size ) {
-			$this->complete();
-			$result['complete'] = true;
+	/**
+	 * The recorded failures, by the start time of the walk that failed them.
+	 *
+	 * @return array<string, array{publish: bool, ids: int[]}>
+	 */
+	private function retry_sets(): array {
+		$sets = get_option( self::RETRY_OPTION, array() );
+
+		return is_array( $sets ) ? $sets : array();
+	}
+
+	/**
+	 * Add this batch's failed redirects to those awaiting a retry.
+	 *
+	 * @param string $started The GMT timestamp at which the walk began.
+	 * @param bool   $publish Whether the walk published 1.x drafts.
+	 * @return void
+	 */
+	private function remember_failures( string $started, bool $publish ): void {
+		if ( array() === $this->failed_ids ) {
+			return;
 		}
 
-		return $result;
+		$sets             = $this->retry_sets();
+		$sets[ $started ] = array(
+			'publish' => $publish,
+			'ids'     => array_values( array_unique( array_merge( $sets[ $started ]['ids'] ?? array(), $this->failed_ids ) ) ),
+		);
+
+		$this->failed_ids = array();
+		update_option( self::RETRY_OPTION, $sets, false );
+	}
+
+	/**
+	 * Replace one walk's recorded failures with those that failed again.
+	 *
+	 * @param string $started The GMT timestamp at which the walk began.
+	 * @param bool   $publish Whether the walk published 1.x drafts.
+	 * @return void
+	 */
+	private function replace_failures( string $started, bool $publish ): void {
+		$sets = $this->retry_sets();
+		unset( $sets[ $started ] );
+
+		if ( array() !== $this->failed_ids ) {
+			$sets[ $started ] = array(
+				'publish' => $publish,
+				'ids'     => $this->failed_ids,
+			);
+		}
+
+		$this->failed_ids = array();
+
+		if ( array() === $sets ) {
+			delete_option( self::RETRY_OPTION );
+		} else {
+			update_option( self::RETRY_OPTION, $sets, false );
+		}
 	}
 
 	/**
@@ -394,8 +602,7 @@ final class Upgrader {
 	private function query_batch( int $after_id, int $ceiling, int $size ): array {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Keyset walk that must not prime the post cache; see above.
-		$rows = $wpdb->get_results(
+		return $this->fetch(
 			$wpdb->prepare(
 				"SELECT * FROM {$wpdb->posts} WHERE post_type = %s AND ID > %d AND ID <= %d ORDER BY ID ASC LIMIT %d",
 				PostType::POST_TYPE,
@@ -404,10 +611,47 @@ final class Upgrader {
 				$size
 			)
 		);
+	}
+
+	/**
+	 * Fetch the redirects with the given IDs, for a retry.
+	 *
+	 * @param int[] $ids The post IDs.
+	 * @return array<WP_Post|null> The redirects that still exist, in ascending ID order.
+	 */
+	private function query_ids( array $ids ): array {
+		global $wpdb;
+
+		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The interpolated fragment is only %d placeholders, one per ID.
+		return $this->fetch( $wpdb->prepare( "SELECT * FROM {$wpdb->posts} WHERE post_type = %s AND ID IN ({$placeholders}) ORDER BY ID ASC", array_merge( array( PostType::POST_TYPE ), $ids ) ) );
+	}
+
+	/**
+	 * Run a prepared SELECT of redirect rows, telling an error from no rows.
+	 *
+	 * $wpdb->get_results() returns an empty array either way, and an error
+	 * mistaken for "no more rows" would end the walk early and mark the
+	 * upgrade complete with rows never visited.
+	 *
+	 * @param string $sql The prepared query.
+	 * @return array<WP_Post|null> The rows as posts.
+	 *
+	 * @throws RuntimeException When the database refuses the read.
+	 */
+	private function fetch( string $sql ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared -- Prepared by the callers; must not prime the post cache (see query_batch()).
+		if ( false === $wpdb->query( $sql ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+		}
 
 		// get_post() on a raw row sanitizes it into a WP_Post, with integer
 		// IDs, without reading or writing the object cache.
-		return array_map( 'get_post', $rows );
+		return array_map( 'get_post', $wpdb->last_result );
 	}
 
 	/**
@@ -420,6 +664,8 @@ final class Upgrader {
 	 * @param string               $started The GMT timestamp at which the upgrade began.
 	 * @param array<string, mixed> $result  Running totals, updated by reference.
 	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses the bulk write.
 	 */
 	private function flush_publish_queue( string $started, array &$result ): void {
 		if ( array() === $this->publish_queue ) {
@@ -437,9 +683,12 @@ final class Upgrader {
 		$published = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$placeholders}) AND post_modified_gmt <= %s", array_merge( $ids, array( $started ) ) ) );
 
 		if ( false === $published ) {
-			foreach ( $ids as $id ) {
-				$result['failed'][] = sprintf( '#%d: %s', $id, self::write_error() );
-			}
+			// A status flip on rows that exist has no row-specific way to
+			// fail, so this is the database, not the data: stop, and let the
+			// next run redo the batch.
+			$this->publish_queue = array();
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not publish a batch of redirects: ' . self::write_error() );
 		} else {
 			$result['changed']   += (int) $published;
 			$result['published'] += (int) $published;
@@ -484,6 +733,7 @@ final class Upgrader {
 
 		if ( array() === $update ) {
 			++$result['unchanged'];
+			$this->mark_conflict( $post->ID, $plan['rival'] );
 			return $conflict;
 		}
 
@@ -500,13 +750,35 @@ final class Upgrader {
 
 		if ( false === $written ) {
 			$result['failed'][] = sprintf( '#%d (%s): %s', $post->ID, $post->post_title, self::write_error() );
-		} elseif ( 0 === $written ) {
-			++$result['skipped'];
-		} else {
-			self::tally( $update, $result );
+			$this->failed_ids[] = $post->ID;
+			return null;
 		}
 
+		if ( 0 === $written ) {
+			++$result['skipped'];
+			return null;
+		}
+
+		self::tally( $update, $result );
+		$this->mark_conflict( $post->ID, $plan['rival'] );
+
 		return $conflict;
+	}
+
+	/**
+	 * Record which redirect a drafted conflict collided with; see CONFLICT_META_KEY.
+	 *
+	 * Only once the row has reached its planned state: a row whose write
+	 * failed is marked when a retry gets it written.
+	 *
+	 * @param int      $post_id The drafted redirect.
+	 * @param int|null $rival   The redirect it collided with, or null when there was no conflict.
+	 * @return void
+	 */
+	private function mark_conflict( int $post_id, ?int $rival ): void {
+		if ( null !== $rival ) {
+			update_post_meta( $post_id, self::CONFLICT_META_KEY, $rival );
+		}
 	}
 
 	/**
@@ -548,11 +820,12 @@ final class Upgrader {
 	 * @param string             $home_path The site's home path, or '' when not a subdirectory site.
 	 * @param bool               $publish   Whether draft redirects should be published.
 	 * @param array<string, int> $claimed   Source hashes a dry run's earlier rows would have been re-keyed to, and the ID of the row.
-	 * @return array{update: array<string, string>, conflict: string|null} The changed fields, and a description of any collision with a redirect going somewhere else.
+	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null} The changed fields, a description of any collision with a redirect going somewhere else, and that redirect's ID.
 	 */
 	private function plan( WP_Post $post, string $home_path, bool $publish, array $claimed = array() ): array {
 		$update   = array();
 		$conflict = null;
+		$rival    = null;
 		$collided = false;
 
 		$new_path = $this->canonical_source( $post->post_title, $home_path );
@@ -587,6 +860,7 @@ final class Upgrader {
 					if ( 'draft' !== $post->post_status ) {
 						$update['post_status'] = 'draft';
 					}
+					$rival    = $existing->ID;
 					$conflict = sprintf(
 						'#%d (%s) collides with #%d (%s)',
 						$post->ID,
@@ -612,6 +886,7 @@ final class Upgrader {
 		return array(
 			'update'   => $update,
 			'conflict' => $conflict,
+			'rival'    => $rival,
 		);
 	}
 

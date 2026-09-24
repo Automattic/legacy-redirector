@@ -39,6 +39,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_conflict
  */
 final class AuditFlagsTest extends TestCase {
 
