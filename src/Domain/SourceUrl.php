@@ -110,8 +110,9 @@ final class SourceUrl {
 			throw new InvalidArgumentException( 'The URL contains neither a path nor query string.' );
 		}
 
-		// Build normalized URL from path and optional query.
-		$normalized = $components['path'] ?? '';
+		// Build normalized URL from path and optional query. A full URL with no
+		// path, 'http://example.com?p=1', is requested as '/?p=1'.
+		$normalized = $components['path'] ?? ( isset( $components['host'] ) ? '/' : '' );
 
 		// A path that arrived with a host was written from the domain root, so
 		// it still carries the home path wherever home is not the root. A bare
@@ -120,11 +121,25 @@ final class SourceUrl {
 			$normalized = self::strip_home_path( $normalized, $home_path );
 		}
 
+		// A path cannot start with '//' without being read as a host the next
+		// time round ('http://example.com//x' has the path '//x'), and no
+		// request produces one either: the parser takes it as a host there too.
+		$normalized = (string) preg_replace( '#^//+#', '/', $normalized );
+
 		$normalized = self::strip_trailing_slash( $normalized );
 
 		if ( ! empty( $components['query'] ) ) {
 			$normalized .= '?' . $components['query'];
 		}
+
+		// Sanitizing encodes square brackets, except where core's quirk of
+		// matching on '//' leaves them raw; a second pass would encode them,
+		// so they are encoded here to keep one source one spelling.
+		$normalized = str_replace( array( '[', ']' ), array( '%5B', '%5D' ), $normalized );
+
+		// Likewise sanitizing's ';//' rule, which decoding can set up (a raw ';'
+		// before an encoded '//' in the query).
+		$normalized = str_replace( ';//', '://', $normalized );
 
 		return $normalized;
 	}
@@ -151,10 +166,16 @@ final class SourceUrl {
 	 * - the mailto: exemption from CRLF stripping is dropped (a source can
 	 *   never be a mailto: link).
 	 *
+	 * Public because the resolver runs a request through it before parsing,
+	 * as 1.x did: characters this strips when they arrive raw would otherwise
+	 * be percent-encoded by the parser first, and survive. 1.x stripped them
+	 * on both sides of its lookup, so '/page?filter={all}' stored as
+	 * '/page?filter=all' and matched the request a browser sends for it.
+	 *
 	 * @param string $url The URL to sanitise (already ltrimmed).
 	 * @return string The sanitised URL, or '' if nothing usable remains.
 	 */
-	private static function sanitise_url( string $url ): string {
+	public static function sanitise_url( string $url ): string {
 		if ( '' === $url ) {
 			return '';
 		}
@@ -282,8 +303,8 @@ final class SourceUrl {
 	 * @return string The path without its trailing slash, or '/' for the site root.
 	 */
 	public static function strip_trailing_slash( string $path ): string {
-		// A query-only source such as 'http://example.com?p=123' parses to no
-		// path at all. Leave it empty rather than inventing a '/'.
+		// No path at all is left alone rather than given one; normalize() has
+		// already given a full URL the '/' a browser requests it with.
 		if ( '' === $path ) {
 			return $path;
 		}

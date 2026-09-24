@@ -51,9 +51,11 @@ final class Url {
 	 * RFC 3986's sub-delimiters, ':' and '@', none of which delimit anything
 	 * inside a path segment - a literal '+' included, which is only a space in
 	 * a form-encoded query - plus '|', which SourceUrl's sanitizing keeps.
-	 * Anything else stays encoded; see decode().
+	 * ';' is the exception: SourceUrl's sanitizing, like esc_url_raw(),
+	 * rewrites ';//' to '://', so a decoded '%3B//' would change on the next
+	 * pass. Anything else stays encoded; see decode().
 	 */
-	public const string PATH_TEXT = "-._~!$&'()*+,;=:@|";
+	public const string PATH_TEXT = "-._~!$&'()*+,=:@|";
 
 	/**
 	 * Punctuation that stands for itself in a query, and so is decoded there.
@@ -62,7 +64,7 @@ final class Url {
 	 * pair keys with values and stand for spaces in a form-encoded query,
 	 * plus the '/' and '?' that have no special meaning once inside one.
 	 */
-	public const string QUERY_TEXT = "-._~!$'()*,;:@/?|";
+	public const string QUERY_TEXT = "-._~!$'()*,:@/?|";
 
 	/**
 	 * Parse a URL, returning its components percent-decoded.

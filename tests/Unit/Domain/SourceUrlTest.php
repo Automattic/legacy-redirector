@@ -735,28 +735,43 @@ final class SourceUrlTest extends YoastTestCase {
 	 */
 	public static function data_sources_to_renormalize(): array {
 		return array(
-			'encoded unicode'        => array( '/caf%C3%A9' ),
-			'double-encoded escape'  => array( '/a%2541' ),
-			'stray percent'          => array( '/100%' ),
-			'encoded slash'          => array( '/a%2Fb' ),
-			'encoded question mark'  => array( '/a%3Fb' ),
-			'encoded hash'           => array( '/a%23b' ),
-			'encoded brace'          => array( '/a%7Bb' ),
-			'encoded square bracket' => array( '/a%5Bb%5D' ),
-			'encoded quote'          => array( '/a%22b' ),
-			'encoded control'        => array( '/a%01b' ),
-			'invalid UTF-8'          => array( '/%FF' ),
-			'plus in the path'       => array( '/a+b' ),
-			'space in the path'      => array( '/a%20b' ),
-			'plus in the query'      => array( '/p?q=a+b' ),
-			'encoded plus in query'  => array( '/p?q=c%2B%2B' ),
-			'encoded ampersand'      => array( '/p?q=a%26b' ),
-			'encoded equals'         => array( '/p?q=a%3Db' ),
-			'encoded hash in query'  => array( '/p?q=a%23b' ),
-			'encoded slash in query' => array( '/p?u=%2Fx%2F' ),
-			'unicode in query'       => array( '/p?q=caf%C3%A9' ),
-			'lower-case escapes'     => array( '/a%2fb%c3%a9' ),
-			'full url'               => array( 'https://example.com/caf%C3%A9/?q=a+b' ),
+			'encoded unicode'          => array( '/caf%C3%A9' ),
+			'double-encoded escape'    => array( '/a%2541' ),
+			'stray percent'            => array( '/100%' ),
+			'encoded slash'            => array( '/a%2Fb' ),
+			'encoded question mark'    => array( '/a%3Fb' ),
+			'encoded hash'             => array( '/a%23b' ),
+			'encoded brace'            => array( '/a%7Bb' ),
+			'encoded square bracket'   => array( '/a%5Bb%5D' ),
+			'encoded quote'            => array( '/a%22b' ),
+			'encoded control'          => array( '/a%01b' ),
+			'invalid UTF-8'            => array( '/%FF' ),
+			'plus in the path'         => array( '/a+b' ),
+			'space in the path'        => array( '/a%20b' ),
+			'plus in the query'        => array( '/p?q=a+b' ),
+			'encoded plus in query'    => array( '/p?q=c%2B%2B' ),
+			'encoded ampersand'        => array( '/p?q=a%26b' ),
+			'encoded equals'           => array( '/p?q=a%3Db' ),
+			'encoded hash in query'    => array( '/p?q=a%23b' ),
+			'encoded slash in query'   => array( '/p?u=%2Fx%2F' ),
+			'unicode in query'         => array( '/p?q=caf%C3%A9' ),
+			'lower-case escapes'       => array( '/a%2fb%c3%a9' ),
+			'full url'                 => array( 'https://example.com/caf%C3%A9/?q=a+b' ),
+			'query-only full url'      => array( 'http://example.com?p=1' ),
+			'double slash after host'  => array( 'http://example.com//x' ),
+			'encoded semicolon'        => array( '/x%3B//y' ),
+			'semicolon before slashes' => array( '/p?q=a;%2F%2Fb' ),
+			'raw bracket'              => array( '/.."]//}//?..' ),
 		);
+	}
+	/**
+	 * Test a full URL with a query but no path gets the '/' a browser requests it with.
+	 *
+	 * Left pathless, it was stored as '?p=123', which no request produces.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_query_only_full_url_gets_a_root_path(): void {
+		$this->assertSame( '/?p=123', SourceUrl::from_string( 'http://example.com?p=123' )->path() );
 	}
 }

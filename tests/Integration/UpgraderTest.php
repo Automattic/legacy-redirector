@@ -1182,4 +1182,29 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( 'trash', get_post_status( $spare_id ) );
 		$this->assertSame( 'publish', get_post_status( $kept_id ) );
 	}
+	/**
+	 * A title kses escaped after its key was hashed is re-keyed from the text that was hashed.
+	 *
+	 * Saved in a web request by a user without unfiltered_html, a 1.x source
+	 * '/search/?q=a+b&page=2' keeps the key of that text but has the title
+	 * '/search/?q=a+b&amp;page=2'. Re-keying from the title would move it to a
+	 * key no request produces.
+	 *
+	 * @return void
+	 */
+	public function test_kses_escaped_title_is_rekeyed_from_the_hashed_text() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/search/?q=a+b&page=2' );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => '/search/?q=a+b&amp;page=2' ), array( 'ID' => $post_id ) );
+		clean_post_cache( $post_id );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/search?q=a b&page=2', get_post( $post_id )->post_title );
+		$this->assertInstanceOf(
+			Redirect::class,
+			( new PostTypeRedirectRepository() )->find_by_source( SourceUrl::from_string( '/search/?q=a+b&page=2' ) )
+		);
+	}
 }

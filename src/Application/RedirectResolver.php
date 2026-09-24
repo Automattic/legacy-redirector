@@ -169,6 +169,12 @@ final class RedirectResolver {
 	 * @return string The path with optional query string.
 	 */
 	private function extract_path( string $url ): string {
+		// Sanitized first, as a source is and as 1.x treated requests: the
+		// characters it strips when they arrive raw ('{', '^' and the like,
+		// which browsers send raw in a query) must go before parse_encoded()
+		// encodes them, or they survive and the request misses its source.
+		$url = SourceUrl::sanitise_url( $url );
+
 		// parse_encoded() rather than wp_parse_url(): a bare parse_url()
 		// corrupts raw multibyte bytes on some hosts, and the components must
 		// come back still percent-encoded so SourceUrl does the only decode.

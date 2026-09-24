@@ -53,13 +53,13 @@ use WP_Query;
  *    (path and fragment decoded, query kept percent-encoded).
  *
  * 4. Sources are re-keyed to the form SourceUrl gives them, which is the form
- *    a request is looked up by. 1.x hashed each source exactly as stored, so
- *    '/caf%C3%A9', '/a%20b' and '/old-page/' all kept keys 2.0 never looks
- *    up. They lose their trailing slash, because 2.0 treats '/old-page' and
- *    '/old-page/' as one redirect rather than two, and their plain-text
- *    escapes are decoded. Sites that stored two spellings of one source,
- *    such as both slash forms, will have the two rows converge on one key;
- *    see plan() for how that is resolved.
+ *    a request is looked up by. 1.x hashed each source as esc_url_raw()
+ *    left it, so '/caf%C3%A9', '/a%20b' and '/old-page/' all kept keys 2.0
+ *    never looks up. They lose their trailing slash, because 2.0 treats
+ *    '/old-page' and '/old-page/' as one redirect rather than two, and their
+ *    plain-text escapes are decoded. Sites that stored two spellings of one
+ *    source, such as both slash forms, will have the two rows converge on
+ *    one key; see plan() for how that is resolved.
  *
  * Every pass is idempotent per redirect, so re-walking the set is safe.
  *
@@ -745,7 +745,7 @@ final class Upgrader {
 		$this->owners = array();
 
 		foreach ( $posts as $post ) {
-			$new_path = $post instanceof WP_Post ? $this->canonical_source( $post->post_title, $home_path ) : null;
+			$new_path = $post instanceof WP_Post ? $this->canonical_source( self::hashed_source( $post ), $home_path ) : null;
 			if ( null !== $new_path ) {
 				$this->owners[ md5( $new_path ) ] = 0;
 			}
@@ -911,7 +911,7 @@ final class Upgrader {
 		$rival    = null;
 		$collided = false;
 
-		$new_path = $this->canonical_source( $post->post_title, $home_path );
+		$new_path = $this->canonical_source( self::hashed_source( $post ), $home_path );
 
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
@@ -1039,13 +1039,37 @@ final class Upgrader {
 	}
 
 	/**
+	 * The source text a redirect's key was hashed from.
+	 *
+	 * Usually the title. But a title saved in a web request by a user without
+	 * unfiltered_html, as everyone is on VIP, passes through kses, which
+	 * writes a lone '&' as '&amp;' - after the key was hashed from the '&'.
+	 * Re-keying from such a title would move the row onto a key no request
+	 * produces, so the key decides which text it was.
+	 *
+	 * @param WP_Post $post The redirect post.
+	 * @return string The source text.
+	 */
+	private static function hashed_source( WP_Post $post ): string {
+		if ( md5( $post->post_title ) !== $post->post_name ) {
+			$unescaped = str_replace( '&amp;', '&', $post->post_title );
+
+			if ( md5( $unescaped ) === $post->post_name ) {
+				return $unescaped;
+			}
+		}
+
+		return $post->post_title;
+	}
+
+	/**
 	 * The canonical stored form of a source path, or null when already canonical.
 	 *
 	 * The home path comes off first (only for a site coming from 1.x, where
 	 * $home_path is set), then whatever is left goes through SourceUrl, as a
 	 * source saved today would. That takes off the trailing slash and settles
-	 * the encoding: 1.x keyed each source by the md5 of the text exactly as
-	 * stored, while 2.0 looks a request up by its SourceUrl form, so a 1.x
+	 * the encoding: 1.x keyed each source by the md5 of the text esc_url_raw()
+	 * produced, while 2.0 looks a request up by its SourceUrl form, so a 1.x
 	 * '/caf%C3%A9' or '/a%20b' keeps a key no request produces until it is
 	 * re-keyed to '/café' or '/a b'.
 	 *
