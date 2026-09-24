@@ -142,9 +142,8 @@ final class InternalDestinationNormalizerTest extends MonkeyStubs {
 			'safe decoded beside kept'          => array( 'https://example.com', '/caf%C3%A9%3F', '/café%3F' ),
 			'kept escape in fragment'           => array( 'https://example.com', 'https://example.com/foo#a%23b', '/foo#a%23b' ),
 			'encoded plus kept'                 => array( 'https://example.com', '/a%2Bb', '/a%2Bb' ),
-			// Url::parse_encoded() encodes a raw space as '+', so a literal
-			// '+' reaches the normalizer indistinguishable from a space.
-			'literal plus read as a space'      => array( 'https://example.com', '/a+b', '/a b' ),
+			// A '+' in a path is a literal plus, not a space.
+			'literal plus kept'                 => array( 'https://example.com', '/a+b', '/a+b' ),
 		);
 	}
 

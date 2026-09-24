@@ -54,7 +54,11 @@ Four storage changes between 1.x and 2.0 would otherwise stop redirects you alre
 2. **Where your site is not at the domain root, 1.x stored source paths with that prefix included** (`/subsite1/old-page` on a subsite, `/blog/old-page` on a single site installed at `example.com/blog`). Version 1.x read the raw request path for both storing and matching, so the two agreed. Version 2.0 strips the site's base path from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
 
    This applies to any install whose home URL is below the domain root, not just multisites. If your site lives at `example.com/blog`, you are affected in exactly the same way as a subsite.
-3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalizes incoming requests the same way, so either spelling now finds the redirect. Sources are re-keyed so they match what 2.0 looks up.
+3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalizes incoming requests the same way, so either spelling now finds the redirect. 
+
+   The same goes for how a source is encoded. Version 1.x keyed each source by its text exactly as stored, so `/caf%C3%A9`, `/café`, `/a%20b` and `/a b` were all different keys, and only a request spelled identically would match. Version 2.0 looks a request up by its decoded form, so every spelling of one path finds the same redirect. Escapes that would change the meaning if decoded stay encoded: `%2F` (a slash inside one path segment), `%3F` and `%23`, `%25`, and in the query `%26`, `%3D` and `%2B`. A `+` in a path is a literal plus, so `/tag/one+two` stays distinct from `/tag/one two`; in a query string it still means a space.
+
+   The migration re-keys every source to the form 2.0 looks up. Without that, a 1.x redirect whose source was stored encoded, or contained a `+` or a space, would stop working after the upgrade with no error.
 
    A trailing slash on the *destination* is left alone: there it is part of where the visitor actually lands.
 4. **Destinations are canonicalized.** A destination pointing at this site by absolute URL (`https://example.com/foo`) is rewritten to the relative form (`/foo`), so anything left absolute afterwards is external by construction. A relative destination is rewritten to the encoding 2.0 produces on save, so whichever of `/café` or `/caf%C3%A9` you originally typed is now stored one way: path and fragment decoded, query string kept percent-encoded.
@@ -67,7 +71,7 @@ One migration handles all four. It runs automatically in small batches on ordina
 
 The first two are corrections to the shape 1.x wrote, so they run **only** where the stored data predates 2.0. Once 2.0 has written data of its own, both readings become ambiguous: a `draft` then means "deliberately disabled" rather than "1.x never set a status", and a source beginning with your home path can be a deliberate double prefix (on a subsite at `/subsite1`, storing `/subsite1/x` is how you redirect the real URL `/subsite1/subsite1/x`). A later version bump re-walks every redirect, so leaving these two ungated would republish redirects you had disabled and rewrite sources you meant.
 
-The trailing-slash and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
+The source and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
 
 ### Large redirect sets
 

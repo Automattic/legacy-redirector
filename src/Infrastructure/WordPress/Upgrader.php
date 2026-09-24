@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\InternalDestinationNormalizer;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use InvalidArgumentException;
 use RuntimeException;
 use WP_Post;
 use WP_Query;
@@ -51,11 +52,14 @@ use WP_Query;
  *    typed is rewritten to the form the normalizer now produces on save
  *    (path and fragment decoded, query kept percent-encoded).
  *
- * 4. Source paths lose their trailing slash, because 2.0 treats '/old-page'
- *    and '/old-page/' as one redirect rather than two. See
- *    SourceUrl::strip_trailing_slash(). Sites that worked around the old
- *    behavior by storing both forms will have the two rows converge on one
- *    key; see plan() for how that is resolved.
+ * 4. Sources are re-keyed to the form SourceUrl gives them, which is the form
+ *    a request is looked up by. 1.x hashed each source exactly as stored, so
+ *    '/caf%C3%A9', '/a%20b' and '/old-page/' all kept keys 2.0 never looks
+ *    up. They lose their trailing slash, because 2.0 treats '/old-page' and
+ *    '/old-page/' as one redirect rather than two, and their plain-text
+ *    escapes are decoded. Sites that stored two spellings of one source,
+ *    such as both slash forms, will have the two rows converge on one key;
+ *    see plan() for how that is resolved.
  *
  * Every pass is idempotent per redirect, so re-walking the set is safe.
  *
@@ -67,7 +71,7 @@ use WP_Query;
  * is how you redirect the real URL /subsite1/subsite1/x). A later version
  * bump re-walks the whole set, so ungated passes would republish disabled
  * redirects and rewrite those sources into something else. The destination
- * and trailing-slash passes have no such ambiguity and run on every walk.
+ * and source passes have no such ambiguity and run on every walk.
  *
  * The routine is version-gated so it runs exactly once, and processes in
  * batches so that a site with a very large redirect set completes over
@@ -94,7 +98,7 @@ final class Upgrader {
 	/**
 	 * Current data schema version.
 	 */
-	public const int DB_VERSION = 5;
+	public const int DB_VERSION = 6;
 
 	/**
 	 * The first data version written under 2.0's rules.
@@ -935,14 +939,20 @@ final class Upgrader {
 	/**
 	 * The canonical stored form of a source path, or null when already canonical.
 	 *
-	 * Two corrections, in the order storage applies them: the home path comes
-	 * off first (only for a site coming from 1.x, where $home_path is set),
-	 * then the trailing slash comes off whatever is left.
+	 * The home path comes off first (only for a site coming from 1.x, where
+	 * $home_path is set), then whatever is left goes through SourceUrl, as a
+	 * source saved today would. That takes off the trailing slash and settles
+	 * the encoding: 1.x keyed each source by the md5 of the text exactly as
+	 * stored, while 2.0 looks a request up by its SourceUrl form, so a 1.x
+	 * '/caf%C3%A9' or '/a%20b' keeps a key no request produces until it is
+	 * re-keyed to '/café' or '/a b'.
 	 *
-	 * The slash rule is delegated to SourceUrl rather than repeated, so a
-	 * migrated row and a freshly saved one cannot disagree. Only the query
-	 * split is done here: SourceUrl works on the path alone, and a query can
-	 * legitimately end in a slash ('/a?b=c/') that must survive.
+	 * Delegating rather than repeating the rules means a migrated row and a
+	 * freshly saved one cannot disagree. The query is split off only for the
+	 * home path, which applies to the path alone.
+	 *
+	 * SourceUrl's form is a fixed point, so a row already in it comes back
+	 * unchanged and the pass is safe to repeat on every walk.
 	 *
 	 * @param string $source_path The stored source path, with optional query string.
 	 * @param string $home_path   The site's home path, or '' when there is nothing to strip.
@@ -962,7 +972,14 @@ final class Upgrader {
 			$path = HomePath::make_relative( $path, $home_path ) ?? $path;
 		}
 
-		$canonical = SourceUrl::strip_trailing_slash( $path ) . $query;
+		try {
+			$canonical = SourceUrl::from_string( $path . $query )->path();
+		} catch ( InvalidArgumentException ) {
+			// A source SourceUrl cannot parse, such as '//?q=1', still loses
+			// its trailing slash, which is often enough to settle it as a
+			// duplicate of the parseable form beside it.
+			$canonical = SourceUrl::strip_trailing_slash( $path ) . $query;
+		}
 
 		return $canonical === $source_path ? null : $canonical;
 	}

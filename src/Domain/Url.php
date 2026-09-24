@@ -46,10 +46,33 @@ final class Url {
 	private const string RESERVED = '|[^!*\'();:@&=+$,\/?%#\[\]]+|usD';
 
 	/**
+	 * Punctuation that stands for itself in a path, and so is decoded there.
+	 *
+	 * RFC 3986's sub-delimiters, ':' and '@', none of which delimit anything
+	 * inside a path segment - a literal '+' included, which is only a space in
+	 * a form-encoded query - plus '|', which SourceUrl's sanitizing keeps.
+	 * Anything else stays encoded; see decode().
+	 */
+	public const string PATH_TEXT = "-._~!$&'()*+,;=:@|";
+
+	/**
+	 * Punctuation that stands for itself in a query, and so is decoded there.
+	 *
+	 * As PATH_TEXT, less the '&', '=' and '+' that separate parameters,
+	 * pair keys with values and stand for spaces in a form-encoded query,
+	 * plus the '/' and '?' that have no special meaning once inside one.
+	 */
+	public const string QUERY_TEXT = "-._~!$'()*,;:@/?|";
+
+	/**
 	 * Parse a URL, returning its components percent-decoded.
 	 *
 	 * For callers that want the components as characters - a value object
 	 * normalizing a path, or a comparison against something already decoded.
+	 *
+	 * Only the escapes that stand for plain text are decoded; see decode().
+	 * A '+' is a literal plus in the path, as RFC 3986 has it, and a space
+	 * only in the query, where form encoding puts it.
 	 *
 	 * @param string $url The URL to parse.
 	 * @return array<string, string>|null The components, or null when the URL
@@ -63,11 +86,59 @@ final class Url {
 		}
 
 		foreach ( $parts as $name => $value ) {
-			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.urlencode_urlencode -- Pairs with the urlencode() in parse_encoded(); rawurldecode() would not restore '+'.
-			$parts[ $name ] = urldecode( $value );
+			$parts[ $name ] = match ( $name ) {
+				'path'     => self::decode( $value, self::PATH_TEXT ),
+				'query'    => self::decode( str_replace( '+', '%20', $value ), self::QUERY_TEXT ),
+				'fragment' => self::decode( $value, self::PATH_TEXT . '/?' ),
+				default    => rawurldecode( $value ),
+			};
 		}
 
 		return $parts;
+	}
+
+	/**
+	 * Decode the percent-escapes that stand for plain text, and keep the rest.
+	 *
+	 * Letters, digits, spaces, valid UTF-8 beyond ASCII and the punctuation
+	 * in $text are decoded. Every other escape is kept, in upper case so one
+	 * value still has one spelling: those are the ones whose decoded form
+	 * would mean something else ('%2F' splits a path segment, '%3F' and '%23'
+	 * start a query or fragment, '%25' is decoded again by the next pass), or
+	 * that could not be stored, such as control characters and bytes that
+	 * are not valid UTF-8. A '%' that starts no escape is encoded as '%25',
+	 * so that it and its encoded form are one spelling too.
+	 *
+	 * The result is a fixed point: parsing and decoding it again changes
+	 * nothing. Stored values are re-canonicalized on every migration walk and
+	 * every edit, so a decode that drifted would move them a step further
+	 * each time - '/a%2541' once became '/a%41', then '/aA'.
+	 *
+	 * @param string $encoded A percent-encoded URL component.
+	 * @param string $text    Punctuation that stands for itself in this component.
+	 * @return string The component with its plain-text escapes decoded.
+	 */
+	public static function decode( string $encoded, string $text ): string {
+		return (string) preg_replace_callback(
+			'/(?:%[0-9A-Fa-f]{2})+/',
+			static function ( array $escapes ) use ( $text ): string {
+				// One token per valid UTF-8 character, or per stray byte.
+				preg_match_all(
+					'/[\x00-\x7F]|[\xC2-\xDF][\x80-\xBF]|\xE0[\xA0-\xBF][\x80-\xBF]|[\xE1-\xEC\xEE\xEF][\x80-\xBF]{2}|\xED[\x80-\x9F][\x80-\xBF]|\xF0[\x90-\xBF][\x80-\xBF]{2}|[\xF1-\xF3][\x80-\xBF]{3}|\xF4[\x80-\x8F][\x80-\xBF]{2}|./s',
+					rawurldecode( $escapes[0] ),
+					$characters
+				);
+
+				$decoded = '';
+				foreach ( $characters[0] as $character ) {
+					$plain    = strlen( $character ) > 1 || 1 === preg_match( '/^[A-Za-z0-9 ]$/', $character ) || str_contains( $text, $character );
+					$decoded .= $plain ? $character : sprintf( '%%%02X', ord( $character ) );
+				}
+
+				return $decoded;
+			},
+			(string) preg_replace( '/%(?![0-9A-Fa-f]{2})/', '%25', $encoded )
+		);
 	}
 
 	/**
@@ -90,8 +161,9 @@ final class Url {
 		$encoded = preg_replace_callback(
 			self::RESERVED,
 			static function ( array $matches ): string {
-				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.urlencode_urlencode -- Required to percent-encode UTF-8 characters; the matching urldecode() is in parse().
-				return urlencode( $matches[0] );
+				// rawurlencode(), not urlencode(): a raw space must come out as
+				// '%20', or it could not be told apart from a literal '+'.
+				return rawurlencode( $matches[0] );
 			},
 			$url
 		);

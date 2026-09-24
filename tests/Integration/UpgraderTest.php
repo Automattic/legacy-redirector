@@ -1062,4 +1062,124 @@ final class UpgraderTest extends TestCase {
 			);
 		}
 	}
+	/**
+	 * A 1.x source in any encoding is reachable by the requests that reached it under 1.x.
+	 *
+	 * 1.x keyed each source by the md5 of the text exactly as stored, while
+	 * 2.0 looks a request up by its SourceUrl form. A row whose stored text
+	 * differed from that form kept a key no request produced, and returned a
+	 * 404 after upgrading, until the migration re-keyed every source.
+	 *
+	 * @dataProvider data_legacy_sources_and_requests
+	 *
+	 * @param string   $stored   The source as 1.x stored it.
+	 * @param string[] $requests Request URIs that should find it.
+	 * @return void
+	 */
+	public function test_legacy_source_is_reachable_after_migration( string $stored, array $requests ) {
+		$this->create_legacy_redirect( $stored );
+
+		$this->upgrader->run_batch( 100 );
+
+		$repository = new PostTypeRedirectRepository();
+
+		foreach ( $requests as $request ) {
+			$this->assertInstanceOf(
+				Redirect::class,
+				$repository->find_by_source( SourceUrl::from_string( $request ) ),
+				$request . ' should resolve after migrating ' . $stored
+			);
+		}
+	}
+
+	/**
+	 * Data provider of 1.x sources and the request URIs that should find them.
+	 *
+	 * @return array<string, array{string, string[]}>
+	 */
+	public static function data_legacy_sources_and_requests(): array {
+		return array(
+			'encoded unicode'            => array( '/caf%C3%A9', array( '/caf%C3%A9', '/caf%c3%a9', '/café' ) ),
+			'raw unicode'                => array( '/café', array( '/caf%C3%A9', '/café' ) ),
+			'literal plus'               => array( '/tag/one+two', array( '/tag/one+two', '/tag/one%2Btwo' ) ),
+			'encoded space'              => array( '/a%20b', array( '/a%20b' ) ),
+			'raw space'                  => array( '/a b', array( '/a%20b' ) ),
+			'plus in the query'          => array( '/p?q=a+b', array( '/p?q=a+b', '/p?q=a%20b' ) ),
+			'encoded plus in query'      => array( '/p?q=c%2B%2B', array( '/p?q=c%2B%2B' ) ),
+			'encoded and slashed'        => array( '/trail%C3%A9/', array( '/trail%C3%A9', '/trail%C3%A9/' ) ),
+			'encoded percent'            => array( '/100%25', array( '/100%25' ) ),
+			'encoded percent twice'      => array( '/a%2541', array( '/a%2541' ) ),
+			'encoded slash'              => array( '/a%2Fb', array( '/a%2Fb' ) ),
+			'encoded question mark'      => array( '/a%3Fb', array( '/a%3Fb' ) ),
+			'encoded ampersand in query' => array( '/p?q=a%26b', array( '/p?q=a%26b' ) ),
+		);
+	}
+
+	/**
+	 * Re-walking migrated sources changes nothing.
+	 *
+	 * The source pass runs on every later version walk, so a canonical form
+	 * that moved again on a second pass would drift a step further each
+	 * release, and a re-keyed row would lose its key.
+	 *
+	 * @return void
+	 */
+	public function test_migrated_sources_are_stable_on_a_later_walk() {
+		$stored = array( '/caf%C3%A9', '/tag/one+two', '/p?q=c%2B%2B', '/a%2541', '/a%2Fb', '/a%3Fb', '/100%', '/p?q=a%26b', '/a%7Bb' );
+		$ids    = array_map( fn( string $source ): int => $this->create_legacy_redirect( $source ), $stored );
+
+		$this->upgrader->run_batch( 100 );
+
+		$first = array_map( fn( int $id ): string => get_post( $id )->post_title, $ids );
+
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['changed'] );
+		$this->assertSame( $first, array_map( fn( int $id ): string => get_post( $id )->post_title, $ids ) );
+	}
+
+	/**
+	 * A site already on 2.0 data has its sources re-keyed too.
+	 *
+	 * Sites running a 2.0 development build migrated their 1.x data before
+	 * sources were re-keyed, so those rows still hold 1.x keys. The source
+	 * pass is not gated on 1.x data, so the next version walk catches them.
+	 *
+	 * @return void
+	 */
+	public function test_source_is_re_keyed_on_a_site_already_on_2_0_data() {
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+		$post_id = $this->create_legacy_redirect( '/caf%C3%A9' );
+		wp_update_post(
+			array(
+				'ID'          => $post_id,
+				'post_status' => 'publish',
+			)
+		);
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['repathed'] );
+		$this->assertSame( '/café', get_post( $post_id )->post_title );
+		$this->assertSame( md5( '/café' ), get_post( $post_id )->post_name );
+	}
+	/**
+	 * A source SourceUrl cannot parse still loses its trailing slash.
+	 *
+	 * '//?q=1' is not a URL 2.0 can look up, but trimming it to '/?q=1' is
+	 * what settles it as a spare copy of the redirect beside it.
+	 *
+	 * @return void
+	 */
+	public function test_unparseable_source_still_loses_its_trailing_slash() {
+		$spare_id = $this->create_legacy_redirect( '//?q=1', 'https://example.com/one' );
+		$kept_id  = $this->create_legacy_redirect( '/?q=1', 'https://example.com/one' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['deduped'] );
+		$this->assertSame( 'trash', get_post_status( $spare_id ) );
+		$this->assertSame( 'publish', get_post_status( $kept_id ) );
+	}
 }

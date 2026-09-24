@@ -692,4 +692,71 @@ final class SourceUrlTest extends YoastTestCase {
 			'root'                       => array( '/', false ),
 		);
 	}
+	/**
+	 * Test a '+' is a literal plus in the path and a space in the query.
+	 *
+	 * WordPress serves '/tag/one+two/' (posts with both tags) but not
+	 * '/tag/one two/', so reading the path's '+' as a space made a different
+	 * source out of it. Only a form-encoded query gives '+' that meaning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 */
+	public function test_plus_is_literal_in_the_path_and_a_space_in_the_query(): void {
+		$this->assertSame( '/tag/one+two', SourceUrl::from_string( '/tag/one+two/' )->path() );
+		$this->assertFalse( SourceUrl::from_string( '/a+b' )->equals( SourceUrl::from_string( '/a%20b' ) ) );
+		$this->assertTrue( SourceUrl::from_string( '/a+b' )->equals( SourceUrl::from_string( '/a%2Bb' ) ) );
+		$this->assertSame( '/p?q=a b', SourceUrl::from_string( '/p?q=a+b' )->path() );
+	}
+
+	/**
+	 * Test a normalized source normalizes to itself.
+	 *
+	 * The stored path is fed back through here whenever a redirect is edited
+	 * and on every migration walk, and its md5 is the lookup key. A path that
+	 * moved on a second pass would lose its key: '/a%2541' used to become
+	 * '/a%41', then '/aA'.
+	 *
+	 * @dataProvider data_sources_to_renormalize
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 *
+	 * @param string $url The source as typed or requested.
+	 */
+	public function test_normalized_source_is_a_fixed_point( string $url ): void {
+		$once = SourceUrl::from_string( $url )->path();
+
+		$this->assertSame( $once, SourceUrl::from_string( $once )->path() );
+	}
+
+	/**
+	 * Data provider for test_normalized_source_is_a_fixed_point.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_sources_to_renormalize(): array {
+		return array(
+			'encoded unicode'        => array( '/caf%C3%A9' ),
+			'double-encoded escape'  => array( '/a%2541' ),
+			'stray percent'          => array( '/100%' ),
+			'encoded slash'          => array( '/a%2Fb' ),
+			'encoded question mark'  => array( '/a%3Fb' ),
+			'encoded hash'           => array( '/a%23b' ),
+			'encoded brace'          => array( '/a%7Bb' ),
+			'encoded square bracket' => array( '/a%5Bb%5D' ),
+			'encoded quote'          => array( '/a%22b' ),
+			'encoded control'        => array( '/a%01b' ),
+			'invalid UTF-8'          => array( '/%FF' ),
+			'plus in the path'       => array( '/a+b' ),
+			'space in the path'      => array( '/a%20b' ),
+			'plus in the query'      => array( '/p?q=a+b' ),
+			'encoded plus in query'  => array( '/p?q=c%2B%2B' ),
+			'encoded ampersand'      => array( '/p?q=a%26b' ),
+			'encoded equals'         => array( '/p?q=a%3Db' ),
+			'encoded hash in query'  => array( '/p?q=a%23b' ),
+			'encoded slash in query' => array( '/p?u=%2Fx%2F' ),
+			'unicode in query'       => array( '/p?q=caf%C3%A9' ),
+			'lower-case escapes'     => array( '/a%2fb%c3%a9' ),
+			'full url'               => array( 'https://example.com/caf%C3%A9/?q=a+b' ),
+		);
+	}
 }
