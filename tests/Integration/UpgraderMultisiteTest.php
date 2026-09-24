@@ -287,7 +287,7 @@ final class UpgraderMultisiteTest extends TestCase {
 
 		$this->assertSame( 0, $result['deduped'] );
 		$this->assertCount( 1, $result['conflicts'] );
-		$this->assertStringContainsString( 'collides with', $result['conflicts'][0] );
+		$this->assertStringContainsString( 'has the same source as', $result['conflicts'][0] );
 
 		$this->assertSame( 'draft', get_post( $prefixed_id )->post_status );
 		$this->assertSame( 'publish', get_post( $kept_id )->post_status );

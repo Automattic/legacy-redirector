@@ -33,6 +33,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */

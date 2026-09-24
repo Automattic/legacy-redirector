@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
+use RuntimeException;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -39,7 +40,7 @@ final class MigrateCommand extends WP_CLI_Command {
 	private const int BATCH_PAUSE_US = 250000;
 
 	/**
-	 * Conflicts listed in full before the rest are summarized.
+	 * Duplicate sources listed in full before the rest are summarized.
 	 *
 	 * A messy site can have thousands, printed just above the summary line.
 	 */
@@ -78,6 +79,14 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * It is safe to run more than once: redirects you have disabled since
 	 * upgrading are left alone.
 	 *
+	 * Where two redirects end up with the same source but different
+	 * destinations, only one can answer: the other is disabled and reported.
+	 * `wp legacy-redirector list --duplicates` lists every one, at any time.
+	 *
+	 * If some redirects could not be written, running it again retries just
+	 * those, without walking the rest of the set again - even once the
+	 * migration has otherwise completed.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--dry-run]
@@ -97,14 +106,40 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * @return void
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
+		try {
+			$this->run( isset( $assoc_args['dry-run'] ) );
+		} catch ( RuntimeException $e ) {
+			WP_CLI::error( sprintf( 'Stopped because %s. It is safe to run the same command again: a migration carries on from the batch it was working on.', $e->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Migrate, retry earlier failures, or report what would happen.
+	 *
+	 * @param bool $dry_run Whether to report without writing.
+	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses a read or bulk write.
+	 */
+	private function run( bool $dry_run ): void {
 		if ( ! $this->upgrader->needs_upgrade() ) {
-			WP_CLI::success( 'Redirect data is already up to date; nothing to migrate.' );
+			$waiting = $this->upgrader->pending_retries();
+
+			if ( 0 === $waiting ) {
+				WP_CLI::success( 'Redirect data is already up to date; nothing to migrate.' );
+			} elseif ( $dry_run ) {
+				WP_CLI::line( sprintf( '%s redirect(s) could not be written in an earlier run. Running `wp legacy-redirector migrate` without --dry-run retries just those.', number_format( $waiting ) ) );
+			} else {
+				WP_CLI::line( sprintf( 'Retrying the %s redirect(s) that could not be written in an earlier run. The rest are already migrated and are not walked again.', number_format( $waiting ) ) );
+				$this->report_outcome( 'Retry complete.', $this->upgrader->retry_failed() );
+			}
+
 			return;
 		}
 
 		$position = $this->upgrader->position();
 
-		if ( isset( $assoc_args['dry-run'] ) ) {
+		if ( $dry_run ) {
 			$this->dry_run( $position['total'] );
 			return;
 		}
@@ -143,8 +178,8 @@ final class MigrateCommand extends WP_CLI_Command {
 		);
 
 		if ( array() !== $pending['conflicts'] ) {
-			WP_CLI::warning( sprintf( '%s source path(s) would collide with a redirect pointing somewhere else:', number_format( count( $pending['conflicts'] ) ) ) );
-			$this->list_capped( $pending['conflicts'], 'Run again with --debug=legacy-redirector to list them all.' );
+			WP_CLI::warning( sprintf( '%s redirect(s) would have the same source as another redirect with a different destination. Sources that differed only in form, such as /old and /old/, become one source, and only one redirect can answer it: the one already there would stay live, and the other would be disabled.', number_format( count( $pending['conflicts'] ) ) ) );
+			$this->list_capped( $pending['conflicts'], 'To list every one, repeat this dry run with --debug=legacy-redirector; like this one, it changes nothing.' );
 		}
 	}
 
@@ -160,13 +195,16 @@ final class MigrateCommand extends WP_CLI_Command {
 			WP_CLI::line( sprintf( 'Resuming where the last run stopped: %s of %s redirect(s) already done.', number_format( $done ), number_format( $total ) ) );
 		}
 
+		$left = $total - $done;
 		WP_CLI::line(
-			sprintf(
-				'Migrating %s redirect(s) in batches of %s, pausing %ss after each batch that writes so database replicas can keep up.',
-				number_format( $total - $done ),
-				number_format( self::BATCH_SIZE ),
-				self::BATCH_PAUSE_US / 1000000
-			)
+			$left > self::BATCH_SIZE
+				? sprintf(
+					'Migrating %s redirect(s) in batches of %s, pausing %ss after each batch that writes so database replicas can keep up.',
+					number_format( $left ),
+					number_format( self::BATCH_SIZE ),
+					self::BATCH_PAUSE_US / 1000000
+				)
+				: sprintf( 'Migrating %s redirect(s).', number_format( $left ) )
 		);
 
 		$report = $this->progress_reporter( 'Processed', $done, $total );
@@ -200,14 +238,26 @@ final class MigrateCommand extends WP_CLI_Command {
 			$report( $done );
 		} while ( ! $batch['complete'] );
 
+		$this->report_outcome( 'Migration complete.', $totals );
+	}
+
+	/**
+	 * Report the duplicate sources, failures and totals of a run or a retry.
+	 *
+	 * @param string               $headline 'Migration complete.' or 'Retry complete.'.
+	 * @param array<string, mixed> $totals   The run's totals.
+	 * @return void
+	 */
+	private function report_outcome( string $headline, array $totals ): void {
 		if ( array() !== $totals['conflicts'] ) {
-			WP_CLI::warning( sprintf( '%s redirect(s) collided with a redirect pointing somewhere else:', number_format( count( $totals['conflicts'] ) ) ) );
-			$this->list_capped( $totals['conflicts'], 'All are disabled, so `wp legacy-redirector list --status=disabled` lists them, alongside any redirect disabled on purpose.' );
-			WP_CLI::line( 'Each has been drafted rather than deleted, so no redirect fires from a path two rows disagree about. Review them, then delete or re-point and republish.' );
+			WP_CLI::warning( sprintf( '%s redirect(s) now have the same source as another redirect with a different destination. Sources that differed only in form, such as /old and /old/, are now one source, and only one redirect can answer it: the one already there stays live, and the other has been disabled.', number_format( count( $totals['conflicts'] ) ) ) );
+			$this->list_capped( $totals['conflicts'], '`wp legacy-redirector list --duplicates` lists every one.' );
+			WP_CLI::line( 'Decide which destination is right, then delete or re-point each disabled redirect. `wp legacy-redirector list --duplicates` lists them, now or later.' );
 		}
 
 		$summary = sprintf(
-			'Migration complete. %s redirect(s) inspected in this run: %s changed, %s needed no change, %s left alone because they were edited after the upgrade began, and %s could not be written. Of those changed, %s published, %s source path(s) rewritten, %s duplicate(s) trashed, %s destination(s) made relative.',
+			'%s %s redirect(s) inspected in this run: %s changed, %s needed no change, %s left alone because they were edited after the upgrade began, and %s could not be written. Of those changed, %s published, %s source path(s) rewritten, %s duplicate(s) trashed, %s destination(s) made relative.',
+			$headline,
 			number_format( $totals['processed'] ),
 			number_format( $totals['changed'] ),
 			number_format( $totals['unchanged'] ),
@@ -219,19 +269,25 @@ final class MigrateCommand extends WP_CLI_Command {
 			number_format( $totals['normalized'] )
 		);
 
-		if ( array() === $totals['failed'] ) {
-			WP_CLI::success( $summary );
+		$waiting = $this->upgrader->pending_retries();
+
+		if ( array() !== $totals['failed'] ) {
+			// Listed in full, unlike duplicate sources: each needs its cause fixed
+			// before a retry can succeed.
+			WP_CLI::warning( sprintf( '%s redirect(s) could not be written, and are as they were before the migration:', number_format( count( $totals['failed'] ) ) ) );
+			foreach ( $totals['failed'] as $failure ) {
+				WP_CLI::line( '  ' . $failure );
+			}
+			WP_CLI::line( $summary );
+			WP_CLI::error( sprintf( '%s redirect(s) are waiting to be retried. Once the cause is fixed, run `wp legacy-redirector migrate` again: it retries just those, without walking the rest again.', number_format( $waiting ) ) );
 			return;
 		}
 
-		// Listed in full, unlike conflicts: each is a redirect someone has to
-		// fix by hand, and the migration will not come back to it.
-		WP_CLI::warning( sprintf( '%s redirect(s) could not be written, and are as they were before the migration:', number_format( count( $totals['failed'] ) ) ) );
-		foreach ( $totals['failed'] as $failure ) {
-			WP_CLI::line( '  ' . $failure );
+		if ( $waiting > 0 ) {
+			WP_CLI::warning( sprintf( '%s redirect(s) that could not be written in an earlier run are still waiting. Run `wp legacy-redirector migrate` again to retry just those.', number_format( $waiting ) ) );
 		}
-		WP_CLI::line( $summary );
-		WP_CLI::error( 'The migration finished, but not every redirect could be migrated; see the list above.' );
+
+		WP_CLI::success( $summary );
 	}
 
 	/**

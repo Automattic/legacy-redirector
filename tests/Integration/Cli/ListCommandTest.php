@@ -10,6 +10,8 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Integration tests for ListCommand.
@@ -27,6 +29,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -48,7 +51,7 @@ final class ListCommandTest extends CliTestCase {
 	public function set_up(): void {
 		parent::set_up();
 
-		$this->command = new ListCommand( $this->query_repository() );
+		$this->command = new ListCommand( $this->query_repository(), $this->repository(), new Upgrader() );
 	}
 
 	/**
@@ -324,5 +327,103 @@ final class ListCommandTest extends CliTestCase {
 		);
 
 		$this->assert_error_contains( 'Invalid fields' );
+	}
+	/**
+	 * Test listing the duplicate sources the migration disabled.
+	 */
+	public function test_list_duplicates(): void {
+		foreach ( array( 'started_gmt', 'cursor', 'ceiling' ) as $option ) {
+			delete_option( 'wpcom_legacy_redirector_upgrade_' . $option );
+		}
+
+		$live_id     = $this->insert_legacy_redirect( '/clash', 'https://example.com/one' );
+		$disabled_id = $this->insert_legacy_redirect( '/clash/', 'https://example.com/two' );
+		$this->insert_legacy_redirect( '/unrelated', 'https://example.com/three' );
+
+		( new Upgrader() )->run_batch( 100 );
+
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'duplicates' => true,
+				'format'     => 'csv',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'csv',
+					array(
+						array(
+							'ID'                => $disabled_id,
+							'from'              => '/clash',
+							'to'                => 'https://example.com/two',
+							'duplicate_of'      => $live_id,
+							'duplicate_of_from' => '/clash',
+							'duplicate_of_to'   => 'https://example.com/one',
+						),
+					),
+					array( 'ID', 'from', 'to', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' ),
+				),
+			),
+			$GLOBALS['wp_cli_format_items_calls']
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'duplicates' => true,
+				'format'     => 'ids',
+			)
+		);
+		$this->assert_stdout_contains( (string) $disabled_id );
+	}
+
+	/**
+	 * Test listing duplicates when there are none says so.
+	 */
+	public function test_list_duplicates_with_none(): void {
+		$this->invoke_command( $this->command, array(), array( 'duplicates' => true ) );
+
+		$this->assert_success_contains( 'No redirects are disabled as duplicate sources.' );
+	}
+
+	/**
+	 * Test --duplicates validates fields against its own set.
+	 */
+	public function test_list_duplicates_rejects_fields_it_does_not_have(): void {
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'duplicates' => true,
+				'fields'     => 'ID,status',
+			)
+		);
+
+		$this->assert_error_contains( 'Invalid fields: status. Available fields: ID, from, to, duplicate_of, duplicate_of_from, duplicate_of_to' );
+	}
+
+	/**
+	 * Store a redirect exactly as version 1.x did.
+	 *
+	 * @param string $source      The source path.
+	 * @param string $destination The destination URL.
+	 * @return int The post ID.
+	 */
+	private function insert_legacy_redirect( string $source, string $destination ): int {
+		return (int) wp_insert_post(
+			array(
+				'post_name'    => md5( $source ),
+				'post_title'   => $source,
+				'post_excerpt' => $destination,
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'draft',
+			)
+		);
 	}
 }

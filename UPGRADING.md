@@ -108,7 +108,7 @@ Only one redirect can own a path, so the migration decides on the destinations:
 - **Both point at the same place.** The spare is redundant, so it is moved to the trash and counted in the migration summary. Nothing is deleted outright, so you can restore it from the Trash view if you disagree.
 - **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, editable, and plainly not doing anything.
 
-`wp legacy-redirector migrate` lists every such conflict, and `--dry-run` shows them before anything is written. Review the disabled redirects afterwards, then either delete them or re-point and re-enable them.
+`wp legacy-redirector migrate --dry-run` shows them before anything is written, and `wp legacy-redirector list --duplicates` lists every one at any time afterwards, beside the live redirect that shares its source. Review them, then either delete them or re-point and re-enable them; each drops off that list once saved.
 
 ## Breaking Changes
 

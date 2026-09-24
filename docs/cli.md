@@ -82,11 +82,28 @@ interrupted, it says so and carries on from where that run stopped.
 At the end it reports how many redirects were changed, how many needed no change, how
 many were left alone because someone edited them after the upgrade began, and how many
 could not be written. It then breaks the changes down: published, source path
-rewritten, trashed as duplicates, destination made relative. It also lists any source
-path that two redirects now disagree about; those are left disabled rather than deleted,
-so review them afterwards. Only the first 20 are listed; add `--debug=legacy-redirector`
-to the dry run to see every one. If any redirect could not be written, the command lists
-each one with the database's reason and exits with an error.
+rewritten, trashed as duplicates, destination made relative.
+
+If any redirect could not be written, the command lists each one with the database's
+reason and exits with an error. Those redirects are left exactly as they were, and are
+remembered: once the cause is fixed, run `wp legacy-redirector migrate` again and it
+retries just those, without walking the rest of the set again. That works even after the
+migration has otherwise completed. A database error partway through, or an interrupted
+run, is also safe to rerun: the command carries on from the batch it was working on.
+
+Where two redirects end up with the same source but different destinations, for example
+`/old` and `/old/`, only one can answer. The one already at that source stays live, and
+the other is disabled rather than deleted, for you to decide. The run lists the first 20.
+To see every one, whenever you like, list the duplicate sources:
+
+```bash
+wp legacy-redirector list --duplicates
+wp legacy-redirector list --duplicates --format=csv > duplicates.csv
+```
+
+Each row shows the disabled redirect and its destination beside the live redirect with the
+same source and its destination. Once you save the disabled redirect, by re-pointing,
+enabling or trashing it, it drops off the list.
 
 See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and why.
 

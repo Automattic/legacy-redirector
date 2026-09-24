@@ -57,6 +57,7 @@ final class UpgraderTest extends TestCase {
 		delete_option( 'wpcom_legacy_redirector_upgrade_cursor' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
 		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_retry' );
 
 		// The shared Integration TestCase does not call parent::set_up(), so
 		// WP_UnitTestCase never opens its rollback transaction and posts leak
@@ -463,32 +464,159 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A write the database refuses is reported, not counted as done.
+	 * A single row's refused write is reported, not counted as done, and retried later.
 	 *
-	 * Simulated by blanking the queries, which is how a failed write looks to
-	 * the migration: the call returns false.
+	 * Simulated by blanking the per-row UPDATE, which is how a failed write
+	 * looks to the migration: the call returns false. The retry comes after
+	 * the upgrade has completed, and must still publish the 1.x draft.
 	 *
 	 * @return void
 	 */
-	public function test_failed_writes_are_reported_and_not_counted() {
-		global $wpdb;
-
+	public function test_failed_row_is_reported_then_retried() {
 		$bulk_id  = $this->create_legacy_redirect( '/old-page' );
 		$rekey_id = $this->create_legacy_redirect( '/other-page/' );
 
-		$refuse = static fn( string $query ): string => preg_match( "/^UPDATE `?{$wpdb->posts}`? /", $query ) ? '' : $query;
+		$result = $this->with_row_writes_refused( fn() => $this->upgrader->run_batch( 100 ) );
+
+		$this->assertSame( 1, $result['changed'] );
+		$this->assertSame( 0, $result['repathed'] );
+		$this->assertCount( 1, $result['failed'] );
+		$this->assertStringStartsWith( '#' . $rekey_id . ' (/other-page/): ', $result['failed'][0] );
+		$this->assertSame( 'publish', get_post_status( $bulk_id ) );
+		$this->assertSame( 'draft', get_post_status( $rekey_id ) );
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+		$this->assertSame( 1, $this->upgrader->pending_retries() );
+
+		$retry = $this->upgrader->retry_failed();
+
+		$this->assertSame( 1, $retry['processed'] );
+		$this->assertSame( 1, $retry['repathed'] );
+		$this->assertSame( 1, $retry['published'] );
+		$this->assertSame( 'publish', get_post_status( $rekey_id ) );
+		$this->assertSame( '/other-page', get_post( $rekey_id )->post_title );
+		$this->assertSame( 0, $this->upgrader->pending_retries() );
+	}
+
+	/**
+	 * A row that fails its retry stays waiting; one deleted meanwhile drops out.
+	 *
+	 * @return void
+	 */
+	public function test_retry_keeps_rows_that_fail_again() {
+		$failing_id = $this->create_legacy_redirect( '/failing/' );
+		$deleted_id = $this->create_legacy_redirect( '/deleted/' );
+
+		$this->with_row_writes_refused( fn() => $this->upgrader->run_batch( 100 ) );
+		$this->assertSame( 2, $this->upgrader->pending_retries() );
+
+		wp_delete_post( $deleted_id, true );
+		$retry = $this->with_row_writes_refused( fn() => $this->upgrader->retry_failed() );
+
+		$this->assertSame( 1, $retry['processed'] );
+		$this->assertCount( 1, $retry['failed'] );
+		$this->assertSame( 1, $this->upgrader->pending_retries() );
+		$this->assertSame( 'draft', get_post_status( $failing_id ) );
+	}
+
+	/**
+	 * A refused bulk write stops the batch without advancing the cursor.
+	 *
+	 * A status flip has no row-specific way to fail, so this is the database
+	 * failing: the next run must redo the batch, not skip it.
+	 *
+	 * @return void
+	 */
+	public function test_refused_bulk_write_stops_the_batch() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ? '' : $query;
 
 		add_filter( 'query', $refuse );
-		$result = $this->upgrader->run_batch( 100 );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should have stopped.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not publish', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertSame( 0, (int) get_option( 'wpcom_legacy_redirector_upgrade_cursor', 0 ) );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+
+		$this->upgrader->run_batch( 100 );
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * A refused read is not mistaken for the end of the walk.
+	 *
+	 * $wpdb returns an empty result for an error and for no rows alike; read
+	 * as "no more rows", a database blip would mark the upgrade complete with
+	 * redirects never visited.
+	 *
+	 * @return void
+	 */
+	public function test_refused_read_does_not_complete_the_upgrade() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$this->upgrader->maybe_upgrade();
 		remove_filter( 'query', $refuse );
 
-		$this->assertSame( 0, $result['changed'] );
-		$this->assertSame( 0, $result['published'] );
-		$this->assertSame( 0, $result['repathed'] );
-		$this->assertCount( 2, $result['failed'] );
-		$this->assertStringStartsWith( '#' . $rekey_id . ' (/other-page/): ', $result['failed'][0] );
-		$this->assertStringStartsWith( '#' . $bulk_id . ': ', $result['failed'][1] );
-		$this->assertSame( 'draft', get_post_status( $bulk_id ) );
+		$this->assertTrue( $this->upgrader->needs_upgrade(), 'A failed read must not complete the upgrade.' );
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * A redirect disabled as a duplicate source can be listed later, until someone saves it.
+	 *
+	 * @return void
+	 */
+	public function test_duplicates_are_listed_until_saved() {
+		$kept_id  = $this->create_legacy_redirect( '/clash', 'https://example.com/one' );
+		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( array( $loser_id => $kept_id ), $this->upgrader->duplicates() );
+
+		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
+		wp_update_post(
+			array(
+				'ID'           => $loser_id,
+				'post_excerpt' => 'https://example.com/one',
+			)
+		);
+		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
+
+		$this->assertSame( array(), $this->upgrader->duplicates() );
+	}
+
+	/**
+	 * Run a callback with every per-row redirect write refused.
+	 *
+	 * Blanks the UPDATE $wpdb->update() builds (its table name is quoted),
+	 * leaving the bulk publish, which is not, alone.
+	 *
+	 * @param callable $callback The code to run.
+	 * @return mixed What the callback returned.
+	 */
+	private function with_row_writes_refused( callable $callback ): mixed {
+		global $wpdb;
+
+		$refuse = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			return $callback();
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
 	}
 
 	/**
@@ -865,7 +993,7 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertSame( 0, $result['deduped'] );
 		$this->assertCount( 1, $result['conflicts'] );
-		$this->assertStringContainsString( 'drafted', $result['conflicts'][0] );
+		$this->assertStringContainsString( 'has the same source as', $result['conflicts'][0] );
 
 		$this->assertSame( 'draft', get_post( $loser_id )->post_status );
 		$this->assertSame( 'publish', get_post( $kept )->post_status );
