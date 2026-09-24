@@ -129,9 +129,9 @@ final class PluginBootstrapper {
 		// too, and a flag must never outlive the save it described.
 		$this->container->audit_flags()->register();
 
-		// Likewise the migration's conflict marker: saving the row is how a
-		// person settles the conflict, in any context.
-		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_conflict' ) );
+		// Likewise the migration's duplicate-source marker: saving the row is
+		// how a person settles it, in any context.
+		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 
 		// Keep the recorded audit summary fresh with a daily scheduled run.
 		// Registered in every context: cron events fire wherever WP loads.
@@ -265,7 +265,7 @@ final class PluginBootstrapper {
 			'create'           => new CreateCommand( $manager, $this->container->auditor() ),
 			'migrate'          => new MigrateCommand( $this->container->upgrader() ),
 			'get'              => new GetCommand( $fetcher ),
-			'list'             => new ListCommand( $this->container->query_repository() ),
+			'list'             => new ListCommand( $this->container->query_repository(), $this->container->repository(), $this->container->upgrader() ),
 			'update'           => new UpdateCommand( $manager, $batch ),
 			'delete'           => new DeleteCommand( $manager, $batch ),
 			'enable'           => new EnableCommand( $manager, $batch ),

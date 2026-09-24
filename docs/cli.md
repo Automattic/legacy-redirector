@@ -91,17 +91,19 @@ retries just those, without walking the rest of the set again. That works even a
 migration has otherwise completed. A database error partway through, or an interrupted
 run, is also safe to rerun: the command carries on from the batch it was working on.
 
-Where two redirects end up with the same source but different destinations, one is left
-disabled rather than deleted, for you to decide. The run lists the first 20. To see every
-one, whenever you like, list them, which only reads:
+Where two redirects end up with the same source but different destinations, for example
+`/old` and `/old/`, only one can answer. The one already at that source stays live, and
+the other is disabled rather than deleted, for you to decide. The run lists the first 20.
+To see every one, whenever you like, list the duplicate sources:
 
 ```bash
-wp legacy-redirector migrate --list-conflicts
-wp legacy-redirector migrate --list-conflicts --format=csv > conflicts.csv
+wp legacy-redirector list --duplicates
+wp legacy-redirector list --duplicates --format=csv > duplicates.csv
 ```
 
-Each row shows the disabled redirect and the one it collided with. Once you save the
-disabled redirect, by re-pointing, enabling or trashing it, it drops off the list.
+Each row shows the disabled redirect and its destination beside the live redirect with the
+same source and its destination. Once you save the disabled redirect, by re-pointing,
+enabling or trashing it, it drops off the list.
 
 See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and why.
 

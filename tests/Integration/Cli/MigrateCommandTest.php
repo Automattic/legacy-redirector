@@ -165,9 +165,9 @@ final class MigrateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * A long conflict list shows the first few and says how many more there are.
+	 * A long duplicate-source list shows the first few and says how many more there are.
 	 */
-	public function test_conflict_list_is_capped(): void {
+	public function test_duplicate_source_list_is_capped(): void {
 		for ( $i = 0; $i < 21; $i++ ) {
 			$this->create_legacy_redirect( '/clash-' . $i, 'https://external.example.net/one' );
 			$this->create_legacy_redirect( '/clash-' . $i . '/', 'https://external.example.net/two' );
@@ -175,9 +175,9 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
 
-		$this->assert_warning_contains( '21 source path(s) would collide' );
+		$this->assert_warning_contains( '21 redirect(s) would have the same source as another redirect with a different destination.' );
 		$this->assert_stdout_contains( '  ...and 1 more. To list every one, repeat this dry run with --debug=legacy-redirector; like this one, it changes nothing.' );
-		$this->assertSame( 20, substr_count( $this->get_stdout(), 'would be drafted' ) );
+		$this->assertSame( 20, substr_count( $this->get_stdout(), 'has the same source as' ) );
 
 		$debugged = array_filter( \WP_CLI::$calls, static fn( array $call ): bool => 'debug' === $call[0] && 'legacy-redirector' === $call[2] );
 		$this->assertCount( 1, $debugged, 'The rest should go to the debug group.' );
@@ -234,51 +234,20 @@ final class MigrateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * The conflicts can be listed after the run, in any of the usual formats.
+	 * A duplicate source is reported with both destinations, and where to list them later.
 	 */
-	public function test_list_conflicts_after_the_run(): void {
+	public function test_duplicate_source_is_reported_with_both_destinations(): void {
 		$kept_id  = $this->create_legacy_redirect( '/clash', 'https://external.example.net/one' );
 		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://external.example.net/two' );
 
 		$this->invoke_command( $this->command, array(), array() );
-		$this->assert_success_contains( 'Migration complete.' );
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array(
-				'list-conflicts' => true,
-				'format'         => 'csv',
-			)
-		);
-
-		$this->assertSame(
-			array(
-				array(
-					'csv',
-					array(
-						array(
-							'id'                   => $loser_id,
-							'source'               => '/clash/',
-							'collides_with'        => $kept_id,
-							'collides_with_source' => '/clash',
-						),
-					),
-					array( 'id', 'source', 'collides_with', 'collides_with_source' ),
-				),
-			),
-			$GLOBALS['wp_cli_format_items_calls']
-		);
-	}
-
-	/**
-	 * With no conflicts, listing them says so.
-	 */
-	public function test_list_conflicts_with_none(): void {
-		$this->invoke_command( $this->command, array(), array( 'list-conflicts' => true ) );
-
-		$this->assert_success_contains( 'No redirects are disabled as migration conflicts.' );
+		$this->assert_warning_contains( '1 redirect(s) now have the same source as another redirect with a different destination.' );
+		$this->assert_warning_contains( 'the one already there stays live, and the other has been disabled.' );
+		$this->assert_stdout_contains( sprintf( '  /clash/ → https://external.example.net/two (#%d) has the same source as /clash → https://external.example.net/one (#%d)', $loser_id, $kept_id ) );
+		$this->assert_stdout_contains( '`wp legacy-redirector list --duplicates` lists them, now or later.' );
+		$this->assertSame( 'draft', get_post_status( $loser_id ) );
+		$this->assertSame( 'publish', get_post_status( $kept_id ) );
 	}
 
 	/**

@@ -159,13 +159,13 @@ final class Upgrader {
 	private const string RETRY_OPTION = 'wpcom_legacy_redirector_upgrade_retry';
 
 	/**
-	 * Meta key marking a redirect drafted as a conflict.
+	 * Meta key marking a redirect the migration disabled as a duplicate source.
 	 *
-	 * Holds the ID of the redirect it collided with, so the conflicts can be
-	 * listed long after the run that found them. Saving the row clears it: a
-	 * person has acted on it. See forget_conflict().
+	 * Holds the ID of the live redirect whose source it shares, so the
+	 * duplicates can be listed long after the run that found them. Saving the
+	 * row clears it: a person has acted on it. See forget_duplicate().
 	 */
-	public const string CONFLICT_META_KEY = '_legacy_redirector_migration_conflict';
+	public const string DUPLICATE_META_KEY = '_legacy_redirector_duplicate_of';
 
 	/**
 	 * Redirects processed per batch when running on a web request.
@@ -347,42 +347,30 @@ final class Upgrader {
 	}
 
 	/**
-	 * The redirects the migration disabled as conflicts, and what each collided with.
+	 * The redirects the migration disabled as duplicate sources.
 	 *
-	 * @return array<int, array{id: int, source: string, collides_with: int, collides_with_source: string}>
+	 * @return array<int, int> Each disabled redirect's ID, mapped to the ID of the live redirect whose source it shares.
 	 */
-	public function conflicts(): array {
+	public function duplicates(): array {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only conflict rows carry the key.
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT p.ID, p.post_title, m.meta_value FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE m.meta_key = %s ORDER BY p.ID", self::CONFLICT_META_KEY ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only duplicate rows carry the key.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY post_id", self::DUPLICATE_META_KEY ) );
 
-		return array_map(
-			static function ( object $row ): array {
-				$rival = get_post( (int) $row->meta_value );
-
-				return array(
-					'id'                   => (int) $row->ID,
-					'source'               => (string) $row->post_title,
-					'collides_with'        => (int) $row->meta_value,
-					'collides_with_source' => $rival instanceof WP_Post ? $rival->post_title : '(deleted)',
-				);
-			},
-			$rows
-		);
+		return array_map( 'intval', array_column( $rows, 'meta_value', 'post_id' ) );
 	}
 
 	/**
-	 * Drop a redirect's conflict marker once someone has saved it.
+	 * Drop a redirect's duplicate marker once someone has saved it.
 	 *
 	 * Hooked to every save of a redirect, as re-pointing, enabling or
-	 * trashing the row are all ways of settling the conflict.
+	 * trashing the row are all ways of settling it.
 	 *
 	 * @param int $post_id The redirect post ID.
 	 * @return void
 	 */
-	public static function forget_conflict( int $post_id ): void {
-		delete_post_meta( $post_id, self::CONFLICT_META_KEY );
+	public static function forget_duplicate( int $post_id ): void {
+		delete_post_meta( $post_id, self::DUPLICATE_META_KEY );
 	}
 
 	/**
@@ -566,7 +554,7 @@ final class Upgrader {
 				}
 
 				if ( null !== $plan['conflict'] ) {
-					$pending['conflicts'][] = $plan['conflict'] . ' and would be drafted';
+					$pending['conflicts'][] = $plan['conflict'];
 				}
 			}
 
@@ -729,11 +717,11 @@ final class Upgrader {
 	private function migrate_post( WP_Post $post, string $home_path, bool $publish, array &$result ): ?string {
 		$plan     = $this->plan( $post, $home_path, $publish );
 		$update   = $plan['update'];
-		$conflict = null === $plan['conflict'] ? null : $plan['conflict'] . ' and has been drafted';
+		$conflict = $plan['conflict'];
 
 		if ( array() === $update ) {
 			++$result['unchanged'];
-			$this->mark_conflict( $post->ID, $plan['rival'] );
+			$this->mark_duplicate( $post->ID, $plan['rival'] );
 			return $conflict;
 		}
 
@@ -760,24 +748,24 @@ final class Upgrader {
 		}
 
 		self::tally( $update, $result );
-		$this->mark_conflict( $post->ID, $plan['rival'] );
+		$this->mark_duplicate( $post->ID, $plan['rival'] );
 
 		return $conflict;
 	}
 
 	/**
-	 * Record which redirect a drafted conflict collided with; see CONFLICT_META_KEY.
+	 * Record which live redirect a disabled duplicate shares its source with; see DUPLICATE_META_KEY.
 	 *
 	 * Only once the row has reached its planned state: a row whose write
 	 * failed is marked when a retry gets it written.
 	 *
 	 * @param int      $post_id The drafted redirect.
-	 * @param int|null $rival   The redirect it collided with, or null when there was no conflict.
+	 * @param int|null $rival   The live redirect whose source it shares, or null when it is not a duplicate.
 	 * @return void
 	 */
-	private function mark_conflict( int $post_id, ?int $rival ): void {
+	private function mark_duplicate( int $post_id, ?int $rival ): void {
 		if ( null !== $rival ) {
-			update_post_meta( $post_id, self::CONFLICT_META_KEY, $rival );
+			update_post_meta( $post_id, self::DUPLICATE_META_KEY, $rival );
 		}
 	}
 
@@ -862,11 +850,13 @@ final class Upgrader {
 					}
 					$rival    = $existing->ID;
 					$conflict = sprintf(
-						'#%d (%s) collides with #%d (%s)',
-						$post->ID,
+						'%s → %s (#%d) has the same source as %s → %s (#%d)',
 						$post->post_title,
-						$existing->ID,
-						$new_path
+						self::destination_label( $post ),
+						$post->ID,
+						$new_path,
+						self::destination_label( $existing ),
+						$existing->ID
 					);
 				}
 			}
@@ -995,6 +985,16 @@ final class Upgrader {
 
 		return ( $this->normalized_excerpt( $a->post_excerpt ) ?? $a->post_excerpt )
 			=== ( $this->normalized_excerpt( $b->post_excerpt ) ?? $b->post_excerpt );
+	}
+
+	/**
+	 * Where a redirect sends visitors, for a duplicate-source report.
+	 *
+	 * @param WP_Post $post The redirect post.
+	 * @return string The destination URL, or the post it points at.
+	 */
+	private static function destination_label( WP_Post $post ): string {
+		return $post->post_parent > 0 ? 'post #' . $post->post_parent : $post->post_excerpt;
 	}
 
 	/**

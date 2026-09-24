@@ -12,6 +12,8 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -30,6 +32,13 @@ final class ListCommand extends WP_CLI_Command {
 	private const array DEFAULT_FIELDS = array( 'ID', 'from', 'to', 'type', 'status' );
 
 	/**
+	 * Output fields for --duplicates.
+	 *
+	 * @var string[]
+	 */
+	private const array DUPLICATE_FIELDS = array( 'ID', 'from', 'to', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' );
+
+	/**
 	 * The query repository.
 	 *
 	 * @var RedirectQueryRepositoryInterface
@@ -37,12 +46,30 @@ final class ListCommand extends WP_CLI_Command {
 	private RedirectQueryRepositoryInterface $query_repository;
 
 	/**
+	 * The redirect repository.
+	 *
+	 * @var RedirectRepositoryInterface
+	 */
+	private RedirectRepositoryInterface $repository;
+
+	/**
+	 * The upgrade routine, which records the duplicate sources it disabled.
+	 *
+	 * @var Upgrader
+	 */
+	private Upgrader $upgrader;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
+	 * @param RedirectRepositoryInterface      $repository       The redirect repository.
+	 * @param Upgrader                         $upgrader         The upgrade routine.
 	 */
-	public function __construct( RedirectQueryRepositoryInterface $query_repository ) {
+	public function __construct( RedirectQueryRepositoryInterface $query_repository, RedirectRepositoryInterface $repository, Upgrader $upgrader ) {
 		$this->query_repository = $query_repository;
+		$this->repository       = $repository;
+		$this->upgrader         = $upgrader;
 	}
 
 	/**
@@ -104,8 +131,15 @@ final class ListCommand extends WP_CLI_Command {
 	 *   - DESC
 	 * ---
 	 *
+	 * [--duplicates]
+	 * : List only the redirects the 2.0 migration disabled because, once
+	 * normalized, they have the same source as another redirect with a
+	 * different destination, alongside that live redirect. Decide which
+	 * destination is right, then delete or re-point the disabled one; saving
+	 * it takes it off this list. The filters and pagination above do not apply.
+	 *
 	 * [--fields=<fields>]
-	 * : Limit output to specific fields (comma-separated). Available: ID, from, to, type, status.
+	 * : Limit output to specific fields (comma-separated). Available: ID, from, to, type, status. With --duplicates: ID, from, to, duplicate_of, duplicate_of_from, duplicate_of_to.
 	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
@@ -140,6 +174,9 @@ final class ListCommand extends WP_CLI_Command {
 	 *     # Export all redirects to a CSV file.
 	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
 	 *
+	 *     # Export the duplicate sources the migration disabled.
+	 *     $ wp legacy-redirector list --duplicates --format=csv > duplicates.csv
+	 *
 	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
@@ -149,15 +186,23 @@ final class ListCommand extends WP_CLI_Command {
 		$format   = $assoc_args['format'] ?? 'table';
 		$criteria = self::criteria_from_args( $assoc_args );
 
+		$duplicates = isset( $assoc_args['duplicates'] );
+		$available  = $duplicates ? self::DUPLICATE_FIELDS : self::DEFAULT_FIELDS;
+
 		// Resolve output fields.
-		$fields = self::DEFAULT_FIELDS;
+		$fields = $available;
 		if ( isset( $assoc_args['fields'] ) ) {
 			$fields  = array_map( 'trim', explode( ',', $assoc_args['fields'] ) );
-			$invalid = array_diff( $fields, self::DEFAULT_FIELDS );
+			$invalid = array_diff( $fields, $available );
 			if ( ! empty( $invalid ) ) {
-				WP_CLI::error( sprintf( 'Invalid fields: %s. Available fields: %s', implode( ', ', $invalid ), implode( ', ', self::DEFAULT_FIELDS ) ) );
+				WP_CLI::error( sprintf( 'Invalid fields: %s. Available fields: %s', implode( ', ', $invalid ), implode( ', ', $available ) ) );
 				return;
 			}
+		}
+
+		if ( $duplicates ) {
+			$this->list_duplicates( $format, $fields );
+			return;
 		}
 
 		// Handle count format - only needs count, not full results.
@@ -208,6 +253,54 @@ final class ListCommand extends WP_CLI_Command {
 				);
 			}
 		}
+	}
+
+	/**
+	 * Print the redirects the migration disabled as duplicate sources.
+	 *
+	 * @param string   $format The output format.
+	 * @param string[] $fields The fields to show.
+	 * @return void
+	 */
+	private function list_duplicates( string $format, array $fields ): void {
+		$items = array();
+
+		foreach ( $this->upgrader->duplicates() as $id => $live_id ) {
+			$redirect = $this->repository->find_by_id( $id );
+
+			if ( null === $redirect ) {
+				continue;
+			}
+
+			$live = $this->repository->find_by_id( $live_id );
+			$row  = $this->redirect_row( $redirect );
+
+			$items[] = array(
+				'ID'                => $row['ID'],
+				'from'              => $row['from'],
+				'to'                => $row['to'],
+				'duplicate_of'      => $live_id,
+				'duplicate_of_from' => null === $live ? '(deleted)' : $live->source()->path(),
+				'duplicate_of_to'   => null === $live ? '' : $this->redirect_row( $live )['to'],
+			);
+		}
+
+		if ( 'count' === $format ) {
+			WP_CLI::line( (string) count( $items ) );
+			return;
+		}
+
+		if ( 'ids' === $format ) {
+			WP_CLI::line( implode( ' ', array_column( $items, 'ID' ) ) );
+			return;
+		}
+
+		if ( array() === $items ) {
+			WP_CLI::success( 'No redirects are disabled as duplicate sources.' );
+			return;
+		}
+
+		\WP_CLI\Utils\format_items( $format, $items, $fields );
 	}
 
 	/**

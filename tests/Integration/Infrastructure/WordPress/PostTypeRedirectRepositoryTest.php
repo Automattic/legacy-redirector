@@ -33,7 +33,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_conflict
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  */
 final class PostTypeRedirectRepositoryTest extends TestCase {
 

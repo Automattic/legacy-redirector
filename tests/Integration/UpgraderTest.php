@@ -573,38 +573,28 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A redirect drafted as a conflict can be listed later, until someone saves it.
+	 * A redirect disabled as a duplicate source can be listed later, until someone saves it.
 	 *
 	 * @return void
 	 */
-	public function test_conflicts_are_listed_until_saved() {
+	public function test_duplicates_are_listed_until_saved() {
 		$kept_id  = $this->create_legacy_redirect( '/clash', 'https://example.com/one' );
 		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
 
 		$this->upgrader->run_batch( 100 );
 
-		$this->assertSame(
-			array(
-				array(
-					'id'                   => $loser_id,
-					'source'               => '/clash/',
-					'collides_with'        => $kept_id,
-					'collides_with_source' => '/clash',
-				),
-			),
-			$this->upgrader->conflicts()
-		);
+		$this->assertSame( array( $loser_id => $kept_id ), $this->upgrader->duplicates() );
 
-		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_conflict' ) );
+		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 		wp_update_post(
 			array(
 				'ID'           => $loser_id,
 				'post_excerpt' => 'https://example.com/one',
 			)
 		);
-		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_conflict' ) );
+		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 
-		$this->assertSame( array(), $this->upgrader->conflicts() );
+		$this->assertSame( array(), $this->upgrader->duplicates() );
 	}
 
 	/**
@@ -1003,7 +993,7 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertSame( 0, $result['deduped'] );
 		$this->assertCount( 1, $result['conflicts'] );
-		$this->assertStringContainsString( 'drafted', $result['conflicts'][0] );
+		$this->assertStringContainsString( 'has the same source as', $result['conflicts'][0] );
 
 		$this->assertSame( 'draft', get_post( $loser_id )->post_status );
 		$this->assertSame( 'publish', get_post( $kept )->post_status );
