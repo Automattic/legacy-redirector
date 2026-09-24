@@ -295,4 +295,43 @@ final class UpgraderMultisiteTest extends TestCase {
 		// The loser keeps its own slug rather than contending for the winner's.
 		$this->assertSame( md5( '/' . $this->subsite . '/old-page' ), get_post( $prefixed_id )->post_name );
 	}
+
+	/**
+	 * A disabled duplicate stored without the subsite path is marked as never having fired.
+	 *
+	 * On a subsite, every 1.x request carried the subsite path, so '/old-page/'
+	 * stored without it never matched anything. Disabling it changed nothing
+	 * for visitors, and the mark says so.
+	 *
+	 * @return void
+	 */
+	public function test_unprefixed_duplicate_is_marked_as_never_fired() {
+		$prefixed_id = $this->create_legacy_redirect( '/old-page' );
+
+		$unprefixed_id = (int) wp_insert_post(
+			array(
+				'post_name'    => md5( '/old-page/' ),
+				'post_title'   => '/old-page/',
+				'post_excerpt' => 'https://example.com/somewhere-else',
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'draft',
+			)
+		);
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['unfired'] );
+		$this->assertStringEndsWith( '(never fired under 1.x)', $result['conflicts'][0] );
+		$this->assertSame( 'publish', get_post( $prefixed_id )->post_status );
+		$this->assertSame( 'draft', get_post( $unprefixed_id )->post_status );
+		$this->assertSame(
+			array(
+				$unprefixed_id => array(
+					'of'          => $prefixed_id,
+					'never_fired' => true,
+				),
+			),
+			$this->upgrader->duplicates()
+		);
+	}
 }

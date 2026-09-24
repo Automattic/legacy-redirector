@@ -639,6 +639,7 @@ PHP;
 			throw new RuntimeException( 'Failed to trash post: ' . $this->output );
 		}
 	}
+
 	/**
 	 * Swap version 1.3.0 in, so a scenario can store data with the real 1.x code.
 	 *

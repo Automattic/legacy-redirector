@@ -81,7 +81,8 @@ final class MigrateCommand extends WP_CLI_Command {
 	 *
 	 * Where two redirects end up with the same source but different
 	 * destinations, only one can answer: the other is disabled and reported.
-	 * `wp legacy-redirector list --duplicates` lists every one, at any time.
+	 * The report says how to settle each one, and `wp legacy-redirector list
+	 * --duplicates` lists every one, at any time.
 	 *
 	 * If some redirects could not be written, running it again retries just
 	 * those, without walking the rest of the set again - even once the
@@ -180,6 +181,10 @@ final class MigrateCommand extends WP_CLI_Command {
 		if ( array() !== $pending['conflicts'] ) {
 			WP_CLI::warning( sprintf( '%s redirect(s) would have the same source as another redirect with a different destination. Sources that differed only in form, such as /old and /old/, become one source, and only one redirect can answer it: the one already there would stay live, and the other would be disabled.', number_format( count( $pending['conflicts'] ) ) ) );
 			$this->list_capped( $pending['conflicts'], 'To list every one, repeat this dry run with --debug=legacy-redirector; like this one, it changes nothing.' );
+			if ( $pending['unfired'] > 0 ) {
+				WP_CLI::line( sprintf( '%s of them never fired under 1.x (marked above), so disabling them will change nothing for visitors.', number_format( $pending['unfired'] ) ) );
+			}
+			WP_CLI::line( 'A real run disables them and explains how to settle each one.' );
 		}
 	}
 
@@ -218,6 +223,7 @@ final class MigrateCommand extends WP_CLI_Command {
 			'deduped'    => 0,
 			'normalized' => 0,
 			'conflicts'  => array(),
+			'unfired'    => 0,
 			'failed'     => array(),
 		);
 
@@ -252,7 +258,7 @@ final class MigrateCommand extends WP_CLI_Command {
 		if ( array() !== $totals['conflicts'] ) {
 			WP_CLI::warning( sprintf( '%s redirect(s) now have the same source as another redirect with a different destination. Sources that differed only in form, such as /old and /old/, are now one source, and only one redirect can answer it: the one already there stays live, and the other has been disabled.', number_format( count( $totals['conflicts'] ) ) ) );
 			$this->list_capped( $totals['conflicts'], '`wp legacy-redirector list --duplicates` lists every one.' );
-			WP_CLI::line( 'Decide which destination is right, then delete or re-point each disabled redirect. `wp legacy-redirector list --duplicates` lists them, now or later.' );
+			$this->explain_duplicates( count( $totals['conflicts'] ), $totals['unfired'] );
 		}
 
 		$summary = sprintf(
@@ -288,6 +294,31 @@ final class MigrateCommand extends WP_CLI_Command {
 		}
 
 		WP_CLI::success( $summary );
+	}
+
+	/**
+	 * Say how to settle the duplicate sources a run disabled.
+	 *
+	 * The choices are the same in the admin, so the Duplicate sources view is
+	 * named too: a site that migrated on ordinary page loads never sees this.
+	 *
+	 * @param int $disabled Duplicates disabled.
+	 * @param int $unfired  Of those, how many never fired under 1.x.
+	 * @return void
+	 */
+	private function explain_duplicates( int $disabled, int $unfired ): void {
+		if ( $unfired > 0 ) {
+			WP_CLI::line( sprintf( '%s of them never fired under 1.x (marked above), so disabling them changed nothing for visitors. Delete them unless you want their destination.', number_format( $unfired ) ) );
+		}
+
+		if ( $disabled > $unfired ) {
+			WP_CLI::line( 'Visitors who used the spelling of any other disabled redirect now reach the live redirect\'s destination. For each, decide which destination is right:' );
+			WP_CLI::line( '  - To keep the live one\'s, delete the disabled redirect: wp legacy-redirector delete <disabled ID>' );
+			WP_CLI::line( '  - To keep the disabled one\'s, point the live redirect there, then delete the disabled one: wp legacy-redirector update <live ID> --to=<destination>' );
+			WP_CLI::line( 'Enabling or editing a disabled duplicate is refused while the live redirect holds its source.' );
+		}
+
+		WP_CLI::line( '`wp legacy-redirector list --duplicates` lists them, now or later, as does the Duplicate sources view on the Redirects screen.' );
 	}
 
 	/**

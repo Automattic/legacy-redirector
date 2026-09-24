@@ -354,6 +354,7 @@ final class SourceUrlTest extends YoastTestCase {
 		$this->assertSame( $decoded->path(), $encoded->path() );
 		$this->assertSame( $decoded->hash(), $encoded->hash() );
 	}
+
 	/**
 	 * Test non-ASCII paths survive normalization across scripts and planes.
 	 *
@@ -565,6 +566,7 @@ final class SourceUrlTest extends YoastTestCase {
 
 		$this->assertSame( '/日本/ページ', $source->path() );
 	}
+
 	/**
 	 * Test a trailing slash is removed from the source path.
 	 *
@@ -692,6 +694,7 @@ final class SourceUrlTest extends YoastTestCase {
 			'root'                       => array( '/', false ),
 		);
 	}
+
 	/**
 	 * Test a '+' is a literal plus in the path and a space in the query.
 	 *
@@ -764,6 +767,7 @@ final class SourceUrlTest extends YoastTestCase {
 			'raw bracket'              => array( '/.."]//}//?..' ),
 		);
 	}
+
 	/**
 	 * Test a full URL with a query but no path gets the '/' a browser requests it with.
 	 *

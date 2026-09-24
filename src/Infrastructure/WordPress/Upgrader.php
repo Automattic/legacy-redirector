@@ -172,6 +172,17 @@ final class Upgrader {
 	public const string DUPLICATE_META_KEY = '_legacy_redirector_duplicate_of';
 
 	/**
+	 * Meta key marking a disabled duplicate that never fired under 1.x.
+	 *
+	 * Set when the disabled row's own stored spelling is one no browser ever
+	 * requested - see reachable_in_1x() - so disabling it changed nothing for
+	 * visitors and it can simply be deleted. Unlike the live row, which the walk
+	 * may have re-keyed, the disabled row keeps its 1.x spelling, so this is
+	 * known exactly. Cleared with DUPLICATE_META_KEY.
+	 */
+	public const string NEVER_FIRED_META_KEY = '_legacy_redirector_duplicate_never_fired';
+
+	/**
 	 * Redirects processed per batch when running on a web request.
 	 *
 	 * Deliberately modest: this runs on `init`, so the cost lands on whichever
@@ -297,7 +308,7 @@ final class Upgrader {
 	 * run redoes the batch.
 	 *
 	 * @param int $size Maximum number of redirects to process.
-	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 *
 	 * @throws RuntimeException When the database refuses the batch's read or bulk write.
 	 */
@@ -347,7 +358,7 @@ final class Upgrader {
 	 * completed. Those that fail again stay recorded for the next retry;
 	 * those deleted in the meantime drop out.
 	 *
-	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 *
 	 * @throws RuntimeException When the database refuses a read or bulk write.
 	 */
@@ -372,28 +383,50 @@ final class Upgrader {
 	/**
 	 * The redirects the migration disabled as duplicate sources.
 	 *
-	 * @return array<int, int> Each disabled redirect's ID, mapped to the ID of the live redirect whose source it shares.
+	 * @return array<int, array{of: int, never_fired: bool}> Each disabled redirect's ID, mapped to the ID of the live redirect whose source it shares, and whether it never fired under 1.x.
 	 */
 	public function duplicates(): array {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only duplicate rows carry the key.
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY post_id", self::DUPLICATE_META_KEY ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only duplicate rows carry the keys.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT d.post_id, d.meta_value, n.meta_id AS never_fired FROM {$wpdb->postmeta} d LEFT JOIN {$wpdb->postmeta} n ON n.post_id = d.post_id AND n.meta_key = %s WHERE d.meta_key = %s ORDER BY d.post_id", self::NEVER_FIRED_META_KEY, self::DUPLICATE_META_KEY ) );
 
-		return array_map( 'intval', array_column( $rows, 'meta_value', 'post_id' ) );
+		$duplicates = array();
+		foreach ( $rows as $row ) {
+			$duplicates[ (int) $row->post_id ] = array(
+				'of'          => (int) $row->meta_value,
+				'never_fired' => null !== $row->never_fired,
+			);
+		}
+
+		return $duplicates;
+	}
+
+	/**
+	 * How many redirects the migration disabled as duplicate sources.
+	 *
+	 * @return int The number of redirects.
+	 */
+	public static function duplicate_count(): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Counts only rows carrying the key; admin screen only.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s", self::DUPLICATE_META_KEY ) );
 	}
 
 	/**
 	 * Drop a redirect's duplicate marker once someone has saved it.
 	 *
-	 * Hooked to every save of a redirect, as re-pointing, enabling or
-	 * trashing the row are all ways of settling it.
+	 * Hooked to every save of a redirect: trashing the row, or giving it a
+	 * source of its own, settles it. Re-pointing or enabling it while the live
+	 * redirect holds its source is refused by the repository.
 	 *
 	 * @param int $post_id The redirect post ID.
 	 * @return void
 	 */
 	public static function forget_duplicate( int $post_id ): void {
 		delete_post_meta( $post_id, self::DUPLICATE_META_KEY );
+		delete_post_meta( $post_id, self::NEVER_FIRED_META_KEY );
 	}
 
 	/**
@@ -441,7 +474,7 @@ final class Upgrader {
 	/**
 	 * Totals with nothing counted yet.
 	 *
-	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 */
 	private static function empty_result(): array {
 		return array(
@@ -454,6 +487,7 @@ final class Upgrader {
 			'deduped'    => 0,
 			'normalized' => 0,
 			'conflicts'  => array(),
+			'unfired'    => 0,
 			'failed'     => array(),
 			'complete'   => false,
 		);
@@ -527,7 +561,7 @@ final class Upgrader {
 	 * do, as predictions, apart from failures, which only a write can reveal.
 	 *
 	 * @param callable(int): void|null $progress Called after each batch with the number of redirects checked so far.
-	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[]}
+	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int}
 	 */
 	public function count_pending( ?callable $progress = null ): array {
 		$started   = $this->started_at( false );
@@ -547,6 +581,7 @@ final class Upgrader {
 			'deduped'    => 0,
 			'normalized' => 0,
 			'conflicts'  => array(),
+			'unfired'    => 0,
 		);
 
 		do {
@@ -584,6 +619,7 @@ final class Upgrader {
 
 				if ( null !== $plan['conflict'] ) {
 					$pending['conflicts'][] = $plan['conflict'];
+					$pending['unfired']    += (int) $plan['never_fired'];
 				}
 			}
 
@@ -816,7 +852,7 @@ final class Upgrader {
 
 		if ( array() === $update ) {
 			++$result['unchanged'];
-			$this->mark_duplicate( $post->ID, $plan['rival'] );
+			$this->mark_duplicate( $post->ID, $plan, $result );
 			return $conflict;
 		}
 
@@ -843,7 +879,7 @@ final class Upgrader {
 		}
 
 		self::tally( $update, $result );
-		$this->mark_duplicate( $post->ID, $plan['rival'] );
+		$this->mark_duplicate( $post->ID, $plan, $result );
 
 		return $conflict;
 	}
@@ -854,14 +890,44 @@ final class Upgrader {
 	 * Only once the row has reached its planned state: a row whose write
 	 * failed is marked when a retry gets it written.
 	 *
-	 * @param int      $post_id The drafted redirect.
-	 * @param int|null $rival   The live redirect whose source it shares, or null when it is not a duplicate.
+	 * @param int                  $post_id The drafted redirect.
+	 * @param array<string, mixed> $plan    The row's plan; see plan().
+	 * @param array<string, mixed> $result  Running totals, updated by reference.
 	 * @return void
 	 */
-	private function mark_duplicate( int $post_id, ?int $rival ): void {
-		if ( null !== $rival ) {
-			update_post_meta( $post_id, self::DUPLICATE_META_KEY, $rival );
+	private function mark_duplicate( int $post_id, array $plan, array &$result ): void {
+		if ( null === $plan['rival'] ) {
+			return;
 		}
+
+		update_post_meta( $post_id, self::DUPLICATE_META_KEY, $plan['rival'] );
+
+		if ( $plan['never_fired'] ) {
+			update_post_meta( $post_id, self::NEVER_FIRED_META_KEY, 1 );
+			++$result['unfired'];
+		}
+	}
+
+	/**
+	 * Whether a browser could ever have reached a source under 1.x.
+	 *
+	 * 1.x compared each request, as esc_url_raw() left it, with the stored
+	 * text. Browsers percent-encode non-ASCII characters and spaces, so a
+	 * source stored with them raw never matched; and wherever home is not the
+	 * domain root, every request for this site carries the home path, so a
+	 * source stored without it never matched either. Anything else could.
+	 *
+	 * @param string $source    The source as 1.x stored it.
+	 * @param string $home_path The site's home path, or '' when home is the domain root.
+	 * @return bool False when no browser request could have matched it.
+	 */
+	private static function reachable_in_1x( string $source, string $home_path ): bool {
+		if ( 1 === preg_match( '/[\x80-\xff ]/', $source ) ) {
+			return false;
+		}
+
+		return '' === $home_path
+			|| null !== HomePath::make_relative( substr( $source, 0, strcspn( $source, '?' ) ), $home_path );
 	}
 
 	/**
@@ -903,13 +969,14 @@ final class Upgrader {
 	 * @param string             $home_path The site's home path, or '' when not a subdirectory site.
 	 * @param bool               $publish   Whether draft redirects should be published.
 	 * @param array<string, int> $claimed   Source hashes a dry run's earlier rows would have been re-keyed to, and the ID of the row.
-	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null} The changed fields, a description of any collision with a redirect going somewhere else, and that redirect's ID.
+	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null, never_fired: bool} The changed fields, a description of any collision with a redirect going somewhere else, that redirect's ID, and whether this one never fired under 1.x.
 	 */
 	private function plan( WP_Post $post, string $home_path, bool $publish, array $claimed = array() ): array {
-		$update   = array();
-		$conflict = null;
-		$rival    = null;
-		$collided = false;
+		$update      = array();
+		$conflict    = null;
+		$rival       = null;
+		$collided    = false;
+		$never_fired = false;
 
 		$new_path = $this->canonical_source( self::hashed_source( $post ), $home_path );
 
@@ -944,8 +1011,11 @@ final class Upgrader {
 					if ( 'draft' !== $post->post_status ) {
 						$update['post_status'] = 'draft';
 					}
-					$rival    = $existing->ID;
-					$conflict = sprintf(
+					// Only a 1.x row can have fired under 1.x, and its spelling is
+					// still the one 1.x stored: a disabled row is never re-keyed.
+					$never_fired = $publish && ! self::reachable_in_1x( self::hashed_source( $post ), $home_path );
+					$rival       = $existing->ID;
+					$conflict    = sprintf(
 						'%s → %s (#%d) has the same source as %s → %s (#%d)',
 						$post->post_title,
 						self::destination_label( $post ),
@@ -954,6 +1024,9 @@ final class Upgrader {
 						self::destination_label( $existing ),
 						$existing->ID
 					);
+					if ( $never_fired ) {
+						$conflict .= ' (never fired under 1.x)';
+					}
 				}
 			}
 		}
@@ -970,9 +1043,10 @@ final class Upgrader {
 		}
 
 		return array(
-			'update'   => $update,
-			'conflict' => $conflict,
-			'rival'    => $rival,
+			'update'      => $update,
+			'conflict'    => $conflict,
+			'rival'       => $rival,
+			'never_fired' => $never_fired,
 		);
 	}
 

@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Handles status view filters and destination type filters for the redirects list table.
@@ -53,6 +54,7 @@ final class ViewFilters {
 		add_filter( 'views_edit-' . PostType::POST_TYPE, array( $this, 'customize_views' ) );
 		add_action( 'pre_get_posts', array( $this, 'filter_by_destination_type' ) );
 		add_action( 'pre_get_posts', array( $this, 'filter_by_audit_flag' ) );
+		add_action( 'pre_get_posts', array( $this, 'filter_by_duplicate_source' ) );
 		add_filter( 'posts_where', array( $this, 'add_destination_type_where_clause' ), 10, 2 );
 	}
 
@@ -95,6 +97,9 @@ final class ViewFilters {
 
 		// Add the "Has issues" view once a scan has completed.
 		$views = $this->add_audit_flag_view( $views );
+
+		// Add the "Duplicate sources" view while the upgrade has left any.
+		$views = $this->add_duplicate_sources_view( $views );
 
 		// Re-add Trash at the end.
 		if ( null !== $trash ) {
@@ -240,6 +245,70 @@ final class ViewFilters {
 
 		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Only flagged rows carry the key; admin list screen only.
 		$query->set( 'meta_key', AuditFlags::META_KEY );
+	}
+
+	/**
+	 * Add the "Duplicate sources" view while the 2.0 upgrade has left any to settle.
+	 *
+	 * Each is a redirect the upgrade disabled because another redirect has the
+	 * same source and a different destination. Hidden at zero: unlike the
+	 * scan, there is nothing to check, only something to settle.
+	 *
+	 * @param array<string, string> $views Existing views.
+	 * @return array<string, string> Modified views.
+	 */
+	private function add_duplicate_sources_view( array $views ): array {
+		$count = Upgrader::duplicate_count();
+
+		if ( 0 === $count ) {
+			return $views;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
+		$current = isset( $_GET['duplicate_sources'] ) ? 'current' : '';
+
+		$views['duplicate_sources'] = sprintf(
+			'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
+			esc_url( self::duplicate_sources_url() ),
+			esc_attr( $current ),
+			esc_html__( 'Duplicate sources', 'legacy-redirector' ),
+			number_format_i18n( $count )
+		);
+
+		return $views;
+	}
+
+	/**
+	 * The admin URL of the "Duplicate sources" view.
+	 *
+	 * @return string The URL.
+	 */
+	public static function duplicate_sources_url(): string {
+		return add_query_arg( 'duplicate_sources', '1', admin_url( 'edit.php?post_type=' . PostType::POST_TYPE ) );
+	}
+
+	/**
+	 * Restrict the admin list to disabled duplicates when the "Duplicate sources" view is active.
+	 *
+	 * @param \WP_Query $query The query object.
+	 * @return void
+	 */
+	public function filter_by_duplicate_source( \WP_Query $query ): void {
+		if ( ! is_admin() || ! $query->is_main_query() ) {
+			return;
+		}
+
+		if ( PostType::POST_TYPE !== $query->get( 'post_type' ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filtering.
+		if ( ! isset( $_GET['duplicate_sources'] ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Only disabled duplicates carry the key; admin list screen only.
+		$query->set( 'meta_key', Upgrader::DUPLICATE_META_KEY );
 	}
 
 	/**

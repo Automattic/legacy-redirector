@@ -245,7 +245,8 @@ final class MigrateCommandTest extends CliTestCase {
 		$this->assert_warning_contains( '1 redirect(s) now have the same source as another redirect with a different destination.' );
 		$this->assert_warning_contains( 'the one already there stays live, and the other has been disabled.' );
 		$this->assert_stdout_contains( sprintf( '  /clash/ → https://external.example.net/two (#%d) has the same source as /clash → https://external.example.net/one (#%d)', $loser_id, $kept_id ) );
-		$this->assert_stdout_contains( '`wp legacy-redirector list --duplicates` lists them, now or later.' );
+		$this->assert_stdout_contains( '  - To keep the live one\'s, delete the disabled redirect: wp legacy-redirector delete <disabled ID>' );
+		$this->assert_stdout_contains( '`wp legacy-redirector list --duplicates` lists them, now or later, as does the Duplicate sources view on the Redirects screen.' );
 		$this->assertSame( 'draft', get_post_status( $loser_id ) );
 		$this->assertSame( 'publish', get_post_status( $kept_id ) );
 	}
@@ -261,5 +262,19 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 		$this->assert_success_contains( 'Redirect data is already up to date; nothing to migrate.' );
+	}
+
+	/**
+	 * A duplicate that never fired under 1.x is called out as safe to delete.
+	 */
+	public function test_never_fired_duplicate_is_called_out(): void {
+		$this->create_legacy_redirect( '/caf%C3%A9-x', 'https://external.example.net/one' );
+		$this->create_legacy_redirect( '/café-x/', 'https://external.example.net/two' );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_stdout_contains( '(never fired under 1.x)' );
+		$this->assert_stdout_contains( '1 of them never fired under 1.x (marked above), so disabling them changed nothing for visitors. Delete them unless you want their destination.' );
+		$this->assert_stdout_not_contains( 'For each, decide which destination is right' );
 	}
 }

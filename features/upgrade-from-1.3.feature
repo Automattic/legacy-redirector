@@ -70,3 +70,50 @@ Feature: Upgrading from version 1.3.0
       Success: Migration complete.
       """
     And every request version 1.3.0 redirected is redirected to the same destination
+
+  # Browsers never sent the raw spelling, so 1.3.0 only ever served the
+  # encoded one. The raw row re-keys onto the encoded one's source and is
+  # disabled, marked as never having fired, so visitors see no change.
+  Scenario: A duplicate that never fired under 1.3.0 is reported as safe to delete
+    Given version 1.3.0 is active in place of this plugin
+    And version 1.3.0 stores these redirects:
+      | from          | to        |
+      | /caf%C3%A9-x  | /dest-one |
+      | /café-x/      | /dest-two |
+    Then version 1.3.0 answers these requests:
+      | request       | status | to        |
+      | /caf%C3%A9-x  | 301    | /dest-one |
+      | /caf%C3%A9-x/ | 404    |           |
+
+    When this plugin replaces version 1.3.0
+    And I run `wp legacy-redirector migrate`
+    Then STDOUT should contain:
+      """
+      (never fired under 1.x)
+      """
+    And STDOUT should contain:
+      """
+      1 of them never fired under 1.x (marked above), so disabling them changed nothing for visitors.
+      """
+    And every request version 1.3.0 redirected is redirected to the same destination
+
+    When I run `wp legacy-redirector list --duplicates --fields=from,to,never_fired --format=csv`
+    Then STDOUT should contain:
+      """
+      /café-x/,/dest-two,yes
+      """
+
+    When I run `wp legacy-redirector list --duplicates --format=ids`
+    And save STDOUT as {DUPLICATE_ID}
+    And I try `wp legacy-redirector enable {DUPLICATE_ID}`
+    Then STDERR should contain:
+      """
+      already has the source
+      """
+
+    When I run `wp legacy-redirector delete {DUPLICATE_ID} --yes`
+    And I run `wp legacy-redirector list --duplicates`
+    Then STDOUT should contain:
+      """
+      No redirects are disabled as duplicate sources.
+      """

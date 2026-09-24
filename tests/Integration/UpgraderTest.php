@@ -583,7 +583,15 @@ final class UpgraderTest extends TestCase {
 
 		$this->upgrader->run_batch( 100 );
 
-		$this->assertSame( array( $loser_id => $kept_id ), $this->upgrader->duplicates() );
+		$this->assertSame(
+			array(
+				$loser_id => array(
+					'of'          => $kept_id,
+					'never_fired' => false,
+				),
+			),
+			$this->upgrader->duplicates()
+		);
 
 		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 		wp_update_post(
@@ -764,6 +772,7 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 	}
+
 	/**
 	 * An absolute destination pointing at this site is rewritten to its relative form.
 	 *
@@ -867,6 +876,7 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertSame( 1, $pending['normalized'] );
 	}
+
 	/**
 	 * A stored source with a trailing slash is re-keyed without one.
 	 *
@@ -1062,6 +1072,7 @@ final class UpgraderTest extends TestCase {
 			);
 		}
 	}
+
 	/**
 	 * A 1.x source in any encoding is reachable by the requests that reached it under 1.x.
 	 *
@@ -1164,6 +1175,7 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( '/café', get_post( $post_id )->post_title );
 		$this->assertSame( md5( '/café' ), get_post( $post_id )->post_name );
 	}
+
 	/**
 	 * A source SourceUrl cannot parse still loses its trailing slash.
 	 *
@@ -1182,6 +1194,7 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( 'trash', get_post_status( $spare_id ) );
 		$this->assertSame( 'publish', get_post_status( $kept_id ) );
 	}
+
 	/**
 	 * A title kses escaped after its key was hashed is re-keyed from the text that was hashed.
 	 *
@@ -1206,5 +1219,51 @@ final class UpgraderTest extends TestCase {
 			Redirect::class,
 			( new PostTypeRedirectRepository() )->find_by_source( SourceUrl::from_string( '/search/?q=a+b&page=2' ) )
 		);
+	}
+
+	/**
+	 * A disabled duplicate stored with raw non-ASCII is marked as never having fired.
+	 *
+	 * Browsers send non-ASCII percent-encoded, and 1.x compared the request
+	 * with the stored text as it was, so '/café-x/' never matched. The encoded
+	 * spelling did, and it is the one left live.
+	 *
+	 * @return void
+	 */
+	public function test_raw_non_ascii_duplicate_is_marked_as_never_fired() {
+		$encoded_id = $this->create_legacy_redirect( '/caf%C3%A9-x', 'https://example.com/one' );
+		$raw_id     = $this->create_legacy_redirect( '/café-x/', 'https://example.com/two' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['unfired'] );
+		$this->assertSame( 'publish', get_post_status( $encoded_id ) );
+		$this->assertSame( 'draft', get_post_status( $raw_id ) );
+		$this->assertTrue( $this->upgrader->duplicates()[ $raw_id ]['never_fired'] );
+
+		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
+		wp_trash_post( $raw_id );
+		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
+
+		$this->assertSame( '', get_post_meta( $raw_id, Upgrader::NEVER_FIRED_META_KEY, true ) );
+	}
+
+	/**
+	 * A disabled duplicate whose spelling browsers did request is not marked.
+	 *
+	 * Its visitors now reach the live redirect's destination, so it needs a
+	 * decision rather than a delete.
+	 *
+	 * @return void
+	 */
+	public function test_reachable_duplicate_is_not_marked_as_never_fired() {
+		$this->create_legacy_redirect( '/clash', 'https://example.com/one' );
+		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 0, $result['unfired'] );
+		$this->assertStringEndsNotWith( '(never fired under 1.x)', $result['conflicts'][0] );
+		$this->assertFalse( $this->upgrader->duplicates()[ $loser_id ]['never_fired'] );
 	}
 }

@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Handles row actions for the redirects list table.
@@ -111,7 +112,10 @@ final class RowActionsManager {
 				esc_url( $disable_link ),
 				esc_html__( 'Disable', 'legacy-redirector' )
 			);
-		} else {
+		} elseif ( '' === (string) get_post_meta( $post->ID, Upgrader::DUPLICATE_META_KEY, true ) ) {
+			// Not for a duplicate the 2.0 upgrade disabled: another redirect holds
+			// its source, so enabling it is refused. The Status column says what to
+			// do instead.
 			$enable_link       = wp_nonce_url(
 				add_query_arg(
 					array(

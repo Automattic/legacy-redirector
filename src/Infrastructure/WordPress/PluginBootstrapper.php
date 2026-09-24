@@ -16,6 +16,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\MenuBadge;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\StatusActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\StatusChangeNotices;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\DuplicateSourcesNotice;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\UpgradeNotice;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\TrashRedirectEnhancer;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CreateCommand;
@@ -223,6 +224,10 @@ final class PluginBootstrapper {
 		// Register the migration-in-progress notice.
 		$upgrade_notice = new UpgradeNotice( $this->container->upgrader() );
 		$upgrade_notice->register();
+
+		// Register the notice for duplicate sources the upgrade disabled.
+		$duplicates_notice = new DuplicateSourcesNotice();
+		$duplicates_notice->register();
 
 		// Register trash redirect enhancer.
 		$trash_enhancer = new TrashRedirectEnhancer( $this->container->repository() );

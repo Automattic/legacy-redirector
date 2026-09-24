@@ -36,7 +36,7 @@ final class ListCommand extends WP_CLI_Command {
 	 *
 	 * @var string[]
 	 */
-	private const array DUPLICATE_FIELDS = array( 'ID', 'from', 'to', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' );
+	private const array DUPLICATE_FIELDS = array( 'ID', 'from', 'to', 'never_fired', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' );
 
 	/**
 	 * The query repository.
@@ -134,12 +134,16 @@ final class ListCommand extends WP_CLI_Command {
 	 * [--duplicates]
 	 * : List only the redirects the 2.0 migration disabled because, once
 	 * normalized, they have the same source as another redirect with a
-	 * different destination, alongside that live redirect. Decide which
-	 * destination is right, then delete or re-point the disabled one; saving
-	 * it takes it off this list. The filters and pagination above do not apply.
+	 * different destination, alongside that live redirect. `from` is the
+	 * disabled redirect's spelling as 1.x stored it, and `never_fired` says
+	 * whether any browser could ever have requested it: if not, disabling it
+	 * changed nothing for visitors. To keep the live redirect's destination,
+	 * delete the disabled one; to keep the disabled one's, update the live
+	 * redirect to it, then delete the disabled one. Deleting or trashing it
+	 * takes it off this list. The filters and pagination above do not apply.
 	 *
 	 * [--fields=<fields>]
-	 * : Limit output to specific fields (comma-separated). Available: ID, from, to, type, status. With --duplicates: ID, from, to, duplicate_of, duplicate_of_from, duplicate_of_to.
+	 * : Limit output to specific fields (comma-separated). Available: ID, from, to, type, status. With --duplicates: ID, from, to, never_fired, duplicate_of, duplicate_of_from, duplicate_of_to.
 	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
@@ -265,7 +269,8 @@ final class ListCommand extends WP_CLI_Command {
 	private function list_duplicates( string $format, array $fields ): void {
 		$items = array();
 
-		foreach ( $this->upgrader->duplicates() as $id => $live_id ) {
+		foreach ( $this->upgrader->duplicates() as $id => $duplicate ) {
+			$live_id  = $duplicate['of'];
 			$redirect = $this->repository->find_by_id( $id );
 
 			if ( null === $redirect ) {
@@ -277,8 +282,11 @@ final class ListCommand extends WP_CLI_Command {
 
 			$items[] = array(
 				'ID'                => $row['ID'],
-				'from'              => $row['from'],
+				// The spelling as stored, not as normalized: the two redirects
+				// normalize alike, and the difference is what needs deciding.
+				'from'              => (string) get_post_field( 'post_title', $id ),
 				'to'                => $row['to'],
+				'never_fired'       => $duplicate['never_fired'] ? 'yes' : 'no',
 				'duplicate_of'      => $live_id,
 				'duplicate_of_from' => null === $live ? '(deleted)' : $live->source()->path(),
 				'duplicate_of_to'   => null === $live ? '' : $this->redirect_row( $live )['to'],

@@ -110,9 +110,36 @@ Re-keying a source can bring two redirects onto one path — most often because 
 Only one redirect can own a path, so the migration decides on the destinations:
 
 - **Both point at the same place.** The spare is redundant, so it is moved to the trash and counted in the migration summary. Nothing is deleted outright, so you can restore it from the Trash view if you disagree.
-- **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, editable, and plainly not doing anything.
+- **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, plainly not doing anything, and it can't be enabled while the live redirect has its source: two redirects can't answer the same path.
 
-`wp legacy-redirector migrate --dry-run` shows them before anything is written, and `wp legacy-redirector list --duplicates` lists every one at any time afterwards, beside the live redirect that shares its source. Review them, then either delete them or re-point and re-enable them; each drops off that list once saved.
+`wp legacy-redirector migrate --dry-run` shows them before anything is written.
+
+#### Settling a disabled duplicate
+
+For each one, decide which destination is right:
+
+- **The live redirect's destination is right.** Delete the disabled one.
+- **The disabled one's destination is right.** Change the live redirect's destination to it, then delete the disabled one.
+
+Some disabled duplicates are marked **never fired under 1.x**. Their stored spelling is one no browser ever requested: raw accented characters, such as `/café` where browsers send `/caf%C3%A9`, or, on a site below the domain root, a path without the site's own. Disabling one of those changed nothing for visitors, so unless you want its destination, just delete it. For every other disabled duplicate, visitors who used its spelling now reach the live redirect's destination, so check that's the one you want.
+
+**In the admin**, a notice on the Redirects screen links to the **Duplicate sources** view, which lists every one. Each row's Status column links to the live redirect and says which choice applies: use **Trash** on the disabled redirect, and **Edit** on the live one to change its destination.
+
+**From the command line:**
+
+```bash
+# List them, with both destinations and whether each disabled one ever fired
+wp legacy-redirector list --duplicates
+
+# Keep the live redirect's destination
+wp legacy-redirector delete <disabled ID>
+
+# Keep the disabled one's destination
+wp legacy-redirector update <live ID> --to=<destination>
+wp legacy-redirector delete <disabled ID>
+```
+
+Each drops off the list, and out of the view, once deleted or trashed.
 
 ## Breaking Changes
 
