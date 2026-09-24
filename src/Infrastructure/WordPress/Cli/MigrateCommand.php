@@ -22,9 +22,21 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * Redirects processed per batch.
 	 *
 	 * Larger than the web-request batch size: WP-CLI has no request timeout to
-	 * worry about, and the round trips dominate on big redirect sets.
+	 * worry about, and the round trips dominate on big redirect sets. The cap
+	 * is a replication concern, not a timeout one - each batch's bulk publish
+	 * is a single UPDATE of at most this many rows, kept small enough to
+	 * replicate in well under a second so replicas never fall behind.
 	 */
-	private const int BATCH_SIZE = 500;
+	private const int BATCH_SIZE = 2000;
+
+	/**
+	 * Pause between batches, in microseconds.
+	 *
+	 * No replica-lag reading is available to application code, so instead of
+	 * feedback throttling the loop paces itself at a fixed conservative rate,
+	 * giving replicas a beat to apply each batch before the next lands.
+	 */
+	private const int BATCH_PAUSE_US = 250000;
 
 	/**
 	 * The upgrade routine.
@@ -52,9 +64,9 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * them up by their site-relative path. Until this has run, redirects
 	 * created under 1.x do not fire.
 	 *
-	 * This runs automatically in small batches on ordinary page loads. Running
-	 * it here completes the whole job in one pass, which is the better option
-	 * for sites with large redirect sets.
+	 * This runs automatically in small batches on ordinary page loads, but
+	 * never on WP-CLI commands. Running it here completes the whole job in one
+	 * pass, which is the better option for sites with large redirect sets.
 	 *
 	 * It is safe to run more than once: redirects you have disabled since
 	 * upgrading are left alone.
@@ -62,7 +74,9 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * ## OPTIONS
 	 *
 	 * [--dry-run]
-	 * : Report what would change without writing anything.
+	 * : Report what would change without writing anything. This walks the
+	 * entire redirect set, so on a site with millions of redirects it takes
+	 * minutes - that is the walk, not a hang.
 	 *
 	 * ## EXAMPLES
 	 *
@@ -116,6 +130,7 @@ final class MigrateCommand extends WP_CLI_Command {
 		$conflicts  = array();
 
 		do {
+			$this->upgrader->hold_web_batches();
 			$batch = $this->upgrader->run_batch( self::BATCH_SIZE );
 
 			$processed  += $batch['processed'];
@@ -127,6 +142,10 @@ final class MigrateCommand extends WP_CLI_Command {
 
 			if ( $batch['processed'] > 0 ) {
 				WP_CLI::line( sprintf( 'Processed %d redirect(s)...', $processed ) );
+			}
+
+			if ( ! $batch['complete'] ) {
+				$this->rest_between_batches( $batch );
 			}
 		} while ( ! $batch['complete'] );
 
@@ -148,5 +167,34 @@ final class MigrateCommand extends WP_CLI_Command {
 				$normalized
 			)
 		);
+	}
+
+	/**
+	 * Housekeeping between batches on a long run.
+	 *
+	 * A multi-million-row walk holds one PHP process and one database primary
+	 * for its whole runtime, so the loop clears the request-lifetime caches
+	 * that would otherwise grow without bound, and pauses after each batch
+	 * that wrote so replicas keep pace. Batches that changed nothing skip the
+	 * pause: an already-migrated stretch replicates nothing.
+	 *
+	 * @param array{published: int, repathed: int, deduped: int, normalized: int} $batch The batch totals just processed.
+	 * @return void
+	 */
+	private function rest_between_batches( array $batch ): void {
+		if ( function_exists( 'vip_reset_local_object_cache' ) ) {
+			vip_reset_local_object_cache();
+		} elseif ( wp_cache_supports( 'flush_runtime' ) ) {
+			wp_cache_flush_runtime();
+		}
+
+		if ( function_exists( 'vip_reset_db_query_log' ) ) {
+			vip_reset_db_query_log();
+		}
+
+		$wrote = $batch['published'] + $batch['repathed'] + $batch['deduped'] + $batch['normalized'] > 0;
+		if ( $wrote ) {
+			usleep( self::BATCH_PAUSE_US );
+		}
 	}
 }

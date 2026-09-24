@@ -90,7 +90,12 @@ final class PluginBootstrapper {
 		// because the data it repairs is what serves front-end redirects, and
 		// a site may go a long time between admin visits. Priority 20 so the
 		// post type is registered (init, priority 10) before we query it.
-		add_action( 'init', array( $this, 'maybe_upgrade' ), 20 );
+		// Not under WP-CLI: `wp legacy-redirector migrate` is how the CLI
+		// migrates, and a batch on the bootstrap of every command would have
+		// even `migrate --dry-run` write.
+		if ( ! ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			add_action( 'init', array( $this, 'maybe_upgrade' ), 20 );
+		}
 
 		// Register redirect handler on template_redirect (early, before canonical).
 		add_filter( 'template_redirect', array( $this, 'maybe_do_redirect' ), 0 );
