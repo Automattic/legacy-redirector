@@ -197,6 +197,25 @@ final class Upgrader {
 	private array $failed_ids = array();
 
 	/**
+	 * Which redirect owns each source hash the batch being processed may re-key onto.
+	 *
+	 * Keyed hash => post ID, or 0 where no redirect owns it. Filled by one
+	 * query per batch in prime_owners() and kept current as the batch writes,
+	 * in place of a lookup query per re-keyed row. A hash missing from it is
+	 * looked up with find_post_by_hash().
+	 *
+	 * @var array<string, int>
+	 */
+	private array $owners = array();
+
+	/**
+	 * IDs written in the batch being processed, whose stale audit flags go at its end.
+	 *
+	 * @var int[]
+	 */
+	private array $unflagged = array();
+
+	/**
 	 * Whether this site still has upgrade work outstanding.
 	 *
 	 * @return bool True if the upgrade has not yet completed.
@@ -390,6 +409,8 @@ final class Upgrader {
 	 * @throws RuntimeException When the database refuses the bulk write.
 	 */
 	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
+		$this->prime_owners( $posts, $home_path );
+
 		foreach ( $posts as $post ) {
 			if ( ! $post instanceof WP_Post ) {
 				continue;
@@ -410,6 +431,9 @@ final class Upgrader {
 				$result['conflicts'][] = $conflict;
 			}
 		}
+
+		self::drop_audit_flags( $this->unflagged );
+		$this->unflagged = array();
 
 		$this->flush_publish_queue( $started, $result );
 	}
@@ -527,6 +551,7 @@ final class Upgrader {
 
 		do {
 			$posts = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
+			$this->prime_owners( $posts, $home_path );
 
 			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
@@ -687,16 +712,12 @@ final class Upgrader {
 			$result['skipped']   += count( $ids ) - (int) $published;
 		}
 
-		// Stale audit flags go in one statement rather than a delete_post_meta()
-		// per row, for the reason write() drops them.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- As above.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN ({$placeholders})", array_merge( array( AuditFlags::META_KEY ), $ids ) ) );
+		self::drop_audit_flags( $ids );
 
-		// Batched: the rows and their meta, core's cached post queries, and
-		// the lookup cache, which holds 0 for a path requested while its
-		// redirect was still a draft.
+		// Batched: the rows, core's cached post queries, and the lookup cache,
+		// which holds 0 for a path requested while its redirect was still a
+		// draft.
 		wp_cache_delete_multiple( $ids, 'posts' );
-		wp_cache_delete_multiple( $ids, 'post_meta' );
 		wp_cache_set_posts_last_changed();
 		wp_cache_delete_multiple(
 			array_map( CachingRedirectRepository::cache_key( ... ), array_values( $this->publish_queue ) ),
@@ -704,6 +725,76 @@ final class Upgrader {
 		);
 
 		$this->publish_queue = array();
+	}
+
+	/**
+	 * Look up, in one query, who owns each source hash a batch may re-key onto.
+	 *
+	 * Mirrors find_post_by_hash(): every status WP_Query's 'any' includes,
+	 * which leaves out the trash, and the newest row where several share a
+	 * hash. A failed read leaves the map empty, so each row falls back to its
+	 * own lookup rather than trusting an answer that was never given.
+	 *
+	 * @param array<WP_Post|null> $posts     The batch.
+	 * @param string              $home_path The home path to strip, or ''.
+	 * @return void
+	 */
+	private function prime_owners( array $posts, string $home_path ): void {
+		global $wpdb;
+
+		$this->owners = array();
+
+		foreach ( $posts as $post ) {
+			$new_path = $post instanceof WP_Post ? $this->canonical_source( $post->post_title, $home_path ) : null;
+			if ( null !== $new_path ) {
+				$this->owners[ md5( $new_path ) ] = 0;
+			}
+		}
+
+		if ( array() === $this->owners ) {
+			return;
+		}
+
+		$hashes   = array_keys( $this->owners );
+		$excluded = array_values( get_post_stati( array( 'exclude_from_search' => true ) ) );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- One read per batch in place of one per row; the interpolated fragments are only %s placeholders. Prepared just above.
+		$sql = $wpdb->prepare(
+			"SELECT ID, post_name FROM {$wpdb->posts} WHERE post_type = %s AND post_status NOT IN (" . implode( ',', array_fill( 0, count( $excluded ), '%s' ) ) . ') AND post_name IN (' . implode( ',', array_fill( 0, count( $hashes ), '%s' ) ) . ') ORDER BY post_date ASC, ID ASC',
+			array_merge( array( PostType::POST_TYPE ), $excluded, $hashes )
+		);
+
+		if ( false === $wpdb->query( $sql ) ) {
+			$this->owners = array();
+			return;
+		}
+		// phpcs:enable
+
+		// Ascending, so the newest row sharing a hash is the one left standing.
+		foreach ( $wpdb->last_result as $row ) {
+			$this->owners[ $row->post_name ] = (int) $row->ID;
+		}
+	}
+
+	/**
+	 * Drop the stale audit flags of redirects just written, in one statement.
+	 *
+	 * @param int[] $ids The redirect post IDs.
+	 * @return void
+	 */
+	private static function drop_audit_flags( array $ids ): void {
+		if ( array() === $ids ) {
+			return;
+		}
+
+		global $wpdb;
+
+		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The interpolated fragment is only %d placeholders, one per ID. The meta cache is cleaned below.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN ({$placeholders})", array_merge( array( AuditFlags::META_KEY ), $ids ) ) );
+
+		wp_cache_delete_multiple( $ids, 'post_meta' );
 	}
 
 	/**
@@ -825,7 +916,8 @@ final class Upgrader {
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
-			$existing = isset( $claimed[ $new_hash ] ) ? get_post( $claimed[ $new_hash ] ) : $this->find_post_by_hash( $new_hash );
+			$owner    = $claimed[ $new_hash ] ?? $this->owners[ $new_hash ] ?? null;
+			$existing = null === $owner ? $this->find_post_by_hash( $new_hash ) : ( 0 === $owner ? null : get_post( $owner ) );
 			$collided = null !== $existing && $existing->ID !== $post->ID;
 
 			if ( ! $collided ) {
@@ -903,7 +995,7 @@ final class Upgrader {
 
 		// Matching the modified date as read skips the write if a user has
 		// edited the row since, so the edit is not overwritten.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned below.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned below and in process().
 		$written = $wpdb->update(
 			$wpdb->posts,
 			$update,
@@ -923,8 +1015,18 @@ final class Upgrader {
 		wp_cache_set_posts_last_changed();
 
 		// Whatever the last scan said about the row described it before this
-		// write, so it goes, as on any save; see AuditFlags.
-		delete_post_meta( $post->ID, AuditFlags::META_KEY );
+		// write, so it goes, as on any save; see AuditFlags. All at once at
+		// the end of the batch, rather than two queries per row here.
+		$this->unflagged[] = $post->ID;
+
+		// The row no longer answers for a key it moved off, or holds from the
+		// trash; forgetting it sends a later check to the database.
+		if ( ( $this->owners[ $post->post_name ] ?? null ) === $post->ID ) {
+			unset( $this->owners[ $post->post_name ] );
+		}
+		if ( isset( $update['post_name'] ) ) {
+			$this->owners[ $update['post_name'] ] = $post->ID;
+		}
 
 		// The lookup cache stores 0 for "no redirect here", so a path that was
 		// requested while the redirect was still a draft is cached as missing.
