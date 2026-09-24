@@ -389,10 +389,16 @@ final class Upgrader {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Bulk status flip; the interpolated fragment is only %d placeholders, one per ID. Caches are cleaned below.
 		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$placeholders}) AND post_modified_gmt <= %s", array_merge( $ids, array( $started ) ) ) );
 
-		// Batched: the rows themselves, core's cached post queries, and the
-		// lookup cache, which holds 0 for a path requested while its redirect
-		// was still a draft.
+		// Stale audit flags go in one statement rather than a delete_post_meta()
+		// per row, for the reason write() drops them.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- As above.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN ({$placeholders})", array_merge( array( AuditFlags::META_KEY ), $ids ) ) );
+
+		// Batched: the rows and their meta, core's cached post queries, and
+		// the lookup cache, which holds 0 for a path requested while its
+		// redirect was still a draft.
 		wp_cache_delete_multiple( $ids, 'posts' );
+		wp_cache_delete_multiple( $ids, 'post_meta' );
 		wp_cache_set_posts_last_changed();
 		wp_cache_delete_multiple(
 			array_map( CachingRedirectRepository::cache_key( ... ), array_values( $this->publish_queue ) ),
@@ -557,6 +563,10 @@ final class Upgrader {
 		// it under its old key or status.
 		wp_cache_delete( $post->ID, 'posts' );
 		wp_cache_set_posts_last_changed();
+
+		// Whatever the last scan said about the row described it before this
+		// write, so it goes, as on any save; see AuditFlags.
+		delete_post_meta( $post->ID, AuditFlags::META_KEY );
 
 		// The lookup cache stores 0 for "no redirect here", so a path that was
 		// requested while the redirect was still a draft is cached as missing.

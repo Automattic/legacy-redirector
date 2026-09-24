@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
@@ -368,6 +369,26 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( md5( '/other-page' ), get_post( $ids['rekey'] )->post_name );
 		$this->assertSame( 'trash', get_post_status( $ids['trashed'] ) );
 		$this->assertSame( md5( '/old-page/' ), get_post( $ids['trashed'] )->post_name );
+	}
+
+	/**
+	 * A migrated row loses the audit flag describing its pre-migration self.
+	 *
+	 * A save clears a row's flag so it never shows a stale verdict; the
+	 * migration's direct writes skip save_post, so they must do the same.
+	 *
+	 * @return void
+	 */
+	public function test_migrated_rows_lose_their_stale_audit_flags() {
+		$bulk_id  = $this->create_legacy_redirect( '/old-page' );
+		$rekey_id = $this->create_legacy_redirect( '/other-page/' );
+		update_post_meta( $bulk_id, AuditFlags::META_KEY, 'warning' );
+		update_post_meta( $rekey_id, AuditFlags::META_KEY, 'problem' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '', get_post_meta( $bulk_id, AuditFlags::META_KEY, true ) );
+		$this->assertSame( '', get_post_meta( $rekey_id, AuditFlags::META_KEY, true ) );
 	}
 
 	/**

@@ -95,7 +95,7 @@ Under 2.0, a `draft` redirect means "deliberately disabled". The migration there
 
 More broadly, any redirect created or edited after the migration began is skipped by **every** pass, not just the publishing one, including an edit made while a batch is running: it was made under 2.0 rules, so whatever it now says is what you meant. That is what makes the ungated passes safe to re-run on a later version bump.
 
-The migration changes only the fields each pass is about, and nothing else. Every redirect keeps its original post date and modified date, so you can still tell which redirects were added in 2020 rather than seeing the day you upgraded on all of them. It writes straight to the database rather than through `wp_update_post()`, so no post meta is added, no slugs are suffixed, and no `save_post` or `transition_post_status` hooks fire for migrated redirects.
+The migration changes only the fields each pass is about, and nothing else. Every redirect keeps its original post date and modified date, so you can still tell which redirects were added in 2020 rather than seeing the day you upgraded on all of them. It writes straight to the database rather than through `wp_update_post()`, so no post meta is added (a stale audit flag is cleared, as on any save), no slugs are suffixed, and no `save_post` or `transition_post_status` hooks fire for migrated redirects.
 
 Destinations given as a post ID rather than a URL are not rewritten — there is no encoding to canonicalize — and no pass changes where a redirect sends visitors. The source path is re-keyed and the destination re-spelled; the page the visitor arrives at is the same one as before.
 
