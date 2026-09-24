@@ -56,6 +56,8 @@ final class MigrateCommandTest extends CliTestCase {
 		delete_option( Upgrader::VERSION_OPTION );
 		delete_option( 'wpcom_legacy_redirector_upgrade_started_gmt' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_cursor' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
+		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
 
 		$this->upgrader = new Upgrader();
 		$this->command  = new MigrateCommand( $this->upgrader );
@@ -106,8 +108,12 @@ final class MigrateCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
 
 		$this->assert_stdout_contains( 'Dry run - no changes will be made.' );
+		$this->assert_stdout_contains( 'Checked 2 of 2 (100%)' );
 		$this->assert_stdout_contains(
-			'2 redirect(s) would be inspected, of which 2 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 1 would have their destination made relative.'
+			'2 redirect(s) would be inspected: 2 would change, 0 need no change, and 0 would be left alone because they were edited after the upgrade began.'
+		);
+		$this->assert_stdout_contains(
+			'Of those changing, 2 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 1 would have their destination made relative.'
 		);
 
 		$this->assertSame( 'draft', get_post_status( $external_id ) );
@@ -125,15 +131,75 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_stdout_contains( 'Processed 2 redirect(s)...' );
+		$this->assert_stdout_contains( 'Migrating 2 redirect(s) in batches of 2,000, pausing 0.25s after each batch that writes' );
+		$this->assert_stdout_contains( 'Processed 2 of 2 (100%)' );
+		$this->assert_stdout_not_contains( 'Resuming' );
 		$this->assert_success_contains(
-			'Migration complete. 2 redirect(s) inspected, 2 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 1 destination(s) made relative.'
+			'Migration complete. 2 redirect(s) inspected in this run: 2 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 0 could not be written. Of those changed, 2 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 1 destination(s) made relative.'
 		);
 
 		$this->assertSame( 'publish', get_post_status( $external_id ) );
 		$this->assertSame( 'publish', get_post_status( $internal_id ) );
 		$this->assertSame( '/new-page', get_post( $internal_id )->post_excerpt );
 		$this->assertFalse( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
+	 * A run picking up after an interrupted one says so, and counts from there.
+	 */
+	public function test_resumed_run_reports_where_it_picked_up(): void {
+		$this->create_legacy_redirect( '/first' );
+		$this->create_legacy_redirect( '/second' );
+		$this->create_legacy_redirect( '/third' );
+
+		// An earlier run that stopped after one redirect.
+		$this->upgrader->run_batch( 1 );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_stdout_contains( 'Resuming where the last run stopped: 1 of 3 redirect(s) already done.' );
+		$this->assert_stdout_contains( 'Migrating 2 redirect(s)' );
+		$this->assert_stdout_contains( 'Processed 3 of 3 (100%)' );
+		$this->assert_success_contains( 'Migration complete. 2 redirect(s) inspected in this run' );
+	}
+
+	/**
+	 * A long conflict list shows the first few and says how many more there are.
+	 */
+	public function test_conflict_list_is_capped(): void {
+		for ( $i = 0; $i < 21; $i++ ) {
+			$this->create_legacy_redirect( '/clash-' . $i, 'https://external.example.net/one' );
+			$this->create_legacy_redirect( '/clash-' . $i . '/', 'https://external.example.net/two' );
+		}
+
+		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
+
+		$this->assert_warning_contains( '21 source path(s) would collide' );
+		$this->assert_stdout_contains( '  ...and 1 more. Run again with --debug=legacy-redirector to list them all.' );
+		$this->assertSame( 20, substr_count( $this->get_stdout(), 'would be drafted' ) );
+
+		$debugged = array_filter( \WP_CLI::$calls, static fn( array $call ): bool => 'debug' === $call[0] && 'legacy-redirector' === $call[2] );
+		$this->assertCount( 1, $debugged, 'The rest should go to the debug group.' );
+	}
+
+	/**
+	 * Redirects the database refuses to write are listed, and the run fails.
+	 */
+	public function test_failed_writes_fail_the_run(): void {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$refuse  = static fn( string $query ): string => preg_match( "/^UPDATE `?{$wpdb->posts}`? /", $query ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$this->invoke_command( $this->command, array(), array() );
+		remove_filter( 'query', $refuse );
+
+		$this->assert_warning_contains( '1 redirect(s) could not be written' );
+		$this->assert_stdout_contains( '  #' . $post_id . ': ' );
+		$this->assert_stdout_contains( '0 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 1 could not be written.' );
+		$this->assert_error_contains( 'not every redirect could be migrated' );
+		$this->assertFalse( $this->output->had_success() );
 	}
 
 	/**

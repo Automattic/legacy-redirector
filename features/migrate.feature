@@ -44,7 +44,7 @@ Feature: Migrating 1.x redirect data
       """
     And STDOUT should contain:
       """
-      210 redirect(s) would be inspected, of which 210 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 0 would have their destination made relative.
+      210 redirect(s) would be inspected: 210 would change, 0 need no change, and 0 would be left alone because they were edited after the upgrade began.
       """
 
     When I run `wp post list --post_type=vip-legacy-redirect --post_status=draft --format=count`
@@ -56,7 +56,7 @@ Feature: Migrating 1.x redirect data
     When I run `wp legacy-redirector migrate`
     Then STDOUT should contain:
       """
-      Success: Migration complete. 210 redirect(s) inspected, 210 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 0 destination(s) made relative.
+      Success: Migration complete. 210 redirect(s) inspected in this run: 210 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 0 could not be written. Of those changed, 210 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 0 destination(s) made relative.
       """
 
     When I run `wp post list --post_type=vip-legacy-redirect --post_status=draft --format=count`

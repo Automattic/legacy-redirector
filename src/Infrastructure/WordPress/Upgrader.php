@@ -202,10 +202,41 @@ final class Upgrader {
 	}
 
 	/**
+	 * How far through the redirect set the upgrade is.
+	 *
+	 * Counts rather than IDs, for progress reporting: 'total' is every
+	 * redirect the walk will visit, 'done' those it has already passed, which
+	 * is non-zero when resuming an interrupted run.
+	 *
+	 * @return array{done: int, total: int}
+	 */
+	public function position(): array {
+		global $wpdb;
+
+		$ceiling = $this->ceiling( false );
+		$cursor  = min( (int) get_option( self::CURSOR_OPTION, 0 ), $ceiling );
+		$count   = static fn( int $up_to ): int => (int) $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Two counts per CLI run, for its progress output.
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND ID <= %d", PostType::POST_TYPE, $up_to )
+		);
+
+		return array(
+			'done'  => $cursor > 0 ? $count( $cursor ) : 0,
+			'total' => $count( $ceiling ),
+		);
+	}
+
+	/**
 	 * Process one batch of redirects.
 	 *
+	 * Every processed redirect lands in exactly one of 'changed', 'unchanged'
+	 * (already in the current shape), 'skipped' (edited since the upgrade
+	 * began, so left alone) and 'failed' (the database refused the write), so
+	 * those four add up to 'processed'. The per-pass counts break 'changed'
+	 * down and can overlap: one redirect can be published and re-keyed.
+	 *
 	 * @param int $size Maximum number of redirects to process.
-	 * @return array{processed: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
 	 */
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
@@ -216,11 +247,15 @@ final class Upgrader {
 
 		$result = array(
 			'processed'  => 0,
+			'changed'    => 0,
+			'unchanged'  => 0,
+			'skipped'    => 0,
 			'published'  => 0,
 			'repathed'   => 0,
 			'deduped'    => 0,
 			'normalized' => 0,
 			'conflicts'  => array(),
+			'failed'     => array(),
 			'complete'   => false,
 		);
 
@@ -238,6 +273,7 @@ final class Upgrader {
 			// under 2.0 rules, where 'draft' means "deliberately disabled".
 			// Republishing it would override an explicit choice.
 			if ( $post->post_modified_gmt > $started ) {
+				++$result['skipped'];
 				continue;
 			}
 
@@ -247,7 +283,7 @@ final class Upgrader {
 			}
 		}
 
-		$this->flush_publish_queue( $started );
+		$this->flush_publish_queue( $started, $result );
 
 		update_option( self::CURSOR_OPTION, $cursor, false );
 
@@ -263,11 +299,13 @@ final class Upgrader {
 	 * Report what a full run would change, without writing anything.
 	 *
 	 * Walks the whole redirect set, so it is proportional to the number of
-	 * redirects rather than constant time.
+	 * redirects rather than constant time. The counts mean what run_batch()'s
+	 * do, as predictions, apart from failures, which only a write can reveal.
 	 *
-	 * @return array{total: int, to_publish: int, to_repath: int, to_dedupe: int, to_normalize: int, conflicts: string[]}
+	 * @param callable(int): void|null $progress Called after each batch with the number of redirects checked so far.
+	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[]}
 	 */
-	public function count_pending(): array {
+	public function count_pending( ?callable $progress = null ): array {
 		$started   = $this->started_at( false );
 		$ceiling   = $this->ceiling( false );
 		$publish   = $this->from_pre_2_0_data();
@@ -276,12 +314,15 @@ final class Upgrader {
 		$claimed   = array();
 
 		$pending = array(
-			'total'        => 0,
-			'to_publish'   => 0,
-			'to_repath'    => 0,
-			'to_dedupe'    => 0,
-			'to_normalize' => 0,
-			'conflicts'    => array(),
+			'total'      => 0,
+			'changed'    => 0,
+			'unchanged'  => 0,
+			'skipped'    => 0,
+			'published'  => 0,
+			'repathed'   => 0,
+			'deduped'    => 0,
+			'normalized' => 0,
+			'conflicts'  => array(),
 		);
 
 		do {
@@ -296,11 +337,11 @@ final class Upgrader {
 				$after_id = $post->ID;
 
 				if ( $post->post_modified_gmt > $started ) {
+					++$pending['skipped'];
 					continue;
 				}
 
-				$plan   = $this->plan( $post, $home_path, $publish, $claimed );
-				$status = $plan['update']['post_status'] ?? '';
+				$plan = $this->plan( $post, $home_path, $publish, $claimed );
 
 				// The run writes each re-key before checking the next row, so
 				// two rows re-keyed onto one source collide there. The dry run
@@ -310,14 +351,19 @@ final class Upgrader {
 					$claimed[ $plan['update']['post_name'] ] = $post->ID;
 				}
 
-				$pending['to_publish']   += (int) ( 'publish' === $status );
-				$pending['to_dedupe']    += (int) ( 'trash' === $status );
-				$pending['to_repath']    += (int) isset( $plan['update']['post_name'] );
-				$pending['to_normalize'] += (int) isset( $plan['update']['post_excerpt'] );
+				if ( array() === $plan['update'] ) {
+					++$pending['unchanged'];
+				} else {
+					self::tally( $plan['update'], $pending );
+				}
 
 				if ( null !== $plan['conflict'] ) {
 					$pending['conflicts'][] = $plan['conflict'] . ' and would be drafted';
 				}
+			}
+
+			if ( null !== $progress ) {
+				$progress( $pending['total'] );
 			}
 
 			$fetched = count( $posts );
@@ -371,10 +417,11 @@ final class Upgrader {
 	 * replicate without lagging replicas. Only the status changes, as with
 	 * every migration write; see write().
 	 *
-	 * @param string $started The GMT timestamp at which the upgrade began.
+	 * @param string               $started The GMT timestamp at which the upgrade began.
+	 * @param array<string, mixed> $result  Running totals, updated by reference.
 	 * @return void
 	 */
-	private function flush_publish_queue( string $started ): void {
+	private function flush_publish_queue( string $started, array &$result ): void {
 		if ( array() === $this->publish_queue ) {
 			return;
 		}
@@ -387,7 +434,17 @@ final class Upgrader {
 		// The modified-date condition skips any row a user edited between
 		// this batch reading it and writing it, so the edit is not overwritten.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Bulk status flip; the interpolated fragment is only %d placeholders, one per ID. Caches are cleaned below.
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$placeholders}) AND post_modified_gmt <= %s", array_merge( $ids, array( $started ) ) ) );
+		$published = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$placeholders}) AND post_modified_gmt <= %s", array_merge( $ids, array( $started ) ) ) );
+
+		if ( false === $published ) {
+			foreach ( $ids as $id ) {
+				$result['failed'][] = sprintf( '#%d: %s', $id, self::write_error() );
+			}
+		} else {
+			$result['changed']   += (int) $published;
+			$result['published'] += (int) $published;
+			$result['skipped']   += count( $ids ) - (int) $published;
+		}
 
 		// Stale audit flags go in one statement rather than a delete_post_meta()
 		// per row, for the reason write() drops them.
@@ -423,29 +480,61 @@ final class Upgrader {
 	private function migrate_post( WP_Post $post, string $home_path, bool $publish, array &$result ): ?string {
 		$plan     = $this->plan( $post, $home_path, $publish );
 		$update   = $plan['update'];
-		$status   = $update['post_status'] ?? '';
 		$conflict = null === $plan['conflict'] ? null : $plan['conflict'] . ' and has been drafted';
 
-		$result['published']  += (int) ( 'publish' === $status );
-		$result['deduped']    += (int) ( 'trash' === $status );
-		$result['repathed']   += (int) isset( $update['post_name'] );
-		$result['normalized'] += (int) isset( $update['post_excerpt'] );
-
 		if ( array() === $update ) {
+			++$result['unchanged'];
 			return $conflict;
 		}
 
 		// A row needing nothing but the status flip - no repath, no dedupe, no
 		// destination rewrite - queues for one bulk UPDATE per batch instead of
-		// a write per row. On a 1.x site that is nearly every row.
+		// a write per row. On a 1.x site that is nearly every row. It is
+		// counted when the queue is flushed.
 		if ( array( 'post_status' => 'publish' ) === $update ) {
 			$this->publish_queue[ $post->ID ] = $post->post_name;
 			return $conflict;
 		}
 
-		$this->write( $post, $update );
+		$written = $this->write( $post, $update );
+
+		if ( false === $written ) {
+			$result['failed'][] = sprintf( '#%d (%s): %s', $post->ID, $post->post_title, self::write_error() );
+		} elseif ( 0 === $written ) {
+			++$result['skipped'];
+		} else {
+			self::tally( $update, $result );
+		}
 
 		return $conflict;
+	}
+
+	/**
+	 * Count one redirect's planned changes into a set of totals.
+	 *
+	 * @param array<string, string> $update The fields being changed.
+	 * @param array<string, mixed>  $totals Running totals, updated by reference.
+	 * @return void
+	 */
+	private static function tally( array $update, array &$totals ): void {
+		$status = $update['post_status'] ?? '';
+
+		++$totals['changed'];
+		$totals['published']  += (int) ( 'publish' === $status );
+		$totals['deduped']    += (int) ( 'trash' === $status );
+		$totals['repathed']   += (int) isset( $update['post_name'] );
+		$totals['normalized'] += (int) isset( $update['post_excerpt'] );
+	}
+
+	/**
+	 * Why the last write failed, for the failure report.
+	 *
+	 * @return string The database's error, or a generic reason when it gave none.
+	 */
+	private static function write_error(): string {
+		global $wpdb;
+
+		return '' !== $wpdb->last_error ? $wpdb->last_error : 'the database did not accept the write';
 	}
 
 	/**
@@ -538,9 +627,9 @@ final class Upgrader {
 	 *
 	 * @param WP_Post               $post   The redirect post.
 	 * @param array<string, string> $update The fields to change.
-	 * @return void
+	 * @return int|false 1 when written, 0 when the row was edited since it was read and so left alone, false when the database refused the write.
 	 */
-	private function write( WP_Post $post, array $update ): void {
+	private function write( WP_Post $post, array $update ): int|false {
 		global $wpdb;
 
 		// Matching the modified date as read skips the write if a user has
@@ -556,7 +645,7 @@ final class Upgrader {
 		);
 
 		if ( ! $written ) {
-			return;
+			return $written;
 		}
 
 		// The row itself, and core's cached post queries that could still list
@@ -574,6 +663,8 @@ final class Upgrader {
 		if ( isset( $update['post_name'] ) ) {
 			$this->invalidate( $update['post_name'] );
 		}
+
+		return $written;
 	}
 
 	/**

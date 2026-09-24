@@ -218,6 +218,6 @@ final class UpgraderSubdirectoryTest extends TestCase {
 
 		$pending = $this->upgrader->count_pending();
 
-		$this->assertSame( 1, $pending['to_repath'], 'The dry run should count the repath it would perform.' );
+		$this->assertSame( 1, $pending['repathed'], 'The dry run should count the repath it would perform.' );
 	}
 }
