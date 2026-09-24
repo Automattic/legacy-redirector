@@ -61,7 +61,7 @@ Four storage changes between 1.x and 2.0 would otherwise stop redirects you alre
 
    Where the visitor lands does not change — only how the destination is written down. `wp legacy-redirector migrate` counts these as "destination(s) made relative" in both its dry-run and its summary, so the number you see reported covers this pass.
 
-One migration handles all four. It runs automatically in small batches on ordinary page loads after you upgrade, and is version-gated, so it walks your redirects once for the upgrade and then stops until a future release changes the stored data again.
+One migration handles all four. It runs automatically in small batches on ordinary page loads after you upgrade (WP-CLI commands never trigger it; `wp legacy-redirector migrate` is how you run it from the command line), and is version-gated, so it walks your redirects once for the upgrade and then stops until a future release changes the stored data again.
 
 ### Which passes run when
 
@@ -71,7 +71,7 @@ The trailing-slash and destination passes carry no such ambiguity — both simpl
 
 ### Large redirect sets
 
-If you have a lot of redirects, run the migration in one pass instead of waiting for it to work through in batches:
+If you have a lot of redirects, run the migration in one pass instead of waiting for it to work through in batches. While it runs, page loads leave the work to it rather than migrating batches of their own:
 
 ```bash
 wp legacy-redirector migrate
@@ -93,7 +93,9 @@ wp site list --field=url | xargs -I % wp --url=% legacy-redirector migrate
 
 Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes redirects that were **never** published, which WordPress records with a `post_modified_gmt` of `0000-00-00 00:00:00`. Anything you disable after upgrading keeps a real modified date and is left alone.
 
-More broadly, any redirect edited after the migration began is skipped by **every** pass, not just the publishing one: the edit was made under 2.0 rules, so whatever it now says is what you meant. That is what makes the ungated passes safe to re-run on a later version bump.
+More broadly, any redirect created or edited after the migration began is skipped by **every** pass, not just the publishing one, including an edit made while a batch is running: it was made under 2.0 rules, so whatever it now says is what you meant. That is what makes the ungated passes safe to re-run on a later version bump.
+
+The migration changes only the fields each pass is about, and nothing else. Every redirect keeps its original post date and modified date, so you can still tell which redirects were added in 2020 rather than seeing the day you upgraded on all of them. It writes straight to the database rather than through `wp_update_post()`, so no post meta is added, no slugs are suffixed, and no `save_post` or `transition_post_status` hooks fire for migrated redirects.
 
 Destinations given as a post ID rather than a URL are not rewritten — there is no encoding to canonicalize — and no pass changes where a redirect sends visitors. The source path is re-keyed and the destination re-spelled; the page the visitor arrives at is the same one as before.
 

@@ -54,6 +54,8 @@ final class UpgraderTest extends TestCase {
 		delete_option( Upgrader::VERSION_OPTION );
 		delete_option( 'wpcom_legacy_redirector_upgrade_started_gmt' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_cursor' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
+		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
 
 		// The shared Integration TestCase does not call parent::set_up(), so
 		// WP_UnitTestCase never opens its rollback transaction and posts leak
@@ -286,6 +288,252 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * The cursor stores the last processed post ID, not an offset.
+	 *
+	 * The web-request path and the CLI share this option, so a run
+	 * interrupted mid-way resumes correctly from the other side - but only
+	 * while both agree on what the stored number means.
+	 *
+	 * @return void
+	 */
+	public function test_cursor_stores_the_last_processed_post_id() {
+		$first = $this->create_legacy_redirect( '/one' );
+		$this->create_legacy_redirect( '/two' );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( $first, (int) get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+	}
+
+	/**
+	 * Walking the set does not load every row into the post cache.
+	 *
+	 * WP_Query primes the post cache whenever it splits a query, whatever
+	 * cache_results says, so a walk built on it holds every redirect in memory
+	 * by the end of a dry run - about 2 GB at a million rows.
+	 *
+	 * @return void
+	 */
+	public function test_walking_the_set_does_not_prime_the_post_cache() {
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		wp_cache_flush();
+
+		$this->upgrader->count_pending();
+
+		$this->assertFalse( wp_cache_get( $post_id, 'posts' ) );
+	}
+
+	/**
+	 * The migration changes the planned fields and nothing else.
+	 *
+	 * Covers each kind of write: the bulk publish, a re-key, and trashing a
+	 * duplicate. Someone auditing which redirects were added in 2020 needs the
+	 * dates as they were, and wp_update_post() would also have left an old
+	 * slug in post meta and suffixed the trashed row's slug.
+	 *
+	 * @return void
+	 */
+	public function test_migration_leaves_dates_meta_and_slugs_alone() {
+		global $wpdb;
+
+		$ids = array(
+			'bulk'    => $this->create_legacy_redirect( '/old-page', 'https://example.com/same' ),
+			'rekey'   => $this->create_legacy_redirect( '/other-page/' ),
+			'trashed' => $this->create_legacy_redirect( '/old-page/', 'https://example.com/same' ),
+		);
+
+		$dates  = array( 'post_date', 'post_date_gmt', 'post_modified', 'post_modified_gmt' );
+		$before = array();
+		foreach ( $ids as $key => $id ) {
+			$wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_date'     => '2020-03-01 09:00:00',
+					'post_modified' => '2020-03-01 09:00:00',
+				),
+				array( 'ID' => $id )
+			);
+			clean_post_cache( $id );
+			$before[ $key ] = wp_array_slice_assoc( get_post( $id, ARRAY_A ), $dates );
+		}
+
+		$this->upgrader->run_batch( 100 );
+
+		foreach ( $ids as $key => $id ) {
+			$this->assertSame( $before[ $key ], wp_array_slice_assoc( get_post( $id, ARRAY_A ), $dates ), 'The ' . $key . ' row should keep its dates.' );
+			$this->assertSame( array(), get_post_meta( $id ), 'The ' . $key . ' row should gain no post meta.' );
+		}
+
+		$this->assertSame( 'publish', get_post_status( $ids['bulk'] ) );
+		$this->assertSame( md5( '/other-page' ), get_post( $ids['rekey'] )->post_name );
+		$this->assertSame( 'trash', get_post_status( $ids['trashed'] ) );
+		$this->assertSame( md5( '/old-page/' ), get_post( $ids['trashed'] )->post_name );
+	}
+
+	/**
+	 * A dry run reports exactly what the run then does.
+	 *
+	 * The dry run used to count every draft as due for publishing, including
+	 * the ones the run was about to trash as duplicates or draft as conflicts.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_predicts_the_run() {
+		$this->create_legacy_redirect( '/plain' );
+		$this->create_legacy_redirect( '/slash/' );
+		$this->create_legacy_redirect( '/internal', home_url( '/target' ) );
+		$this->create_legacy_redirect( '/dupe', 'https://example.com/same' );
+		$this->create_legacy_redirect( '/dupe/', 'https://example.com/same' );
+		$this->create_legacy_redirect( '/clash', 'https://example.com/one' );
+		$this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
+		// Both need re-keying onto '/converge', so only the run's own write of
+		// the first can make the second collide.
+		$this->create_legacy_redirect( '/converge/', 'https://example.com/one' );
+		$this->create_legacy_redirect( '/converge//', 'https://example.com/two' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		// '/dupe/' is trashed and '/clash/' and '/converge//' drafted, so none
+		// of them is published.
+		$this->assertSame( 6, $pending['to_publish'] );
+		$this->assertSame(
+			array( $result['published'], $result['repathed'], $result['deduped'], $result['normalized'], count( $result['conflicts'] ) ),
+			array( $pending['to_publish'], $pending['to_repath'], $pending['to_dedupe'], $pending['to_normalize'], count( $pending['conflicts'] ) )
+		);
+	}
+
+	/**
+	 * Two rows re-keyed onto the same source in one batch do not both take it.
+	 *
+	 * The first row's write has to be visible to the collision check for the
+	 * second, including through any cached lookup query.
+	 *
+	 * @return void
+	 */
+	public function test_rows_converging_on_one_key_in_one_batch_collide() {
+		$first  = $this->create_legacy_redirect( '/x/', 'https://example.com/one' );
+		$second = $this->create_legacy_redirect( '/x//', 'https://example.com/two' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( md5( '/x' ), get_post( $first )->post_name );
+		$this->assertSame( md5( '/x//' ), get_post( $second )->post_name );
+		$this->assertSame( 'draft', get_post_status( $second ) );
+		$this->assertCount( 1, $result['conflicts'] );
+	}
+
+	/**
+	 * A trashed row that collides is left in the trash, and not reported.
+	 *
+	 * It is already out of service. Drafting it as a conflict would quietly
+	 * restore it, and trashing it again would count it as a duplicate on
+	 * every walk.
+	 *
+	 * @return void
+	 */
+	public function test_trashed_row_that_collides_is_left_alone() {
+		$this->create_legacy_redirect( '/old-page', 'https://example.com/one' );
+		$trashed_id = $this->create_legacy_redirect( '/old-page/', 'https://example.com/two' );
+		wp_update_post(
+			array(
+				'ID'          => $trashed_id,
+				'post_status' => 'trash',
+			)
+		);
+		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2099-01-01 00:00:00' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'trash', get_post_status( $trashed_id ) );
+		$this->assertSame( 0, $result['deduped'] );
+		$this->assertSame( array(), $result['conflicts'] );
+	}
+
+	/**
+	 * A redirect created disabled while the upgrade runs is not published.
+	 *
+	 * Created as a draft and never modified, it looks exactly like a 1.x
+	 * redirect, so the walk has to stop at the highest ID that existed when
+	 * the upgrade began.
+	 *
+	 * @return void
+	 */
+	public function test_redirect_created_after_the_upgrade_began_is_left_alone() {
+		$legacy_id = $this->create_legacy_redirect( '/old-a' );
+		$this->create_legacy_redirect( '/old-b' );
+
+		$this->upgrader->run_batch( 1 );
+
+		$created_id = $this->create_legacy_redirect( '/created-disabled' );
+
+		do {
+			$batch = $this->upgrader->run_batch( 1 );
+		} while ( ! $batch['complete'] );
+
+		$this->assertSame( 'publish', get_post_status( $legacy_id ) );
+		$this->assertSame( 'draft', get_post_status( $created_id ) );
+	}
+
+	/**
+	 * An edit that lands between a batch reading a row and writing it survives.
+	 *
+	 * Simulated by editing both rows at the moment the batch issues its first
+	 * UPDATE: one row is by then waiting in the bulk publish queue, the other
+	 * is about to be re-keyed.
+	 *
+	 * @return void
+	 */
+	public function test_an_edit_landing_mid_batch_is_not_overwritten() {
+		global $wpdb;
+
+		$bulk_id  = $this->create_legacy_redirect( '/old-page' );
+		$rekey_id = $this->create_legacy_redirect( '/other-page/' );
+
+		$raced = false;
+		$race  = static function ( string $query ) use ( &$raced, $wpdb, $bulk_id, $rekey_id ): string {
+			if ( ! $raced && preg_match( "/^UPDATE `?{$wpdb->posts}`? /", $query ) ) {
+				$raced = true;
+				foreach ( array( $bulk_id, $rekey_id ) as $id ) {
+					$wpdb->update(
+						$wpdb->posts,
+						array( 'post_modified_gmt' => '2099-01-01 00:00:00' ),
+						array( 'ID' => $id )
+					);
+				}
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $race );
+		$this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $race );
+
+		$this->assertTrue( $raced, 'The simulated edit should have run.' );
+		$this->assertSame( 'draft', get_post_status( $bulk_id ) );
+		$this->assertSame( '/other-page/', get_post( $rekey_id )->post_title );
+	}
+
+	/**
+	 * Web requests leave the work to a running CLI migration.
+	 *
+	 * @return void
+	 */
+	public function test_web_batches_hold_off_while_the_cli_migrates() {
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+
+		$this->upgrader->hold_web_batches();
+		$this->upgrader->maybe_upgrade();
+
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertFalse( get_transient( 'wpcom_legacy_redirector_upgrade_cli' ), 'Completing the upgrade should release the hold.' );
+	}
+
+	/**
 	 * A dry run reports the work without performing it.
 	 *
 	 * @return void
@@ -490,10 +738,10 @@ final class UpgraderTest extends TestCase {
 	/**
 	 * Trashing a duplicate must not shift later rows out from under the cursor.
 	 *
-	 * The batch query pages by offset, and WP_Query's 'any' status excludes
-	 * trash - so a duplicate trashed in batch one would shrink the result set
-	 * and the row straddling the batch boundary would be skipped, silently
-	 * left on its old key. The query names every status to keep the set stable.
+	 * The batch query pages by keyset (ID > cursor), so a status change in an
+	 * earlier batch cannot move unprocessed rows around the way it would shrink
+	 * an offset-paged result set. This pins that invariant: the row straddling
+	 * the batch boundary after a trashed duplicate is still migrated.
 	 *
 	 * @return void
 	 */

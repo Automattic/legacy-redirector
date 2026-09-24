@@ -54,7 +54,7 @@ use WP_Query;
  *    and '/old-page/' as one redirect rather than two. See
  *    SourceUrl::strip_trailing_slash(). Sites that worked around the old
  *    behavior by storing both forms will have the two rows converge on one
- *    key; see migrate_post() for how that is resolved.
+ *    key; see plan() for how that is resolved.
  *
  * Every pass is idempotent per redirect, so re-walking the set is safe.
  *
@@ -115,9 +115,37 @@ final class Upgrader {
 	private const string STARTED_OPTION = 'wpcom_legacy_redirector_upgrade_started_gmt';
 
 	/**
-	 * Option holding how far through the redirect set the upgrade has reached.
+	 * Option holding the ID of the last redirect a batch processed.
+	 *
+	 * A keyset cursor: each batch queries ID > cursor, so query cost stays
+	 * flat however deep the walk is, where an offset re-reads and discards
+	 * every earlier row (O(n²) across a multi-million-row set). A site that
+	 * began upgrading while this stored an offset loses nothing: the Nth row's
+	 * ID is at least N, so reading an offset as an ID can only re-walk rows,
+	 * never skip them, and every pass is idempotent.
 	 */
 	private const string CURSOR_OPTION = 'wpcom_legacy_redirector_upgrade_cursor';
+
+	/**
+	 * Option holding the highest redirect ID when the upgrade began.
+	 *
+	 * The walk stops here. Anything created later was written by the current
+	 * version, so has nothing to migrate - and a redirect created disabled is
+	 * a never-modified draft, exactly what a 1.x redirect looks like, so
+	 * walking it would publish it.
+	 */
+	private const string CEILING_OPTION = 'wpcom_legacy_redirector_upgrade_ceiling';
+
+	/**
+	 * Transient set while `wp legacy-redirector migrate` runs.
+	 *
+	 * Web requests hold off their batches while it exists: they would walk
+	 * the same rows as the CLI and pull the shared cursor back under it,
+	 * sending it over rows it has already done. Short-lived and refreshed
+	 * every batch, so a CLI run that dies hands back to web requests within
+	 * minutes.
+	 */
+	private const string CLI_LOCK = 'wpcom_legacy_redirector_upgrade_cli';
 
 	/**
 	 * Redirects processed per batch when running on a web request.
@@ -126,6 +154,16 @@ final class Upgrader {
 	 * visitor happens to trigger it.
 	 */
 	public const int BATCH_SIZE = 100;
+
+	/**
+	 * Drafts needing only the publish flip, keyed ID => stored hash.
+	 *
+	 * Filled by migrate_post() during a batch and applied by
+	 * flush_publish_queue() as one bulk UPDATE at the end of it.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $publish_queue = array();
 
 	/**
 	 * Whether this site still has upgrade work outstanding.
@@ -145,11 +183,22 @@ final class Upgrader {
 	 * @return void
 	 */
 	public function maybe_upgrade(): void {
-		if ( ! $this->needs_upgrade() ) {
+		if ( ! $this->needs_upgrade() || false !== get_transient( self::CLI_LOCK ) ) {
 			return;
 		}
 
 		$this->run_batch( self::BATCH_SIZE );
+	}
+
+	/**
+	 * Keep web requests from running batches for the next few minutes.
+	 *
+	 * For the CLI to call before each of its batches; see CLI_LOCK.
+	 *
+	 * @return void
+	 */
+	public function hold_web_batches(): void {
+		set_transient( self::CLI_LOCK, 1, 5 * MINUTE_IN_SECONDS );
 	}
 
 	/**
@@ -160,6 +209,7 @@ final class Upgrader {
 	 */
 	public function run_batch( int $size ): array {
 		$started   = $this->started_at();
+		$ceiling   = $this->ceiling();
 		$cursor    = (int) get_option( self::CURSOR_OPTION, 0 );
 		$publish   = $this->from_pre_2_0_data();
 		$home_path = $publish ? $this->home_path() : '';
@@ -174,32 +224,15 @@ final class Upgrader {
 			'complete'   => false,
 		);
 
-		$query = new WP_Query(
-			array(
-				'post_type'              => PostType::POST_TYPE,
-				// Every status by name, because 'any' excludes trash: a duplicate
-				// trashed by an earlier batch would shrink an 'any' result set
-				// and shift unprocessed rows under the offset cursor, silently
-				// skipping them. Naming trash keeps the set stable while we
-				// mutate statuses as we go.
-				'post_status'            => array_keys( get_post_stati() ),
-				'posts_per_page'         => $size,
-				'offset'                 => $cursor,
-				'orderby'                => 'ID',
-				'order'                  => 'ASC',
-				'no_found_rows'          => true,
-				'update_post_meta_cache' => false,
-				'update_post_term_cache' => false,
-				'ignore_sticky_posts'    => true,
-			)
-		);
+		$posts = $this->query_batch( $cursor, $ceiling, $size );
 
-		foreach ( $query->posts as $post ) {
+		foreach ( $posts as $post ) {
 			if ( ! $post instanceof WP_Post ) {
 				continue;
 			}
 
 			++$result['processed'];
+			$cursor = $post->ID;
 
 			// A redirect touched since the upgrade began was acted on by a user
 			// under 2.0 rules, where 'draft' means "deliberately disabled".
@@ -214,7 +247,8 @@ final class Upgrader {
 			}
 		}
 
-		$cursor += $result['processed'];
+		$this->flush_publish_queue( $started );
+
 		update_option( self::CURSOR_OPTION, $cursor, false );
 
 		if ( $result['processed'] < $size ) {
@@ -235,9 +269,11 @@ final class Upgrader {
 	 */
 	public function count_pending(): array {
 		$started   = $this->started_at( false );
+		$ceiling   = $this->ceiling( false );
 		$publish   = $this->from_pre_2_0_data();
 		$home_path = $publish ? $this->home_path() : '';
-		$paged     = 1;
+		$after_id  = 0;
+		$claimed   = array();
 
 		$pending = array(
 			'total'        => 0,
@@ -249,78 +285,128 @@ final class Upgrader {
 		);
 
 		do {
-			$query = new WP_Query(
-				array(
-					'post_type'              => PostType::POST_TYPE,
-					// The same status list run_batch() walks, so the dry-run
-					// counts describe the same set of rows the run will touch.
-					'post_status'            => array_keys( get_post_stati() ),
-					'posts_per_page'         => self::BATCH_SIZE,
-					'paged'                  => $paged,
-					'orderby'                => 'ID',
-					'order'                  => 'ASC',
-					'no_found_rows'          => true,
-					'update_post_meta_cache' => false,
-					'update_post_term_cache' => false,
-					'ignore_sticky_posts'    => true,
-				)
-			);
+			$posts = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
 
-			foreach ( $query->posts as $post ) {
+			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
 					continue;
 				}
 
 				++$pending['total'];
+				$after_id = $post->ID;
 
 				if ( $post->post_modified_gmt > $started ) {
 					continue;
 				}
 
-				if ( $publish && 'draft' === $post->post_status ) {
-					++$pending['to_publish'];
+				$plan   = $this->plan( $post, $home_path, $publish, $claimed );
+				$status = $plan['update']['post_status'] ?? '';
+
+				// The run writes each re-key before checking the next row, so
+				// two rows re-keyed onto one source collide there. The dry run
+				// writes nothing, so it remembers the keys instead - by row ID
+				// alone, as a large set can re-key hundreds of thousands.
+				if ( isset( $plan['update']['post_name'] ) ) {
+					$claimed[ $plan['update']['post_name'] ] = $post->ID;
 				}
 
-				if ( null !== $this->normalized_excerpt( $post->post_excerpt ) ) {
-					++$pending['to_normalize'];
+				$pending['to_publish']   += (int) ( 'publish' === $status );
+				$pending['to_dedupe']    += (int) ( 'trash' === $status );
+				$pending['to_repath']    += (int) isset( $plan['update']['post_name'] );
+				$pending['to_normalize'] += (int) isset( $plan['update']['post_excerpt'] );
+
+				if ( null !== $plan['conflict'] ) {
+					$pending['conflicts'][] = $plan['conflict'] . ' and would be drafted';
 				}
-
-				$new_path = $this->canonical_source( $post->post_title, $home_path );
-
-				if ( null === $new_path ) {
-					continue;
-				}
-
-				$existing = $this->find_post_by_hash( md5( $new_path ) );
-
-				if ( null !== $existing && $existing->ID !== $post->ID ) {
-					if ( $this->same_destination( $post, $existing ) ) {
-						++$pending['to_dedupe'];
-						continue;
-					}
-
-					$pending['conflicts'][] = sprintf(
-						'#%d (%s) would collide with #%d (%s) and be drafted',
-						$post->ID,
-						$post->post_title,
-						$existing->ID,
-						$new_path
-					);
-					continue;
-				}
-
-				++$pending['to_repath'];
 			}
 
-			$fetched = count( $query->posts );
-			++$paged;
+			$fetched = count( $posts );
 		} while ( self::BATCH_SIZE === $fetched );
 
 		return $pending;
 	}
 
 	/**
-	 * Apply both migrations to a single redirect.
+	 * Fetch the next batch of redirects after a given post ID.
+	 *
+	 * Every row of the post type whatever its status, trash included: a row
+	 * trashed under 1.x still gets 2.0 shape here, so restoring it later does
+	 * not resurrect a stale key.
+	 *
+	 * A direct query rather than WP_Query, because WP_Query primes the post
+	 * cache with every row it returns whenever it splits the query - which it
+	 * always does under a persistent object cache - regardless of
+	 * cache_results. Across a multi-million-row walk that is millions of cache
+	 * writes of rows about to change, and a dry run holding every row in
+	 * memory at once.
+	 *
+	 * @param int $after_id Only redirects with an ID above this are returned.
+	 * @param int $ceiling  Nor any with an ID above this; see CEILING_OPTION.
+	 * @param int $size     Maximum number of redirects to return.
+	 * @return array<WP_Post|null> The redirects, in ascending ID order.
+	 */
+	private function query_batch( int $after_id, int $ceiling, int $size ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Keyset walk that must not prime the post cache; see above.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->posts} WHERE post_type = %s AND ID > %d AND ID <= %d ORDER BY ID ASC LIMIT %d",
+				PostType::POST_TYPE,
+				$after_id,
+				$ceiling,
+				$size
+			)
+		);
+
+		// get_post() on a raw row sanitizes it into a WP_Post, with integer
+		// IDs, without reading or writing the object cache.
+		return array_map( 'get_post', $rows );
+	}
+
+	/**
+	 * Publish every queued draft in one UPDATE.
+	 *
+	 * Capped at one batch per statement, so each UPDATE stays small enough to
+	 * replicate without lagging replicas. Only the status changes, as with
+	 * every migration write; see write().
+	 *
+	 * @param string $started The GMT timestamp at which the upgrade began.
+	 * @return void
+	 */
+	private function flush_publish_queue( string $started ): void {
+		if ( array() === $this->publish_queue ) {
+			return;
+		}
+
+		global $wpdb;
+
+		$ids          = array_keys( $this->publish_queue );
+		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		// The modified-date condition skips any row a user edited between
+		// this batch reading it and writing it, so the edit is not overwritten.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Bulk status flip; the interpolated fragment is only %d placeholders, one per ID. Caches are cleaned below.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->posts} SET post_status = 'publish' WHERE ID IN ({$placeholders}) AND post_modified_gmt <= %s", array_merge( $ids, array( $started ) ) ) );
+
+		// Batched: the rows themselves, core's cached post queries, and the
+		// lookup cache, which holds 0 for a path requested while its redirect
+		// was still a draft.
+		wp_cache_delete_multiple( $ids, 'posts' );
+		wp_cache_set_posts_last_changed();
+		wp_cache_delete_multiple(
+			array_map( CachingRedirectRepository::cache_key( ... ), array_values( $this->publish_queue ) ),
+			CachingRedirectRepository::CACHE_GROUP
+		);
+
+		$this->publish_queue = array();
+	}
+
+	/**
+	 * Apply every pass to a single redirect.
+	 *
+	 * A row needing only the draft→publish flip is not written here: it joins
+	 * the publish queue, which run_batch() flushes as one bulk UPDATE.
 	 *
 	 * @param WP_Post              $post      The redirect post.
 	 * @param string               $home_path The site's home path, or '' when not a subdirectory site.
@@ -329,24 +415,68 @@ final class Upgrader {
 	 * @return string|null A description of the conflict, or null when there was none.
 	 */
 	private function migrate_post( WP_Post $post, string $home_path, bool $publish, array &$result ): ?string {
-		$update      = array();
-		$old_hash    = $post->post_name;
-		$source_path = $post->post_title;
-		$conflict    = null;
+		$plan     = $this->plan( $post, $home_path, $publish );
+		$update   = $plan['update'];
+		$status   = $update['post_status'] ?? '';
+		$conflict = null === $plan['conflict'] ? null : $plan['conflict'] . ' and has been drafted';
 
-		$new_path = $this->canonical_source( $source_path, $home_path );
+		$result['published']  += (int) ( 'publish' === $status );
+		$result['deduped']    += (int) ( 'trash' === $status );
+		$result['repathed']   += (int) isset( $update['post_name'] );
+		$result['normalized'] += (int) isset( $update['post_excerpt'] );
+
+		if ( array() === $update ) {
+			return $conflict;
+		}
+
+		// A row needing nothing but the status flip - no repath, no dedupe, no
+		// destination rewrite - queues for one bulk UPDATE per batch instead of
+		// a write per row. On a 1.x site that is nearly every row.
+		if ( array( 'post_status' => 'publish' ) === $update ) {
+			$this->publish_queue[ $post->ID ] = $post->post_name;
+			return $conflict;
+		}
+
+		$this->write( $post, $update );
+
+		return $conflict;
+	}
+
+	/**
+	 * Work out what the migration changes about a single redirect.
+	 *
+	 * The one place that decides, so a dry run cannot report something other
+	 * than what the run then does. Only fields whose value actually changes
+	 * are included.
+	 *
+	 * @param WP_Post            $post      The redirect post.
+	 * @param string             $home_path The site's home path, or '' when not a subdirectory site.
+	 * @param bool               $publish   Whether draft redirects should be published.
+	 * @param array<string, int> $claimed   Source hashes a dry run's earlier rows would have been re-keyed to, and the ID of the row.
+	 * @return array{update: array<string, string>, conflict: string|null} The changed fields, and a description of any collision with a redirect going somewhere else.
+	 */
+	private function plan( WP_Post $post, string $home_path, bool $publish, array $claimed = array() ): array {
+		$update   = array();
+		$conflict = null;
+		$collided = false;
+
+		$new_path = $this->canonical_source( $post->post_title, $home_path );
 
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
-			$existing = $this->find_post_by_hash( $new_hash );
-			if ( null !== $existing && $existing->ID !== $post->ID ) {
-				// Two rows now want one key. Only one can survive: the loser
-				// must not keep its old post_name (no request will produce it
-				// again) and must not take the new one either, because two
-				// rows contending for one slug would send this through
-				// wp_unique_post_slug() and silently suffix it, leaving the
-				// redirect findable under neither.
+			$existing = isset( $claimed[ $new_hash ] ) ? get_post( $claimed[ $new_hash ] ) : $this->find_post_by_hash( $new_hash );
+			$collided = null !== $existing && $existing->ID !== $post->ID;
+
+			if ( ! $collided ) {
+				$update['post_title'] = $new_path;
+				$update['post_name']  = $new_hash;
+			} elseif ( 'trash' !== $post->post_status ) {
+				// Two rows now want one key, and a key can answer for only one
+				// redirect. The other row keeps its old key - which no request
+				// can produce any more - and is taken out of service. A row
+				// already in the trash is out of service, so it has nothing to
+				// settle, and drafting it would quietly restore it.
 				if ( $this->same_destination( $post, $existing ) ) {
 					// Both send visitors to the same place, so the loser is
 					// pure redundancy - typically a site that worked around
@@ -354,56 +484,86 @@ final class Upgrader {
 					// Trash rather than delete: an upgrade running quietly on
 					// someone's site should not destroy rows outright.
 					$update['post_status'] = 'trash';
-					++$result['deduped'];
 				} else {
 					// They disagree about where the visitor should land, which
 					// only a human can settle. Draft means "deliberately
 					// disabled" here, so the row stays visible and editable
 					// while plainly not firing.
-					$update['post_status'] = 'draft';
-					$conflict              = sprintf(
-						'#%d (%s) collides with #%d (%s) and has been drafted',
+					if ( 'draft' !== $post->post_status ) {
+						$update['post_status'] = 'draft';
+					}
+					$conflict = sprintf(
+						'#%d (%s) collides with #%d (%s)',
 						$post->ID,
-						$source_path,
+						$post->post_title,
 						$existing->ID,
 						$new_path
 					);
 				}
-			} else {
-				$update['post_title'] = $new_path;
-				$update['post_name']  = $new_hash;
-				++$result['repathed'];
 			}
 		}
 
-		// isset(): a row the collision branch has just trashed or drafted must
-		// not be resurrected by the publish pass a moment later.
-		if ( $publish && 'draft' === $post->post_status && ! isset( $update['post_status'] ) ) {
+		// A row the collision branch has just trashed or drafted must not be
+		// resurrected by the publish pass.
+		if ( $publish && 'draft' === $post->post_status && ! $collided ) {
 			$update['post_status'] = 'publish';
-			++$result['published'];
 		}
 
 		$normalized = $this->normalized_excerpt( $post->post_excerpt );
 		if ( null !== $normalized ) {
 			$update['post_excerpt'] = $normalized;
-			++$result['normalized'];
 		}
 
-		if ( array() === $update ) {
-			return $conflict;
+		return array(
+			'update'   => $update,
+			'conflict' => $conflict,
+		);
+	}
+
+	/**
+	 * Write a single redirect's changes straight to its row.
+	 *
+	 * Every migration write, this one and the bulk publish alike, changes the
+	 * planned fields and nothing else. wp_update_post() would also restamp the
+	 * post and modified dates, record the old slug in post meta, suffix the
+	 * slug of a trashed row and fire every save hook. The dates matter most:
+	 * when a redirect was added is what someone auditing the set wants to
+	 * see, and the migration's own write time would bury it.
+	 *
+	 * @param WP_Post               $post   The redirect post.
+	 * @param array<string, string> $update The fields to change.
+	 * @return void
+	 */
+	private function write( WP_Post $post, array $update ): void {
+		global $wpdb;
+
+		// Matching the modified date as read skips the write if a user has
+		// edited the row since, so the edit is not overwritten.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned below.
+		$written = $wpdb->update(
+			$wpdb->posts,
+			$update,
+			array(
+				'ID'                => $post->ID,
+				'post_modified_gmt' => $post->post_modified_gmt,
+			)
+		);
+
+		if ( ! $written ) {
+			return;
 		}
 
-		$update['ID'] = $post->ID;
-		wp_update_post( $update );
+		// The row itself, and core's cached post queries that could still list
+		// it under its old key or status.
+		wp_cache_delete( $post->ID, 'posts' );
+		wp_cache_set_posts_last_changed();
 
 		// The lookup cache stores 0 for "no redirect here", so a path that was
 		// requested while the redirect was still a draft is cached as missing.
-		$this->invalidate( $old_hash );
+		$this->invalidate( $post->post_name );
 		if ( isset( $update['post_name'] ) ) {
 			$this->invalidate( $update['post_name'] );
 		}
-
-		return $conflict;
 	}
 
 	/**
@@ -476,6 +636,11 @@ final class Upgrader {
 				'posts_per_page'         => 1,
 				'fields'                 => 'ids',
 				'no_found_rows'          => true,
+				// Each key is looked up about once per walk, so a cached result
+				// is never reused - but it would be stale the moment a row is
+				// re-keyed onto that key, and a big walk would pile up a cache
+				// entry per lookup.
+				'cache_results'          => false,
 				'update_post_meta_cache' => false,
 				'update_post_term_cache' => false,
 			)
@@ -585,6 +750,31 @@ final class Upgrader {
 	}
 
 	/**
+	 * The highest redirect ID when the upgrade began; see CEILING_OPTION.
+	 *
+	 * @param bool $persist Whether to record the ceiling when none is stored yet.
+	 * @return int The post ID.
+	 */
+	private function ceiling( bool $persist = true ): int {
+		$ceiling = get_option( self::CEILING_OPTION );
+
+		if ( is_numeric( $ceiling ) ) {
+			return (int) $ceiling;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Read once per upgrade, then stored.
+		$ceiling = (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_type = %s", PostType::POST_TYPE ) );
+
+		if ( $persist ) {
+			update_option( self::CEILING_OPTION, $ceiling, false );
+		}
+
+		return $ceiling;
+	}
+
+	/**
 	 * Mark the upgrade as finished and clean up its working state.
 	 *
 	 * @return void
@@ -593,5 +783,7 @@ final class Upgrader {
 		update_option( self::VERSION_OPTION, self::DB_VERSION );
 		delete_option( self::STARTED_OPTION );
 		delete_option( self::CURSOR_OPTION );
+		delete_option( self::CEILING_OPTION );
+		delete_transient( self::CLI_LOCK );
 	}
 }

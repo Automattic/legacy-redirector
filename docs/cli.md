@@ -57,8 +57,10 @@ Commands added in 2.0, such as `create` and `list`, are only available under
 ### Migrate redirects created by 1.x
 
 Redirects created by 1.x will not fire under 2.0 until they have been migrated. This
-happens automatically in small batches on ordinary page loads, but on a site with a large
-redirect set it is better to do it in one pass:
+happens automatically in small batches on ordinary page loads (never on WP-CLI commands), but on a site with a large
+redirect set it is better to do it in one pass. Either form walks the entire redirect
+set, so on a site with millions of redirects expect the dry run to take minutes - that
+is the walk, not a hang:
 
 ```bash
 # See what will change, without writing anything.
