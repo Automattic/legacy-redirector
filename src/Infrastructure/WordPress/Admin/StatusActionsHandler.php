@@ -107,12 +107,16 @@ final class StatusActionsHandler {
 		$redirect_source = $redirect->source()->path();
 
 		// Perform the status change.
-		$success = 'publish' === $new_status
-			? $this->manager->enable( $redirect_id )
-			: $this->manager->disable( $redirect_id );
+		$result = $this->manager->change_status( $redirect_id, $new_status );
 
-		if ( ! $success ) {
-			wp_die( esc_html__( 'Invalid redirect.', 'legacy-redirector' ) );
+		// The reason matters: enabling a duplicate the 2.0 upgrade disabled is
+		// refused with an explanation of what to do instead.
+		if ( ! $result->is_success() ) {
+			wp_die(
+				esc_html( $result->error_message() ?? __( 'Invalid redirect.', 'legacy-redirector' ) ),
+				'',
+				array( 'back_link' => true )
+			);
 		}
 
 		// Redirect back to the list.

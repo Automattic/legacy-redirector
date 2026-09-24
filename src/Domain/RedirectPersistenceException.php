@@ -49,6 +49,26 @@ final class RedirectPersistenceException extends RuntimeException {
 	}
 
 	/**
+	 * Create an exception for saving a redirect onto a source another one already has.
+	 *
+	 * A source can answer for only one redirect, so the message says which
+	 * redirect has it and what to do instead.
+	 *
+	 * @param SourceUrl $source    The source.
+	 * @param int       $holder_id The ID of the redirect that already has it.
+	 * @return self
+	 */
+	public static function source_taken( SourceUrl $source, int $holder_id ): self {
+		return new self(
+			sprintf(
+				'Redirect #%1$d already has the source "%2$s", and a source can answer for only one redirect. Change the destination of #%1$d instead, or delete one of the two.',
+				$holder_id,
+				$source->path()
+			)
+		);
+	}
+
+	/**
 	 * Create an exception for an attempt to save a corrupt redirect.
 	 *
 	 * A corrupt redirect carries placeholder values; saving it would replace
