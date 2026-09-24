@@ -169,8 +169,7 @@ final class InternalDestinationNormalizer {
 
 		// A '//'-prefixed result is scheme-relative, not site-relative:
 		// DestinationUrl would reject it and collapsing the slashes would
-		// change the URL. Leave the destination as entered. Decoding can
-		// manufacture this ('/%2F%2Fx'), so the guard runs on the decoded form.
+		// change the URL. Leave the destination as entered.
 		if ( str_starts_with( $path, '//' ) ) {
 			return null;
 		}
@@ -183,9 +182,10 @@ final class InternalDestinationNormalizer {
 	 *
 	 * Some escapes must stay encoded because decoding them changes the URL
 	 * or cannot be stored: '%3F' and '%23' would turn path text into a query
-	 * or fragment, '%25' and '%2B' would leave a character that the next pass
-	 * decodes again, control characters have no place in a stored URL, and
-	 * bytes that are not valid UTF-8 are refused by the database column.
+	 * or fragment, '%2F' would split one path segment into two, '%25' and
+	 * '%2B' would leave a character that the next pass decodes again, control
+	 * characters have no place in a stored URL, and bytes that are not valid
+	 * UTF-8 are refused by the database column.
 	 * Those are kept, in upper case, so one target still has one spelling.
 	 *
 	 * A literal '+' is read as a space, because Url::parse_encoded() encodes a
@@ -209,7 +209,7 @@ final class InternalDestinationNormalizer {
 				$decoded = '';
 				foreach ( $characters[0] as $character ) {
 					$byte     = ord( $character[0] );
-					$keep     = 1 === strlen( $character ) && ( $byte < 0x20 || $byte >= 0x7F || str_contains( '%?#+', $character ) );
+					$keep     = 1 === strlen( $character ) && ( $byte < 0x20 || $byte >= 0x7F || str_contains( '%/?#+', $character ) );
 					$decoded .= $keep ? sprintf( '%%%02X', $byte ) : $character;
 				}
 
