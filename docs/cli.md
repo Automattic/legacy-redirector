@@ -59,8 +59,7 @@ Commands added in 2.0, such as `create` and `list`, are only available under
 Redirects created by 1.x will not fire under 2.0 until they have been migrated. This
 happens automatically in small batches on ordinary page loads (never on WP-CLI commands), but on a site with a large
 redirect set it is better to do it in one pass. Either form walks the entire redirect
-set, so on a site with millions of redirects expect the dry run to take minutes - that
-is the walk, not a hang:
+set, so on a site with millions of redirects expect the dry run to take minutes:
 
 ```bash
 # See what will change, without writing anything.
@@ -76,10 +75,18 @@ On a network, run it per site:
 wp site list --field=url | xargs -I % wp --url=% legacy-redirector migrate
 ```
 
-The command reports how many redirects were published, how many had their source path
-rewritten, how many were trashed as duplicates, and how many had their destination made
-relative. It also lists any source path that two redirects now disagree about; those are
-left disabled rather than deleted, so review them afterwards.
+While it runs, the command prints a progress line for each percent of the set it gets
+through, with the time elapsed and an estimate of the time left. If an earlier run was
+interrupted, it says so and carries on from where that run stopped.
+
+At the end it reports how many redirects were changed, how many needed no change, how
+many were left alone because someone edited them after the upgrade began, and how many
+could not be written. It then breaks the changes down: published, source path
+rewritten, trashed as duplicates, destination made relative. It also lists any source
+path that two redirects now disagree about; those are left disabled rather than deleted,
+so review them afterwards. Only the first 20 are listed; add `--debug=legacy-redirector`
+to the dry run to see every one. If any redirect could not be written, the command lists
+each one with the database's reason and exits with an error.
 
 See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and why.
 

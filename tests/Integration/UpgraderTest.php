@@ -412,16 +412,83 @@ final class UpgraderTest extends TestCase {
 		$this->create_legacy_redirect( '/converge/', 'https://example.com/one' );
 		$this->create_legacy_redirect( '/converge//', 'https://example.com/two' );
 
+		// Already published and canonical, so nothing to change.
+		global $wpdb;
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'publish' ), array( 'ID' => $this->create_legacy_redirect( '/already' ) ) );
+
+		// Edited after the upgrade began, so left alone.
+		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2000-01-01 00:00:00' );
+		wp_update_post(
+			array(
+				'ID'          => $this->create_legacy_redirect( '/edited/' ),
+				'post_status' => 'draft',
+			)
+		);
+
 		$pending = $this->upgrader->count_pending();
 		$result  = $this->upgrader->run_batch( 100 );
 
 		// '/dupe/' is trashed and '/clash/' and '/converge//' drafted, so none
 		// of them is published.
-		$this->assertSame( 6, $pending['to_publish'] );
-		$this->assertSame(
-			array( $result['published'], $result['repathed'], $result['deduped'], $result['normalized'], count( $result['conflicts'] ) ),
-			array( $pending['to_publish'], $pending['to_repath'], $pending['to_dedupe'], $pending['to_normalize'], count( $pending['conflicts'] ) )
-		);
+		$this->assertSame( 6, $pending['published'] );
+		// '/already', plus '/clash/' and '/converge//': 1.x drafts already, so
+		// drafting them as conflicts writes nothing.
+		$this->assertSame( 3, $pending['unchanged'] );
+		$this->assertSame( 1, $pending['skipped'] );
+
+		$keys = array( 'changed', 'unchanged', 'skipped', 'published', 'repathed', 'deduped', 'normalized' );
+		$this->assertSame( wp_array_slice_assoc( $pending, $keys ), wp_array_slice_assoc( $result, $keys ) );
+		$this->assertSame( count( $pending['conflicts'] ), count( $result['conflicts'] ) );
+		$this->assertSame( $pending['total'], $result['processed'] );
+	}
+
+	/**
+	 * Every processed redirect is counted in exactly one outcome.
+	 *
+	 * Otherwise the summary's numbers do not add up, and nobody can tell what
+	 * was left untouched.
+	 *
+	 * @return void
+	 */
+	public function test_outcomes_add_up_to_the_redirects_processed() {
+		$this->create_legacy_redirect( '/old-page' );
+		$this->create_legacy_redirect( '/other-page/' );
+		$this->create_legacy_redirect( '/dupe', 'https://example.com/same' );
+		$this->create_legacy_redirect( '/dupe/', 'https://example.com/same' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 4, $result['processed'] );
+		$this->assertSame( $result['processed'], $result['changed'] + $result['unchanged'] + $result['skipped'] + count( $result['failed'] ) );
+	}
+
+	/**
+	 * A write the database refuses is reported, not counted as done.
+	 *
+	 * Simulated by blanking the queries, which is how a failed write looks to
+	 * the migration: the call returns false.
+	 *
+	 * @return void
+	 */
+	public function test_failed_writes_are_reported_and_not_counted() {
+		global $wpdb;
+
+		$bulk_id  = $this->create_legacy_redirect( '/old-page' );
+		$rekey_id = $this->create_legacy_redirect( '/other-page/' );
+
+		$refuse = static fn( string $query ): string => preg_match( "/^UPDATE `?{$wpdb->posts}`? /", $query ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $refuse );
+
+		$this->assertSame( 0, $result['changed'] );
+		$this->assertSame( 0, $result['published'] );
+		$this->assertSame( 0, $result['repathed'] );
+		$this->assertCount( 2, $result['failed'] );
+		$this->assertStringStartsWith( '#' . $rekey_id . ' (/other-page/): ', $result['failed'][0] );
+		$this->assertStringStartsWith( '#' . $bulk_id . ': ', $result['failed'][1] );
+		$this->assertSame( 'draft', get_post_status( $bulk_id ) );
 	}
 
 	/**
@@ -565,7 +632,7 @@ final class UpgraderTest extends TestCase {
 		$pending = $this->upgrader->count_pending();
 
 		$this->assertSame( 1, $pending['total'] );
-		$this->assertSame( 1, $pending['to_publish'] );
+		$this->assertSame( 1, $pending['published'] );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 	}
@@ -670,7 +737,7 @@ final class UpgraderTest extends TestCase {
 
 		$pending = $this->upgrader->count_pending();
 
-		$this->assertSame( 1, $pending['to_normalize'] );
+		$this->assertSame( 1, $pending['normalized'] );
 	}
 	/**
 	 * A stored source with a trailing slash is re-keyed without one.
@@ -836,7 +903,7 @@ final class UpgraderTest extends TestCase {
 
 		$pending = $this->upgrader->count_pending();
 
-		$this->assertSame( 1, $pending['to_dedupe'] );
+		$this->assertSame( 1, $pending['deduped'] );
 		$this->assertCount( 1, $pending['conflicts'] );
 
 		// Nothing was written.
