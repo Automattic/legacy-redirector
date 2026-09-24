@@ -132,7 +132,7 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_stdout_contains( 'Migrating 2 redirect(s) in batches of 2,000, pausing 0.25s after each batch that writes' );
+		$this->assert_stdout_contains( 'Migrating 2 redirect(s).' );
 		$this->assert_stdout_contains( 'Processed 2 of 2 (100%)' );
 		$this->assert_stdout_not_contains( 'Resuming' );
 		$this->assert_success_contains(

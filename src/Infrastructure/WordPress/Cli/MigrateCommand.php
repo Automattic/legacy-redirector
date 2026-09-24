@@ -233,13 +233,16 @@ final class MigrateCommand extends WP_CLI_Command {
 			WP_CLI::line( sprintf( 'Resuming where the last run stopped: %s of %s redirect(s) already done.', number_format( $done ), number_format( $total ) ) );
 		}
 
+		$left = $total - $done;
 		WP_CLI::line(
-			sprintf(
-				'Migrating %s redirect(s) in batches of %s, pausing %ss after each batch that writes so database replicas can keep up.',
-				number_format( $total - $done ),
-				number_format( self::BATCH_SIZE ),
-				self::BATCH_PAUSE_US / 1000000
-			)
+			$left > self::BATCH_SIZE
+				? sprintf(
+					'Migrating %s redirect(s) in batches of %s, pausing %ss after each batch that writes so database replicas can keep up.',
+					number_format( $left ),
+					number_format( self::BATCH_SIZE ),
+					self::BATCH_PAUSE_US / 1000000
+				)
+				: sprintf( 'Migrating %s redirect(s).', number_format( $left ) )
 		);
 
 		$report = $this->progress_reporter( 'Processed', $done, $total );
