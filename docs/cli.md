@@ -93,17 +93,32 @@ run, is also safe to rerun: the command carries on from the batch it was working
 
 Where two redirects end up with the same source but different destinations, for example
 `/old` and `/old/`, only one can answer. The one already at that source stays live, and
-the other is disabled rather than deleted, for you to decide. The run lists the first 20.
-To see every one, whenever you like, list the duplicate sources:
+the other is disabled rather than deleted, for you to decide. The run lists the first 20,
+marks any that never fired under 1.x, and says how to settle each. To see every one,
+whenever you like, list the duplicate sources:
 
 ```bash
 wp legacy-redirector list --duplicates
 wp legacy-redirector list --duplicates --format=csv > duplicates.csv
 ```
 
-Each row shows the disabled redirect and its destination beside the live redirect with the
-same source and its destination. Once you save the disabled redirect, by re-pointing,
-enabling or trashing it, it drops off the list.
+Each row shows the disabled redirect, in the spelling 1.x stored, beside the live redirect
+with the same source, both with their destinations. `never_fired` is `yes` where no browser
+could ever have requested the disabled spelling, so disabling it changed nothing for
+visitors. For each one, decide which destination is right:
+
+```bash
+# Keep the live redirect's destination
+wp legacy-redirector delete <disabled ID>
+
+# Keep the disabled one's destination
+wp legacy-redirector update <live ID> --to=<destination>
+wp legacy-redirector delete <disabled ID>
+```
+
+A disabled duplicate can't be enabled or edited in place while the live redirect has its
+source. Once it's deleted or trashed, it drops off the list. The admin's Duplicate sources
+view on the Redirects screen shows the same list, with the same choices.
 
 See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and why.
 

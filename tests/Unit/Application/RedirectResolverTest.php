@@ -679,22 +679,26 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 */
 	public static function data_request_and_stored_source(): array {
 		return array(
-			'encoded percent'    => array( '/100%25-cotton', '/100%25-cotton' ),
-			'double encoded'     => array( '/a%2520b', '/a%2520b' ),
-			'encoded hash'       => array( '/page%23section', '/page%23section' ),
-			'encoded question'   => array( '/page%3Fnot-a-query', '/page%3Fnot-a-query' ),
-			'encoded space'      => array( '/hello%20world', '/hello world' ),
-			'plus'               => array( '/hello+world', '/hello+world' ),
-			'encoded slash'      => array( '/a%2Fb', '/a%2Fb' ),
-			'encoded ampersand'  => array( '/a%26b', '/a%26b' ),
-			'multibyte'          => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
-			'multibyte in query' => array( '/photos/?test=%D9%81%D9%88%D8%AA%D9%88', '/photos/?test=فوتو' ),
-			'cyrillic'           => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
-			'cyrillic in query'  => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
-			'emoji'              => array( '/%F0%9F%8E%89', '/🎉' ),
-			'emoji in query'     => array( '/page?mood=%F0%9F%8E%89', '/page?mood=🎉' ),
-			'japanese'           => array( '/JP%E7%B4%8D%E8%B1%86', '/JP納豆' ),
-			'query preserved'    => array( '/page?a=1&b=2', '/page?a=1&b=2' ),
+			'encoded percent'     => array( '/100%25-cotton', '/100%25-cotton' ),
+			'double encoded'      => array( '/a%2520b', '/a%2520b' ),
+			'encoded hash'        => array( '/page%23section', '/page%23section' ),
+			'encoded question'    => array( '/page%3Fnot-a-query', '/page%3Fnot-a-query' ),
+			'encoded space'       => array( '/hello%20world', '/hello world' ),
+			'plus'                => array( '/hello+world', '/hello+world' ),
+			'encoded slash'       => array( '/a%2Fb', '/a%2Fb' ),
+			'encoded ampersand'   => array( '/a%26b', '/a%26b' ),
+			'multibyte'           => array( '/%D9%81%D9%88%D8%AA%D9%88/', '/فوتو/' ),
+			'multibyte in query'  => array( '/photos/?test=%D9%81%D9%88%D8%AA%D9%88', '/photos/?test=فوتو' ),
+			'cyrillic'            => array( '/%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82', '/привет' ),
+			'cyrillic in query'   => array( '/page?q=%D1%82%D0%B5%D1%81%D1%82', '/page?q=тест' ),
+			'emoji'               => array( '/%F0%9F%8E%89', '/🎉' ),
+			'emoji in query'      => array( '/page?mood=%F0%9F%8E%89', '/page?mood=🎉' ),
+			'japanese'            => array( '/JP%E7%B4%8D%E8%B1%86', '/JP納豆' ),
+			'query preserved'     => array( '/page?a=1&b=2', '/page?a=1&b=2' ),
+			// Characters sanitizing strips when typed are stripped from the
+			// request too, before the parser can encode them, as 1.x did.
+			'raw braces in query' => array( '/page?filter={all}', '/page?filter={all}' ),
+			'raw caret in path'   => array( '/a^b', '/a^b' ),
 		);
 	}
 

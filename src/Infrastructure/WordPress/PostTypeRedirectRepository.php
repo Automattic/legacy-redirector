@@ -116,7 +116,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	 * @param Redirect $redirect The redirect to save.
 	 * @return Redirect The saved redirect with ID populated.
 	 *
-	 * @throws RedirectPersistenceException If the save fails, an insert would duplicate an existing source, or the redirect is corrupt.
+	 * @throws RedirectPersistenceException If the save fails, an insert would duplicate an existing source, an update would move onto a source another redirect has, or the redirect is corrupt.
 	 */
 	#[\Override]
 	public function save( Redirect $redirect ): Redirect {
@@ -130,6 +130,17 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 		$args = $this->map_redirect_to_post_args( $redirect );
 
 		if ( $redirect->is_persisted() ) {
+			// An update re-derives the key from the source, so a redirect
+			// sharing its source with another - a duplicate the 2.0 upgrade
+			// disabled - would land on the other's key with any save, even an
+			// enable. The lookup then answers with whichever row it finds
+			// first, and the live redirect can stop working.
+			$holder = $this->other_holder( $redirect );
+			if ( $holder > 0 ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+				throw RedirectPersistenceException::source_taken( $redirect->source(), $holder );
+			}
+
 			$args['ID'] = $redirect->id();
 			$result     = wp_update_post( $args, true );
 		} else {
@@ -192,6 +203,28 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 		);
 
 		return $post_id ? (int) $post_id : 0;
+	}
+
+	/**
+	 * Another redirect holding a persisted redirect's source key, if any.
+	 *
+	 * The trash is left out: a trashed row answers no request.
+	 *
+	 * @param Redirect $redirect A persisted redirect.
+	 * @return int The other redirect's ID, or 0 when none holds the key.
+	 */
+	private function other_holder( Redirect $redirect ): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- A write-path check that must see the database as it is.
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT ID FROM $wpdb->posts WHERE post_type = %s AND post_name = %s AND ID <> %d AND post_status <> 'trash' LIMIT 1",
+				self::POST_TYPE,
+				$redirect->source()->hash(),
+				$redirect->id()
+			)
+		);
 	}
 
 	/**

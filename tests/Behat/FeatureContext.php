@@ -59,6 +59,20 @@ final class FeatureContext extends WpEnvFeatureContext {
 	private array $added_hosts = array();
 
 	/**
+	 * Where version 1.3.0 sent each request it redirected, by request path.
+	 *
+	 * @var array<string, string>
+	 */
+	private array $legacy_baseline = array();
+
+	/**
+	 * Whether version 1.3.0 is active in place of this plugin.
+	 *
+	 * @var bool
+	 */
+	private bool $legacy_active = false;
+
+	/**
 	 * Get the plugin slug for wp-env command execution.
 	 *
 	 * Derived rather than hardcoded because wp-env mounts the plugin at
@@ -584,7 +598,7 @@ PHP;
 		// `wordpress` service directly (the site port is not reachable
 		// from inside the CLI container).
 		$container_script = sprintf(
-			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -sI -H "Host: ${HOST_HEADER}" %s 2>&1',
+			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -gsI -H "Host: ${HOST_HEADER}" %s 2>&1',
 			escapeshellarg( 'http://wordpress' . $path )
 		);
 
@@ -624,5 +638,218 @@ PHP;
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 			throw new RuntimeException( 'Failed to trash post: ' . $this->output );
 		}
+	}
+
+	/**
+	 * Swap version 1.3.0 in, so a scenario can store data with the real 1.x code.
+	 *
+	 * The upgrade path is only proven against data 1.x actually wrote, not
+	 * against a model of it: 1.x ran every source through esc_url_raw() and
+	 * wp_parse_url() before hashing, and a hand-built fixture gets such
+	 * details wrong. The files are 1.3.0's, byte for byte, in
+	 * tests/Behat/fixtures. The data version options go too, as a 1.x site
+	 * never had them.
+	 *
+	 * @Given version 1.3.0 is active in place of this plugin
+	 * @throws RuntimeException If the swap fails.
+	 * @return void
+	 */
+	public function version_1_3_0_is_active(): void {
+		list( $output, $exit_code ) = self::run_in_container(
+			'rm -rf ../legacy-redirector-1.3.0 && cp -r tests/Behat/fixtures/legacy-redirector-1.3.0 ../legacy-redirector-1.3.0',
+			true
+		);
+
+		if ( 0 !== $exit_code ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( 'Could not install version 1.3.0: ' . implode( "\n", $output ) );
+		}
+
+		$this->set_this_plugin_active( false );
+		$this->legacy_active = true;
+		$this->run_wp_cli_command( 'plugin activate legacy-redirector-1.3.0' );
+		$this->run_wp_cli_command( "eval 'foreach ( array( \"db_version\", \"upgrade_started_gmt\", \"upgrade_cursor\", \"upgrade_ceiling\", \"upgrade_retry\" ) as \$o ) { delete_option( \"wpcom_legacy_redirector_\" . \$o ); }'" );
+	}
+
+	/**
+	 * Store redirects through version 1.3.0's own insert-redirect command.
+	 *
+	 * @Given version 1.3.0 stores these redirects:
+	 * @throws RuntimeException If 1.3.0 refuses one.
+	 * @param \Behat\Gherkin\Node\TableNode $table Columns: from, to.
+	 * @param string                        $user  A --user flag and trailing space, or '' for none.
+	 * @return void
+	 */
+	public function version_1_3_0_stores_these_redirects( \Behat\Gherkin\Node\TableNode $table, string $user = '' ): void {
+		foreach ( $table->getHash() as $row ) {
+			$this->run_wp_cli_command( sprintf( '%swpcom-legacy-redirector insert-redirect %s %s', $user, escapeshellarg( $row['from'] ), escapeshellarg( $row['to'] ) ) );
+
+			if ( 0 !== $this->exit_code || str_contains( $this->output . $this->error_output, "Couldn't insert" ) ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+				throw new RuntimeException( sprintf( 'Version 1.3.0 did not store %s: %s %s', $row['from'], $this->output, $this->error_output ) );
+			}
+		}
+	}
+
+	/**
+	 * Store redirects through version 1.3.0 as an author, as a web request by one would.
+	 *
+	 * An author lacks unfiltered_html, as every user on VIP does, so kses
+	 * filters the title on save and writes a lone '&' as '&amp;' - after 1.3.0
+	 * has hashed the key from the '&'. WP-CLI with no user skips kses, so this
+	 * is how a scenario gets the title a web-created 1.x redirect really has.
+	 *
+	 * @Given version 1.3.0 stores these redirects as an author:
+	 * @param \Behat\Gherkin\Node\TableNode $table Columns: from, to.
+	 * @return void
+	 */
+	public function version_1_3_0_stores_these_redirects_as_an_author( \Behat\Gherkin\Node\TableNode $table ): void {
+		$this->run_wp_cli_command( 'user create behat-author behat-author@example.com --role=author' );
+		$this->version_1_3_0_stores_these_redirects( $table, '--user=behat-author ' );
+	}
+
+	/**
+	 * Request each path from version 1.3.0, check it answers as expected, and remember the redirects.
+	 *
+	 * The expectations are 1.3.0's real behavior, 404s included: a request it
+	 * never redirected is not something the upgrade has to preserve.
+	 *
+	 * @Then version 1.3.0 answers these requests:
+	 * @throws RuntimeException If 1.3.0 answers any differently.
+	 * @param \Behat\Gherkin\Node\TableNode $table Columns: request, status, to.
+	 * @return void
+	 */
+	public function version_1_3_0_answers_these_requests( \Behat\Gherkin\Node\TableNode $table ): void {
+		$wrong = array();
+
+		foreach ( $table->getHash() as $row ) {
+			list( $status, $to ) = $this->request_status_and_location( $row['request'] );
+
+			if ( (string) $status !== $row['status'] || ( '' !== $row['to'] && $to !== $row['to'] ) ) {
+				$wrong[] = sprintf( '%s: expected %s %s, got %s %s', $row['request'], $row['status'], $row['to'], $status, $to );
+			}
+
+			if ( 301 === $status ) {
+				$this->legacy_baseline[ $row['request'] ] = $to;
+			}
+		}
+
+		if ( array() !== $wrong ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( "Version 1.3.0 did not answer as the table says:\n" . implode( "\n", $wrong ) );
+		}
+	}
+
+	/**
+	 * Swap this plugin back in for version 1.3.0, leaving 1.3.0's data behind.
+	 *
+	 * @When this plugin replaces version 1.3.0
+	 * @return void
+	 */
+	public function this_plugin_replaces_version_1_3_0(): void {
+		$this->remove_version_1_3_0();
+	}
+
+	/**
+	 * Check every request 1.3.0 redirected is redirected to the same place now.
+	 *
+	 * The upgrade's whole promise, checked over HTTP: whatever the migration
+	 * did to the stored rows, a visitor following an old link lands where 1.x
+	 * sent them.
+	 *
+	 * @Then every request version 1.3.0 redirected is redirected to the same destination
+	 * @throws RuntimeException If any request now lands elsewhere, or nowhere.
+	 * @return void
+	 */
+	public function every_legacy_request_redirects_the_same(): void {
+		if ( array() === $this->legacy_baseline ) {
+			throw new RuntimeException( 'Version 1.3.0 redirected nothing, so there is nothing to compare.' );
+		}
+
+		$wrong = array();
+
+		foreach ( $this->legacy_baseline as $request => $expected ) {
+			list( $status, $to ) = $this->request_status_and_location( $request );
+
+			if ( 301 !== $status || $to !== $expected ) {
+				$wrong[] = sprintf( '%s: 1.3.0 sent 301 %s, now %s %s', $request, $expected, $status, $to );
+			}
+		}
+
+		if ( array() !== $wrong ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( "Redirects that worked under 1.3.0 no longer do:\n" . implode( "\n", $wrong ) );
+		}
+	}
+
+	/**
+	 * Put this plugin back if a scenario left version 1.3.0 active.
+	 *
+	 * @AfterScenario
+	 * @return void
+	 */
+	public function restore_this_plugin(): void {
+		if ( $this->legacy_active ) {
+			$this->remove_version_1_3_0();
+		}
+
+		$this->legacy_baseline = array();
+	}
+
+	/**
+	 * Deactivate and delete version 1.3.0, and activate this plugin again.
+	 *
+	 * @return void
+	 */
+	private function remove_version_1_3_0(): void {
+		$this->run_wp_cli_command( 'plugin deactivate legacy-redirector-1.3.0' );
+		self::run_in_container( 'rm -rf ../legacy-redirector-1.3.0', true );
+		$this->legacy_active = false;
+		$this->set_this_plugin_active( true );
+	}
+
+	/**
+	 * Activate or deactivate this plugin, under either name WP-CLI knows it by.
+	 *
+	 * @param bool $active Whether it should be active.
+	 * @throws RuntimeException If activating fails.
+	 * @return void
+	 */
+	private function set_this_plugin_active( bool $active ): void {
+		$slug = $this->get_plugin_slug();
+		$verb = $active ? 'activate' : 'deactivate';
+
+		foreach ( array( $slug, "{$slug}/wpcom-legacy-redirector.php" ) as $name ) {
+			$this->run_wp_cli_command( "plugin {$verb} {$name}" );
+
+			if ( 0 === $this->exit_code ) {
+				self::$plugin_activated = $active;
+				return;
+			}
+		}
+
+		if ( $active ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( 'Could not activate this plugin again: ' . $this->output . ' ' . $this->error_output );
+		}
+	}
+
+	/**
+	 * Request a path and read the status code and the redirect target's path.
+	 *
+	 * The target is compared as a path and query, because 1.3.0 sends the
+	 * stored relative destination while 2.0 may send it absolute.
+	 *
+	 * @param string $path The request path, as a browser would send it.
+	 * @return array{0: int, 1: string} The status code, and the Location path or ''.
+	 */
+	private function request_status_and_location( string $path ): array {
+		$this->i_request_the_front_end_path( $path );
+
+		$status   = preg_match( '#^HTTP/\S+ (\d{3})#m', $this->output, $m ) ? (int) $m[1] : 0;
+		$location = preg_match( '#^Location: (\S+)#mi', $this->output, $l ) ? $l[1] : '';
+		$location = (string) preg_replace( '#^https?://[^/]+#', '', $location );
+
+		return array( $status, $location );
 	}
 }

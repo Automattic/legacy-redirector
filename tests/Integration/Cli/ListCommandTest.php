@@ -328,6 +328,7 @@ final class ListCommandTest extends CliTestCase {
 
 		$this->assert_error_contains( 'Invalid fields' );
 	}
+
 	/**
 	 * Test listing the duplicate sources the migration disabled.
 	 */
@@ -359,14 +360,15 @@ final class ListCommandTest extends CliTestCase {
 					array(
 						array(
 							'ID'                => $disabled_id,
-							'from'              => '/clash',
+							'from'              => '/clash/',
 							'to'                => 'https://example.com/two',
+							'never_fired'       => 'no',
 							'duplicate_of'      => $live_id,
 							'duplicate_of_from' => '/clash',
 							'duplicate_of_to'   => 'https://example.com/one',
 						),
 					),
-					array( 'ID', 'from', 'to', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' ),
+					array( 'ID', 'from', 'to', 'never_fired', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' ),
 				),
 			),
 			$GLOBALS['wp_cli_format_items_calls']
@@ -405,7 +407,7 @@ final class ListCommandTest extends CliTestCase {
 			)
 		);
 
-		$this->assert_error_contains( 'Invalid fields: status. Available fields: ID, from, to, duplicate_of, duplicate_of_from, duplicate_of_to' );
+		$this->assert_error_contains( 'Invalid fields: status. Available fields: ID, from, to, never_fired, duplicate_of, duplicate_of_from, duplicate_of_to' );
 	}
 
 	/**

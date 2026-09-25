@@ -29,6 +29,7 @@ use WPDieException;
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
@@ -252,5 +253,30 @@ final class StatusActionsHandlerTest extends TestCase {
 		}
 
 		$this->assertSame( $expected, $message );
+	}
+
+	/**
+	 * Test enabling a duplicate source explains why it is refused.
+	 *
+	 * Any failure used to read "Invalid redirect.", which says nothing about
+	 * what to do next.
+	 */
+	public function test_enabling_a_duplicate_source_dies_with_the_reason(): void {
+		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
+		$duplicate_id = $this->insert_redirect_post(
+			array(
+				'post_title'   => '/clash/',
+				'post_name'    => md5( '/clash/' ),
+				'post_excerpt' => 'https://example.com/two',
+				'post_status'  => 'draft',
+			)
+		);
+		$this->request( 'enable_redirect', $duplicate_id );
+
+		$this->assert_dies_with(
+			sprintf( 'Redirect #%1$d already has the source &quot;/clash&quot;, and a source can answer for only one redirect. Change the destination of #%1$d instead, or delete one of the two.', $live_id ),
+			'handle_enable_redirect'
+		);
+		$this->assertSame( 'draft', get_post_status( $duplicate_id ) );
 	}
 }

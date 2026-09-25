@@ -14,6 +14,7 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Handles column definitions, content rendering, and sorting for the redirects list table.
@@ -369,6 +370,40 @@ final class ColumnsManager {
 		} else {
 			echo '<span class="dashicons dashicons-no" style="color: #dc3232;" title="' . esc_attr__( 'Disabled', 'legacy-redirector' ) . '"></span> ';
 			echo esc_html__( 'Disabled', 'legacy-redirector' );
+			$this->render_duplicate_note( $redirect );
 		}
+	}
+	/**
+	 * Explain a duplicate the 2.0 upgrade disabled, and how to settle it.
+	 *
+	 * Enabling it would be refused - the live redirect holds its source - so
+	 * the choices are spelled out where the Enable action would have been.
+	 *
+	 * @param Redirect $redirect The disabled redirect.
+	 * @return void
+	 */
+	private function render_duplicate_note( Redirect $redirect ): void {
+		$live_id = (int) get_post_meta( $redirect->id(), Upgrader::DUPLICATE_META_KEY, true );
+
+		if ( 0 === $live_id ) {
+			return;
+		}
+
+		$live_link = sprintf(
+			'<a href="%1$s">#%2$d</a>',
+			esc_url( admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $live_id ) ),
+			$live_id
+		);
+
+		$message = (bool) get_post_meta( $redirect->id(), Upgrader::NEVER_FIRED_META_KEY, true )
+			/* translators: %1$s: link to the live redirect, e.g. "#12" */
+			? __( 'Duplicate source: %1$s has the same source and is live. This one never fired under 1.x, so disabling it changed nothing for visitors: trash it unless you want its destination.', 'legacy-redirector' )
+			/* translators: %1$s: link to the live redirect, e.g. "#12" */
+			: __( 'Duplicate source: %1$s has the same source and is live, so visitors who used this spelling now reach its destination. To keep that destination, trash this one. To keep this one\'s, edit %1$s to use it, then trash this one.', 'legacy-redirector' );
+
+		printf(
+			'<p class="description">%s</p>',
+			wp_kses( sprintf( $message, $live_link ), array( 'a' => array( 'href' => array() ) ) )
+		);
 	}
 }

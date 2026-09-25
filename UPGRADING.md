@@ -54,7 +54,11 @@ Four storage changes between 1.x and 2.0 would otherwise stop redirects you alre
 2. **Where your site is not at the domain root, 1.x stored source paths with that prefix included** (`/subsite1/old-page` on a subsite, `/blog/old-page` on a single site installed at `example.com/blog`). Version 1.x read the raw request path for both storing and matching, so the two agreed. Version 2.0 strips the site's base path from an incoming request and looks up `/old-page`, so it never matches what 1.x wrote.
 
    This applies to any install whose home URL is below the domain root, not just multisites. If your site lives at `example.com/blog`, you are affected in exactly the same way as a subsite.
-3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalizes incoming requests the same way, so either spelling now finds the redirect. Sources are re-keyed so they match what 2.0 looks up.
+3. **Source paths no longer keep a trailing slash.** Version 1.x matched sources exactly, so `/old-page` and `/old-page/` were two separate redirects and covering both meant creating both. Version 2.0 treats them as one, stored under the slash-less form, and canonicalizes incoming requests the same way, so either spelling now finds the redirect.
+
+   The same goes for how a source is encoded. Version 1.x ran the stored source and each incoming request through `esc_url_raw()` and compared the results as text, so `/caf%C3%A9` and `/café` were different redirects, and one stored with raw accented characters never matched at all, because browsers send them percent-encoded. Version 2.0 compares decoded forms, so the spellings of one path find the same redirect. Characters `esc_url_raw()` strips, such as `{` and `^`, are still stripped from both sides, as they were in 1.x. Escapes that would change the meaning if decoded stay encoded: `%2F` (a slash inside one path segment), `%3F`, `%23`, `%25` and `%3B`, and in the query `%26`, `%3D` and `%2B`. A `+` in a path is a literal plus, so `/tag/one+two` stays distinct from `/tag/one two`; in a query string it still means a space.
+
+   The migration re-keys every source to the form 2.0 looks up. Without that, a 1.x redirect whose source was stored encoded, or contained a `+` or a space, would stop working after the upgrade with no error.
 
    A trailing slash on the *destination* is left alone: there it is part of where the visitor actually lands.
 4. **Destinations are canonicalized.** A destination pointing at this site by absolute URL (`https://example.com/foo`) is rewritten to the relative form (`/foo`), so anything left absolute afterwards is external by construction. A relative destination is rewritten to the encoding 2.0 produces on save, so whichever of `/café` or `/caf%C3%A9` you originally typed is now stored one way: path and fragment decoded, query string kept percent-encoded.
@@ -67,7 +71,7 @@ One migration handles all four. It runs automatically in small batches on ordina
 
 The first two are corrections to the shape 1.x wrote, so they run **only** where the stored data predates 2.0. Once 2.0 has written data of its own, both readings become ambiguous: a `draft` then means "deliberately disabled" rather than "1.x never set a status", and a source beginning with your home path can be a deliberate double prefix (on a subsite at `/subsite1`, storing `/subsite1/x` is how you redirect the real URL `/subsite1/subsite1/x`). A later version bump re-walks every redirect, so leaving these two ungated would republish redirects you had disabled and rewrite sources you meant.
 
-The trailing-slash and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
+The source and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
 
 ### Large redirect sets
 
@@ -106,9 +110,36 @@ Re-keying a source can bring two redirects onto one path — most often because 
 Only one redirect can own a path, so the migration decides on the destinations:
 
 - **Both point at the same place.** The spare is redundant, so it is moved to the trash and counted in the migration summary. Nothing is deleted outright, so you can restore it from the Trash view if you disagree.
-- **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, editable, and plainly not doing anything.
+- **They point at different places.** Only you can say which was meant, so the existing redirect keeps firing and the other is **disabled** and reported. It stays in your list, plainly not doing anything, and it can't be enabled while the live redirect has its source: two redirects can't answer the same path.
 
-`wp legacy-redirector migrate --dry-run` shows them before anything is written, and `wp legacy-redirector list --duplicates` lists every one at any time afterwards, beside the live redirect that shares its source. Review them, then either delete them or re-point and re-enable them; each drops off that list once saved.
+`wp legacy-redirector migrate --dry-run` shows them before anything is written.
+
+#### Settling a disabled duplicate
+
+For each one, decide which destination is right:
+
+- **The live redirect's destination is right.** Delete the disabled one.
+- **The disabled one's destination is right.** Change the live redirect's destination to it, then delete the disabled one.
+
+Some disabled duplicates are marked **never fired under 1.x**. Their stored spelling is one no browser ever requested: raw accented characters, such as `/café` where browsers send `/caf%C3%A9`, or, on a site below the domain root, a path without the site's own. Disabling one of those changed nothing for visitors, so unless you want its destination, just delete it. For every other disabled duplicate, visitors who used its spelling now reach the live redirect's destination, so check that's the one you want.
+
+**In the admin**, a notice on the Redirects screen links to the **Duplicate sources** view, which lists every one. Each row's Status column links to the live redirect and says which choice applies: use **Trash** on the disabled redirect, and **Edit** on the live one to change its destination.
+
+**From the command line:**
+
+```bash
+# List them, with both destinations and whether each disabled one ever fired
+wp legacy-redirector list --duplicates
+
+# Keep the live redirect's destination
+wp legacy-redirector delete <disabled ID>
+
+# Keep the disabled one's destination
+wp legacy-redirector update <live ID> --to=<destination>
+wp legacy-redirector delete <disabled ID>
+```
+
+Each drops off the list, and out of the view, once deleted or trashed.
 
 ## Breaking Changes
 

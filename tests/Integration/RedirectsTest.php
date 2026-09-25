@@ -34,6 +34,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
@@ -443,5 +444,35 @@ final class RedirectsTest extends TestCase {
 		foreach ( $post_ids as $post_id ) {
 			$this->assertSame( 'publish', get_post_status( $post_id ) );
 		}
+	}
+
+	/**
+	 * Test a redirect cannot be enabled onto a source another redirect has.
+	 *
+	 * A duplicate the 2.0 upgrade disabled keeps its old key, but any save
+	 * re-derives the key from its source - the live redirect's. Two rows on
+	 * one key leave the lookup to a LIMIT 1, which can stop the live one
+	 * answering, so the save is refused with what to do instead.
+	 */
+	public function test_enabling_a_duplicate_source_is_refused(): void {
+		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
+		$duplicate_id = $this->insert_redirect_post(
+			array(
+				'post_title'   => '/clash/',
+				'post_name'    => md5( '/clash/' ),
+				'post_excerpt' => 'https://example.com/two',
+				'post_status'  => 'draft',
+			)
+		);
+
+		$result = $this->manager()->change_status( $duplicate_id, 'publish' );
+
+		$this->assertFalse( $result->is_success() );
+		$this->assertStringContainsString( sprintf( 'Redirect #%d already has the source "/clash"', $live_id ), (string) $result->error_message() );
+		$this->assertSame( 'draft', get_post_status( $duplicate_id ) );
+		$this->assertSame( $live_id, $this->repository()->find_by_source( SourceUrl::from_string( '/clash' ) )?->id() );
+
+		// Changing the live redirect's own destination is still allowed.
+		$this->assertTrue( $this->manager()->update_destination( $live_id, Destination::from_mixed( 'https://example.com/two' ) )->is_success() );
 	}
 }

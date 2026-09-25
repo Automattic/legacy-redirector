@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\InternalDestinationNormalizer;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use InvalidArgumentException;
 use RuntimeException;
 use WP_Post;
 use WP_Query;
@@ -51,11 +52,14 @@ use WP_Query;
  *    typed is rewritten to the form the normalizer now produces on save
  *    (path and fragment decoded, query kept percent-encoded).
  *
- * 4. Source paths lose their trailing slash, because 2.0 treats '/old-page'
- *    and '/old-page/' as one redirect rather than two. See
- *    SourceUrl::strip_trailing_slash(). Sites that worked around the old
- *    behavior by storing both forms will have the two rows converge on one
- *    key; see plan() for how that is resolved.
+ * 4. Sources are re-keyed to the form SourceUrl gives them, which is the form
+ *    a request is looked up by. 1.x hashed each source as esc_url_raw()
+ *    left it, so '/caf%C3%A9', '/a%20b' and '/old-page/' all kept keys 2.0
+ *    never looks up. They lose their trailing slash, because 2.0 treats
+ *    '/old-page' and '/old-page/' as one redirect rather than two, and their
+ *    plain-text escapes are decoded. Sites that stored two spellings of one
+ *    source, such as both slash forms, will have the two rows converge on
+ *    one key; see plan() for how that is resolved.
  *
  * Every pass is idempotent per redirect, so re-walking the set is safe.
  *
@@ -67,7 +71,7 @@ use WP_Query;
  * is how you redirect the real URL /subsite1/subsite1/x). A later version
  * bump re-walks the whole set, so ungated passes would republish disabled
  * redirects and rewrite those sources into something else. The destination
- * and trailing-slash passes have no such ambiguity and run on every walk.
+ * and source passes have no such ambiguity and run on every walk.
  *
  * The routine is version-gated so it runs exactly once, and processes in
  * batches so that a site with a very large redirect set completes over
@@ -94,7 +98,7 @@ final class Upgrader {
 	/**
 	 * Current data schema version.
 	 */
-	public const int DB_VERSION = 5;
+	public const int DB_VERSION = 6;
 
 	/**
 	 * The first data version written under 2.0's rules.
@@ -168,6 +172,17 @@ final class Upgrader {
 	public const string DUPLICATE_META_KEY = '_legacy_redirector_duplicate_of';
 
 	/**
+	 * Meta key marking a disabled duplicate that never fired under 1.x.
+	 *
+	 * Set when the disabled row's own stored spelling is one no browser ever
+	 * requested - see reachable_in_1x() - so disabling it changed nothing for
+	 * visitors and it can simply be deleted. Unlike the live row, which the walk
+	 * may have re-keyed, the disabled row keeps its 1.x spelling, so this is
+	 * known exactly. Cleared with DUPLICATE_META_KEY.
+	 */
+	public const string NEVER_FIRED_META_KEY = '_legacy_redirector_duplicate_never_fired';
+
+	/**
 	 * Redirects processed per batch when running on a web request.
 	 *
 	 * Deliberately modest: this runs on `init`, so the cost lands on whichever
@@ -191,6 +206,25 @@ final class Upgrader {
 	 * @var int[]
 	 */
 	private array $failed_ids = array();
+
+	/**
+	 * Which redirect owns each source hash the batch being processed may re-key onto.
+	 *
+	 * Keyed hash => post ID, or 0 where no redirect owns it. Filled by one
+	 * query per batch in prime_owners() and kept current as the batch writes,
+	 * in place of a lookup query per re-keyed row. A hash missing from it is
+	 * looked up with find_post_by_hash().
+	 *
+	 * @var array<string, int>
+	 */
+	private array $owners = array();
+
+	/**
+	 * IDs written in the batch being processed, whose stale audit flags go at its end.
+	 *
+	 * @var int[]
+	 */
+	private array $unflagged = array();
 
 	/**
 	 * Whether this site still has upgrade work outstanding.
@@ -274,7 +308,7 @@ final class Upgrader {
 	 * run redoes the batch.
 	 *
 	 * @param int $size Maximum number of redirects to process.
-	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 *
 	 * @throws RuntimeException When the database refuses the batch's read or bulk write.
 	 */
@@ -324,7 +358,7 @@ final class Upgrader {
 	 * completed. Those that fail again stay recorded for the next retry;
 	 * those deleted in the meantime drop out.
 	 *
-	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 *
 	 * @throws RuntimeException When the database refuses a read or bulk write.
 	 */
@@ -349,28 +383,50 @@ final class Upgrader {
 	/**
 	 * The redirects the migration disabled as duplicate sources.
 	 *
-	 * @return array<int, int> Each disabled redirect's ID, mapped to the ID of the live redirect whose source it shares.
+	 * @return array<int, array{of: int, never_fired: bool}> Each disabled redirect's ID, mapped to the ID of the live redirect whose source it shares, and whether it never fired under 1.x.
 	 */
 	public function duplicates(): array {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only duplicate rows carry the key.
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s ORDER BY post_id", self::DUPLICATE_META_KEY ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- A one-off listing on demand; only duplicate rows carry the keys.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT d.post_id, d.meta_value, n.meta_id AS never_fired FROM {$wpdb->postmeta} d LEFT JOIN {$wpdb->postmeta} n ON n.post_id = d.post_id AND n.meta_key = %s WHERE d.meta_key = %s ORDER BY d.post_id", self::NEVER_FIRED_META_KEY, self::DUPLICATE_META_KEY ) );
 
-		return array_map( 'intval', array_column( $rows, 'meta_value', 'post_id' ) );
+		$duplicates = array();
+		foreach ( $rows as $row ) {
+			$duplicates[ (int) $row->post_id ] = array(
+				'of'          => (int) $row->meta_value,
+				'never_fired' => null !== $row->never_fired,
+			);
+		}
+
+		return $duplicates;
+	}
+
+	/**
+	 * How many redirects the migration disabled as duplicate sources.
+	 *
+	 * @return int The number of redirects.
+	 */
+	public static function duplicate_count(): int {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Counts only rows carrying the key; admin screen only.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s", self::DUPLICATE_META_KEY ) );
 	}
 
 	/**
 	 * Drop a redirect's duplicate marker once someone has saved it.
 	 *
-	 * Hooked to every save of a redirect, as re-pointing, enabling or
-	 * trashing the row are all ways of settling it.
+	 * Hooked to every save of a redirect: trashing the row, or giving it a
+	 * source of its own, settles it. Re-pointing or enabling it while the live
+	 * redirect holds its source is refused by the repository.
 	 *
 	 * @param int $post_id The redirect post ID.
 	 * @return void
 	 */
 	public static function forget_duplicate( int $post_id ): void {
 		delete_post_meta( $post_id, self::DUPLICATE_META_KEY );
+		delete_post_meta( $post_id, self::NEVER_FIRED_META_KEY );
 	}
 
 	/**
@@ -386,6 +442,8 @@ final class Upgrader {
 	 * @throws RuntimeException When the database refuses the bulk write.
 	 */
 	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
+		$this->prime_owners( $posts, $home_path );
+
 		foreach ( $posts as $post ) {
 			if ( ! $post instanceof WP_Post ) {
 				continue;
@@ -407,13 +465,16 @@ final class Upgrader {
 			}
 		}
 
+		self::drop_audit_flags( $this->unflagged );
+		$this->unflagged = array();
+
 		$this->flush_publish_queue( $started, $result );
 	}
 
 	/**
 	 * Totals with nothing counted yet.
 	 *
-	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], failed: string[], complete: bool}
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 */
 	private static function empty_result(): array {
 		return array(
@@ -426,6 +487,7 @@ final class Upgrader {
 			'deduped'    => 0,
 			'normalized' => 0,
 			'conflicts'  => array(),
+			'unfired'    => 0,
 			'failed'     => array(),
 			'complete'   => false,
 		);
@@ -499,7 +561,7 @@ final class Upgrader {
 	 * do, as predictions, apart from failures, which only a write can reveal.
 	 *
 	 * @param callable(int): void|null $progress Called after each batch with the number of redirects checked so far.
-	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[]}
+	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int}
 	 */
 	public function count_pending( ?callable $progress = null ): array {
 		$started   = $this->started_at( false );
@@ -519,10 +581,12 @@ final class Upgrader {
 			'deduped'    => 0,
 			'normalized' => 0,
 			'conflicts'  => array(),
+			'unfired'    => 0,
 		);
 
 		do {
 			$posts = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
+			$this->prime_owners( $posts, $home_path );
 
 			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
@@ -555,6 +619,7 @@ final class Upgrader {
 
 				if ( null !== $plan['conflict'] ) {
 					$pending['conflicts'][] = $plan['conflict'];
+					$pending['unfired']    += (int) $plan['never_fired'];
 				}
 			}
 
@@ -683,16 +748,12 @@ final class Upgrader {
 			$result['skipped']   += count( $ids ) - (int) $published;
 		}
 
-		// Stale audit flags go in one statement rather than a delete_post_meta()
-		// per row, for the reason write() drops them.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- As above.
-		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN ({$placeholders})", array_merge( array( AuditFlags::META_KEY ), $ids ) ) );
+		self::drop_audit_flags( $ids );
 
-		// Batched: the rows and their meta, core's cached post queries, and
-		// the lookup cache, which holds 0 for a path requested while its
-		// redirect was still a draft.
+		// Batched: the rows, core's cached post queries, and the lookup cache,
+		// which holds 0 for a path requested while its redirect was still a
+		// draft.
 		wp_cache_delete_multiple( $ids, 'posts' );
-		wp_cache_delete_multiple( $ids, 'post_meta' );
 		wp_cache_set_posts_last_changed();
 		wp_cache_delete_multiple(
 			array_map( CachingRedirectRepository::cache_key( ... ), array_values( $this->publish_queue ) ),
@@ -700,6 +761,76 @@ final class Upgrader {
 		);
 
 		$this->publish_queue = array();
+	}
+
+	/**
+	 * Look up, in one query, who owns each source hash a batch may re-key onto.
+	 *
+	 * Mirrors find_post_by_hash(): every status WP_Query's 'any' includes,
+	 * which leaves out the trash, and the newest row where several share a
+	 * hash. A failed read leaves the map empty, so each row falls back to its
+	 * own lookup rather than trusting an answer that was never given.
+	 *
+	 * @param array<WP_Post|null> $posts     The batch.
+	 * @param string              $home_path The home path to strip, or ''.
+	 * @return void
+	 */
+	private function prime_owners( array $posts, string $home_path ): void {
+		global $wpdb;
+
+		$this->owners = array();
+
+		foreach ( $posts as $post ) {
+			$new_path = $post instanceof WP_Post ? $this->canonical_source( self::hashed_source( $post ), $home_path ) : null;
+			if ( null !== $new_path ) {
+				$this->owners[ md5( $new_path ) ] = 0;
+			}
+		}
+
+		if ( array() === $this->owners ) {
+			return;
+		}
+
+		$hashes   = array_keys( $this->owners );
+		$excluded = array_values( get_post_stati( array( 'exclude_from_search' => true ) ) );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- One read per batch in place of one per row; the interpolated fragments are only %s placeholders. Prepared just above.
+		$sql = $wpdb->prepare(
+			"SELECT ID, post_name FROM {$wpdb->posts} WHERE post_type = %s AND post_status NOT IN (" . implode( ',', array_fill( 0, count( $excluded ), '%s' ) ) . ') AND post_name IN (' . implode( ',', array_fill( 0, count( $hashes ), '%s' ) ) . ') ORDER BY post_date ASC, ID ASC',
+			array_merge( array( PostType::POST_TYPE ), $excluded, $hashes )
+		);
+
+		if ( false === $wpdb->query( $sql ) ) {
+			$this->owners = array();
+			return;
+		}
+		// phpcs:enable
+
+		// Ascending, so the newest row sharing a hash is the one left standing.
+		foreach ( $wpdb->last_result as $row ) {
+			$this->owners[ $row->post_name ] = (int) $row->ID;
+		}
+	}
+
+	/**
+	 * Drop the stale audit flags of redirects just written, in one statement.
+	 *
+	 * @param int[] $ids The redirect post IDs.
+	 * @return void
+	 */
+	private static function drop_audit_flags( array $ids ): void {
+		if ( array() === $ids ) {
+			return;
+		}
+
+		global $wpdb;
+
+		$placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The interpolated fragment is only %d placeholders, one per ID. The meta cache is cleaned below.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN ({$placeholders})", array_merge( array( AuditFlags::META_KEY ), $ids ) ) );
+
+		wp_cache_delete_multiple( $ids, 'post_meta' );
 	}
 
 	/**
@@ -721,7 +852,7 @@ final class Upgrader {
 
 		if ( array() === $update ) {
 			++$result['unchanged'];
-			$this->mark_duplicate( $post->ID, $plan['rival'] );
+			$this->mark_duplicate( $post->ID, $plan, $result );
 			return $conflict;
 		}
 
@@ -748,7 +879,7 @@ final class Upgrader {
 		}
 
 		self::tally( $update, $result );
-		$this->mark_duplicate( $post->ID, $plan['rival'] );
+		$this->mark_duplicate( $post->ID, $plan, $result );
 
 		return $conflict;
 	}
@@ -759,14 +890,44 @@ final class Upgrader {
 	 * Only once the row has reached its planned state: a row whose write
 	 * failed is marked when a retry gets it written.
 	 *
-	 * @param int      $post_id The drafted redirect.
-	 * @param int|null $rival   The live redirect whose source it shares, or null when it is not a duplicate.
+	 * @param int                  $post_id The drafted redirect.
+	 * @param array<string, mixed> $plan    The row's plan; see plan().
+	 * @param array<string, mixed> $result  Running totals, updated by reference.
 	 * @return void
 	 */
-	private function mark_duplicate( int $post_id, ?int $rival ): void {
-		if ( null !== $rival ) {
-			update_post_meta( $post_id, self::DUPLICATE_META_KEY, $rival );
+	private function mark_duplicate( int $post_id, array $plan, array &$result ): void {
+		if ( null === $plan['rival'] ) {
+			return;
 		}
+
+		update_post_meta( $post_id, self::DUPLICATE_META_KEY, $plan['rival'] );
+
+		if ( $plan['never_fired'] ) {
+			update_post_meta( $post_id, self::NEVER_FIRED_META_KEY, 1 );
+			++$result['unfired'];
+		}
+	}
+
+	/**
+	 * Whether a browser could ever have reached a source under 1.x.
+	 *
+	 * 1.x compared each request, as esc_url_raw() left it, with the stored
+	 * text. Browsers percent-encode non-ASCII characters and spaces, so a
+	 * source stored with them raw never matched; and wherever home is not the
+	 * domain root, every request for this site carries the home path, so a
+	 * source stored without it never matched either. Anything else could.
+	 *
+	 * @param string $source    The source as 1.x stored it.
+	 * @param string $home_path The site's home path, or '' when home is the domain root.
+	 * @return bool False when no browser request could have matched it.
+	 */
+	private static function reachable_in_1x( string $source, string $home_path ): bool {
+		if ( 1 === preg_match( '/[\x80-\xff ]/', $source ) ) {
+			return false;
+		}
+
+		return '' === $home_path
+			|| null !== HomePath::make_relative( substr( $source, 0, strcspn( $source, '?' ) ), $home_path );
 	}
 
 	/**
@@ -808,20 +969,22 @@ final class Upgrader {
 	 * @param string             $home_path The site's home path, or '' when not a subdirectory site.
 	 * @param bool               $publish   Whether draft redirects should be published.
 	 * @param array<string, int> $claimed   Source hashes a dry run's earlier rows would have been re-keyed to, and the ID of the row.
-	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null} The changed fields, a description of any collision with a redirect going somewhere else, and that redirect's ID.
+	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null, never_fired: bool} The changed fields, a description of any collision with a redirect going somewhere else, that redirect's ID, and whether this one never fired under 1.x.
 	 */
 	private function plan( WP_Post $post, string $home_path, bool $publish, array $claimed = array() ): array {
-		$update   = array();
-		$conflict = null;
-		$rival    = null;
-		$collided = false;
+		$update      = array();
+		$conflict    = null;
+		$rival       = null;
+		$collided    = false;
+		$never_fired = false;
 
-		$new_path = $this->canonical_source( $post->post_title, $home_path );
+		$new_path = $this->canonical_source( self::hashed_source( $post ), $home_path );
 
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
-			$existing = isset( $claimed[ $new_hash ] ) ? get_post( $claimed[ $new_hash ] ) : $this->find_post_by_hash( $new_hash );
+			$owner    = $claimed[ $new_hash ] ?? $this->owners[ $new_hash ] ?? null;
+			$existing = null === $owner ? $this->find_post_by_hash( $new_hash ) : ( 0 === $owner ? null : get_post( $owner ) );
 			$collided = null !== $existing && $existing->ID !== $post->ID;
 
 			if ( ! $collided ) {
@@ -848,8 +1011,11 @@ final class Upgrader {
 					if ( 'draft' !== $post->post_status ) {
 						$update['post_status'] = 'draft';
 					}
-					$rival    = $existing->ID;
-					$conflict = sprintf(
+					// Only a 1.x row can have fired under 1.x, and its spelling is
+					// still the one 1.x stored: a disabled row is never re-keyed.
+					$never_fired = $publish && ! self::reachable_in_1x( self::hashed_source( $post ), $home_path );
+					$rival       = $existing->ID;
+					$conflict    = sprintf(
 						'%s → %s (#%d) has the same source as %s → %s (#%d)',
 						$post->post_title,
 						self::destination_label( $post ),
@@ -858,6 +1024,9 @@ final class Upgrader {
 						self::destination_label( $existing ),
 						$existing->ID
 					);
+					if ( $never_fired ) {
+						$conflict .= ' (never fired under 1.x)';
+					}
 				}
 			}
 		}
@@ -874,9 +1043,10 @@ final class Upgrader {
 		}
 
 		return array(
-			'update'   => $update,
-			'conflict' => $conflict,
-			'rival'    => $rival,
+			'update'      => $update,
+			'conflict'    => $conflict,
+			'rival'       => $rival,
+			'never_fired' => $never_fired,
 		);
 	}
 
@@ -899,7 +1069,7 @@ final class Upgrader {
 
 		// Matching the modified date as read skips the write if a user has
 		// edited the row since, so the edit is not overwritten.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned below.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned below and in process().
 		$written = $wpdb->update(
 			$wpdb->posts,
 			$update,
@@ -919,8 +1089,18 @@ final class Upgrader {
 		wp_cache_set_posts_last_changed();
 
 		// Whatever the last scan said about the row described it before this
-		// write, so it goes, as on any save; see AuditFlags.
-		delete_post_meta( $post->ID, AuditFlags::META_KEY );
+		// write, so it goes, as on any save; see AuditFlags. All at once at
+		// the end of the batch, rather than two queries per row here.
+		$this->unflagged[] = $post->ID;
+
+		// The row no longer answers for a key it moved off, or holds from the
+		// trash; forgetting it sends a later check to the database.
+		if ( ( $this->owners[ $post->post_name ] ?? null ) === $post->ID ) {
+			unset( $this->owners[ $post->post_name ] );
+		}
+		if ( isset( $update['post_name'] ) ) {
+			$this->owners[ $update['post_name'] ] = $post->ID;
+		}
 
 		// The lookup cache stores 0 for "no redirect here", so a path that was
 		// requested while the redirect was still a draft is cached as missing.
@@ -933,16 +1113,46 @@ final class Upgrader {
 	}
 
 	/**
+	 * The source text a redirect's key was hashed from.
+	 *
+	 * Usually the title. But a title saved in a web request by a user without
+	 * unfiltered_html, as everyone is on VIP, passes through kses, which
+	 * writes a lone '&' as '&amp;' - after the key was hashed from the '&'.
+	 * Re-keying from such a title would move the row onto a key no request
+	 * produces, so the key decides which text it was.
+	 *
+	 * @param WP_Post $post The redirect post.
+	 * @return string The source text.
+	 */
+	private static function hashed_source( WP_Post $post ): string {
+		if ( md5( $post->post_title ) !== $post->post_name ) {
+			$unescaped = str_replace( '&amp;', '&', $post->post_title );
+
+			if ( md5( $unescaped ) === $post->post_name ) {
+				return $unescaped;
+			}
+		}
+
+		return $post->post_title;
+	}
+
+	/**
 	 * The canonical stored form of a source path, or null when already canonical.
 	 *
-	 * Two corrections, in the order storage applies them: the home path comes
-	 * off first (only for a site coming from 1.x, where $home_path is set),
-	 * then the trailing slash comes off whatever is left.
+	 * The home path comes off first (only for a site coming from 1.x, where
+	 * $home_path is set), then whatever is left goes through SourceUrl, as a
+	 * source saved today would. That takes off the trailing slash and settles
+	 * the encoding: 1.x keyed each source by the md5 of the text esc_url_raw()
+	 * produced, while 2.0 looks a request up by its SourceUrl form, so a 1.x
+	 * '/caf%C3%A9' or '/a%20b' keeps a key no request produces until it is
+	 * re-keyed to '/café' or '/a b'.
 	 *
-	 * The slash rule is delegated to SourceUrl rather than repeated, so a
-	 * migrated row and a freshly saved one cannot disagree. Only the query
-	 * split is done here: SourceUrl works on the path alone, and a query can
-	 * legitimately end in a slash ('/a?b=c/') that must survive.
+	 * Delegating rather than repeating the rules means a migrated row and a
+	 * freshly saved one cannot disagree. The query is split off only for the
+	 * home path, which applies to the path alone.
+	 *
+	 * SourceUrl's form is a fixed point, so a row already in it comes back
+	 * unchanged and the pass is safe to repeat on every walk.
 	 *
 	 * @param string $source_path The stored source path, with optional query string.
 	 * @param string $home_path   The site's home path, or '' when there is nothing to strip.
@@ -962,7 +1172,14 @@ final class Upgrader {
 			$path = HomePath::make_relative( $path, $home_path ) ?? $path;
 		}
 
-		$canonical = SourceUrl::strip_trailing_slash( $path ) . $query;
+		try {
+			$canonical = SourceUrl::from_string( $path . $query )->path();
+		} catch ( InvalidArgumentException ) {
+			// A source SourceUrl cannot parse, such as '//?q=1', still loses
+			// its trailing slash, which is often enough to settle it as a
+			// duplicate of the parseable form beside it.
+			$canonical = SourceUrl::strip_trailing_slash( $path ) . $query;
+		}
 
 		return $canonical === $source_path ? null : $canonical;
 	}

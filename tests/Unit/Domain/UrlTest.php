@@ -135,9 +135,51 @@ final class UrlTest extends YoastTestCase {
 			'encoded unicode'      => array( '/%E6%97%A5%E6%9C%AC', '/日本' ),
 			'raw emoji'            => array( '/🎉', '/🎉' ),
 			'encoded emoji'        => array( '/%F0%9F%8E%89', '/🎉' ),
-			'encoded percent'      => array( '/100%25-cotton', '/100%-cotton' ),
+			'encoded percent kept' => array( '/100%25-cotton', '/100%25-cotton' ),
 			'full url'             => array( 'https://example.com/日本', '/日本' ),
 			'path with query kept' => array( '/page?q=1', '/page' ),
+			'literal plus kept'    => array( '/a+b', '/a+b' ),
+			'raw space'            => array( '/a b', '/a b' ),
+			'sub-delimiter'        => array( '/a%2Cb', '/a,b' ),
+			'encoded slash kept'   => array( '/a%2Fb', '/a%2Fb' ),
+			'encoded query kept'   => array( '/a%3Fb', '/a%3Fb' ),
+			'encoded hash kept'    => array( '/a%23b', '/a%23b' ),
+			'encoded brace kept'   => array( '/a%7Bb', '/a%7Bb' ),
+			'control kept'         => array( '/a%00b', '/a%00b' ),
+			'invalid UTF-8 kept'   => array( '/%FF', '/%FF' ),
+			'kept upper-cased'     => array( '/a%2fb', '/a%2Fb' ),
+			'stray percent'        => array( '/100%', '/100%25' ),
+		);
+	}
+
+	/**
+	 * Test parse() decodes the query with form semantics.
+	 *
+	 * @dataProvider data_parse_query
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\Url::parse
+	 * @covers \Automattic\LegacyRedirector\Domain\Url::decode
+	 *
+	 * @param string $url      The URL to parse.
+	 * @param string $expected The expected query.
+	 */
+	public function test_parse_decodes_the_query_as_a_form( string $url, string $expected ): void {
+		$this->assertSame( $expected, Url::parse( $url )['query'] );
+	}
+
+	/**
+	 * Data provider of URLs and their decoded queries.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_parse_query(): array {
+		return array(
+			'plus is a space'        => array( '/p?q=a+b', 'q=a b' ),
+			'encoded plus kept'      => array( '/p?q=c%2B%2B', 'q=c%2B%2B' ),
+			'encoded ampersand kept' => array( '/p?q=a%26b', 'q=a%26b' ),
+			'encoded equals kept'    => array( '/p?q=a%3Db', 'q=a%3Db' ),
+			'encoded slash decoded'  => array( '/p?u=%2Fx', 'u=/x' ),
+			'unicode decoded'        => array( '/p?q=caf%C3%A9', 'q=café' ),
 		);
 	}
 

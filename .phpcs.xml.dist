@@ -10,6 +10,8 @@
 	<!-- Ignoring Files and Folders:
 		https://github.com/squizlabs/PHP_CodeSniffer/wiki/Advanced-Usage#ignoring-files-and-folders -->
 	<exclude-pattern>/vendor/</exclude-pattern>
+	<!-- Version 1.3.0, kept byte for byte so the upgrade test runs the real 1.x code. -->
+	<exclude-pattern>/tests/Behat/fixtures/</exclude-pattern>
 
 	<!-- How to scan -->
 	<!-- Usage instructions: https://github.com/squizlabs/PHP_CodeSniffer/wiki/Usage -->
