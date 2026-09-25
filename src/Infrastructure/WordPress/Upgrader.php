@@ -98,7 +98,7 @@ final class Upgrader {
 	/**
 	 * Current data schema version.
 	 */
-	public const int DB_VERSION = 6;
+	public const int DB_VERSION = 7;
 
 	/**
 	 * The first data version written under 2.0's rules.
@@ -1266,7 +1266,7 @@ final class Upgrader {
 		++$totals['changed'];
 		$totals['published']  += (int) ( 'publish' === $status );
 		$totals['deduped']    += (int) ( 'trash' === $status );
-		$totals['repathed']   += (int) isset( $update['post_name'] );
+		$totals['repathed']   += (int) isset( $update['post_title'] );
 		$totals['normalized'] += (int) isset( $update['post_excerpt'] );
 	}
 
@@ -1301,7 +1301,15 @@ final class Upgrader {
 		$collided    = false;
 		$never_fired = false;
 
-		$new_path = $this->canonical_source( self::hashed_source( $post ), $home_path );
+		$hashed   = self::hashed_source( $post );
+		$new_path = $this->canonical_source( $hashed, $home_path );
+
+		// A kses-escaped title over a key that is already canonical keeps its
+		// key but gets back the text it was hashed from: every save rebuilds
+		// the key from the title, so the next one would move the row.
+		if ( null === $new_path && $hashed !== $post->post_title ) {
+			$update['post_title'] = $hashed;
+		}
 
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
@@ -1813,25 +1821,31 @@ final class Upgrader {
 	/**
 	 * The relative form of an internal absolute destination, or null when no rewrite is due.
 	 *
+	 * A destination saved in a web request by a user without unfiltered_html
+	 * went through kses, which wrote each '&' as '&amp;', and 1.x then sent
+	 * visitors to the escaped URL. Version 7 un-escapes it first: no URL means
+	 * '&amp;', so it can only be kses's doing.
+	 *
 	 * @param string $excerpt The stored destination.
 	 * @return string|null The normalized destination, or null when already canonical.
 	 */
 	private function normalized_excerpt( string $excerpt ): ?string {
-		if ( str_starts_with( $excerpt, 'http' ) ) {
-			return $this->normalizer->to_internal_path( $excerpt );
+		$unescaped = str_replace( '&amp;', '&', $excerpt );
+
+		if ( str_starts_with( $unescaped, 'http' ) ) {
+			$normalized = $this->normalizer->to_internal_path( $unescaped ) ?? $unescaped;
+		} elseif ( str_starts_with( $unescaped, '/' ) ) {
+			// A relative destination may have been stored in whichever encoding
+			// it was entered in; version 4 canonicalizes it the same way saving
+			// does now.
+			$normalized = $this->normalizer->canonicalize( $unescaped ) ?? $unescaped;
+		} else {
+			$normalized = $unescaped;
 		}
 
-		// A relative destination may have been stored in whichever encoding
-		// it was entered in; version 4 canonicalizes it the same way saving
-		// does now. Null when nothing changes, so an already-canonical row is
-		// neither rewritten nor counted.
-		if ( ! str_starts_with( $excerpt, '/' ) ) {
-			return null;
-		}
-
-		$canonical = $this->normalizer->canonicalize( $excerpt );
-
-		return null === $canonical || $canonical === $excerpt ? null : $canonical;
+		// Null when nothing changes, so an already-canonical row is neither
+		// rewritten nor counted.
+		return $normalized === $excerpt ? null : $normalized;
 	}
 
 	/**
