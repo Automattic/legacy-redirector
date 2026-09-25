@@ -34,12 +34,9 @@ class RedirectManager {
 	/**
 	 * The redirect validator.
 	 *
-	 * Created lazily: most manager operations (delete, enable, disable,
-	 * unvalidated creation) never need it.
-	 *
-	 * @var RedirectValidator|null
+	 * @var RedirectValidator
 	 */
-	private ?RedirectValidator $validator;
+	private RedirectValidator $validator;
 
 	/**
 	 * The internal destination normalizer.
@@ -52,21 +49,12 @@ class RedirectManager {
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository The redirect repository.
-	 * @param RedirectValidator|null      $validator  The redirect validator (optional, created on first use if not provided).
+	 * @param RedirectValidator           $validator  The redirect validator.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository, ?RedirectValidator $validator = null ) {
+	public function __construct( RedirectRepositoryInterface $repository, RedirectValidator $validator ) {
 		$this->repository = $repository;
 		$this->validator  = $validator;
 		$this->normalizer = new InternalDestinationNormalizer();
-	}
-
-	/**
-	 * Get the redirect validator, creating it on first use.
-	 *
-	 * @return RedirectValidator The validator.
-	 */
-	private function validator(): RedirectValidator {
-		return $this->validator ??= new RedirectValidator( $this->repository );
 	}
 
 	/**
@@ -92,7 +80,7 @@ class RedirectManager {
 		$redirect = Redirect::create( $source, $destination );
 
 		if ( $validate ) {
-			$validation = $this->validator()->validate( $redirect );
+			$validation = $this->validator->validate( $redirect );
 			if ( $validation->is_invalid() ) {
 				return RedirectCreationResult::from_validation( $validation );
 			}
@@ -264,7 +252,7 @@ class RedirectManager {
 		$updated = $redirect->with_destination( $destination );
 
 		if ( $validate ) {
-			$validation = $this->validator()->validate( $updated );
+			$validation = $this->validator->validate( $updated );
 			if ( $validation->is_invalid() ) {
 				return RedirectCreationResult::from_validation( $validation );
 			}
@@ -309,7 +297,7 @@ class RedirectManager {
 		$updated = $this->with_new_mapping( $redirect, $source, $destination );
 
 		if ( $validate ) {
-			$validation = $this->validator()->validate( $updated );
+			$validation = $this->validator->validate( $updated );
 			if ( $validation->is_invalid() ) {
 				return RedirectCreationResult::from_validation( $validation );
 			}
@@ -389,7 +377,7 @@ class RedirectManager {
 		$updated = $this->with_new_mapping( $redirect, $source, $destination );
 
 		if ( $validate ) {
-			$validation = $this->validator()->validate( $updated );
+			$validation = $this->validator->validate( $updated );
 			if ( $validation->is_invalid() ) {
 				return RedirectCreationResult::from_validation( $validation );
 			}

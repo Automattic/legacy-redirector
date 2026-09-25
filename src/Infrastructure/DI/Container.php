@@ -117,7 +117,7 @@ final class Container {
 	 */
 	public function manager(): RedirectManager {
 		if ( ! isset( $this->services['manager'] ) ) {
-			$this->services['manager'] = new RedirectManager( $this->repository() );
+			$this->services['manager'] = new RedirectManager( $this->repository(), $this->validator() );
 		}
 		return $this->services['manager'];
 	}
