@@ -402,7 +402,7 @@ final class UpgraderMultisiteTest extends TestCase {
 		$this->assertSame( array(), $totals['conflicts'] );
 		$this->assertSame( $between + 2, $totals['processed'] );
 		$this->assertSame( $between + 2, $totals['repathed'] );
-		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_waiting' ) );
+		$this->assertSame( 0, $this->waiting_rows() );
 
 		$this->assertSame( array(), $pending['conflicts'] );
 		$this->assertSame( $between + 2, $pending['total'] );
@@ -530,6 +530,117 @@ final class UpgraderMultisiteTest extends TestCase {
 		$this->assertSame( $single_id, $this->upgrader->duplicates()[ $double_id ]['of'] );
 		$this->assertCount( 2, $result['conflicts'] );
 		$this->assertSame( $result['conflicts'], $pending['conflicts'] );
+	}
+
+	/**
+	 * Of two rows waiting for one key, the lower ID takes it, as it would without the wait.
+	 *
+	 * @return void
+	 */
+	public function test_first_of_two_rows_waiting_for_one_key_takes_it() {
+		$first_id  = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$second_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x/' );
+		$this->create_legacy_redirect( '/x' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'publish', get_post_status( $first_id ) );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $first_id )->post_name );
+		$this->assertSame( 'trash', get_post_status( $second_id ) );
+		$this->assertSame( 1, $result['deduped'] );
+		$this->assertSame( 1, $pending['deduped'] );
+	}
+
+	/**
+	 * A row already in the trash waits too, and takes the key as it would in the other order.
+	 *
+	 * @return void
+	 */
+	public function test_trashed_row_waits_like_any_other() {
+		global $wpdb;
+
+		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'trash' ), array( 'ID' => $double_id ) );
+		clean_post_cache( $double_id );
+		$this->create_legacy_redirect( '/x' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'trash', get_post_status( $double_id ) );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $double_id )->post_name );
+		$this->assertSame( 2, $result['repathed'] );
+		$this->assertSame( 2, $pending['repathed'] );
+	}
+
+	/**
+	 * A chain waiting across batches on a redirect deleted before the walk reached it still settles.
+	 *
+	 * '/sub/sub/sub/x' waits for '/sub/sub/x', which waits for '/sub/x', a
+	 * batch later. Progress counts neither waiting row as done.
+	 *
+	 * @return void
+	 */
+	public function test_chain_waiting_on_a_deleted_redirect_settles_at_the_end() {
+		$prefix = '/' . $this->subsite;
+		$third  = $this->create_legacy_redirect( $prefix . $prefix . '/x' );
+		$second = $this->create_legacy_redirect( $prefix . '/x' );
+		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$first = $this->create_legacy_redirect( '/x' );
+
+		$this->upgrader->run_batch( Upgrader::BATCH_SIZE );
+		$this->assertSame( 2, $this->waiting_rows() );
+		$this->assertSame( Upgrader::BATCH_SIZE - 2, $this->upgrader->position()['done'] );
+
+		wp_delete_post( $first, true );
+		$totals = $this->run_to_completion();
+
+		$this->assertSame( md5( $prefix . '/x' ), get_post( $second )->post_name );
+		$this->assertSame( md5( $prefix . $prefix . '/x' ), get_post( $third )->post_name );
+		$this->assertSame( 'publish', get_post_status( $third ) );
+		$this->assertSame( array(), $totals['conflicts'] );
+		$this->assertSame( 0, $this->waiting_rows() );
+	}
+
+	/**
+	 * A released row stops being recorded as waiting as soon as its holder's batch is done.
+	 *
+	 * Otherwise a later batch would read it back as still waiting, and plan it
+	 * a second time at the end.
+	 *
+	 * @return void
+	 */
+	public function test_released_row_is_no_longer_recorded_as_waiting() {
+		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$this->create_legacy_redirect( '/x' );
+		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
+			$this->create_legacy_redirect( '/later-' . $i );
+		}
+
+		$this->upgrader->run_batch( Upgrader::BATCH_SIZE );
+		$this->assertSame( 1, $this->waiting_rows() );
+
+		$second = $this->upgrader->run_batch( Upgrader::BATCH_SIZE );
+		$this->assertFalse( $second['complete'] );
+		$this->assertSame( 0, $this->waiting_rows() );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $double_id )->post_name );
+	}
+
+	/**
+	 * How many redirects are recorded as waiting.
+	 *
+	 * @return int The number of rows.
+	 */
+	private function waiting_rows(): int {
+		global $wpdb;
+
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s", '_legacy_redirector_upgrade_waits_for' ) );
 	}
 
 	/**

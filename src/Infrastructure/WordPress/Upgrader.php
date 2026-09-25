@@ -163,13 +163,16 @@ final class Upgrader {
 	private const string RETRY_OPTION = 'wpcom_legacy_redirector_upgrade_retry';
 
 	/**
-	 * Option holding redirects waiting for a later one to leave the key they re-key onto.
+	 * Meta key marking a redirect waiting for a later one to leave the key it re-keys onto.
 	 *
-	 * See plan(). Each waiting redirect's ID maps to the ID of the redirect it
-	 * waits for and the key. Nearly always empty: only a double-prefixed source
-	 * created before its prefixed twin waits.
+	 * See plan(). Holds the ID of the redirect it waits for and the key, as
+	 * 'ID:hash'. Almost never set: only a double-prefixed source created before
+	 * its prefixed twin waits. Kept on the waiting row rather than in one
+	 * option so that two batches running at once, as web requests can, each
+	 * add and remove only their own; one overwriting the other's list would
+	 * strand a row below the cursor, never migrated.
 	 */
-	private const string WAITING_OPTION = 'wpcom_legacy_redirector_upgrade_waiting';
+	private const string WAITING_META_KEY = '_legacy_redirector_upgrade_waits_for';
 
 	/**
 	 * Meta key marking a redirect the migration disabled as a duplicate source.
@@ -277,7 +280,7 @@ final class Upgrader {
 	private bool $from_1x = false;
 
 	/**
-	 * Redirects waiting for another to leave a key; see WAITING_OPTION.
+	 * Redirects waiting for another to leave a key, by ID, with the ID of the one each waits for and the key; see WAITING_META_KEY.
 	 *
 	 * @var array<int, array{0: int, 1: string}>
 	 */
@@ -362,7 +365,8 @@ final class Upgrader {
 		);
 
 		return array(
-			'done'  => $cursor > 0 ? $count( $cursor ) : 0,
+			// A waiting row is behind the cursor but still to be processed.
+			'done'  => $cursor > 0 ? $count( $cursor ) - count( $this->stored_waits() ) : 0,
 			'total' => $count( $ceiling ),
 		);
 	}
@@ -393,9 +397,9 @@ final class Upgrader {
 		$publish   = $this->from_pre_2_0_data();
 		$home_path = $publish ? $this->home_path() : '';
 		$result    = self::empty_result();
-		$waiting   = get_option( self::WAITING_OPTION, array() );
+		$stored    = $this->stored_waits();
 
-		$this->waiting      = is_array( $waiting ) ? $waiting : array();
+		$this->waiting      = $stored;
 		$this->reached      = $cursor;
 		$this->walk_ceiling = $ceiling;
 
@@ -419,8 +423,8 @@ final class Upgrader {
 
 		$this->remember_failures( $started, $publish );
 
+		$this->store_waits( $stored );
 		update_option( self::CURSOR_OPTION, $cursor, false );
-		update_option( self::WAITING_OPTION, $this->waiting, false );
 		$this->reached = PHP_INT_MAX;
 
 		// Fewer rows than asked for means the walk has reached the end. The
@@ -728,6 +732,7 @@ final class Upgrader {
 		$queue = array_filter( $posts, static fn( $post ): bool => $post instanceof WP_Post );
 
 		while ( array() !== $queue ) {
+			// ponytail: scans every wait per row; free while waits are a handful, index by holder if a site ever has thousands.
 			$post          = array_shift( $queue );
 			$this->reached = max( $this->reached, $post->ID );
 			$released      = array_keys( array_filter( $this->waiting, static fn( array $wait ): bool => $post->ID === $wait[0] ) );
@@ -784,6 +789,52 @@ final class Upgrader {
 		$this->waiting = array_diff_key( $this->waiting, array_flip( $ids ) );
 
 		return $ids;
+	}
+
+	/**
+	 * The redirects recorded as waiting; see WAITING_META_KEY.
+	 *
+	 * @return array<int, array{0: int, 1: string}> Each waiting redirect's ID, mapped to the ID of the one it waits for and the key.
+	 *
+	 * @throws RuntimeException When the database refuses the read.
+	 */
+	private function stored_waits(): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One read per batch; only waiting rows carry the key.
+		if ( false === $wpdb->query( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s", self::WAITING_META_KEY ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+		}
+
+		$waits = array();
+		foreach ( $wpdb->last_result as $row ) {
+			list( $holder, $hash ) = explode( ':', (string) $row->meta_value, 2 ) + array( '', '' );
+
+			$waits[ (int) $row->post_id ] = array( (int) $holder, $hash );
+		}
+
+		return $waits;
+	}
+
+	/**
+	 * Record the batch's changes to who waits, once the batch has done its work.
+	 *
+	 * Only this batch's own changes: a row it started waiting, and a row it
+	 * released. A batch that throws records nothing, so its rerun releases the
+	 * same rows again.
+	 *
+	 * @param array<int, array{0: int, 1: string}> $stored The waits recorded when the batch began.
+	 * @return void
+	 */
+	private function store_waits( array $stored ): void {
+		foreach ( array_diff_key( $this->waiting, $stored ) as $id => list( $holder, $hash ) ) {
+			update_post_meta( $id, self::WAITING_META_KEY, $holder . ':' . $hash );
+		}
+
+		foreach ( array_keys( array_diff_key( $stored, $this->waiting ) ) as $id ) {
+			delete_post_meta( $id, self::WAITING_META_KEY );
+		}
 	}
 
 	/**
@@ -2150,7 +2201,7 @@ final class Upgrader {
 		delete_option( self::STARTED_OPTION );
 		delete_option( self::CURSOR_OPTION );
 		delete_option( self::CEILING_OPTION );
-		delete_option( self::WAITING_OPTION );
+		delete_post_meta_by_key( self::WAITING_META_KEY );
 		delete_transient( self::CLI_LOCK );
 	}
 }
