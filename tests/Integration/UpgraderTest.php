@@ -1266,4 +1266,449 @@ final class UpgraderTest extends TestCase {
 		$this->assertStringEndsNotWith( '(never fired under 1.x)', $result['conflicts'][0] );
 		$this->assertFalse( $this->upgrader->duplicates()[ $loser_id ]['never_fired'] );
 	}
+	/**
+	 * Writing a batch in bulk gives exactly what writing it row by row gives.
+	 *
+	 * The dry run must predict the bulk result exactly, and the same mixed set
+	 * is migrated three more ways: with every bulk statement made to fall
+	 * short, so each row is read back and written alone; with the key map
+	 * unavailable, so every row is looked up in the database and written
+	 * before the next is planned - the original behavior, and a reference
+	 * that shares none of the bulk machinery; and in batches of seven, so
+	 * rows interact across batches. Every row, marker, count and report line
+	 * must come out the same.
+	 *
+	 * @return void
+	 */
+	public function test_bulk_writes_match_row_by_row_writes() {
+		global $wpdb;
+
+		$bulk_ids = $this->create_mixed_legacy_set();
+		$pending  = $this->upgrader->count_pending();
+		$seen     = array(
+			'bulk'    => 0,
+			'per-row' => 0,
+			'read'    => 0,
+		);
+		$watch    = static function ( string $query ) use ( &$seen, $wpdb ): string {
+			if ( str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) ) {
+				++$seen[ str_contains( $query, 'CASE ID' ) ? 'bulk' : 'per-row' ];
+			}
+			$seen['read'] += (int) str_starts_with( $query, 'SELECT ID, post_title, post_name, post_status, post_excerpt, post_modified_gmt' );
+			return $query;
+		};
+
+		add_filter( 'query', $watch );
+		$bulk = $this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $watch );
+
+		// Every change went in bulk statements, all of which landed, and
+		// converging rows made them flush part-way.
+		$this->assertGreaterThan( 1, $seen['bulk'] );
+		$this->assertSame( 0, $seen['per-row'] );
+		$this->assertSame( 0, $seen['read'] );
+		$bulk_state = $this->snapshot( $bulk_ids );
+
+		// The dry run predicted exactly this.
+		$keys = array( 'changed', 'unchanged', 'skipped', 'published', 'repathed', 'deduped', 'normalized', 'unfired' );
+		$this->assertSame( wp_array_slice_assoc( $bulk, $keys ), wp_array_slice_assoc( $pending, $keys ), 'dry run' );
+		$this->assertSame( self::by_position( $bulk['conflicts'], $bulk_ids ), self::by_position( $pending['conflicts'], $bulk_ids ), 'dry run' );
+
+		$keys[] = 'processed';
+		$runs   = array(
+			'every bulk statement falling short' => static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' ) ? $query . ' AND 1 = 0' : $query,
+			'no key map, as before'              => static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query,
+			'batches of seven'                   => null,
+		);
+
+		foreach ( $runs as $label => $filter ) {
+			$this->forget_every_redirect();
+			$ids      = $this->create_mixed_legacy_set();
+			$altered  = 0;
+			$tracking = static function ( string $query ) use ( $filter, &$altered ): string {
+				$changed  = null === $filter ? $query : $filter( $query );
+				$altered += (int) ( $changed !== $query );
+				return $changed;
+			};
+
+			$upgrader = new Upgrader();
+			$result   = array_fill_keys( $keys, 0 ) + array( 'conflicts' => array() );
+			add_filter( 'query', $tracking );
+			do {
+				$batch = $upgrader->run_batch( null === $filter ? 7 : 100 );
+				foreach ( $keys as $key ) {
+					$result[ $key ] += $batch[ $key ];
+				}
+				$result['conflicts'] = array_merge( $result['conflicts'], $batch['conflicts'] );
+			} while ( ! $batch['complete'] );
+			remove_filter( 'query', $tracking );
+
+			if ( null !== $filter ) {
+				$this->assertGreaterThan( 0, $altered, $label . ': the run should have taken its intended path.' );
+			}
+			$this->assertSame( $bulk_state, $this->snapshot( $ids ), $label );
+			$this->assertSame( wp_array_slice_assoc( $result, $keys ), wp_array_slice_assoc( $bulk, $keys ), $label );
+			$this->assertSame( self::by_position( $result['conflicts'], $ids ), self::by_position( $bulk['conflicts'], $bulk_ids ), $label );
+		}
+
+		$this->assertNotSame( array(), $bulk['conflicts'] );
+		$this->assertSame( array(), $bulk['failed'] );
+	}
+
+	/**
+	 * A held write that turns out skipped is taken back out of the key map before the next row is planned.
+	 *
+	 * '/k/' is held to move onto '/k'; '/k//' wants '/k' too, so the held
+	 * write is made first - and a user edits '/k/' just then. Row by row,
+	 * '/k/' would be skipped and '/k//' would take '/k', so that is what must
+	 * happen here, not a collision with a move that never landed.
+	 *
+	 * @return void
+	 */
+	public function test_skipped_held_write_frees_its_key_for_the_next_row() {
+		global $wpdb;
+
+		$edited_id = $this->create_legacy_redirect( '/k/', 'https://example.com/one' );
+		$next_id   = $this->create_legacy_redirect( '/k//', 'https://example.com/two' );
+
+		$raced = false;
+		$race  = static function ( string $query ) use ( &$raced, $wpdb, $edited_id ): string {
+			if ( ! $raced && str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' ) ) {
+				$raced = true;
+				$wpdb->update( $wpdb->posts, array( 'post_modified_gmt' => '2099-01-01 00:00:00' ), array( 'ID' => $edited_id ) );
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $race );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $race );
+
+		$this->assertTrue( $raced );
+		$this->assertSame( 1, $result['skipped'] );
+		$this->assertSame( array(), $result['conflicts'] );
+		$this->assertSame( '/k/', get_post( $edited_id )->post_title );
+		$this->assertSame( '/k', get_post( $next_id )->post_title );
+		$this->assertSame( 'publish', get_post_status( $next_id ) );
+	}
+
+	/**
+	 * A held write that did not land, and was not edited, is written alone.
+	 *
+	 * Simulated by a bulk statement that leaves one row out, as a statement
+	 * partly applied by a non-transactional table would.
+	 *
+	 * @return void
+	 */
+	public function test_held_write_that_did_not_land_is_written_alone() {
+		global $wpdb;
+
+		$left_out_id = $this->create_legacy_redirect( '/one/' );
+		$other_id    = $this->create_legacy_redirect( '/two/' );
+
+		$partial = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' )
+			? $query . ' AND ID <> ' . $left_out_id
+			: $query;
+
+		add_filter( 'query', $partial );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $partial );
+
+		$this->assertSame( 2, $result['changed'] );
+		$this->assertSame( 2, $result['repathed'] );
+		$this->assertSame( 0, $result['skipped'] );
+		$this->assertSame( '/one', get_post( $left_out_id )->post_title );
+		$this->assertSame( '/two', get_post( $other_id )->post_title );
+	}
+
+	/**
+	 * A value too long for its column is written alone, so it is refused and reported, not truncated.
+	 *
+	 * The query of a relative destination is kept percent-encoded, so one
+	 * stored raw can grow threefold. $wpdb->update() refuses what no longer
+	 * fits; a multi-row statement would silently cut it short.
+	 *
+	 * @return void
+	 */
+	public function test_too_long_value_is_refused_not_truncated() {
+		$long_id  = $this->create_legacy_redirect( '/long', '/p?q=' . str_repeat( 'é', 30000 ) );
+		$other_id = $this->create_legacy_redirect( '/other/' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertCount( 1, $result['failed'] );
+		$this->assertStringStartsWith( '#' . $long_id . ' (/long): ', $result['failed'][0] );
+		$this->assertSame( '/p?q=' . str_repeat( 'é', 30000 ), get_post( $long_id )->post_excerpt );
+		$this->assertSame( '/other', get_post( $other_id )->post_title );
+	}
+
+	/**
+	 * The dry run predicts a trashed row's key the way the run treats it.
+	 *
+	 * A lookup ignores the trash, so a row re-keyed while in the trash does
+	 * not hold its new key, and a live row converging on it takes it.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_ignores_a_trashed_row_on_a_key_as_the_run_does() {
+		global $wpdb;
+
+		$trashed_id = $this->create_legacy_redirect( '/tr/', 'https://example.com/one' );
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'trash' ), array( 'ID' => $trashed_id ) );
+		$live_id = $this->create_legacy_redirect( '/tr//', 'https://example.com/two' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( array(), $result['conflicts'] );
+		$this->assertSame( 'publish', get_post_status( $live_id ) );
+		$this->assertSame( '/tr', get_post( $live_id )->post_title );
+
+		$keys = array( 'changed', 'unchanged', 'published', 'repathed', 'deduped' );
+		$this->assertSame( wp_array_slice_assoc( $pending, $keys ), wp_array_slice_assoc( $result, $keys ) );
+		$this->assertSame( array(), $pending['conflicts'] );
+	}
+
+	/**
+	 * A row written in bulk loses its cached copies, as one written alone does.
+	 *
+	 * Its post object, cached while it was a draft, and the lookup cache's
+	 * "nothing here" for its new source would otherwise hide the change.
+	 *
+	 * @return void
+	 */
+	public function test_bulk_written_row_loses_its_cached_copies() {
+		$post_id   = $this->create_legacy_redirect( '/cached/' );
+		$cache_key = CachingRedirectRepository::cache_key( SourceUrl::from_string( '/cached' )->hash() );
+
+		$this->assertSame( 'draft', get_post( $post_id )->post_status );
+		wp_cache_set( $cache_key, 0, CachingRedirectRepository::CACHE_GROUP );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'publish', get_post( $post_id )->post_status );
+		$this->assertSame( '/cached', get_post( $post_id )->post_title );
+		$this->assertFalse( wp_cache_get( $cache_key, CachingRedirectRepository::CACHE_GROUP ) );
+	}
+
+	/**
+	 * When the rows cannot be read back, every held row loses its cached copies before the batch stops.
+	 *
+	 * Some may have landed, and a rerun will find them already done, so
+	 * nothing would clear their cached copies later.
+	 *
+	 * @return void
+	 */
+	public function test_failed_read_back_still_clears_the_cached_copies() {
+		global $wpdb;
+
+		$left_out_id = $this->create_legacy_redirect( '/one/' );
+		$landed_id   = $this->create_legacy_redirect( '/two/' );
+		$this->assertSame( 'draft', get_post( $landed_id )->post_status );
+
+		$break = static function ( string $query ) use ( $wpdb, $left_out_id ): string {
+			if ( str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' ) ) {
+				return $query . ' AND ID <> ' . $left_out_id;
+			}
+			return str_starts_with( $query, 'SELECT ID, post_title, post_name, post_status, post_excerpt, post_modified_gmt' ) ? '' : $query;
+		};
+
+		add_filter( 'query', $break );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should have stopped.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not read back', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $break );
+		}
+
+		$this->assertSame( 'publish', get_post( $landed_id )->post_status );
+		$this->assertSame( '/two', get_post( $landed_id )->post_title );
+	}
+
+	/**
+	 * A user's edit that leaves the planned values in place is still the user's, not ours.
+	 *
+	 * The row is to be disabled as a duplicate; a user disables it first. Row
+	 * by row, the write would find it edited and skip it, marking nothing.
+	 *
+	 * @return void
+	 */
+	public function test_edit_matching_the_plan_is_skipped_not_counted_as_written() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/match', 'https://example.com/one' );
+		$edited_id = $this->create_legacy_redirect( '/match/', 'https://example.com/two' );
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'publish' ), array( 'ID' => $edited_id ) );
+
+		$raced = false;
+		$race  = static function ( string $query ) use ( &$raced, $wpdb, $edited_id ): string {
+			if ( ! $raced && str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' ) ) {
+				$raced = true;
+				$wpdb->update(
+					$wpdb->posts,
+					array(
+						'post_status'       => 'draft',
+						'post_modified_gmt' => '2099-01-01 00:00:00',
+					),
+					array( 'ID' => $edited_id )
+				);
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $race );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $race );
+
+		$this->assertTrue( $raced );
+		$this->assertSame( 1, $result['skipped'] );
+		$this->assertSame( array(), $result['conflicts'] );
+		$this->assertSame( array(), $this->upgrader->duplicates() );
+	}
+
+	/**
+	 * Create one of every shape the migration handles, in an order that exercises its interactions.
+	 *
+	 * @return int[] The created IDs, in creation order.
+	 */
+	private function create_mixed_legacy_set(): array {
+		global $wpdb;
+
+		$ids = array();
+		foreach (
+			array(
+				array( '/plain', 'https://example.com/new' ),
+				array( '/slash/', 'https://example.com/new' ),
+				array( '/caf%C3%A9-e', 'https://example.com/new' ),
+				array( '/café-raw/', 'https://example.com/new' ),
+				array( '/dupe', 'https://example.com/same' ),
+				array( '/dupe/', 'https://example.com/same' ),
+				array( '/clash', 'https://example.com/one' ),
+				array( '/clash/', 'https://example.com/two' ),
+				array( '/converge/', 'https://example.com/one' ),
+				array( '/converge//', 'https://example.com/two' ),
+				array( '/caf%C3%A9-x', 'https://example.com/one' ),
+				array( '/café-x/', 'https://example.com/two' ),
+				array( '/internal', home_url( '/target' ) ),
+				array( '/relative', '/caf%C3%A9' ),
+				array( '//?q=1', 'https://example.com/same-two' ),
+				array( '/?q=1', 'https://example.com/same-two' ),
+				array( '/plus+sign/', 'https://example.com/new' ),
+				array( '/sp%20ace', 'https://example.com/new' ),
+				// A live row whose destination is internal and pending its
+				// rewrite, and a row colliding with it: the report names it.
+				array( '/label', home_url( '/label-target' ) ),
+				array( '/label/', 'https://example.com/elsewhere' ),
+			) as list( $source, $destination )
+		) {
+			$ids[] = $this->create_legacy_redirect( $source, $destination );
+		}
+
+		// Stored by a web request under kses: the key is of the '&' text.
+		$ids[] = $this->create_legacy_redirect( '/k/?a=1&b=2' );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => '/k/?a=1&amp;b=2' ), array( 'ID' => end( $ids ) ) );
+
+		// A trashed row and an auto-draft each re-keyed onto a source, then a
+		// live row converging on each: lookups ignore both statuses.
+		foreach ( array( 'trash', 'auto-draft' ) as $status ) {
+			$ids[] = $this->create_legacy_redirect( "/{$status}-first/", 'https://example.com/one' );
+			$wpdb->update( $wpdb->posts, array( 'post_status' => $status ), array( 'ID' => end( $ids ) ) );
+			$ids[] = $this->create_legacy_redirect( "/{$status}-first//", 'https://example.com/two' );
+		}
+
+		// Two rows already sharing one key, a year apart, and a third
+		// converging on it: it must collide with the newer.
+		foreach ( array( '2019-06-01 12:00:00', '2020-06-01 12:00:00' ) as $date ) {
+			$ids[] = $this->create_legacy_redirect( '/twin', 'https://example.com/twin-' . substr( $date, 0, 4 ) );
+			$wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_date'     => $date,
+					'post_date_gmt' => $date,
+				),
+				array( 'ID' => end( $ids ) )
+			);
+		}
+		$ids[] = $this->create_legacy_redirect( '/twin/', 'https://example.com/twin-other' );
+
+		// Already in the trash, already published, and edited since the upgrade began.
+		$ids[] = $this->create_legacy_redirect( '/in-trash/' );
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'trash' ), array( 'ID' => end( $ids ) ) );
+		$ids[] = $this->create_legacy_redirect( '/already' );
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'publish' ), array( 'ID' => end( $ids ) ) );
+
+		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2000-01-01 00:00:00' );
+		$ids[] = $this->create_legacy_redirect( '/edited/' );
+		wp_update_post(
+			array(
+				'ID'          => end( $ids ),
+				'post_status' => 'draft',
+			)
+		);
+
+		wp_cache_flush();
+
+		return $ids;
+	}
+
+	/**
+	 * Each row's migrated state, with duplicate markers given as positions in the set.
+	 *
+	 * @param int[] $ids The set's IDs, in creation order.
+	 * @return array<int, array<int, mixed>> One entry per row.
+	 */
+	private function snapshot( array $ids ): array {
+		global $wpdb;
+
+		$position = array_flip( $ids );
+
+		return array_map(
+			static function ( int $id ) use ( $wpdb, $position ): array {
+				$row = $wpdb->get_row( $wpdb->prepare( "SELECT post_title, post_name, post_status, post_excerpt, post_date, post_modified_gmt FROM {$wpdb->posts} WHERE ID = %d", $id ), ARRAY_A );
+				$of  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $id, Upgrader::DUPLICATE_META_KEY ) );
+
+				return array(
+					$row['post_title'],
+					$row['post_name'],
+					$row['post_status'],
+					$row['post_excerpt'],
+					$of > 0 ? $position[ $of ] : null,
+					null !== $wpdb->get_var( $wpdb->prepare( "SELECT meta_id FROM {$wpdb->postmeta} WHERE post_id = %d AND meta_key = %s", $id, Upgrader::NEVER_FIRED_META_KEY ) ),
+				);
+			},
+			$ids
+		);
+	}
+
+	/**
+	 * Report lines with each redirect ID replaced by its position in the set.
+	 *
+	 * @param string[] $lines The report lines.
+	 * @param int[]    $ids   The set's IDs, in creation order.
+	 * @return string[] The lines, comparable across two copies of the set.
+	 */
+	private static function by_position( array $lines, array $ids ): array {
+		$position = array_flip( $ids );
+
+		return array_map(
+			static fn( string $line ): string => (string) preg_replace_callback( '/#(\d+)/', static fn( array $m ): string => '#' . $position[ (int) $m[1] ], $line ),
+			$lines
+		);
+	}
+
+	/**
+	 * Remove every redirect, whatever its status, and every trace of an upgrade.
+	 *
+	 * @return void
+	 */
+	private function forget_every_redirect(): void {
+		global $wpdb;
+
+		$wpdb->query( $wpdb->prepare( "DELETE m FROM {$wpdb->postmeta} m JOIN {$wpdb->posts} p ON p.ID = m.post_id WHERE p.post_type = %s", PostType::POST_TYPE ) );
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->posts} WHERE post_type = %s", PostType::POST_TYPE ) );
+		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'wpcom\\_legacy\\_redirector\\_%'" );
+		wp_cache_flush();
+	}
 }

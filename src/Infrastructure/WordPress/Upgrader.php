@@ -208,16 +208,50 @@ final class Upgrader {
 	private array $failed_ids = array();
 
 	/**
-	 * Which redirect owns each source hash the batch being processed may re-key onto.
+	 * Every redirect holding each source hash the batch being processed may re-key onto.
 	 *
-	 * Keyed hash => post ID, or 0 where no redirect owns it. Filled by one
-	 * query per batch in prime_owners() and kept current as the batch writes,
-	 * in place of a lookup query per re-keyed row. A hash missing from it is
-	 * looked up with find_post_by_hash().
+	 * Keyed hash => (post ID => sort key), an empty list where none does.
+	 * Filled by one query per batch in prime_owners() and kept current by
+	 * move_owner() as rows move, in place of a lookup query per re-keyed row.
+	 * It holds every holder, not only the one a lookup would return, so it
+	 * stays exact when a holder moves away - which is what lets a whole batch
+	 * be planned before any of it is written. A hash missing from it is
+	 * looked up with find_post_by_hash(); see owner_of().
 	 *
-	 * @var array<string, int>
+	 * @var array<string, array<int, string>>
 	 */
 	private array $owners = array();
+
+	/**
+	 * Writes planned but not yet made, by position in the batch; see flush_writes().
+	 *
+	 * @var array<int, array{post: WP_Post, update: array<string, string>}>
+	 */
+	private array $pending_writes = array();
+
+	/**
+	 * Source hashes the pending writes move a redirect onto or off, as keys.
+	 *
+	 * A row whose plan would look one of these up waits until the pending
+	 * writes are made, so it is planned against what they really did.
+	 *
+	 * @var array<string, true>
+	 */
+	private array $touched = array();
+
+	/**
+	 * Each written column's limit, or false where a bulk write cannot be trusted with it; see fits_in_bulk().
+	 *
+	 * @var array<string, array{type: string, length: int, charset: string}|false>
+	 */
+	private array $column_limits = array();
+
+	/**
+	 * Statuses a lookup ignores, as WP_Query's 'any' does; see prime_owners().
+	 *
+	 * @var string[]
+	 */
+	private array $ignored_statuses = array( 'trash', 'auto-draft' );
 
 	/**
 	 * IDs written in the batch being processed, whose stale audit flags go at its end.
@@ -439,11 +473,153 @@ final class Upgrader {
 	 * @param array<string, mixed> $result    Running totals, updated by reference.
 	 * @return void
 	 *
-	 * @throws RuntimeException When the database refuses the bulk write.
+	 * @throws RuntimeException When the database refuses a bulk write or the read behind it.
 	 */
 	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
-		$this->prime_owners( $posts, $home_path );
+		// Without a complete map of who holds each key, rows can only be
+		// planned against writes that have already been made.
+		if ( ! $this->prime_owners( $posts, $home_path ) ) {
+			$this->process_row_by_row( $posts, $started, $home_path, $publish, $result );
+			return;
+		}
 
+		$this->process_in_bulk( $posts, $started, $home_path, $publish, $result );
+	}
+
+	/**
+	 * Apply every pass to a batch, writing its changes together wherever that changes nothing.
+	 *
+	 * Row by row, each write is made before the next row is planned, and a
+	 * later row can depend on it: two rows converging on one key collide, and
+	 * a row can take a key an earlier one has left. Here each planned write
+	 * is recorded in the key map by move_owner() and held back, and the held
+	 * writes are made together only when a row about to be planned would look
+	 * up a key they touch, and at the end of the batch. So every row is still
+	 * planned against the writes before it as they really landed - including
+	 * one skipped because a user edited its row meanwhile - and the outcome is
+	 * the one row-by-row writing gives, in far fewer statements.
+	 *
+	 * @param array<WP_Post|null>  $posts     The redirects.
+	 * @param string               $started   The GMT timestamp at which the walk began.
+	 * @param string               $home_path The home path to strip, or ''.
+	 * @param bool                 $publish   Whether draft redirects should be published.
+	 * @param array<string, mixed> $result    Running totals, updated by reference.
+	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses the bulk publish or a read.
+	 */
+	private function process_in_bulk( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
+		$rows                 = array();
+		$this->pending_writes = array();
+		$this->touched        = array();
+
+		foreach ( $posts as $post ) {
+			if ( ! $post instanceof WP_Post ) {
+				continue;
+			}
+
+			if ( $post->post_modified_gmt > $started ) {
+				$rows[] = array( 'skip', $post, null, null );
+				continue;
+			}
+
+			// plan() looks up exactly this key, so if a held write moves a
+			// redirect onto or off it, make the held writes first.
+			$target = $this->canonical_source( self::hashed_source( $post ), $home_path );
+			if ( null !== $target && isset( $this->touched[ md5( $target ) ] ) ) {
+				$this->flush_writes( $rows );
+			}
+
+			$plan   = $this->plan( $post, $home_path, $publish );
+			$update = $plan['update'];
+
+			if ( array() === $update ) {
+				$rows[] = array( 'unchanged', $post, $plan, null );
+				continue;
+			}
+
+			if ( array( 'post_status' => 'publish' ) === $update ) {
+				$rows[] = array( 'publish', $post, $plan, null );
+				continue;
+			}
+
+			$position = count( $rows );
+			$rows[]   = array( 'write', $post, $plan, null );
+
+			if ( ! $this->fits_in_bulk( $update ) ) {
+				// The database would refuse it, and it must be refused
+				// against its own row, so it goes alone - after the held
+				// writes, to keep their order.
+				$this->flush_writes( $rows );
+				$rows[ $position ][3] = $this->write_alone( $post, $update );
+				continue;
+			}
+
+			$this->pending_writes[ $position ] = array(
+				'post'   => $post,
+				'update' => $update,
+			);
+			$this->move_owner( $post, $update );
+
+			if ( $this->changes_holders( $post, $update ) ) {
+				$this->touched[ $post->post_name ]                         = true;
+				$this->touched[ $update['post_name'] ?? $post->post_name ] = true;
+			}
+		}
+
+		$this->flush_writes( $rows );
+
+		foreach ( $rows as list( $kind, $post, $plan, $outcome ) ) {
+			++$result['processed'];
+
+			if ( 'skip' === $kind || 'skipped' === $outcome ) {
+				++$result['skipped'];
+				continue;
+			}
+
+			if ( is_string( $outcome ) && str_starts_with( $outcome, 'failed:' ) ) {
+				$result['failed'][] = sprintf( '#%d (%s): %s', $post->ID, $post->post_title, substr( $outcome, 7 ) );
+				$this->failed_ids[] = $post->ID;
+				continue;
+			}
+
+			if ( 'unchanged' === $kind ) {
+				++$result['unchanged'];
+			} elseif ( 'publish' === $kind ) {
+				$this->publish_queue[ $post->ID ] = $post->post_name;
+			} else {
+				self::tally( $plan['update'], $result );
+			}
+
+			$this->mark_duplicate( $post->ID, $plan, $result );
+
+			if ( null !== $plan['conflict'] ) {
+				$result['conflicts'][] = $plan['conflict'];
+			}
+		}
+
+		self::drop_audit_flags( $this->unflagged );
+		$this->unflagged = array();
+
+		$this->flush_publish_queue( $started, $result );
+	}
+
+	/**
+	 * Apply every pass one redirect at a time, writing each change as it is planned.
+	 *
+	 * For a batch whose key map could not be read, so each row's collision
+	 * check has to look in the database, after the writes before it are made.
+	 *
+	 * @param array<WP_Post|null>  $posts     The redirects.
+	 * @param string               $started   The GMT timestamp at which the walk began.
+	 * @param string               $home_path The home path to strip, or ''.
+	 * @param bool                 $publish   Whether draft redirects should be published.
+	 * @param array<string, mixed> $result    Running totals, updated by reference.
+	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses the bulk publish.
+	 */
+	private function process_row_by_row( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
 		foreach ( $posts as $post ) {
 			if ( ! $post instanceof WP_Post ) {
 				continue;
@@ -562,6 +738,8 @@ final class Upgrader {
 	 *
 	 * @param callable(int): void|null $progress Called after each batch with the number of redirects checked so far.
 	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int}
+	 *
+	 * @throws RuntimeException When the database refuses a read.
 	 */
 	public function count_pending( ?callable $progress = null ): array {
 		$started   = $this->started_at( false );
@@ -570,6 +748,7 @@ final class Upgrader {
 		$home_path = $publish ? $this->home_path() : '';
 		$after_id  = 0;
 		$claimed   = array();
+		$left      = str_repeat( "\0", intdiv( $ceiling, 8 ) + 1 );
 
 		$pending = array(
 			'total'      => 0,
@@ -586,7 +765,20 @@ final class Upgrader {
 
 		do {
 			$posts = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
-			$this->prime_owners( $posts, $home_path );
+			if ( ! $this->prime_owners( $posts, $home_path ) ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+				throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+			}
+
+			// The database still shows rows an earlier batch would have moved
+			// at the keys they would have left.
+			foreach ( $this->owners as $hash => $holders ) {
+				foreach ( array_keys( $holders ) as $id ) {
+					if ( self::has_left( $left, $id ) ) {
+						unset( $this->owners[ $hash ][ $id ] );
+					}
+				}
+			}
 
 			foreach ( $posts as $post ) {
 				if ( ! $post instanceof WP_Post ) {
@@ -603,13 +795,7 @@ final class Upgrader {
 
 				$plan = $this->plan( $post, $home_path, $publish, $claimed );
 
-				// The run writes each re-key before checking the next row, so
-				// two rows re-keyed onto one source collide there. The dry run
-				// writes nothing, so it remembers the keys instead - by row ID
-				// alone, as a large set can re-key hundreds of thousands.
-				if ( isset( $plan['update']['post_name'] ) ) {
-					$claimed[ $plan['update']['post_name'] ] = $post->ID;
-				}
+				$this->predict_move( $post, $plan['update'], $claimed, $left );
 
 				if ( array() === $plan['update'] ) {
 					++$pending['unchanged'];
@@ -631,6 +817,52 @@ final class Upgrader {
 		} while ( self::BATCH_SIZE === $fetched );
 
 		return $pending;
+	}
+
+	/**
+	 * Record, for a dry run, a change the run would make to who holds a key.
+	 *
+	 * The run writes each change before later rows are planned against it;
+	 * the dry run writes nothing, so it keeps them in memory instead. Within a
+	 * batch the key map tracks them, as in the run. Across batches, the key a
+	 * row comes to hold is remembered by row ID, and a row leaving the key the
+	 * database shows it on is marked in a bitmap of row IDs - an eighth of a
+	 * byte per row, however large the set.
+	 *
+	 * @param WP_Post               $post    The redirect as read.
+	 * @param array<string, string> $update  The fields the run would change.
+	 * @param array<string, int>    $claimed Keys held since earlier batches, updated by reference.
+	 * @param string                $left    Bitmap of rows no longer on their stored key, updated by reference.
+	 * @return void
+	 */
+	private function predict_move( WP_Post $post, array $update, array &$claimed, string &$left ): void {
+		if ( ! $this->changes_holders( $post, $update ) ) {
+			return;
+		}
+
+		$this->move_owner( $post, $update );
+
+		if ( ! in_array( $update['post_status'] ?? $post->post_status, $this->ignored_statuses, true ) ) {
+			$claimed[ $update['post_name'] ?? $post->post_name ] = $post->ID;
+		}
+
+		if ( ! in_array( $post->post_status, $this->ignored_statuses, true ) ) {
+			$byte          = intdiv( $post->ID, 8 );
+			$left[ $byte ] = chr( ord( $left[ $byte ] ) | ( 1 << ( $post->ID % 8 ) ) );
+		}
+	}
+
+	/**
+	 * Whether a dry run has marked a row as no longer on its stored key; see predict_move().
+	 *
+	 * @param string $left The bitmap of row IDs.
+	 * @param int    $id   The row ID.
+	 * @return bool True when the row has left its stored key.
+	 */
+	private static function has_left( string $left, int $id ): bool {
+		$byte = intdiv( $id, 8 );
+
+		return $byte < strlen( $left ) && 0 !== ( ord( $left[ $byte ] ) & ( 1 << ( $id % 8 ) ) );
 	}
 
 	/**
@@ -773,9 +1005,9 @@ final class Upgrader {
 	 *
 	 * @param array<WP_Post|null> $posts     The batch.
 	 * @param string              $home_path The home path to strip, or ''.
-	 * @return void
+	 * @return bool False when the read failed, so the map is empty.
 	 */
-	private function prime_owners( array $posts, string $home_path ): void {
+	private function prime_owners( array $posts, string $home_path ): bool {
 		global $wpdb;
 
 		$this->owners = array();
@@ -783,33 +1015,124 @@ final class Upgrader {
 		foreach ( $posts as $post ) {
 			$new_path = $post instanceof WP_Post ? $this->canonical_source( self::hashed_source( $post ), $home_path ) : null;
 			if ( null !== $new_path ) {
-				$this->owners[ md5( $new_path ) ] = 0;
+				$this->owners[ md5( $new_path ) ] = array();
 			}
 		}
 
 		if ( array() === $this->owners ) {
-			return;
+			return true;
 		}
 
-		$hashes   = array_keys( $this->owners );
-		$excluded = array_values( get_post_stati( array( 'exclude_from_search' => true ) ) );
+		$hashes                 = array_keys( $this->owners );
+		$excluded               = array_values( get_post_stati( array( 'exclude_from_search' => true ) ) );
+		$this->ignored_statuses = $excluded;
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- One read per batch in place of one per row; the interpolated fragments are only %s placeholders. Prepared just above.
 		$sql = $wpdb->prepare(
-			"SELECT ID, post_name FROM {$wpdb->posts} WHERE post_type = %s AND post_status NOT IN (" . implode( ',', array_fill( 0, count( $excluded ), '%s' ) ) . ') AND post_name IN (' . implode( ',', array_fill( 0, count( $hashes ), '%s' ) ) . ') ORDER BY post_date ASC, ID ASC',
+			"SELECT ID, post_name, post_date FROM {$wpdb->posts} WHERE post_type = %s AND post_status NOT IN (" . implode( ',', array_fill( 0, count( $excluded ), '%s' ) ) . ') AND post_name IN (' . implode( ',', array_fill( 0, count( $hashes ), '%s' ) ) . ')',
 			array_merge( array( PostType::POST_TYPE ), $excluded, $hashes )
 		);
 
 		if ( false === $wpdb->query( $sql ) ) {
 			$this->owners = array();
-			return;
+			return false;
 		}
 		// phpcs:enable
 
-		// Ascending, so the newest row sharing a hash is the one left standing.
 		foreach ( $wpdb->last_result as $row ) {
-			$this->owners[ $row->post_name ] = (int) $row->ID;
+			$this->owners[ $row->post_name ][ (int) $row->ID ] = self::holder_rank( (string) $row->post_date, (int) $row->ID );
 		}
+
+		return true;
+	}
+
+	/**
+	 * The redirect a lookup of a hash would find, as far as the key map knows.
+	 *
+	 * The newest holder, as find_post_by_hash() orders them, with the ID
+	 * settling a tie.
+	 *
+	 * @param string $hash The source hash.
+	 * @return int|null The holder's ID, 0 when the hash is free, or null when the map does not track it.
+	 */
+	private function owner_of( string $hash ): ?int {
+		if ( ! isset( $this->owners[ $hash ] ) ) {
+			return null;
+		}
+
+		if ( array() === $this->owners[ $hash ] ) {
+			return 0;
+		}
+
+		return (int) array_search( max( $this->owners[ $hash ] ), $this->owners[ $hash ], true );
+	}
+
+	/**
+	 * Record in the key map a redirect's planned or written move.
+	 *
+	 * A row leaves the key it holds, unless a lookup already ignored it there,
+	 * and holds its final key, new or old, unless its final status is one a
+	 * lookup ignores, such as the trash. Only tracked keys change: an
+	 * untracked one is looked up in the database instead.
+	 *
+	 * @param WP_Post               $post   The redirect as it was read.
+	 * @param array<string, string> $update The fields changing.
+	 * @return void
+	 */
+	private function move_owner( WP_Post $post, array $update ): void {
+		if ( ! in_array( $post->post_status, $this->ignored_statuses, true ) ) {
+			unset( $this->owners[ $post->post_name ][ $post->ID ] );
+		}
+
+		$key = $update['post_name'] ?? $post->post_name;
+		if ( isset( $this->owners[ $key ] ) && ! in_array( $update['post_status'] ?? $post->post_status, $this->ignored_statuses, true ) ) {
+			$this->owners[ $key ][ $post->ID ] = self::holder_rank( $post->post_date, $post->ID );
+		}
+	}
+
+	/**
+	 * Undo move_owner() for a write that did not land after all.
+	 *
+	 * @param WP_Post               $post   The redirect as it was read.
+	 * @param array<string, string> $update The fields that were to change.
+	 * @return void
+	 */
+	private function unmove_owner( WP_Post $post, array $update ): void {
+		if ( ! in_array( $update['post_status'] ?? $post->post_status, $this->ignored_statuses, true ) ) {
+			unset( $this->owners[ $update['post_name'] ?? $post->post_name ][ $post->ID ] );
+		}
+
+		if ( isset( $this->owners[ $post->post_name ] ) && ! in_array( $post->post_status, $this->ignored_statuses, true ) ) {
+			$this->owners[ $post->post_name ][ $post->ID ] = self::holder_rank( $post->post_date, $post->ID );
+		}
+	}
+
+	/**
+	 * Whether a write changes which redirects hold a key, as a lookup sees them.
+	 *
+	 * It does when the row moves, or passes between a status lookups ignore
+	 * and one they see. Nothing else a write changes - a destination, or a
+	 * status between two that lookups see - can alter another row's plan, as
+	 * plan() compares destinations normalized.
+	 *
+	 * @param WP_Post               $post   The redirect as it was read.
+	 * @param array<string, string> $update The fields changing.
+	 * @return bool True when the key map changes.
+	 */
+	private function changes_holders( WP_Post $post, array $update ): bool {
+		return isset( $update['post_name'] )
+			|| in_array( $post->post_status, $this->ignored_statuses, true ) !== in_array( $update['post_status'] ?? $post->post_status, $this->ignored_statuses, true );
+	}
+
+	/**
+	 * A sort key ordering a hash's holders as find_post_by_hash() would.
+	 *
+	 * @param string $post_date The holder's post date.
+	 * @param int    $id        The holder's ID.
+	 * @return string A string that sorts newest last.
+	 */
+	private static function holder_rank( string $post_date, int $id ): string {
+		return $post_date . ' ' . str_pad( (string) $id, 20, '0', STR_PAD_LEFT );
 	}
 
 	/**
@@ -983,7 +1306,7 @@ final class Upgrader {
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
-			$owner    = $claimed[ $new_hash ] ?? $this->owners[ $new_hash ] ?? null;
+			$owner    = $claimed[ $new_hash ] ?? $this->owner_of( $new_hash );
 			$existing = null === $owner ? $this->find_post_by_hash( $new_hash ) : ( 0 === $owner ? null : get_post( $owner ) );
 			$collided = null !== $existing && $existing->ID !== $post->ID;
 
@@ -1018,10 +1341,10 @@ final class Upgrader {
 					$conflict    = sprintf(
 						'%s → %s (#%d) has the same source as %s → %s (#%d)',
 						$post->post_title,
-						self::destination_label( $post ),
+						$this->destination_label( $post ),
 						$post->ID,
 						$new_path,
-						self::destination_label( $existing ),
+						$this->destination_label( $existing ),
 						$existing->ID
 					);
 					if ( $never_fired ) {
@@ -1083,6 +1406,248 @@ final class Upgrader {
 			return $written;
 		}
 
+		$this->move_owner( $post, $update );
+		$this->after_write( $post, $update );
+
+		return $written;
+	}
+
+	/**
+	 * Make the held writes, all in one statement, and settle each row's outcome.
+	 *
+	 * Each row keeps write()'s condition - its modified date as read - so a
+	 * row a user edited mid-batch is left alone. When every row lands, that is
+	 * the end of it. When some do not - an edit, or a refusal of the whole
+	 * statement - the rows are read back to see which landed, with no reliance
+	 * on a transaction, which not every host's database routing honors. A row
+	 * edited since it was read is skipped, and taken back out of the key map
+	 * so later rows are planned against where it really is. Any other row that
+	 * did not land is written alone with write(), so a refusal is reported
+	 * against the row it belongs to.
+	 *
+	 * @param array<int, array{0: string, 1: WP_Post, 2: array<string, mixed>|null, 3: string|null}> $rows The batch so far; each held row's outcome is set.
+	 * @return void
+	 *
+	 * @throws RuntimeException When the rows cannot be read back.
+	 */
+	private function flush_writes( array &$rows ): void {
+		$writes               = $this->pending_writes;
+		$this->pending_writes = array();
+		$this->touched        = array();
+
+		if ( array() === $writes ) {
+			return;
+		}
+
+		if ( count( $writes ) === $this->write_all( $writes ) ) {
+			foreach ( $writes as $position => $write ) {
+				$this->after_write( $write['post'], $write['update'] );
+				$rows[ $position ][3] = 'written';
+			}
+			return;
+		}
+
+		try {
+			$now = $this->read_back( array_map( static fn( array $write ): int => $write['post']->ID, $writes ) );
+		} catch ( RuntimeException $e ) {
+			// Some of these may have landed, and the batch is about to stop
+			// before recording which. A rerun will find them already done, so
+			// their cached copies must go now or never.
+			foreach ( $writes as $write ) {
+				$this->after_write( $write['post'], $write['update'] );
+			}
+			throw $e;
+		}
+
+		foreach ( $writes as $position => $write ) {
+			$post   = $write['post'];
+			$update = $write['update'];
+			$row    = $now[ $post->ID ] ?? null;
+
+			// Ours only if the modified date is still as read: a user's edit can
+			// leave the planned values in place, and then it, not we, wrote them.
+			if ( null !== $row && $row->post_modified_gmt === $post->post_modified_gmt && self::holds( $row, $update ) ) {
+				$this->after_write( $post, $update );
+				$rows[ $position ][3] = 'written';
+				continue;
+			}
+
+			$this->unmove_owner( $post, $update );
+
+			$rows[ $position ][3] = null === $row || $row->post_modified_gmt !== $post->post_modified_gmt
+				? 'skipped'
+				: $this->write_alone( $post, $update );
+		}
+	}
+
+	/**
+	 * Write one redirect's changes with write(), as an outcome for the batch.
+	 *
+	 * @param WP_Post               $post   The redirect as it was read.
+	 * @param array<string, string> $update The fields to change.
+	 * @return string 'written-alone', 'skipped', or 'failed:' and the reason.
+	 */
+	private function write_alone( WP_Post $post, array $update ): string {
+		$written = $this->write( $post, $update );
+
+		if ( false === $written ) {
+			return 'failed:' . self::write_error();
+		}
+
+		return 0 === $written ? 'skipped' : 'written-alone';
+	}
+
+	/**
+	 * Write held changes in one UPDATE, each row guarded by its modified date as read.
+	 *
+	 * One CASE per changing column, so each row gets only its own planned
+	 * fields and every other row keeps what it has. The column names come
+	 * from plan(), never from the data.
+	 *
+	 * @param array<int, array{post: WP_Post, update: array<string, string>}> $writes The held writes.
+	 * @return int|false How many rows changed, or false when the database refused the statement.
+	 */
+	private function write_all( array $writes ): int|false {
+		global $wpdb;
+
+		$ids     = array();
+		$columns = array();
+		$guard   = array();
+		foreach ( $writes as $write ) {
+			$id      = $write['post']->ID;
+			$ids[]   = $id;
+			$guard[] = $id;
+			$guard[] = $write['post']->post_modified_gmt;
+			foreach ( $write['update'] as $column => $value ) {
+				$columns[ $column ][] = $id;
+				$columns[ $column ][] = $value;
+			}
+		}
+
+		$sets = array();
+		$args = array();
+		foreach ( $columns as $column => $pairs ) {
+			$sets[] = "`{$column}` = CASE ID" . str_repeat( ' WHEN %d THEN %s', count( $pairs ) / 2 ) . " ELSE `{$column}` END";
+			$args   = array_merge( $args, $pairs );
+		}
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Every value is a placeholder; the interpolated parts are column names from plan() and placeholder lists. Deliberately bypasses wp_update_post(); see write(). Caches are cleaned in after_write().
+		$written = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE `{$wpdb->posts}` SET " . implode( ', ', $sets )
+					. ' WHERE ID IN (' . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')'
+					. ' AND post_modified_gmt = CASE ID' . str_repeat( ' WHEN %d THEN %s', count( $ids ) ) . ' END',
+				array_merge( $args, $ids, $guard )
+			)
+		);
+		// phpcs:enable
+
+		return false === $written ? false : (int) $written;
+	}
+
+	/**
+	 * Read back the fields the migration writes, for the given redirects.
+	 *
+	 * @param int[] $ids The redirect post IDs.
+	 * @return array<int, object> The rows that still exist, by ID.
+	 *
+	 * @throws RuntimeException When the database refuses the read.
+	 */
+	private function read_back( array $ids ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Must see the table as it is now; the interpolated fragment is only %d placeholders.
+		if ( false === $wpdb->query( $wpdb->prepare( "SELECT ID, post_title, post_name, post_status, post_excerpt, post_modified_gmt FROM {$wpdb->posts} WHERE ID IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')', $ids ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read back a batch of redirects: ' . self::write_error() );
+		}
+
+		$rows = array();
+		foreach ( $wpdb->last_result as $row ) {
+			$rows[ (int) $row->ID ] = $row;
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Whether a row as read back holds every value a write planned for it.
+	 *
+	 * @param object                $row    The row as read back.
+	 * @param array<string, string> $update The planned fields.
+	 * @return bool True when the write landed.
+	 */
+	private static function holds( object $row, array $update ): bool {
+		foreach ( $update as $column => $value ) {
+			if ( (string) $row->$column !== $value ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether a planned write can go in a bulk statement.
+	 *
+	 * $wpdb->update() refuses a value too long for its column, or not valid in
+	 * the column's character set, where one multi-row statement could store it
+	 * cut short or mangled instead. So a value goes in a bulk statement only
+	 * when it passes the same checks here: it fits, and it is valid UTF-8 for
+	 * a UTF-8 column, with no four-byte characters where the column cannot
+	 * hold them. Anything else, including a column in another character set,
+	 * is written alone, so it is refused and reported exactly as before.
+	 *
+	 * @param array<string, string> $update The planned fields.
+	 * @return bool True when the bulk statement stores it exactly as write() would.
+	 */
+	private function fits_in_bulk( array $update ): bool {
+		global $wpdb;
+
+		foreach ( $update as $column => $value ) {
+			if ( ! array_key_exists( $column, $this->column_limits ) ) {
+				$length  = $wpdb->get_col_length( $wpdb->posts, $column );
+				$charset = $wpdb->get_col_charset( $wpdb->posts, $column );
+
+				$this->column_limits[ $column ] = is_array( $length ) && in_array( $charset, array( 'utf8mb4', 'utf8', 'utf8mb3' ), true )
+					? array(
+						'type'    => $length['type'],
+						'length'  => $length['length'],
+						'charset' => $charset,
+					)
+					: false;
+			}
+
+			$limit = $this->column_limits[ $column ];
+			if ( false === $limit ) {
+				return false;
+			}
+
+			if ( 1 !== preg_match( '//u', $value ) ) {
+				return false;
+			}
+
+			if ( 'utf8mb4' !== $limit['charset'] && 1 === preg_match( '/[\x{10000}-\x{10FFFF}]/u', $value ) ) {
+				return false;
+			}
+
+			$size = 'byte' === $limit['type'] ? strlen( $value ) : mb_strlen( $value, 'UTF-8' );
+			if ( $size > $limit['length'] ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Clean up after a redirect's changes have been written.
+	 *
+	 * @param WP_Post               $post   The redirect as it was read.
+	 * @param array<string, string> $update The fields that changed.
+	 * @return void
+	 */
+	private function after_write( WP_Post $post, array $update ): void {
 		// The row itself, and core's cached post queries that could still list
 		// it under its old key or status.
 		wp_cache_delete( $post->ID, 'posts' );
@@ -1093,23 +1658,12 @@ final class Upgrader {
 		// the end of the batch, rather than two queries per row here.
 		$this->unflagged[] = $post->ID;
 
-		// The row no longer answers for a key it moved off, or holds from the
-		// trash; forgetting it sends a later check to the database.
-		if ( ( $this->owners[ $post->post_name ] ?? null ) === $post->ID ) {
-			unset( $this->owners[ $post->post_name ] );
-		}
-		if ( isset( $update['post_name'] ) ) {
-			$this->owners[ $update['post_name'] ] = $post->ID;
-		}
-
 		// The lookup cache stores 0 for "no redirect here", so a path that was
 		// requested while the redirect was still a draft is cached as missing.
 		$this->invalidate( $post->post_name );
 		if ( isset( $update['post_name'] ) ) {
 			$this->invalidate( $update['post_name'] );
 		}
-
-		return $written;
 	}
 
 	/**
@@ -1207,11 +1761,14 @@ final class Upgrader {
 	/**
 	 * Where a redirect sends visitors, for a duplicate-source report.
 	 *
+	 * In its canonical form, which it has once this walk has written it, so
+	 * the report reads the same however far the walk has got.
+	 *
 	 * @param WP_Post $post The redirect post.
 	 * @return string The destination URL, or the post it points at.
 	 */
-	private static function destination_label( WP_Post $post ): string {
-		return $post->post_parent > 0 ? 'post #' . $post->post_parent : $post->post_excerpt;
+	private function destination_label( WP_Post $post ): string {
+		return $post->post_parent > 0 ? 'post #' . $post->post_parent : ( $this->normalized_excerpt( $post->post_excerpt ) ?? $post->post_excerpt );
 	}
 
 	/**
