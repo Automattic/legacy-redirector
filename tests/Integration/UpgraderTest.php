@@ -1247,6 +1247,68 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A duplicate with a kses-escaped title keeps its key but gets back the text it was hashed from.
+	 *
+	 * Otherwise enabling it later would re-key it from the escaped title, to a
+	 * key nobody holds, past the guard against taking the live row's source.
+	 *
+	 * @return void
+	 */
+	public function test_duplicate_with_a_kses_escaped_title_gets_back_the_hashed_text() {
+		global $wpdb;
+
+		$live_id      = $this->create_legacy_redirect( '/a?x=1&y=2', 'https://example.com/one' );
+		$duplicate_id = $this->create_legacy_redirect( '/a/?x=1&y=2', 'https://example.com/two' );
+		foreach ( array( $live_id, $duplicate_id ) as $id ) {
+			$wpdb->update( $wpdb->posts, array( 'post_title' => str_replace( '&', '&amp;', get_post( $id )->post_title ) ), array( 'ID' => $id ) );
+			clean_post_cache( $id );
+		}
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'draft', get_post_status( $duplicate_id ) );
+		$this->assertSame( '/a/?x=1&y=2', get_post( $duplicate_id )->post_title );
+		$this->assertSame( md5( '/a/?x=1&y=2' ), get_post( $duplicate_id )->post_name );
+	}
+
+	/**
+	 * A trashed row's kses-escaped title is recognised through the key core gave it in the trash.
+	 *
+	 * @return void
+	 */
+	public function test_trashed_row_with_a_kses_escaped_title_gets_back_the_hashed_text() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/find?q=a&page=2' );
+		wp_trash_post( $post_id );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => '/find?q=a&amp;page=2' ), array( 'ID' => $post_id ) );
+		clean_post_cache( $post_id );
+		$this->assertSame( md5( '/find?q=a&page=2' ) . '__trashed', get_post( $post_id )->post_name );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/find?q=a&page=2', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * A walk over 2.0 data leaves '&amp;' in a destination alone.
+	 *
+	 * Only 1.x saved destinations through kses unchecked; a 2.0 one holding
+	 * '&amp;' was saved that way on purpose, and a later walk must not change
+	 * it.
+	 *
+	 * @return void
+	 */
+	public function test_later_walk_leaves_an_escaped_ampersand_in_a_destination() {
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+		$post_id = $this->create_legacy_redirect( '/deliberate', '/a?b=&amp;c' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/a?b=&amp;c', get_post( $post_id )->post_excerpt );
+	}
+
+	/**
 	 * A kses-escaped destination is un-escaped, relative or absolute.
 	 *
 	 * 1.x sent visitors to the escaped URL, whose query has a parameter named

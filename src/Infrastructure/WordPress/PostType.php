@@ -47,15 +47,18 @@ final class PostType {
 	 * the title, so the redirect would move to a key no request produces.
 	 * A destination would send visitors to the escaped URL.
 	 *
-	 * Only that change is undone. Where kses did anything else, such as
-	 * stripping a tag, its result stands.
+	 * Only that change is undone, and only in a value with no markup in it:
+	 * inside a tag, kses escapes an entity such as '&colon;' to disarm it,
+	 * which on some versions, 6.8 among them, is how it stops
+	 * 'javascript&colon;'. No source can hold markup, so wherever there is
+	 * any, or kses changed anything else, its result stands.
 	 *
 	 * @param array<string, mixed> $data                Slashed, sanitized post data.
 	 * @param array<string, mixed> $postarr             Slashed, sanitized post data as passed in.
-	 * @param array<string, mixed> $unsanitized_postarr Slashed post data as passed in, before sanitizing.
+	 * @param array<string, mixed> $unsanitized_postarr Slashed post data as passed in, before sanitizing; absent where a caller passes only two arguments.
 	 * @return array<string, mixed> The post data.
 	 */
-	public function undo_ampersand_escaping( array $data, array $postarr, array $unsanitized_postarr ): array {
+	public function undo_ampersand_escaping( array $data, array $postarr, array $unsanitized_postarr = array() ): array {
 		if ( self::POST_TYPE !== ( $data['post_type'] ?? '' ) ) {
 			return $data;
 		}
@@ -63,7 +66,7 @@ final class PostType {
 		foreach ( array( 'post_title', 'post_excerpt' ) as $field ) {
 			$given = $unsanitized_postarr[ $field ] ?? null;
 
-			if ( is_string( $given ) && is_string( $data[ $field ] ?? null )
+			if ( is_string( $given ) && is_string( $data[ $field ] ?? null ) && 1 !== preg_match( '/[<>]/', $given )
 				&& str_replace( '&amp;', '&', $data[ $field ] ) === str_replace( '&amp;', '&', $given )
 			) {
 				$data[ $field ] = $given;

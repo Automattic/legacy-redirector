@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
  * Integration tests for redirects saved by a user without unfiltered_html, as everyone is on VIP.
@@ -98,6 +99,25 @@ final class AmpersandEscapingTest extends TestCase {
 		$id = $this->create_redirect( '/markup', 'https://example.com/x?a=1&b=<script>alert(1)</script>' );
 
 		$this->assertStringNotContainsString( '<script', get_post( $id )->post_excerpt );
+	}
+
+	/**
+	 * Test kses's escaping of an entity inside a tag is never undone.
+	 *
+	 * Older kses disarms 'javascript&colon;' by writing its '&' as '&amp;',
+	 * the only change it makes, so without the guard on markup the escaping
+	 * would be undone. Called directly, because current kses strips the
+	 * attribute outright and a save cannot show the older behavior.
+	 */
+	public function test_escaping_inside_markup_stands(): void {
+		$given = '<a href="javascript&colon;alert(1)">x</a>';
+		$data  = array(
+			'post_type'  => PostType::POST_TYPE,
+			'post_title' => '<a href="javascript&amp;colon;alert(1)">x</a>',
+		);
+
+		$this->assertSame( $data, ( new PostType() )->undo_ampersand_escaping( $data, $data, array( 'post_title' => $given ) ) );
+		$this->assertSame( $data, ( new PostType() )->undo_ampersand_escaping( $data, $data ) );
 	}
 
 	/**

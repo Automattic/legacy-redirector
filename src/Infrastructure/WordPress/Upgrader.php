@@ -261,6 +261,13 @@ final class Upgrader {
 	private array $unflagged = array();
 
 	/**
+	 * Whether the walk under way repairs what 1.x left in stored destinations; see normalized_excerpt().
+	 *
+	 * @var bool
+	 */
+	private bool $from_1x = false;
+
+	/**
 	 * Whether this site still has upgrade work outstanding.
 	 *
 	 * @return bool True if the upgrade has not yet completed.
@@ -476,6 +483,8 @@ final class Upgrader {
 	 * @throws RuntimeException When the database refuses a bulk write or the read behind it.
 	 */
 	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
+		$this->from_1x = $publish;
+
 		// Without a complete map of who holds each key, rows can only be
 		// planned against writes that have already been made.
 		if ( ! $this->prime_owners( $posts, $home_path ) ) {
@@ -749,6 +758,8 @@ final class Upgrader {
 		$after_id  = 0;
 		$claimed   = array();
 		$left      = str_repeat( "\0", intdiv( $ceiling, 8 ) + 1 );
+
+		$this->from_1x = $publish;
 
 		$pending = array(
 			'total'      => 0,
@@ -1304,13 +1315,6 @@ final class Upgrader {
 		$hashed   = self::hashed_source( $post );
 		$new_path = $this->canonical_source( $hashed, $home_path );
 
-		// A kses-escaped title over a key that is already canonical keeps its
-		// key but gets back the text it was hashed from: every save rebuilds
-		// the key from the title, so the next one would move the row.
-		if ( null === $new_path && $hashed !== $post->post_title ) {
-			$update['post_title'] = $hashed;
-		}
-
 		if ( null !== $new_path ) {
 			$new_hash = md5( $new_path );
 
@@ -1360,6 +1364,14 @@ final class Upgrader {
 					}
 				}
 			}
+		}
+
+		// A kses-escaped title on a row keeping its key - already canonical, or
+		// disabled as a duplicate - gets back the text the key was hashed from:
+		// every save rebuilds the key from the title, so the next one would
+		// move the row.
+		if ( ! isset( $update['post_title'] ) && $hashed !== $post->post_title ) {
+			$update['post_title'] = $hashed;
 		}
 
 		// A row the collision branch has just trashed or drafted must not be
@@ -1683,14 +1695,18 @@ final class Upgrader {
 	 * Re-keying from such a title would move the row onto a key no request
 	 * produces, so the key decides which text it was.
 	 *
+	 * A row core trashed carries its key with a '__trashed' suffix.
+	 *
 	 * @param WP_Post $post The redirect post.
 	 * @return string The source text.
 	 */
 	private static function hashed_source( WP_Post $post ): string {
-		if ( md5( $post->post_title ) !== $post->post_name ) {
+		$key = str_ends_with( $post->post_name, '__trashed' ) ? substr( $post->post_name, 0, -9 ) : $post->post_name;
+
+		if ( md5( $post->post_title ) !== $key ) {
 			$unescaped = str_replace( '&amp;', '&', $post->post_title );
 
-			if ( md5( $unescaped ) === $post->post_name ) {
+			if ( md5( $unescaped ) === $key ) {
 				return $unescaped;
 			}
 		}
@@ -1821,16 +1837,18 @@ final class Upgrader {
 	/**
 	 * The relative form of an internal absolute destination, or null when no rewrite is due.
 	 *
-	 * A destination saved in a web request by a user without unfiltered_html
-	 * went through kses, which wrote each '&' as '&amp;', and 1.x then sent
-	 * visitors to the escaped URL. Version 7 un-escapes it first: no URL means
-	 * '&amp;', so it can only be kses's doing.
+	 * A destination 1.x saved in a web request by a user without
+	 * unfiltered_html went through kses, which wrote each '&' as '&amp;', and
+	 * 1.x then sent visitors to the escaped URL. On 1.x data it is un-escaped
+	 * first, like the publish pass, only then: 2.0 saves keep the '&', and a
+	 * deliberate '&amp;' - or one canonicalizing decoded from '%26amp%3B' - must
+	 * survive a later walk.
 	 *
 	 * @param string $excerpt The stored destination.
 	 * @return string|null The normalized destination, or null when already canonical.
 	 */
 	private function normalized_excerpt( string $excerpt ): ?string {
-		$unescaped = str_replace( '&amp;', '&', $excerpt );
+		$unescaped = $this->from_1x ? str_replace( '&amp;', '&', $excerpt ) : $excerpt;
 
 		if ( str_starts_with( $unescaped, 'http' ) ) {
 			$normalized = $this->normalizer->to_internal_path( $unescaped ) ?? $unescaped;

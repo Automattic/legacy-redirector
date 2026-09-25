@@ -71,7 +71,7 @@ One migration handles all four. It runs automatically in small batches on ordina
 
 The first two are corrections to the shape 1.x wrote, so they run **only** where the stored data predates 2.0. Once 2.0 has written data of its own, both readings become ambiguous: a `draft` then means "deliberately disabled" rather than "1.x never set a status", and a source beginning with your home path can be a deliberate double prefix (on a subsite at `/subsite1`, storing `/subsite1/x` is how you redirect the real URL `/subsite1/subsite1/x`). A later version bump re-walks every redirect, so leaving these two ungated would republish redirects you had disabled and rewrite sources you meant.
 
-The source and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
+The source and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted. The one exception is restoring the `&` in a destination saved as `&amp;`: only 1.x saved destinations through that filter unchecked, and a later `&amp;` may be deliberate, so it runs with the first two, on 1.x data only.
 
 ### Large redirect sets
 
