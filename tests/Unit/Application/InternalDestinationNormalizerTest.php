@@ -207,4 +207,15 @@ final class InternalDestinationNormalizerTest extends MonkeyStubs {
 
 		$this->assertNull( $this->normalizer->to_internal_path( 'https://google.com/x' ) );
 	}
+	/**
+	 * Test a scheme-relative destination is not made into a path on this site.
+	 *
+	 * 1.x stored '//other.example/x' as typed. Read as relative, it lost its
+	 * host and became '/x', silently pointing somewhere else.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer::canonicalize
+	 */
+	public function test_scheme_relative_destination_is_left_alone(): void {
+		$this->assertNull( $this->normalizer->canonicalize( '//other.example/x' ) );
+	}
 }

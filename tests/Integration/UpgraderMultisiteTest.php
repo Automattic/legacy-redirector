@@ -334,4 +334,134 @@ final class UpgraderMultisiteTest extends TestCase {
 			$this->upgrader->duplicates()
 		);
 	}
+	/**
+	 * A row can take a key another row in the same batch has just left.
+	 *
+	 * On a subsite, the 1.x '/sub/x' becomes '/x', and the 1.x '/sub/sub/x'
+	 * becomes '/sub/x' - the key the first row held when the batch began. A
+	 * batch planned before any of it is written must know that key is free.
+	 *
+	 * @return void
+	 */
+	public function test_row_takes_a_key_freed_earlier_in_the_batch() {
+		$first_id  = $this->create_legacy_redirect( '/x' );
+		$second_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( array(), $result['conflicts'] );
+		$this->assertSame( '/x', get_post( $first_id )->post_title );
+		$this->assertSame( '/' . $this->subsite . '/x', get_post( $second_id )->post_title );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $second_id )->post_name );
+		$this->assertSame( 'publish', get_post_status( $first_id ) );
+		$this->assertSame( 'publish', get_post_status( $second_id ) );
+
+		// The dry run, which writes nothing, must see the key freed too.
+		$this->assertSame( array(), $pending['conflicts'] );
+		$this->assertSame( 2, $pending['repathed'] );
+	}
+	/**
+	 * The dry run sees a key freed by a row in an earlier batch.
+	 *
+	 * The run has written that move by then; the dry run, which writes
+	 * nothing, has to remember it across batches.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_sees_a_key_freed_in_an_earlier_batch() {
+		$this->create_legacy_redirect( '/x' );
+		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+
+		$pending = $this->upgrader->count_pending();
+
+		$this->assertSame( array(), $pending['conflicts'] );
+		// Every row here is re-keyed off its subsite prefix, the fillers too.
+		$this->assertSame( Upgrader::BATCH_SIZE + 2, $pending['repathed'] );
+	}
+	/**
+	 * A key held by a row trashed as a duplicate is free for a later row.
+	 *
+	 * '/sub/y' re-keys onto '/y', which a redirect with the same destination
+	 * already holds, so it goes to the trash on its old key, '/sub/y'. A
+	 * lookup ignores the trash, so '/sub/sub/y' then takes '/sub/y'. The dry
+	 * run must agree, whether the two land in one batch or in two.
+	 *
+	 * @dataProvider data_rows_between
+	 *
+	 * @param int $between Rows between the trashed one and the one taking its key.
+	 * @return void
+	 */
+	public function test_key_of_a_trashed_duplicate_is_free_for_a_later_row( int $between ) {
+		$this->create_relative_redirect( '/y' );
+		$trashed_id = $this->create_legacy_redirect( '/y' );
+		for ( $i = 0; $i < $between; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$taker_id = $this->create_legacy_redirect( '/' . $this->subsite . '/y' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 1000 );
+
+		$this->assertSame( 'trash', get_post_status( $trashed_id ) );
+		$this->assertSame( 'publish', get_post_status( $taker_id ) );
+		$this->assertSame( '/' . $this->subsite . '/y', get_post( $taker_id )->post_title );
+		$this->assertSame( array(), $result['conflicts'] );
+
+		$keys = array( 'changed', 'unchanged', 'published', 'repathed', 'deduped' );
+		$this->assertSame( wp_array_slice_assoc( $result, $keys ), wp_array_slice_assoc( $pending, $keys ) );
+		$this->assertSame( array(), $pending['conflicts'] );
+	}
+
+	/**
+	 * Data provider: the pair in one dry-run batch, and in two.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public static function data_rows_between(): array {
+		return array(
+			'one batch'   => array( 0 ),
+			'two batches' => array( Upgrader::BATCH_SIZE ),
+		);
+	}
+
+	/**
+	 * An auto-draft drafted as a duplicate becomes a holder of its key.
+	 *
+	 * A lookup ignores an auto-draft but sees a draft, so once '/sub/x' is
+	 * drafted as a duplicate of '/x', '/sub/sub/x' collides with it on
+	 * '/sub/x', as it would row by row.
+	 *
+	 * @return void
+	 */
+	public function test_auto_draft_drafted_as_a_duplicate_holds_its_key() {
+		global $wpdb;
+
+		$this->create_relative_redirect( '/x' );
+		$drafted_id = $this->create_legacy_redirect( '/x' );
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_status'  => 'auto-draft',
+				'post_excerpt' => 'https://example.com/elsewhere',
+			),
+			array( 'ID' => $drafted_id )
+		);
+		$later_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$wpdb->update( $wpdb->posts, array( 'post_excerpt' => 'https://example.com/third' ), array( 'ID' => $later_id ) );
+		clean_post_cache( $drafted_id );
+		clean_post_cache( $later_id );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'draft', get_post_status( $drafted_id ) );
+		$this->assertSame( 'draft', get_post_status( $later_id ) );
+		$this->assertSame( $drafted_id, $this->upgrader->duplicates()[ $later_id ]['of'] );
+		$this->assertCount( 2, $result['conflicts'] );
+		$this->assertCount( 2, $pending['conflicts'] );
+	}
 }
