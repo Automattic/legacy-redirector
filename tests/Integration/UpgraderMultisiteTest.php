@@ -363,6 +363,199 @@ final class UpgraderMultisiteTest extends TestCase {
 		$this->assertSame( 2, $pending['repathed'] );
 	}
 	/**
+	 * A double-prefixed source created before its prefixed twin still takes the key the twin leaves.
+	 *
+	 * '/sub/sub/x' re-keys onto '/sub/x', which the 1.x '/sub/x' holds until
+	 * the walk reaches it and makes it '/x'. Visited first, the double-prefixed
+	 * row waits for that rather than colliding. The pair is split across
+	 * batches too, so the wait outlives the request that began it.
+	 * Row by row, as when the key map cannot be read, it waits just the same.
+	 *
+	 * @dataProvider data_waiting_cases
+	 *
+	 * @param int  $between Rows between the two.
+	 * @param bool $by_row  Whether the run has to go row by row.
+	 * @return void
+	 */
+	public function test_double_prefixed_source_created_first_takes_the_freed_key( int $between, bool $by_row ) {
+		global $wpdb;
+
+		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		for ( $i = 0; $i < $between; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$single_id = $this->create_legacy_redirect( '/x' );
+
+		$pending = $this->upgrader->count_pending();
+
+		if ( $by_row ) {
+			add_filter( 'query', static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query );
+		}
+
+		$totals = $this->run_to_completion();
+
+		$this->assertSame( '/x', get_post( $single_id )->post_title );
+		$this->assertSame( '/' . $this->subsite . '/x', get_post( $double_id )->post_title );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $double_id )->post_name );
+		$this->assertSame( 'publish', get_post_status( $single_id ) );
+		$this->assertSame( 'publish', get_post_status( $double_id ) );
+		$this->assertSame( array(), $totals['conflicts'] );
+		$this->assertSame( $between + 2, $totals['processed'] );
+		$this->assertSame( $between + 2, $totals['repathed'] );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_waiting' ) );
+
+		$this->assertSame( array(), $pending['conflicts'] );
+		$this->assertSame( $between + 2, $pending['total'] );
+		$this->assertSame( $between + 2, $pending['repathed'] );
+	}
+
+	/**
+	 * Data provider: the pair in one batch and in two, planned in bulk and row by row.
+	 *
+	 * @return array<string, array{int, bool}>
+	 */
+	public static function data_waiting_cases(): array {
+		return array(
+			'one batch'               => array( 0, false ),
+			'two batches'             => array( Upgrader::BATCH_SIZE, false ),
+			'row by row'              => array( 0, true ),
+			'row by row, two batches' => array( Upgrader::BATCH_SIZE, true ),
+		);
+	}
+
+	/**
+	 * A chain of prefixed sources created newest-prefix first all reach their keys.
+	 *
+	 * '/sub/sub/sub/x' waits for '/sub/sub/x', which waits for '/sub/x'.
+	 *
+	 * @return void
+	 */
+	public function test_chain_of_waiting_sources_all_reach_their_keys() {
+		$prefix = '/' . $this->subsite;
+		$ids    = array(
+			$this->create_legacy_redirect( $prefix . $prefix . '/x' ),
+			$this->create_legacy_redirect( $prefix . '/x' ),
+			$this->create_legacy_redirect( '/x' ),
+		);
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( $prefix . $prefix . '/x', get_post( $ids[0] )->post_title );
+		$this->assertSame( $prefix . '/x', get_post( $ids[1] )->post_title );
+		$this->assertSame( '/x', get_post( $ids[2] )->post_title );
+		$this->assertSame( array(), $result['conflicts'] );
+		$this->assertSame( 3, $result['repathed'] );
+		$this->assertSame( array(), $pending['conflicts'] );
+		$this->assertSame( 3, $pending['repathed'] );
+	}
+
+	/**
+	 * A row waiting for a redirect deleted before the walk reached it is still migrated.
+	 *
+	 * @return void
+	 */
+	public function test_row_waiting_for_a_deleted_redirect_is_migrated_at_the_end() {
+		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$single_id = $this->create_legacy_redirect( '/x' );
+
+		$first = $this->upgrader->run_batch( Upgrader::BATCH_SIZE );
+		wp_delete_post( $single_id, true );
+		$rest = $this->upgrader->run_batch( Upgrader::BATCH_SIZE );
+
+		$this->assertSame( Upgrader::BATCH_SIZE - 1, $first['processed'] );
+		$this->assertTrue( $rest['complete'] );
+		$this->assertSame( 'publish', get_post_status( $double_id ) );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $double_id )->post_name );
+	}
+
+	/**
+	 * The dry run counts a row waiting for a redirect deleted before it was reached.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_counts_a_row_waiting_for_a_deleted_redirect() {
+		$this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+		$single_id = $this->create_legacy_redirect( '/x' );
+
+		$pending = $this->upgrader->count_pending(
+			static function () use ( $single_id ): void {
+				wp_delete_post( $single_id, true );
+			}
+		);
+
+		$this->assertSame( Upgrader::BATCH_SIZE + 1, $pending['total'] );
+		$this->assertSame( Upgrader::BATCH_SIZE + 1, $pending['repathed'] );
+		$this->assertSame( array(), $pending['conflicts'] );
+	}
+
+	/**
+	 * A waiting row collides as before when the redirect it waited for could not move.
+	 *
+	 * '/sub/x' re-keys onto '/x', which a redirect going elsewhere holds, so it
+	 * is disabled on '/sub/x' - and '/sub/sub/x' then collides with it there,
+	 * as it does when created in the other order.
+	 *
+	 * @return void
+	 */
+	public function test_waiting_row_collides_when_its_holder_cannot_move() {
+		$live_id = $this->create_relative_redirect( '/x' );
+		wp_update_post(
+			array(
+				'ID'           => $live_id,
+				'post_excerpt' => 'https://example.com/elsewhere',
+			)
+		);
+		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$single_id = $this->create_legacy_redirect( '/x' );
+		wp_update_post(
+			array(
+				'ID'           => $single_id,
+				'post_excerpt' => 'https://example.com/third',
+			)
+		);
+		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2100-01-01 00:00:00' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'draft', get_post_status( $single_id ) );
+		$this->assertSame( 'draft', get_post_status( $double_id ) );
+		$this->assertSame( $single_id, $this->upgrader->duplicates()[ $double_id ]['of'] );
+		$this->assertCount( 2, $result['conflicts'] );
+		$this->assertSame( $result['conflicts'], $pending['conflicts'] );
+	}
+
+	/**
+	 * Run batches of the web size until the upgrade completes, adding up their totals.
+	 *
+	 * @return array<string, mixed> The totals.
+	 */
+	private function run_to_completion(): array {
+		$totals = array(
+			'processed' => 0,
+			'repathed'  => 0,
+			'conflicts' => array(),
+		);
+
+		do {
+			$batch = $this->upgrader->run_batch( Upgrader::BATCH_SIZE );
+
+			$totals['processed'] += $batch['processed'];
+			$totals['repathed']  += $batch['repathed'];
+			$totals['conflicts']  = array_merge( $totals['conflicts'], $batch['conflicts'] );
+		} while ( ! $batch['complete'] );
+
+		return $totals;
+	}
+
+	/**
 	 * The dry run sees a key freed by a row in an earlier batch.
 	 *
 	 * The run has written that move by then; the dry run, which writes
