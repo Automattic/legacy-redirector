@@ -96,12 +96,15 @@ final class InternalDestinationNormalizer {
 	 * identical: one target, one stored string, whichever spelling was typed.
 	 *
 	 * @param string $relative The relative destination as entered or as stored.
-	 * @return string|null The canonical form, or null when it cannot be parsed.
+	 * @return string|null The canonical form, or null when it cannot be parsed or is not
+	 *                     relative after all.
 	 */
 	public function canonicalize( string $relative ): ?string {
 		$parts = Url::parse_encoded( $relative );
 
-		if ( null === $parts || ! isset( $parts['path'] ) ) {
+		// A scheme-relative '//host/path' names another host: dropping the host
+		// would turn it into a path on this site.
+		if ( null === $parts || isset( $parts['host'] ) || ! isset( $parts['path'] ) ) {
 			return null;
 		}
 
