@@ -59,6 +59,7 @@ final class UpgraderTest extends TestCase {
 		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
 		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_retry' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_rekeyed' );
 
 		// The shared Integration TestCase does not call parent::set_up(), so
 		// WP_UnitTestCase never opens its rollback transaction and posts leak
@@ -548,6 +549,181 @@ final class UpgraderTest extends TestCase {
 
 		$this->upgrader->run_batch( 100 );
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * A batch does not run while another holds the lock, but takes over one left by a runner that died.
+	 *
+	 * @return void
+	 */
+	public function test_batch_waits_for_another_to_finish() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => 'wpcom_legacy_redirector_upgrade_lock',
+				'option_value' => (string) time(),
+				'autoload'     => 'off',
+			)
+		);
+
+		$waited = microtime( true );
+		try {
+			$this->upgrader->run_batch( 100, 1 );
+			$this->fail( 'The batch should not have run.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'holds its lock', $e->getMessage() );
+		}
+		$this->assertGreaterThanOrEqual( 1.0, microtime( true ) - $waited );
+
+		try {
+			$this->upgrader->retry_failed();
+			$this->fail( 'The retry should not have run.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'holds its lock', $e->getMessage() );
+		}
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+
+		$wpdb->update( $wpdb->options, array( 'option_value' => (string) ( time() - HOUR_IN_SECONDS ) ), array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+		$this->assertNull( $this->lock_value() );
+	}
+
+	/**
+	 * A batch starts from where the walk is now, not from the cursor this process read earlier.
+	 *
+	 * `migrate` reads the cursor to report progress, then may wait while a
+	 * web batch moves it on; starting from its own copy would plan that
+	 * batch's rows again.
+	 *
+	 * @return void
+	 */
+	public function test_batch_starts_from_the_cursor_as_it_is_now() {
+		global $wpdb;
+
+		$ids = array(
+			$this->create_legacy_redirect( '/first' ),
+			$this->create_legacy_redirect( '/second' ),
+			$this->create_legacy_redirect( '/third' ),
+		);
+		$this->upgrader->run_batch( 1 );
+		$this->assertSame( $ids[0], (int) get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+
+		// Another runner does the second row, writing past this process's cache.
+		$wpdb->update( $wpdb->options, array( 'option_value' => (string) $ids[1] ), array( 'option_name' => 'wpcom_legacy_redirector_upgrade_cursor' ) );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( 'draft', get_post_status( $ids[1] ) );
+		$this->assertSame( 'publish', get_post_status( $ids[2] ) );
+	}
+
+	/**
+	 * A retry leaves the record of re-keyed rows while the walk goes on, and clears it once the walk is done.
+	 *
+	 * Completing the walk clears it too, but a retry can record rows after that.
+	 *
+	 * @return void
+	 */
+	public function test_retry_clears_the_rekey_record_once_the_walk_is_done() {
+		update_option( 'wpcom_legacy_redirector_upgrade_rekeyed', array( 1 => md5( '/x' ) ), false );
+
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+		$this->upgrader->retry_failed();
+		$this->assertNotFalse( get_option( 'wpcom_legacy_redirector_upgrade_rekeyed' ) );
+
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION );
+		$this->upgrader->retry_failed();
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rekeyed' ) );
+	}
+
+	/**
+	 * A database error taking the lock is reported as one, not as another batch running.
+	 *
+	 * @return void
+	 */
+	public function test_database_error_taking_the_lock_is_reported() {
+		global $wpdb;
+
+		$refuse = static fn( string $query ): string => str_starts_with( $query, "INSERT IGNORE INTO {$wpdb->options}" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should not have run.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not take the migration lock', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+	}
+
+	/**
+	 * A batch whose lock was taken over leaves the new holder's lock in place.
+	 *
+	 * @return void
+	 */
+	public function test_batch_releases_only_its_own_lock() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$take_over = static function ( string $query ) use ( $wpdb ): string {
+			if ( str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ) {
+				$wpdb->update( $wpdb->options, array( 'option_value' => 'another runner' ), array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $take_over );
+		try {
+			$this->upgrader->run_batch( 100 );
+		} finally {
+			remove_filter( 'query', $take_over );
+		}
+
+		$this->assertSame( 'another runner', $this->lock_value() );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+	}
+
+	/**
+	 * A batch that finds, once it holds the lock, that another has finished the upgrade does nothing.
+	 *
+	 * Otherwise it would start a new walk from the first redirect, stripping
+	 * the home path from sources that no longer carry it.
+	 *
+	 * @return void
+	 */
+	public function test_batch_finds_the_upgrade_finished_under_the_lock() {
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$this->upgrader->run_batch( 100 );
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+
+		$stale = array( Upgrader::VERSION_OPTION => '0' ) + wp_load_alloptions();
+		wp_cache_set( 'alloptions', $stale, 'options' );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertTrue( $result['complete'] );
+		$this->assertSame( 0, $result['processed'] );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_started_gmt' ) );
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * The batch lock's stored value, if any.
+	 *
+	 * @return string|null The value, or null when no lock is held.
+	 */
+	private function lock_value(): ?string {
+		global $wpdb;
+
+		return $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wpcom_legacy_redirector_upgrade_lock' ) );
 	}
 
 	/**

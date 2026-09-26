@@ -153,6 +153,29 @@ final class Upgrader {
 	private const string CLI_LOCK = 'wpcom_legacy_redirector_upgrade_cli';
 
 	/**
+	 * Option row held while a batch runs, web or CLI; see lock().
+	 *
+	 * Two batches at once would plan the same rows, which is not always safe;
+	 * see REKEYED_OPTION. CLI_LOCK only stands web requests down for the CLI:
+	 * on its own it leaves them running batches beside each other, and one
+	 * already under way when the CLI starts.
+	 */
+	private const string BATCH_LOCK = 'wpcom_legacy_redirector_upgrade_lock';
+
+	/**
+	 * Option recording the keys the walk is giving rows it must not re-key twice.
+	 *
+	 * Re-keying is not always safe to repeat. On a site at /sub, the migrated
+	 * '/sub/x' - the 1.x '/sub/sub/x' - looks exactly like a 1.x '/sub/x', and
+	 * planned again would lose its prefix a second time. A batch is planned
+	 * again whenever it stops part-way, by an error or by the process dying,
+	 * as the cursor only moves once a batch is done. So before such a row is
+	 * written, the key it is about to get is recorded here, and a row found
+	 * holding it already is not stripped again. Maps ID => key.
+	 */
+	private const string REKEYED_OPTION = 'wpcom_legacy_redirector_upgrade_rekeyed';
+
+	/**
 	 * Option holding redirects whose migration write failed, for a later run to retry.
 	 *
 	 * Keyed by the start time of the walk that failed them, each with whether
@@ -273,6 +296,27 @@ final class Upgrader {
 	private array $unflagged = array();
 
 	/**
+	 * The keys recorded as given; see REKEYED_OPTION.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $rekeyed = array();
+
+	/**
+	 * Whether $rekeyed holds keys not yet saved; see save_rekeys().
+	 *
+	 * @var bool
+	 */
+	private bool $rekeys_unsaved = false;
+
+	/**
+	 * The value of the batch lock this runner holds, identifying it; see lock().
+	 *
+	 * @var string
+	 */
+	private string $lock_value = '';
+
+	/**
 	 * Whether the walk under way repairs what 1.x left in stored destinations; see normalized_excerpt().
 	 *
 	 * @var bool
@@ -385,12 +429,41 @@ final class Upgrader {
 	 * row, so it throws instead, leaving the cursor where it was so the next
 	 * run redoes the batch.
 	 *
+	 * Only one batch runs at a time; see BATCH_LOCK.
+	 *
+	 * @param int $size Maximum number of redirects to process.
+	 * @param int $wait Seconds to wait for another batch to finish first.
+	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
+	 *
+	 * @throws RuntimeException When the database refuses the batch's read or bulk write, or another batch holds the lock.
+	 */
+	public function run_batch( int $size, int $wait = 0 ): array {
+		$this->lock( $wait );
+
+		try {
+			// Another runner may have finished the upgrade while this one
+			// waited; walking it again would strip home paths twice.
+			if ( ! $this->still_upgrading() ) {
+				return array( 'complete' => true ) + self::empty_result();
+			}
+
+			return $this->walk_batch( $size );
+		} finally {
+			$this->unlock();
+		}
+	}
+
+	/**
+	 * Process one batch of redirects, holding the lock; see run_batch().
+	 *
 	 * @param int $size Maximum number of redirects to process.
 	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 *
 	 * @throws RuntimeException When the database refuses the batch's read or bulk write.
 	 */
-	public function run_batch( int $size ): array {
+	private function walk_batch( int $size ): array {
+		$this->rekeyed = $this->stored_rekeys();
+
 		$started   = $this->started_at();
 		$ceiling   = $this->ceiling();
 		$cursor    = (int) get_option( self::CURSOR_OPTION, 0 );
@@ -454,28 +527,45 @@ final class Upgrader {
 	 * completed. Those that fail again stay recorded for the next retry;
 	 * those deleted in the meantime drop out.
 	 *
+	 * Holds the batch lock, as a batch does; see BATCH_LOCK.
+	 *
+	 * @param int $wait Seconds to wait for a batch to finish first.
 	 * @return array{processed: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int, failed: string[], complete: bool}
 	 *
-	 * @throws RuntimeException When the database refuses a read or bulk write.
+	 * @throws RuntimeException When the database refuses a read or bulk write, or a batch holds the lock.
 	 */
-	public function retry_failed(): array {
-		$result        = self::empty_result();
-		$this->waiting = array();
-		$this->reached = PHP_INT_MAX;
+	public function retry_failed( int $wait = 0 ): array {
+		$this->lock( $wait );
 
-		foreach ( $this->retry_sets() as $started => $set ) {
-			$home_path = $set['publish'] ? $this->home_path() : '';
+		try {
+			$result        = self::empty_result();
+			$this->waiting = array();
+			$this->reached = PHP_INT_MAX;
+			$this->rekeyed = $this->stored_rekeys();
 
-			foreach ( array_chunk( $set['ids'], 2000 ) as $ids ) {
-				$this->process( $this->query_ids( $ids ), $started, $home_path, $set['publish'], $result );
+			foreach ( $this->retry_sets() as $started => $set ) {
+				$home_path = $set['publish'] ? $this->home_path() : '';
+
+				foreach ( array_chunk( $set['ids'], 2000 ) as $ids ) {
+					$this->process( $this->query_ids( $ids ), $started, $home_path, $set['publish'], $result );
+				}
+
+				$this->replace_failures( $started, $set['publish'] );
 			}
 
-			$this->replace_failures( $started, $set['publish'] );
+			// The record guards rows the walk wrote. Once it has finished, only
+			// rows whose write failed are planned again, and those were never
+			// written.
+			if ( ! $this->still_upgrading() ) {
+				delete_option( self::REKEYED_OPTION );
+			}
+
+			$result['complete'] = true;
+
+			return $result;
+		} finally {
+			$this->unlock();
 		}
-
-		$result['complete'] = true;
-
-		return $result;
 	}
 
 	/**
@@ -613,6 +703,8 @@ final class Upgrader {
 			$position = count( $rows );
 			$rows[]   = array( 'write', $post, $plan, null );
 
+			$this->record_rekey( $post, $update, $home_path );
+
 			if ( ! $this->fits_in_bulk( $update ) ) {
 				// The database would refuse it, and it must be refused
 				// against its own row, so it goes alone - after the held
@@ -706,6 +798,7 @@ final class Upgrader {
 
 			++$result['processed'];
 
+			$this->record_rekey( $post, $plan['update'], $home_path );
 			$conflict = $this->migrate_post( $post, $plan, $result );
 			if ( null !== $conflict ) {
 				$result['conflicts'][] = $conflict;
@@ -789,6 +882,148 @@ final class Upgrader {
 		$this->waiting = array_diff_key( $this->waiting, array_flip( $ids ) );
 
 		return $ids;
+	}
+
+	/**
+	 * Take the batch lock, waiting up to a number of seconds for it; see BATCH_LOCK.
+	 *
+	 * The row is created with INSERT IGNORE, which only one caller can do,
+	 * where add_option() would quietly overwrite another's. A lock older than
+	 * any batch runs was left by a runner that died, and is taken over; the
+	 * delete is conditional on its age, so two callers cannot both do so.
+	 * Ages go by the database's clock, which every web server shares.
+	 *
+	 * Once held, what this process has cached of the walk's state is dropped:
+	 * another runner may have moved the walk on while this one waited.
+	 *
+	 * @param int $wait Seconds to wait for another batch to finish.
+	 * @return void
+	 *
+	 * @throws RuntimeException When another batch holds the lock throughout, or the database refuses.
+	 */
+	private function lock( int $wait ): void {
+		global $wpdb;
+
+		$deadline = microtime( true ) + $wait;
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- A lock must go to the database; the options API caches and overwrites.
+		while ( true ) {
+			$taken = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, UNIX_TIMESTAMP(), 'off')", self::BATCH_LOCK ) );
+			$freed = 1 === $taken ? 0 : $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value < UNIX_TIMESTAMP() - %d", self::BATCH_LOCK, 5 * MINUTE_IN_SECONDS ) );
+
+			if ( false === $taken || false === $freed ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+				throw new RuntimeException( 'the database could not take the migration lock: ' . self::write_error() );
+			}
+
+			if ( 1 === $taken ) {
+				$this->lock_value = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::BATCH_LOCK ) );
+				break;
+			}
+
+			if ( 0 === $freed && microtime( true ) >= $deadline ) {
+				throw new RuntimeException( 'another migration batch is running, or one that stopped in the last five minutes still holds its lock' );
+			}
+
+			if ( 0 === $freed ) {
+				usleep( 250000 );
+			}
+		}
+		// phpcs:enable
+
+		foreach ( array( 'notoptions', self::STARTED_OPTION, self::CURSOR_OPTION, self::CEILING_OPTION, self::RETRY_OPTION, self::REKEYED_OPTION ) as $option ) {
+			wp_cache_delete( $option, 'options' );
+		}
+	}
+
+	/**
+	 * Whether the upgrade is still to finish, as the database says now.
+	 *
+	 * Unlike needs_upgrade(), which reads the autoloaded options this process
+	 * loaded when it started, before it waited for the lock.
+	 *
+	 * @return bool True if the upgrade has not yet completed.
+	 */
+	private function still_upgrading(): bool {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Past the cache on purpose; see above.
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::VERSION_OPTION ) ) < self::DB_VERSION;
+	}
+
+	/**
+	 * Release the batch lock, if this runner still holds it.
+	 *
+	 * A lock held past its age may have been taken over; deleting that one
+	 * would let a third runner in beside the second.
+	 *
+	 * @return void
+	 */
+	private function unlock(): void {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The lock row lock() created.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::BATCH_LOCK, $this->lock_value ) );
+	}
+
+	/**
+	 * The keys recorded as given; see REKEYED_OPTION.
+	 *
+	 * @return array<int, string> Each row's ID, mapped to its key.
+	 */
+	private function stored_rekeys(): array {
+		$rekeyed = get_option( self::REKEYED_OPTION, array() );
+
+		return is_array( $rekeyed ) ? $rekeyed : array();
+	}
+
+	/**
+	 * Note the key a row is about to get, if planning it again would re-key it again.
+	 *
+	 * Only a row whose new source still starts with the home path; see
+	 * REKEYED_OPTION. Any other re-key plans the same way twice. It is saved
+	 * before any write, by save_rekeys(), once for the statement.
+	 *
+	 * @param WP_Post               $post      The redirect as read.
+	 * @param array<string, string> $update    The fields about to be written.
+	 * @param string                $home_path The home path to strip, or ''.
+	 * @return void
+	 */
+	private function record_rekey( WP_Post $post, array $update, string $home_path ): void {
+		if ( '' === $home_path || ! isset( $update['post_name'], $update['post_title'] )
+			|| null === HomePath::make_relative( substr( $update['post_title'], 0, strcspn( $update['post_title'], '?' ) ), $home_path )
+		) {
+			return;
+		}
+
+		$this->rekeyed[ $post->ID ] = $update['post_name'];
+		$this->rekeys_unsaved       = true;
+	}
+
+	/**
+	 * Save the keys noted by record_rekey(), ahead of the write that gives them.
+	 *
+	 * Called by write() and write_all(), which every planned write goes
+	 * through, so the record is always saved first however the batch stops.
+	 *
+	 * @return void
+	 */
+	private function save_rekeys(): void {
+		if ( $this->rekeys_unsaved ) {
+			update_option( self::REKEYED_OPTION, $this->rekeyed, false );
+			$this->rekeys_unsaved = false;
+		}
+	}
+
+	/**
+	 * The home path to strip from a row's source: none where the walk has re-keyed it already; see REKEYED_OPTION.
+	 *
+	 * @param WP_Post $post      The redirect.
+	 * @param string  $home_path The home path to strip, or ''.
+	 * @return string The home path, or ''.
+	 */
+	private function home_path_of( WP_Post $post, string $home_path ): string {
+		return ( $this->rekeyed[ $post->ID ] ?? null ) === $post->post_name ? '' : $home_path;
 	}
 
 	/**
@@ -958,6 +1193,7 @@ final class Upgrader {
 		$this->waiting      = array();
 		$this->reached      = 0;
 		$this->walk_ceiling = $ceiling;
+		$this->rekeyed      = $this->stored_rekeys();
 
 		do {
 			$posts   = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
@@ -1531,6 +1767,9 @@ final class Upgrader {
 		$collided    = false;
 		$never_fired = false;
 
+		// A row this walk has re-keyed already keeps its key; see REKEYED_OPTION.
+		$home_path = $this->home_path_of( $post, $home_path );
+
 		$hashed   = self::hashed_source( $post );
 		$new_path = $this->canonical_source( $hashed, $home_path );
 
@@ -1643,6 +1882,8 @@ final class Upgrader {
 	 * @return int|false 1 when written, 0 when the row was edited since it was read and so left alone, false when the database refused the write.
 	 */
 	private function write( WP_Post $post, array $update ): int|false {
+		$this->save_rekeys();
+
 		global $wpdb;
 
 		// Matching the modified date as read skips the write if a user has
@@ -1763,6 +2004,8 @@ final class Upgrader {
 	 * @return int|false How many rows changed, or false when the database refused the statement.
 	 */
 	private function write_all( array $writes ): int|false {
+		$this->save_rekeys();
+
 		global $wpdb;
 
 		$ids     = array();
@@ -2202,6 +2445,7 @@ final class Upgrader {
 		delete_option( self::CURSOR_OPTION );
 		delete_option( self::CEILING_OPTION );
 		delete_post_meta_by_key( self::WAITING_META_KEY );
+		delete_option( self::REKEYED_OPTION );
 		delete_transient( self::CLI_LOCK );
 	}
 }
