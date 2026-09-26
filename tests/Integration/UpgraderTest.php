@@ -33,6 +33,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class UpgraderTest extends TestCase {
@@ -1219,6 +1220,113 @@ final class UpgraderTest extends TestCase {
 			Redirect::class,
 			( new PostTypeRedirectRepository() )->find_by_source( SourceUrl::from_string( '/search/?q=a+b&page=2' ) )
 		);
+	}
+
+	/**
+	 * A kses-escaped title over a key that is already canonical gets back the text it was hashed from.
+	 *
+	 * Nothing about the key changes, but every save rebuilds the key from the
+	 * title, so leaving '&amp;' there would move the row on its next edit.
+	 *
+	 * @return void
+	 */
+	public function test_kses_escaped_title_over_a_canonical_key_is_unescaped() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/find?q=a&page=2' );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => '/find?q=a&amp;page=2' ), array( 'ID' => $post_id ) );
+		clean_post_cache( $post_id );
+
+		$this->assertSame( 1, $this->upgrader->count_pending()['repathed'] );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['repathed'] );
+		$this->assertSame( '/find?q=a&page=2', get_post( $post_id )->post_title );
+		$this->assertSame( md5( '/find?q=a&page=2' ), get_post( $post_id )->post_name );
+	}
+
+	/**
+	 * A duplicate with a kses-escaped title keeps its key but gets back the text it was hashed from.
+	 *
+	 * Otherwise enabling it later would re-key it from the escaped title, to a
+	 * key nobody holds, past the guard against taking the live row's source.
+	 *
+	 * @return void
+	 */
+	public function test_duplicate_with_a_kses_escaped_title_gets_back_the_hashed_text() {
+		global $wpdb;
+
+		$live_id      = $this->create_legacy_redirect( '/a?x=1&y=2', 'https://example.com/one' );
+		$duplicate_id = $this->create_legacy_redirect( '/a/?x=1&y=2', 'https://example.com/two' );
+		foreach ( array( $live_id, $duplicate_id ) as $id ) {
+			$wpdb->update( $wpdb->posts, array( 'post_title' => str_replace( '&', '&amp;', get_post( $id )->post_title ) ), array( 'ID' => $id ) );
+			clean_post_cache( $id );
+		}
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'draft', get_post_status( $duplicate_id ) );
+		$this->assertSame( '/a/?x=1&y=2', get_post( $duplicate_id )->post_title );
+		$this->assertSame( md5( '/a/?x=1&y=2' ), get_post( $duplicate_id )->post_name );
+	}
+
+	/**
+	 * A trashed row's kses-escaped title is recognised through the key core gave it in the trash.
+	 *
+	 * @return void
+	 */
+	public function test_trashed_row_with_a_kses_escaped_title_gets_back_the_hashed_text() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/find?q=a&page=2' );
+		wp_trash_post( $post_id );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => '/find?q=a&amp;page=2' ), array( 'ID' => $post_id ) );
+		clean_post_cache( $post_id );
+		$this->assertSame( md5( '/find?q=a&page=2' ) . '__trashed', get_post( $post_id )->post_name );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/find?q=a&page=2', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * A walk over 2.0 data leaves '&amp;' in a destination alone.
+	 *
+	 * Only 1.x saved destinations through kses unchecked; a 2.0 one holding
+	 * '&amp;' was saved that way on purpose, and a later walk must not change
+	 * it.
+	 *
+	 * @return void
+	 */
+	public function test_later_walk_leaves_an_escaped_ampersand_in_a_destination() {
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+		$post_id = $this->create_legacy_redirect( '/deliberate', '/a?b=&amp;c' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/a?b=&amp;c', get_post( $post_id )->post_excerpt );
+	}
+
+	/**
+	 * A kses-escaped destination is un-escaped, relative or absolute.
+	 *
+	 * 1.x sent visitors to the escaped URL, whose query has a parameter named
+	 * 'amp;b' where 'b' was meant.
+	 *
+	 * @return void
+	 */
+	public function test_kses_escaped_destination_is_unescaped() {
+		$relative_id = $this->create_legacy_redirect( '/relative', '/new?a=1&amp;b=2' );
+		$absolute_id = $this->create_legacy_redirect( '/absolute', 'https://example.com/new?a=1&amp;b=2' );
+
+		$this->assertSame( 2, $this->upgrader->count_pending()['normalized'] );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 2, $result['normalized'] );
+		$this->assertSame( '/new?a=1&b=2', get_post( $relative_id )->post_excerpt );
+		$this->assertSame( 'https://example.com/new?a=1&b=2', get_post( $absolute_id )->post_excerpt );
 	}
 
 	/**

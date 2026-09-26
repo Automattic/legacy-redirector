@@ -34,6 +34,46 @@ final class PostType {
 		register_post_type( self::POST_TYPE, $this->get_args() );
 		add_filter( 'bulk_post_updated_messages', array( $this, 'bulk_post_updated_messages' ), 10, 2 );
 		add_filter( 'ep_indexable_post_types', array( $this, 'exclude_from_elasticpress' ) );
+		add_filter( 'wp_insert_post_data', array( $this, 'undo_ampersand_escaping' ), 10, 3 );
+	}
+
+	/**
+	 * Keep a redirect's source and destination as given, where kses only escaped their ampersands.
+	 *
+	 * Every write through wp_insert_post() by a user without unfiltered_html,
+	 * as everyone is on VIP, sends the title and excerpt through kses - saves,
+	 * and trashing and restoring too. kses writes a lone '&' as '&amp;', but
+	 * the key was hashed from the '&', and the next save rebuilds the key from
+	 * the title, so the redirect would move to a key no request produces.
+	 * A destination would send visitors to the escaped URL.
+	 *
+	 * Only that change is undone, and only in a value with no markup in it:
+	 * inside a tag, kses escapes an entity such as '&colon;' to disarm it,
+	 * which on some versions, 6.8 among them, is how it stops
+	 * 'javascript&colon;'. No source can hold markup, so wherever there is
+	 * any, or kses changed anything else, its result stands.
+	 *
+	 * @param array<string, mixed> $data                Slashed, sanitized post data.
+	 * @param array<string, mixed> $postarr             Slashed, sanitized post data as passed in.
+	 * @param array<string, mixed> $unsanitized_postarr Slashed post data as passed in, before sanitizing; absent where a caller passes only two arguments.
+	 * @return array<string, mixed> The post data.
+	 */
+	public function undo_ampersand_escaping( array $data, array $postarr, array $unsanitized_postarr = array() ): array {
+		if ( self::POST_TYPE !== ( $data['post_type'] ?? '' ) ) {
+			return $data;
+		}
+
+		foreach ( array( 'post_title', 'post_excerpt' ) as $field ) {
+			$given = $unsanitized_postarr[ $field ] ?? null;
+
+			if ( is_string( $given ) && is_string( $data[ $field ] ?? null ) && 1 !== preg_match( '/[<>]/', $given )
+				&& str_replace( '&amp;', '&', $data[ $field ] ) === str_replace( '&amp;', '&', $given )
+			) {
+				$data[ $field ] = $given;
+			}
+		}
+
+		return $data;
 	}
 
 	/**

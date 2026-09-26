@@ -95,3 +95,23 @@ Feature: Front-end redirects
       """
       /emoji-http-destination
       """
+
+  # End-to-end test: kses escapes a lone '&' as '&amp;' in whatever a user
+  # without unfiltered_html saves, as everyone on VIP is. Neither the source
+  # nor the destination may pick that up, however many times it is saved.
+  Scenario: Ampersands survive every save by a user whose writes kses filters
+    Given I run `wp user create behat-author behat-author@example.com --role=author`
+    And I run `wp user add-cap behat-author manage_redirects`
+
+    When I run `wp legacy-redirector create '/find?q=a&page=2' '/dest?a=1&b=2' --user=behat-author`
+    And I run `wp legacy-redirector disable '/find?q=a&page=2' --user=behat-author`
+    And I run `wp legacy-redirector enable '/find?q=a&page=2' --user=behat-author`
+    And I request the front-end path "/find?q=a&page=2"
+    Then STDOUT should contain:
+      """
+      301 Moved Permanently
+      """
+    And STDOUT should contain:
+      """
+      /dest?a=1&b=2
+      """

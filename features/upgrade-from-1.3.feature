@@ -71,6 +71,26 @@ Feature: Upgrading from version 1.3.0
       """
     And every request version 1.3.0 redirected is redirected to the same destination
 
+  # kses escaped the '&' in a destination an author saved, and 1.3.0 sent
+  # visitors to the escaped URL, whose query has a parameter named 'amp;b'.
+  # The migration sends them where the author meant.
+  Scenario: A destination 1.3.0 stored with an escaped ampersand is repaired
+    Given version 1.3.0 is active in place of this plugin
+    And version 1.3.0 stores these redirects as an author:
+      | from        | to                |
+      | /amp-source | /dest-amp?a=1&b=2 |
+    Then version 1.3.0 answers these requests:
+      | request     | status | to                    |
+      | /amp-source | 301    | /dest-amp?a=1&amp;b=2 |
+
+    When this plugin replaces version 1.3.0
+    And I run `wp legacy-redirector migrate`
+    And I request the front-end path "/amp-source"
+    Then STDOUT should contain:
+      """
+      /dest-amp?a=1&b=2
+      """
+
   # Browsers never sent the raw spelling, so 1.3.0 only ever served the
   # encoded one. The raw row re-keys onto the encoded one's source and is
   # disabled, marked as never having fired, so visitors see no change.

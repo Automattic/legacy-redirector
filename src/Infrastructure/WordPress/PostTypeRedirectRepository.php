@@ -127,7 +127,9 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 			throw RedirectPersistenceException::corrupt_redirect( $redirect->id() );
 		}
 
-		$args = $this->map_redirect_to_post_args( $redirect );
+		// wp_insert_post() unslashes what it is given, which would take the
+		// backslash out of a destination such as '/a\b'.
+		$args = wp_slash( $this->map_redirect_to_post_args( $redirect ) );
 
 		if ( $redirect->is_persisted() ) {
 			// An update re-derives the key from the source, so a redirect

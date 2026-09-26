@@ -63,7 +63,7 @@ Four storage changes between 1.x and 2.0 would otherwise stop redirects you alre
    A trailing slash on the *destination* is left alone: there it is part of where the visitor actually lands.
 4. **Destinations are canonicalized.** A destination pointing at this site by absolute URL (`https://example.com/foo`) is rewritten to the relative form (`/foo`), so anything left absolute afterwards is external by construction. A relative destination is rewritten to the encoding 2.0 produces on save, so whichever of `/café` or `/caf%C3%A9` you originally typed is now stored one way: path and fragment decoded, query string kept percent-encoded.
 
-   Where the visitor lands does not change — only how the destination is written down. `wp legacy-redirector migrate` counts these as "destination(s) made relative" in both its dry-run and its summary, so the number you see reported covers this pass.
+   With one exception, where the visitor lands does not change — only how the destination is written down. The exception: a destination saved in a web request by a user without `unfiltered_html` (on VIP, everyone) had each `&` stored as `&amp;` by WordPress's HTML filter, and 1.x sent visitors to that escaped URL, whose query has a parameter named `amp;b` where `b` was meant. The migration restores the `&`, so those visitors now land where the redirect was meant to send them. `wp legacy-redirector migrate` counts these as "destination(s) made relative" in both its dry-run and its summary, so the number you see reported covers this pass.
 
 One migration handles all four. It runs automatically in small batches on ordinary page loads after you upgrade (WP-CLI commands never trigger it; `wp legacy-redirector migrate` is how you run it from the command line), and is version-gated, so it walks your redirects once for the upgrade and then stops until a future release changes the stored data again.
 
@@ -71,7 +71,7 @@ One migration handles all four. It runs automatically in small batches on ordina
 
 The first two are corrections to the shape 1.x wrote, so they run **only** where the stored data predates 2.0. Once 2.0 has written data of its own, both readings become ambiguous: a `draft` then means "deliberately disabled" rather than "1.x never set a status", and a source beginning with your home path can be a deliberate double prefix (on a subsite at `/subsite1`, storing `/subsite1/x` is how you redirect the real URL `/subsite1/subsite1/x`). A later version bump re-walks every redirect, so leaving these two ungated would republish redirects you had disabled and rewrite sources you meant.
 
-The source and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted.
+The source and destination passes carry no such ambiguity — both simply restate a redirect in the one form 2.0 writes — so they run on every walk, including version bumps after 2.0, on any site rather than only one coming from 1.x. Each pass is idempotent, so a redirect already in canonical form is neither rewritten nor counted. The one exception is restoring the `&` in a destination saved as `&amp;`: only 1.x saved destinations through that filter unchecked, and a later `&amp;` may be deliberate, so it runs with the first two, on 1.x data only.
 
 ### Large redirect sets
 
