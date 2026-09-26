@@ -163,6 +163,18 @@ final class Upgrader {
 	private const string RETRY_OPTION = 'wpcom_legacy_redirector_upgrade_retry';
 
 	/**
+	 * Meta key marking a redirect waiting for a later one to leave the key it re-keys onto.
+	 *
+	 * See plan(). Holds the ID of the redirect it waits for and the key, as
+	 * 'ID:hash'. Almost never set: only a double-prefixed source created before
+	 * its prefixed twin waits. Kept on the waiting row rather than in one
+	 * option so that two batches running at once, as web requests can, each
+	 * add and remove only their own; one overwriting the other's list would
+	 * strand a row below the cursor, never migrated.
+	 */
+	private const string WAITING_META_KEY = '_legacy_redirector_upgrade_waits_for';
+
+	/**
 	 * Meta key marking a redirect the migration disabled as a duplicate source.
 	 *
 	 * Holds the ID of the live redirect whose source it shares, so the
@@ -268,6 +280,30 @@ final class Upgrader {
 	private bool $from_1x = false;
 
 	/**
+	 * Redirects waiting for another to leave a key, by ID, with the ID of the one each waits for and the key; see WAITING_META_KEY.
+	 *
+	 * @var array<int, array{0: int, 1: string}>
+	 */
+	private array $waiting = array();
+
+	/**
+	 * The highest redirect ID the walk has reached.
+	 *
+	 * Rows above it, up to the ceiling, are still to be visited. No walk is
+	 * under way outside run_batch() and count_pending(), so nothing waits.
+	 *
+	 * @var int
+	 */
+	private int $reached = PHP_INT_MAX;
+
+	/**
+	 * The ceiling of the walk under way; see CEILING_OPTION.
+	 *
+	 * @var int
+	 */
+	private int $walk_ceiling = 0;
+
+	/**
 	 * Whether this site still has upgrade work outstanding.
 	 *
 	 * @return bool True if the upgrade has not yet completed.
@@ -329,7 +365,8 @@ final class Upgrader {
 		);
 
 		return array(
-			'done'  => $cursor > 0 ? $count( $cursor ) : 0,
+			// A waiting row is behind the cursor but still to be processed.
+			'done'  => $cursor > 0 ? $count( $cursor ) - count( $this->stored_waits() ) : 0,
 			'total' => $count( $ceiling ),
 		);
 	}
@@ -360,8 +397,14 @@ final class Upgrader {
 		$publish   = $this->from_pre_2_0_data();
 		$home_path = $publish ? $this->home_path() : '';
 		$result    = self::empty_result();
+		$stored    = $this->stored_waits();
+
+		$this->waiting      = $stored;
+		$this->reached      = $cursor;
+		$this->walk_ceiling = $ceiling;
 
 		$posts = $this->query_batch( $cursor, $ceiling, $size );
+		$last  = count( $posts ) < $size;
 
 		foreach ( $posts as $post ) {
 			if ( $post instanceof WP_Post ) {
@@ -370,11 +413,23 @@ final class Upgrader {
 		}
 
 		$this->process( $posts, $started, $home_path, $publish, $result );
+
+		// Whatever still waits, waits for a redirect deleted since, or for one
+		// that is itself waiting on such a redirect.
+		while ( $last && array() !== $this->waiting ) {
+			$this->reached = PHP_INT_MAX;
+			$this->process( $this->query_ids( $this->waiting_on_nobody() ), $started, $home_path, $publish, $result );
+		}
+
 		$this->remember_failures( $started, $publish );
 
+		$this->store_waits( $stored );
 		update_option( self::CURSOR_OPTION, $cursor, false );
+		$this->reached = PHP_INT_MAX;
 
-		if ( $result['processed'] < $size ) {
+		// Fewer rows than asked for means the walk has reached the end. The
+		// processed count cannot say so: a row can wait for a later batch.
+		if ( $last ) {
 			$this->complete();
 			$result['complete'] = true;
 		}
@@ -404,7 +459,9 @@ final class Upgrader {
 	 * @throws RuntimeException When the database refuses a read or bulk write.
 	 */
 	public function retry_failed(): array {
-		$result = self::empty_result();
+		$result        = self::empty_result();
+		$this->waiting = array();
+		$this->reached = PHP_INT_MAX;
 
 		foreach ( $this->retry_sets() as $started => $set ) {
 			$home_path = $set['publish'] ? $this->home_path() : '';
@@ -522,11 +579,7 @@ final class Upgrader {
 		$this->pending_writes = array();
 		$this->touched        = array();
 
-		foreach ( $posts as $post ) {
-			if ( ! $post instanceof WP_Post ) {
-				continue;
-			}
-
+		foreach ( $this->in_walk_order( $posts ) as $post ) {
 			if ( $post->post_modified_gmt > $started ) {
 				$rows[] = array( 'skip', $post, null, null );
 				continue;
@@ -541,6 +594,11 @@ final class Upgrader {
 
 			$plan   = $this->plan( $post, $home_path, $publish );
 			$update = $plan['update'];
+
+			if ( null !== $plan['wait'] ) {
+				$this->waiting[ $post->ID ] = $plan['wait'];
+				continue;
+			}
 
 			if ( array() === $update ) {
 				$rows[] = array( 'unchanged', $post, $plan, null );
@@ -629,22 +687,26 @@ final class Upgrader {
 	 * @throws RuntimeException When the database refuses the bulk publish.
 	 */
 	private function process_row_by_row( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
-		foreach ( $posts as $post ) {
-			if ( ! $post instanceof WP_Post ) {
+		foreach ( $this->in_walk_order( $posts ) as $post ) {
+			// A redirect touched since the upgrade began was acted on by a user
+			// under 2.0 rules, where 'draft' means "deliberately disabled".
+			// Republishing it would override an explicit choice.
+			if ( $post->post_modified_gmt > $started ) {
+				++$result['processed'];
+				++$result['skipped'];
+				continue;
+			}
+
+			$plan = $this->plan( $post, $home_path, $publish );
+
+			if ( null !== $plan['wait'] ) {
+				$this->waiting[ $post->ID ] = $plan['wait'];
 				continue;
 			}
 
 			++$result['processed'];
 
-			// A redirect touched since the upgrade began was acted on by a user
-			// under 2.0 rules, where 'draft' means "deliberately disabled".
-			// Republishing it would override an explicit choice.
-			if ( $post->post_modified_gmt > $started ) {
-				++$result['skipped'];
-				continue;
-			}
-
-			$conflict = $this->migrate_post( $post, $home_path, $publish, $result );
+			$conflict = $this->migrate_post( $post, $plan, $result );
 			if ( null !== $conflict ) {
 				$result['conflicts'][] = $conflict;
 			}
@@ -654,6 +716,125 @@ final class Upgrader {
 		$this->unflagged = array();
 
 		$this->flush_publish_queue( $started, $result );
+	}
+
+	/**
+	 * A set of redirects in the order the walk plans them.
+	 *
+	 * ID order, with each redirect waiting for one of them (see plan()) read
+	 * afresh and planned straight after it. A row released while its holder
+	 * is itself still to move waits again.
+	 *
+	 * @param array<WP_Post|null> $posts The redirects, in ascending ID order.
+	 * @return \Generator<int, WP_Post>
+	 */
+	private function in_walk_order( array $posts ): \Generator {
+		$queue = array_filter( $posts, static fn( $post ): bool => $post instanceof WP_Post );
+
+		while ( array() !== $queue ) {
+			// ponytail: scans every wait per row; free while waits are a handful, index by holder if a site ever has thousands.
+			$post          = array_shift( $queue );
+			$this->reached = max( $this->reached, $post->ID );
+			$released      = array_keys( array_filter( $this->waiting, static fn( array $wait ): bool => $post->ID === $wait[0] ) );
+
+			if ( array() !== $released ) {
+				$this->waiting = array_diff_key( $this->waiting, array_flip( $released ) );
+				$queue         = array_merge( $this->query_ids( $released ), $queue );
+			}
+
+			yield $post;
+		}
+	}
+
+	/**
+	 * Whether a redirect holding a key is one the walk has yet to re-key off it.
+	 *
+	 * True for a row still ahead of the walk, or waiting itself, whose own
+	 * source re-keys elsewhere. One a user has edited since is left where it
+	 * is when reached, and whatever waited for it then collides with it, as
+	 * it would have without waiting.
+	 *
+	 * @param WP_Post $holder    The redirect holding the key.
+	 * @param string  $hash      The key.
+	 * @param string  $home_path The home path to strip, or ''.
+	 * @return bool True when the walk will move it later.
+	 */
+	private function moves_later( WP_Post $holder, string $hash, string $home_path ): bool {
+		if ( $holder->ID > $this->walk_ceiling || ( $holder->ID <= $this->reached && ! isset( $this->waiting[ $holder->ID ] ) ) ) {
+			return false;
+		}
+
+		$target = $this->canonical_source( self::hashed_source( $holder ), $home_path );
+
+		return null !== $target && md5( $target ) !== $hash;
+	}
+
+	/**
+	 * Stop waiting, for the walk's last batch, every redirect whose holder is not itself waiting.
+	 *
+	 * Such a holder was deleted before the walk reached it. Those waiting on
+	 * one that still waits are released after it, by in_walk_order().
+	 *
+	 * @return int[] The IDs released.
+	 */
+	private function waiting_on_nobody(): array {
+		$ids = array_keys( array_filter( $this->waiting, fn( array $wait ): bool => ! isset( $this->waiting[ $wait[0] ] ) ) );
+
+		// Only a cycle would leave none, and a re-key cannot close one: it
+		// guards the caller's loop all the same.
+		if ( array() === $ids ) {
+			$ids = array_keys( $this->waiting );
+		}
+
+		$this->waiting = array_diff_key( $this->waiting, array_flip( $ids ) );
+
+		return $ids;
+	}
+
+	/**
+	 * The redirects recorded as waiting; see WAITING_META_KEY.
+	 *
+	 * @return array<int, array{0: int, 1: string}> Each waiting redirect's ID, mapped to the ID of the one it waits for and the key.
+	 *
+	 * @throws RuntimeException When the database refuses the read.
+	 */
+	private function stored_waits(): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- One read per batch; only waiting rows carry the key.
+		if ( false === $wpdb->query( $wpdb->prepare( "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s", self::WAITING_META_KEY ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+		}
+
+		$waits = array();
+		foreach ( $wpdb->last_result as $row ) {
+			list( $holder, $hash ) = explode( ':', (string) $row->meta_value, 2 ) + array( '', '' );
+
+			$waits[ (int) $row->post_id ] = array( (int) $holder, $hash );
+		}
+
+		return $waits;
+	}
+
+	/**
+	 * Record the batch's changes to who waits, once the batch has done its work.
+	 *
+	 * Only this batch's own changes: a row it started waiting, and a row it
+	 * released. A batch that throws records nothing, so its rerun releases the
+	 * same rows again.
+	 *
+	 * @param array<int, array{0: int, 1: string}> $stored The waits recorded when the batch began.
+	 * @return void
+	 */
+	private function store_waits( array $stored ): void {
+		foreach ( array_diff_key( $this->waiting, $stored ) as $id => list( $holder, $hash ) ) {
+			update_post_meta( $id, self::WAITING_META_KEY, $holder . ':' . $hash );
+		}
+
+		foreach ( array_keys( array_diff_key( $stored, $this->waiting ) ) as $id ) {
+			delete_post_meta( $id, self::WAITING_META_KEY );
+		}
 	}
 
 	/**
@@ -774,60 +955,95 @@ final class Upgrader {
 			'unfired'    => 0,
 		);
 
+		$this->waiting      = array();
+		$this->reached      = 0;
+		$this->walk_ceiling = $ceiling;
+
 		do {
-			$posts = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
-			if ( ! $this->prime_owners( $posts, $home_path ) ) {
-				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
-				throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+			$posts   = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
+			$fetched = count( $posts );
+
+			if ( $fetched > 0 ) {
+				$after_id = (int) end( $posts )->ID;
 			}
 
-			// The database still shows rows an earlier batch would have moved
-			// at the keys they would have left.
-			foreach ( $this->owners as $hash => $holders ) {
-				foreach ( array_keys( $holders ) as $id ) {
-					if ( self::has_left( $left, $id ) ) {
-						unset( $this->owners[ $hash ][ $id ] );
-					}
-				}
-			}
-
-			foreach ( $posts as $post ) {
-				if ( ! $post instanceof WP_Post ) {
-					continue;
-				}
-
-				++$pending['total'];
-				$after_id = $post->ID;
-
-				if ( $post->post_modified_gmt > $started ) {
-					++$pending['skipped'];
-					continue;
-				}
-
-				$plan = $this->plan( $post, $home_path, $publish, $claimed );
-
-				$this->predict_move( $post, $plan['update'], $claimed, $left );
-
-				if ( array() === $plan['update'] ) {
-					++$pending['unchanged'];
-				} else {
-					self::tally( $plan['update'], $pending );
-				}
-
-				if ( null !== $plan['conflict'] ) {
-					$pending['conflicts'][] = $plan['conflict'];
-					$pending['unfired']    += (int) $plan['never_fired'];
-				}
-			}
+			$this->predict( $posts, $started, $home_path, $publish, $pending, $claimed, $left );
 
 			if ( null !== $progress ) {
 				$progress( $pending['total'] );
 			}
-
-			$fetched = count( $posts );
 		} while ( self::BATCH_SIZE === $fetched );
 
+		// As in the run's last batch; see run_batch().
+		while ( array() !== $this->waiting ) {
+			$this->reached = PHP_INT_MAX;
+			$this->predict( $this->query_ids( $this->waiting_on_nobody() ), $started, $home_path, $publish, $pending, $claimed, $left );
+		}
+
+		$this->reached = PHP_INT_MAX;
+
 		return $pending;
+	}
+
+	/**
+	 * Predict, for a dry run, what the run does to a set of redirects.
+	 *
+	 * @param array<WP_Post|null>  $posts     The redirects, in ascending ID order.
+	 * @param string               $started   The GMT timestamp at which the walk began.
+	 * @param string               $home_path The home path to strip, or ''.
+	 * @param bool                 $publish   Whether draft redirects would be published.
+	 * @param array<string, mixed> $pending   Running predictions, updated by reference.
+	 * @param array<string, int>   $claimed   Keys held since earlier batches, updated by reference; see predict_move().
+	 * @param string               $left      Bitmap of rows no longer on their stored key, updated by reference.
+	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses a read.
+	 */
+	private function predict( array $posts, string $started, string $home_path, bool $publish, array &$pending, array &$claimed, string &$left ): void {
+		if ( ! $this->prime_owners( $posts, $home_path ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+		}
+
+		// The database still shows rows an earlier batch would have moved
+		// at the keys they would have left.
+		foreach ( $this->owners as $hash => $holders ) {
+			foreach ( array_keys( $holders ) as $id ) {
+				if ( self::has_left( $left, $id ) ) {
+					unset( $this->owners[ $hash ][ $id ] );
+				}
+			}
+		}
+
+		foreach ( $this->in_walk_order( $posts ) as $post ) {
+			if ( $post->post_modified_gmt > $started ) {
+				++$pending['total'];
+				++$pending['skipped'];
+				continue;
+			}
+
+			$plan = $this->plan( $post, $home_path, $publish, $claimed );
+
+			if ( null !== $plan['wait'] ) {
+				$this->waiting[ $post->ID ] = $plan['wait'];
+				continue;
+			}
+
+			++$pending['total'];
+
+			$this->predict_move( $post, $plan['update'], $claimed, $left );
+
+			if ( array() === $plan['update'] ) {
+				++$pending['unchanged'];
+			} else {
+				self::tally( $plan['update'], $pending );
+			}
+
+			if ( null !== $plan['conflict'] ) {
+				$pending['conflicts'][] = $plan['conflict'];
+				$pending['unfired']    += (int) $plan['never_fired'];
+			}
+		}
 	}
 
 	/**
@@ -1030,6 +1246,11 @@ final class Upgrader {
 			}
 		}
 
+		// A waiting row can be released into this batch; see in_walk_order().
+		foreach ( $this->waiting as list( , $hash ) ) {
+			$this->owners[ $hash ] = array();
+		}
+
 		if ( array() === $this->owners ) {
 			return true;
 		}
@@ -1173,14 +1394,12 @@ final class Upgrader {
 	 * A row needing only the draft→publish flip is not written here: it joins
 	 * the publish queue, which run_batch() flushes as one bulk UPDATE.
 	 *
-	 * @param WP_Post              $post      The redirect post.
-	 * @param string               $home_path The site's home path, or '' when not a subdirectory site.
-	 * @param bool                 $publish   Whether draft redirects should be published.
-	 * @param array<string, mixed> $result    Running totals, updated by reference.
+	 * @param WP_Post              $post   The redirect post.
+	 * @param array<string, mixed> $plan   The redirect's plan; see plan().
+	 * @param array<string, mixed> $result Running totals, updated by reference.
 	 * @return string|null A description of the conflict, or null when there was none.
 	 */
-	private function migrate_post( WP_Post $post, string $home_path, bool $publish, array &$result ): ?string {
-		$plan     = $this->plan( $post, $home_path, $publish );
+	private function migrate_post( WP_Post $post, array $plan, array &$result ): ?string {
 		$update   = $plan['update'];
 		$conflict = $plan['conflict'];
 
@@ -1303,7 +1522,7 @@ final class Upgrader {
 	 * @param string             $home_path The site's home path, or '' when not a subdirectory site.
 	 * @param bool               $publish   Whether draft redirects should be published.
 	 * @param array<string, int> $claimed   Source hashes a dry run's earlier rows would have been re-keyed to, and the ID of the row.
-	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null, never_fired: bool} The changed fields, a description of any collision with a redirect going somewhere else, that redirect's ID, and whether this one never fired under 1.x.
+	 * @return array{update: array<string, string>, conflict: string|null, rival: int|null, never_fired: bool, wait: array{0: int, 1: string}|null} The changed fields, a description of any collision with a redirect going somewhere else, that redirect's ID, whether this one never fired under 1.x, and the redirect it must wait for and the key, if any.
 	 */
 	private function plan( WP_Post $post, string $home_path, bool $publish, array $claimed = array() ): array {
 		$update      = array();
@@ -1321,6 +1540,21 @@ final class Upgrader {
 			$owner    = $claimed[ $new_hash ] ?? $this->owner_of( $new_hash );
 			$existing = null === $owner ? $this->find_post_by_hash( $new_hash ) : ( 0 === $owner ? null : get_post( $owner ) );
 			$collided = null !== $existing && $existing->ID !== $post->ID;
+
+			// The key's holder is one the walk has yet to re-key off it: on a
+			// site at /sub, a 1.x '/sub/x' holds the key '/sub/sub/x' re-keys
+			// onto, until it becomes '/x'. Settling that as a collision would
+			// disable this row for a key about to be free, so it waits and is
+			// planned again straight after the holder; see in_walk_order().
+			if ( $collided && $this->moves_later( $existing, $new_hash, $home_path ) ) {
+				return array(
+					'update'      => array(),
+					'conflict'    => null,
+					'rival'       => null,
+					'never_fired' => false,
+					'wait'        => array( $existing->ID, $new_hash ),
+				);
+			}
 
 			if ( ! $collided ) {
 				$update['post_title'] = $new_path;
@@ -1390,6 +1624,7 @@ final class Upgrader {
 			'conflict'    => $conflict,
 			'rival'       => $rival,
 			'never_fired' => $never_fired,
+			'wait'        => null,
 		);
 	}
 
@@ -1966,6 +2201,7 @@ final class Upgrader {
 		delete_option( self::STARTED_OPTION );
 		delete_option( self::CURSOR_OPTION );
 		delete_option( self::CEILING_OPTION );
+		delete_post_meta_by_key( self::WAITING_META_KEY );
 		delete_transient( self::CLI_LOCK );
 	}
 }
