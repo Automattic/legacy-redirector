@@ -1,0 +1,22 @@
+{
+  "name": "legacy-redirector-dataform-prototype",
+  "private": true,
+  "scripts": {
+    "build": "wp-scripts build",
+    "start": "wp-scripts start"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^36.0.0"
+  },
+  "dependencies": {
+    "@wordpress/api-fetch": "^7.56.0",
+    "@wordpress/compose": "^8.9.0",
+    "@wordpress/dataviews": "^19.1.0",
+    "@wordpress/element": "^8.8.0",
+    "@wordpress/html-entities": "^4.56.0",
+    "@wordpress/i18n": "^6.29.0",
+    "@wordpress/theme": "^2.2.0",
+    "@wordpress/ui": "^0.23.0",
+    "@wordpress/url": "^4.56.0"
+  }
+}

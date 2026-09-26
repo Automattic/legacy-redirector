@@ -6,6 +6,7 @@
 /bin/
 /features/
 /node_modules/
+/prototypes/
 /tests/
 /vendor/
 
