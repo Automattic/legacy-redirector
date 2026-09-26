@@ -15,6 +15,7 @@ use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectPersistenceException;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 
@@ -33,7 +34,10 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  */
 final class PostTypeRedirectRepositoryTest extends TestCase {
@@ -496,6 +500,136 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		// get_id_by_source won't find trashed posts because post_name changes.
 		$this->assertSame( 0, $id );
+	}
+
+	/**
+	 * Test get_id_by_source answers with the live row where several have the key, and never with the trash.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
+	 */
+	public function test_get_id_by_source_prefers_the_live_row(): void {
+		global $wpdb;
+
+		$source = SourceUrl::from_string( '/shared-key' );
+		$ids    = array();
+		foreach ( array( 'trash', 'draft', 'publish' ) as $status ) {
+			$ids[ $status ] = $this->insert_redirect_post( array( 'post_title' => '/shared-key' ) );
+			$wpdb->update(
+				$wpdb->posts,
+				array(
+					'post_name'   => $source->hash(),
+					'post_status' => $status,
+				),
+				array( 'ID' => $ids[ $status ] )
+			);
+		}
+
+		$this->assertSame( $ids['publish'], $this->repository->get_id_by_source( $source ) );
+
+		$wpdb->delete( $wpdb->posts, array( 'ID' => $ids['publish'] ) );
+
+		$this->assertSame( $ids['draft'], $this->repository->get_id_by_source( $source ) );
+
+		$wpdb->delete( $wpdb->posts, array( 'ID' => $ids['draft'] ) );
+
+		$this->assertSame( 0, $this->repository->get_id_by_source( $source ) );
+	}
+
+	/**
+	 * Test restoring a redirect whose source a new one has leaves the new one live and editable.
+	 *
+	 * Core would put the restored row on the new redirect's key, and never
+	 * renames a draft's slug: the new one could no longer be saved, as two
+	 * rows cannot share a source.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 */
+	public function test_restored_redirect_leaves_its_replacement_editable(): void {
+		$source = SourceUrl::from_string( '/replaced' );
+		$old    = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/old' ) ) ) );
+		wp_trash_post( $old->id() );
+		$new = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/new' ) ) ) );
+
+		wp_untrash_post( $old->id() );
+
+		$this->assertSame( 'draft', get_post_status( $old->id() ) );
+		$this->assertSame( $source->hash() . '__trashed', get_post( $old->id() )->post_name );
+		$this->assertSame( $new->id(), $this->repository->find_by_source( $source )?->id() );
+		$this->repository->save( $new->with_destination( Destination::from_url( DestinationUrl::from_string( 'https://example.com/newer' ) ) ) );
+	}
+
+	/**
+	 * Test a redirect restored to its earlier, published status onto a key another holds comes back disabled.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 */
+	public function test_restored_live_onto_a_held_key_comes_back_disabled(): void {
+		$source = SourceUrl::from_string( '/held' );
+		$old    = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/old' ) ) ) );
+		wp_trash_post( $old->id() );
+		$new = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/new' ) ) ) );
+
+		add_filter( 'wp_untrash_post_status', 'wp_untrash_post_set_previous_status', 10, 3 );
+		wp_untrash_post( $old->id() );
+		remove_filter( 'wp_untrash_post_status', 'wp_untrash_post_set_previous_status', 10 );
+
+		$this->assertSame( 'draft', get_post_status( $old->id() ) );
+		$this->assertSame( $new->id(), $this->repository->find_by_source( $source )?->id() );
+	}
+
+	/**
+	 * Test a redirect leaving the trash is not hidden by a cached lookup of the one trashed after it.
+	 *
+	 * Core's trash and restore do not go through the repository, so nothing
+	 * else clears the cached answer to which row holds the source.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_source
+	 */
+	public function test_restored_redirect_is_not_hidden_by_the_lookup_cache(): void {
+		$cached  = new CachingRedirectRepository( $this->repository );
+		$source  = SourceUrl::from_string( '/cached' );
+		$earlier = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/earlier' ) ) ) );
+		wp_trash_post( $earlier->id() );
+		$later = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/later' ) ) ) );
+		$this->assertSame( $later->id(), $cached->find_by_source( $source )?->id() );
+		wp_trash_post( $later->id() );
+
+		add_filter( 'wp_untrash_post_status', 'wp_untrash_post_set_previous_status', 10, 3 );
+		wp_untrash_post( $earlier->id() );
+		remove_filter( 'wp_untrash_post_status', 'wp_untrash_post_set_previous_status', 10 );
+
+		$this->assertSame( $earlier->id(), $cached->find_by_source( $source )?->id() );
+	}
+
+	/**
+	 * Test a trashed row left on a bare key does not stop a new redirect for its source.
+	 *
+	 * The 2.0 migration re-keys trashed rows without core's '__trashed'
+	 * suffix, and core would not move this type's aside itself.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 */
+	public function test_trashed_row_on_a_bare_key_does_not_block_a_new_redirect(): void {
+		global $wpdb;
+
+		$source     = SourceUrl::from_string( '/bare' );
+		$trashed_id = $this->insert_redirect_post( array( 'post_title' => '/bare' ) );
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_name'   => $source->hash(),
+				'post_status' => 'trash',
+			),
+			array( 'ID' => $trashed_id )
+		);
+		clean_post_cache( $trashed_id );
+
+		$new = $this->repository->save( Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/new' ) ) ) );
+
+		$this->assertSame( $source->hash(), get_post( $new->id() )->post_name );
+		$this->assertSame( $source->hash() . '__trashed', get_post( $trashed_id )->post_name );
+		$this->assertSame( $new->id(), $this->repository->find_by_source( $source )?->id() );
 	}
 
 	/**

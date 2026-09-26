@@ -22,8 +22,8 @@ interface RedirectRepositoryInterface {
 	 *
 	 * Only returns published redirects: this is the front-end resolution
 	 * lookup. Management code that must see disabled redirects too should use
-	 * get_id_by_source() and find_by_id(), which ignore status. A corrupt row
-	 * (see Redirect::is_corrupt()) is treated as no redirect.
+	 * get_id_by_source() and find_by_id(). A corrupt row (see
+	 * Redirect::is_corrupt()) is treated as no redirect.
 	 *
 	 * @param SourceUrl $source The source URL to find.
 	 * @return Redirect|null The redirect if found, null otherwise.
@@ -45,7 +45,7 @@ interface RedirectRepositoryInterface {
 	/**
 	 * Check if a redirect exists for the given source URL.
 	 *
-	 * Includes all statuses (publish, draft, trash).
+	 * Enabled or disabled; a redirect in the trash holds no source.
 	 *
 	 * @param SourceUrl $source The source URL to check.
 	 * @return bool True if a redirect exists.

@@ -402,7 +402,7 @@ class RedirectManager {
 	 * the lookup RedirectFetcher uses for the same reason.
 	 *
 	 * @param SourceUrl $source The source URL.
-	 * @return Redirect|null The redirect in any status, or null if none exists.
+	 * @return Redirect|null The redirect, enabled or disabled, or null if none exists.
 	 */
 	private function find_any_by_source( SourceUrl $source ): ?Redirect {
 		$redirect_id = $this->repository->get_id_by_source( $source );
