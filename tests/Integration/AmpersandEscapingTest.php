@@ -25,6 +25,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager

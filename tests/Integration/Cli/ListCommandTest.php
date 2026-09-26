@@ -337,6 +337,7 @@ final class ListCommandTest extends CliTestCase {
 	 * Test listing the duplicate sources the migration disabled.
 	 */
 	public function test_list_duplicates(): void {
+		delete_option( Upgrader::VERSION_OPTION );
 		foreach ( array( 'started_gmt', 'cursor', 'ceiling' ) as $option ) {
 			delete_option( 'wpcom_legacy_redirector_upgrade_' . $option );
 		}

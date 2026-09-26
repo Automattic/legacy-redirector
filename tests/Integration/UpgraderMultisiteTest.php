@@ -633,6 +633,83 @@ final class UpgraderMultisiteTest extends TestCase {
 	}
 
 	/**
+	 * Planning a batch's rows again leaves those it re-keyed as it wrote them.
+	 *
+	 * The migrated '/sub/x' - the 1.x '/sub/sub/x' - looks exactly like a 1.x
+	 * '/sub/x', and re-keyed again would lose its prefix a second time and
+	 * collide with '/x'. A batch is planned again when it throws, when the
+	 * process dies part-way, and when two batches overlap.
+	 *
+	 * @dataProvider data_interruptions
+	 *
+	 * @param string $interruption How the first batch is cut short.
+	 * @return void
+	 */
+	public function test_rows_planned_again_keep_the_keys_they_were_given( string $interruption ) {
+		global $wpdb;
+
+		$single_id = $this->create_legacy_redirect( '/x' );
+		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$plain_id  = $this->create_relative_redirect( '/plain' );
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->create_legacy_redirect( '/filler-' . $i );
+		}
+
+		if ( 'overlap' === $interruption ) {
+			$this->upgrader->run_batch( 3 );
+			update_option( 'wpcom_legacy_redirector_upgrade_cursor', 0, false );
+		} else {
+			$stop = static function ( string $query ) use ( $wpdb, $interruption ): string {
+				if ( 'row by row' === $interruption && str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ) {
+					return '';
+				}
+				if ( ! str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ) {
+					return $query;
+				}
+				if ( 'dies' === $interruption ) {
+					throw new \Error( 'The process died.' );
+				}
+				return '';
+			};
+
+			add_filter( 'query', $stop );
+			try {
+				$this->upgrader->run_batch( 3 );
+				$this->fail( 'The batch should have stopped.' );
+			} catch ( \RuntimeException | \Error $e ) {
+				$this->assertNotSame( 'The batch should have stopped.', $e->getMessage() );
+			} finally {
+				remove_filter( 'query', $stop );
+			}
+		}
+
+		$result = $this->upgrader->run_batch( 3 );
+
+		$this->assertSame( md5( '/x' ), get_post( $single_id )->post_name );
+		$this->assertSame( md5( '/' . $this->subsite . '/x' ), get_post( $double_id )->post_name );
+		$this->assertSame( 'publish', get_post_status( $double_id ) );
+		$this->assertSame( 'publish', get_post_status( $plain_id ) );
+		$this->assertSame( array(), $result['conflicts'] );
+
+		$this->run_to_completion();
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rekeyed' ) );
+	}
+
+	/**
+	 * Data provider: the ways a batch comes to be planned again.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_interruptions(): array {
+		return array(
+			'the batch throws'      => array( 'throws' ),
+			'row by row, it throws' => array( 'row by row' ),
+			'the process dies'      => array( 'dies' ),
+			'two batches overlap'   => array( 'overlap' ),
+		);
+	}
+
+	/**
 	 * How many redirects are recorded as waiting.
 	 *
 	 * @return int The number of rows.
