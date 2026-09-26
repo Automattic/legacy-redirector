@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Application;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
@@ -62,7 +63,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		parent::set_up();
 
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
-		$this->validator  = new RedirectValidator( $this->repository );
+		$this->validator  = new RedirectValidator( $this->repository, new RedirectAuditor() );
 
 		// Default stub for __ translation function.
 		Functions\stubs(

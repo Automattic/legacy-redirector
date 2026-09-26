@@ -80,7 +80,7 @@ trait RedirectTestHelper {
 	 * @return RedirectManager The manager.
 	 */
 	protected function manager(): RedirectManager {
-		return $this->services['manager'] ??= new RedirectManager( $this->repository() );
+		return $this->services['manager'] ??= new RedirectManager( $this->repository(), $this->validator() );
 	}
 
 	/**

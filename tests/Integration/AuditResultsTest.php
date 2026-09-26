@@ -26,6 +26,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Destination

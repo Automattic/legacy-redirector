@@ -46,11 +46,11 @@ class RedirectValidator {
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface $repository The redirect repository.
-	 * @param RedirectAuditor|null        $auditor    The redirect auditor (optional, created if not provided).
+	 * @param RedirectAuditor             $auditor    The redirect auditor.
 	 */
-	public function __construct( RedirectRepositoryInterface $repository, ?RedirectAuditor $auditor = null ) {
+	public function __construct( RedirectRepositoryInterface $repository, RedirectAuditor $auditor ) {
 		$this->repository = $repository;
-		$this->auditor    = $auditor ?? new RedirectAuditor();
+		$this->auditor    = $auditor;
 	}
 
 	/**
