@@ -35,6 +35,7 @@ final class PostType {
 		add_filter( 'bulk_post_updated_messages', array( $this, 'bulk_post_updated_messages' ), 10, 2 );
 		add_filter( 'ep_indexable_post_types', array( $this, 'exclude_from_elasticpress' ) );
 		add_filter( 'wp_insert_post_data', array( $this, 'undo_ampersand_escaping' ), 10, 3 );
+		add_filter( 'wp_insert_post_data', array( $this, 'key_redirect_leaving_the_trash' ), 11, 2 );
 	}
 
 	/**
@@ -72,6 +73,62 @@ final class PostType {
 				$data[ $field ] = $given;
 			}
 		}
+
+		return $data;
+	}
+
+	/**
+	 * Key a redirect leaving the trash by its source, and keep it off another redirect's key.
+	 *
+	 * Core puts a post leaving the trash back on the slug it had when it was
+	 * trashed, whether it is restored or saved with a new status. The 2.0
+	 * migration re-keys trashed rows along with the rest, so for a redirect
+	 * trashed under 1.x that slug is its 1.x key, one no request produces.
+	 * Every save keys a redirect by its source, so leaving the trash does too:
+	 * unless the slug is what the title was hashed from (see
+	 * Upgrader::hashed_text()), as for a row the migration has yet to reach,
+	 * it becomes the md5 of the title.
+	 *
+	 * Where another redirect has that key, taking it would leave two rows on
+	 * one source, and that one could no longer be saved. Instead it keeps its
+	 * key set aside, as it had in the trash, and comes out disabled, even on a
+	 * site that restores posts to their earlier status: saving it onto the
+	 * held key would be refused.
+	 *
+	 * @param array<string, mixed> $data    Slashed, sanitized post data.
+	 * @param array<string, mixed> $postarr Slashed, sanitized post data as passed in.
+	 * @return array<string, mixed> The post data.
+	 */
+	public function key_redirect_leaving_the_trash( array $data, array $postarr ): array {
+		$id    = (int) ( $postarr['ID'] ?? 0 );
+		$title = wp_unslash( (string) ( $data['post_title'] ?? '' ) );
+
+		if ( self::POST_TYPE !== ( $data['post_type'] ?? '' ) || 'trash' === ( $data['post_status'] ?? '' ) || '' === $title
+			|| 0 === $id || 'trash' !== get_post_status( $id )
+		) {
+			return $data;
+		}
+
+		$key = (string) $data['post_name'];
+		if ( md5( Upgrader::hashed_text( $title, $key ) ) !== $key ) {
+			$key = md5( $title );
+		}
+
+		// The lookup cache may still name the redirect that had the source
+		// while this one was in the trash.
+		wp_cache_delete( CachingRedirectRepository::cache_key( $key ), CachingRedirectRepository::CACHE_GROUP );
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- A write-path check that must see the database as it is; only when leaving the trash.
+		if ( null !== $wpdb->get_var( $wpdb->prepare( "SELECT ID FROM $wpdb->posts WHERE post_type = %s AND post_name = %s AND ID <> %d AND post_status <> 'trash' LIMIT 1", self::POST_TYPE, $key, $id ) ) ) {
+			$key .= '__trashed';
+			if ( 'publish' === $data['post_status'] ) {
+				$data['post_status'] = 'draft';
+			}
+		}
+
+		$data['post_name'] = $key;
 
 		return $data;
 	}
