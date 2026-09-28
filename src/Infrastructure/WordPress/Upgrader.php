@@ -1196,11 +1196,12 @@ final class Upgrader {
 	 * do, as predictions, apart from failures, which only a write can reveal.
 	 *
 	 * @param callable(int): void|null $progress Called after each batch with the number of redirects checked so far.
+	 * @param int                      $size     Redirects read per batch.
 	 * @return array{total: int, changed: int, unchanged: int, skipped: int, published: int, repathed: int, deduped: int, normalized: int, conflicts: string[], unfired: int}
 	 *
 	 * @throws RuntimeException When the database refuses a read.
 	 */
-	public function count_pending( ?callable $progress = null ): array {
+	public function count_pending( ?callable $progress = null, int $size = self::BATCH_SIZE ): array {
 		$started   = $this->started_at( false );
 		$ceiling   = $this->ceiling( false );
 		$publish   = $this->from_pre_2_0_data();
@@ -1230,7 +1231,7 @@ final class Upgrader {
 		$this->rekeyed      = $this->stored_rekeys();
 
 		do {
-			$posts   = $this->query_batch( $after_id, $ceiling, self::BATCH_SIZE );
+			$posts   = $this->query_batch( $after_id, $ceiling, $size );
 			$fetched = count( $posts );
 
 			if ( $fetched > 0 ) {
@@ -1242,7 +1243,7 @@ final class Upgrader {
 			if ( null !== $progress ) {
 				$progress( $pending['total'] );
 			}
-		} while ( self::BATCH_SIZE === $fetched );
+		} while ( $size === $fetched );
 
 		// As in the run's last batch; see run_batch().
 		while ( array() !== $this->waiting ) {
