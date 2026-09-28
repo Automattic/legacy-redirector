@@ -41,7 +41,7 @@ final class UpgradeNoticeTest extends MonkeyStubs {
 
 		Monkey\Functions\stubTranslationFunctions();
 		Monkey\Functions\stubEscapeFunctions();
-		Monkey\Functions\stubs( array( 'wp_kses' ) );
+		Monkey\Functions\stubs( array( 'wp_kses', 'number_format_i18n' ) );
 
 		// Upgrader is final, so drive needs_upgrade() through its option read
 		// rather than mocking it.
@@ -71,6 +71,38 @@ final class UpgradeNoticeTest extends MonkeyStubs {
 		$this->prime_screen( PostType::POST_TYPE, Upgrader::DB_VERSION );
 
 		$this->assertSame( '', $this->render() );
+	}
+
+	/**
+	 * Test a completed upgrade still warns while failed writes await a retry.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\UpgradeNotice::display
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\UpgradeNotice::show
+	 */
+	public function test_display_warns_of_failed_writes_once_up_to_date(): void {
+		$this->prime_screen( PostType::POST_TYPE, Upgrader::DB_VERSION );
+		$this->prime_retries( array( 5, 6 ), array( 9 ) );
+
+		$output = $this->render();
+
+		$this->assertStringContainsString( 'notice-warning', $output );
+		$this->assertStringContainsString( '3 redirects could not be migrated', $output );
+		$this->assertStringContainsString( '<code>wp legacy-redirector migrate</code>', $output );
+	}
+
+	/**
+	 * Test the in-progress notice takes precedence over failed writes.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\UpgradeNotice::display
+	 */
+	public function test_display_shows_only_progress_while_upgrade_pending(): void {
+		$this->prime_screen( PostType::POST_TYPE );
+		$this->prime_retries( array( 5 ) );
+
+		$output = $this->render();
+
+		$this->assertStringContainsString( 'notice-info', $output );
+		$this->assertStringNotContainsString( 'could not be migrated', $output );
 	}
 
 	/**
@@ -119,6 +151,27 @@ final class UpgradeNoticeTest extends MonkeyStubs {
 		Functions\when( 'get_option' )->justReturn( $db_version );
 		Functions\when( 'get_current_screen' )->justReturn( (object) array( 'post_type' => $screen_post_type ) );
 		Functions\when( 'current_user_can' )->justReturn( $can );
+	}
+
+	/**
+	 * Stub the recorded failures, one set of IDs per failed walk, alongside the data version.
+	 *
+	 * @param int[] ...$sets The failed IDs of each walk.
+	 * @return void
+	 */
+	private function prime_retries( array ...$sets ): void {
+		$version = get_option( Upgrader::VERSION_OPTION );
+		$retries = array();
+		foreach ( $sets as $index => $ids ) {
+			$retries[ '2026-01-0' . ( $index + 1 ) . ' 00:00:00' ] = array(
+				'publish' => true,
+				'ids'     => $ids,
+			);
+		}
+
+		Functions\when( 'get_option' )->alias(
+			static fn( string $name ) => 'wpcom_legacy_redirector_upgrade_retry' === $name ? $retries : $version
+		);
 	}
 
 	/**
