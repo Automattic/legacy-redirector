@@ -95,7 +95,7 @@ wp site list --field=url | xargs -I % wp --url=% legacy-redirector migrate
 
 ### What the migration will not touch
 
-Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes redirects that were **never** published, which WordPress records with a `post_modified_gmt` of `0000-00-00 00:00:00`. Anything you disable after upgrading keeps a real modified date and is left alone.
+Under 2.0, a `draft` redirect means "deliberately disabled". The migration therefore only publishes drafts that already existed when it began: a redirect created after that is beyond its reach, and one edited after that is skipped, as below. Anything you disable after upgrading is left alone. A site that has no redirects when 2.0 first loads is recorded as already migrated, so the redirects it goes on to create, disabled or not, are never mistaken for 1.x data.
 
 More broadly, any redirect created or edited after the migration began is skipped by **every** pass, not just the publishing one, including an edit made while a batch is running: it was made under 2.0 rules, so whatever it now says is what you meant. That is what makes the ungated passes safe to re-run on a later version bump.
 

@@ -357,6 +357,40 @@ final class Upgrader {
 	}
 
 	/**
+	 * Record a site with no redirects as already on the current data version.
+	 *
+	 * 1.x stored no data version, so a missing one means 1.x data or a fresh
+	 * install, and the walk treats it as 1.x: it publishes drafts and strips
+	 * the home path. Redirects a fresh install creates before any page load
+	 * has run a batch - `wp legacy-redirector import` on a new site - would
+	 * then have their disabled rows published and their deliberate
+	 * double-prefixed sources rewritten. With no redirect rows there is no
+	 * 1.x data, so the version is recorded before any are created.
+	 *
+	 * For every context, WP-CLI included. One indexed query per request
+	 * while the version is missing, which on a 1.x site is until the upgrade
+	 * completes.
+	 *
+	 * @return void
+	 */
+	public function stamp_fresh_install(): void {
+		if ( false !== get_option( self::VERSION_OPTION ) ) {
+			return;
+		}
+
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Only while the version is missing; must see the table as it is.
+		$found = $wpdb->query( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s LIMIT 1", PostType::POST_TYPE ) );
+
+		// A refused read is not an empty table: stamping a 1.x site would
+		// skip its upgrade for good.
+		if ( 0 === $found ) {
+			update_option( self::VERSION_OPTION, self::DB_VERSION );
+		}
+	}
+
+	/**
 	 * Run a single batch if the site needs upgrading.
 	 *
 	 * Safe to call on every request: it costs one autoloaded option read once

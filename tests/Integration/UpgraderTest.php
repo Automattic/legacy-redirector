@@ -115,6 +115,59 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A site with no redirects is recorded as current before it creates any.
+	 *
+	 * A disabled redirect is a draft, exactly as 1.x stored every redirect,
+	 * so one created on a fresh install before any page load has run a batch
+	 * - `wp legacy-redirector import` on a new site - would be published.
+	 *
+	 * @return void
+	 */
+	public function test_fresh_install_is_stamped_before_its_first_redirect() {
+		$this->upgrader->stamp_fresh_install();
+		$disabled_id = $this->create_legacy_redirect( '/disabled-on-purpose' );
+
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+
+		$this->upgrader->maybe_upgrade();
+
+		$this->assertSame( 'draft', get_post_status( $disabled_id ) );
+	}
+
+	/**
+	 * A site holding redirects is not stamped, so its 1.x data is still migrated.
+	 *
+	 * @return void
+	 */
+	public function test_site_with_redirects_is_not_stamped() {
+		$this->create_legacy_redirect( '/old-page' );
+
+		$this->upgrader->stamp_fresh_install();
+
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
+	 * A refused read is not taken for an empty table.
+	 *
+	 * Stamping a 1.x site would skip its migration for good.
+	 *
+	 * @return void
+	 */
+	public function test_refused_read_does_not_stamp() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$refuse = static fn( string $query ): string => str_starts_with( $query, "SELECT ID FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$this->upgrader->stamp_fresh_install();
+		remove_filter( 'query', $refuse );
+
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
 	 * Redirects stored as drafts by 1.x are published.
 	 *
 	 * @return void
