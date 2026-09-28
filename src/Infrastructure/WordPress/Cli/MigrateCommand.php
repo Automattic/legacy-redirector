@@ -132,7 +132,7 @@ final class MigrateCommand extends WP_CLI_Command {
 				WP_CLI::line( sprintf( '%s redirect(s) could not be written in an earlier run. Running `wp legacy-redirector migrate` without --dry-run retries just those.', number_format( $waiting ) ) );
 			} else {
 				WP_CLI::line( sprintf( 'Retrying the %s redirect(s) that could not be written in an earlier run. The rest are already migrated and are not walked again.', number_format( $waiting ) ) );
-				$this->report_outcome( 'Retry complete.', $this->upgrader->retry_failed() );
+				$this->report_outcome( 'Retry complete.', $this->upgrader->retry_failed( 60 ) );
 			}
 
 			return;
@@ -229,7 +229,7 @@ final class MigrateCommand extends WP_CLI_Command {
 
 		do {
 			$this->upgrader->hold_web_batches();
-			$batch = $this->upgrader->run_batch( self::BATCH_SIZE );
+			$batch = $this->upgrader->run_batch( self::BATCH_SIZE, 60 );
 
 			foreach ( $totals as $key => $value ) {
 				$totals[ $key ] = is_array( $value ) ? array_merge( $value, $batch[ $key ] ) : $value + $batch[ $key ];
