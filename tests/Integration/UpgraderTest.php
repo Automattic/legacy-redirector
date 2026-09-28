@@ -168,6 +168,30 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A batch clears the caches its writes left stale once, not once per row.
+	 *
+	 * On a persistent object cache each clear is a network round trip.
+	 *
+	 * @return void
+	 */
+	public function test_batch_clears_caches_once() {
+		foreach ( array( '/a/', '/b/', '/c/' ) as $source ) {
+			$this->create_legacy_redirect( $source );
+		}
+		$bumps = 0;
+		$count = static function ( string $group ) use ( &$bumps ): void {
+			$bumps += (int) ( 'posts' === $group );
+		};
+
+		add_action( 'wp_cache_set_last_changed', $count );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_action( 'wp_cache_set_last_changed', $count );
+
+		$this->assertSame( 3, $result['repathed'] );
+		$this->assertSame( 1, $bumps );
+	}
+
+	/**
 	 * Redirects stored as drafts by 1.x are published.
 	 *
 	 * @return void

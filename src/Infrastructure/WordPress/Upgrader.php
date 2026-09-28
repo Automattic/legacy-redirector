@@ -289,11 +289,18 @@ final class Upgrader {
 	private array $ignored_statuses = array( 'trash', 'auto-draft' );
 
 	/**
-	 * IDs written in the batch being processed, whose stale audit flags go at its end.
+	 * IDs written in the batch being processed, whose caches and stale audit flags go at its end; see clean_up_writes().
 	 *
 	 * @var int[]
 	 */
-	private array $unflagged = array();
+	private array $written = array();
+
+	/**
+	 * Source hashes the batch being processed moved a redirect onto or off, whose lookup cache goes at its end.
+	 *
+	 * @var array<string, true>
+	 */
+	private array $stale_keys = array();
 
 	/**
 	 * The keys recorded as given; see REKEYED_OPTION.
@@ -791,8 +798,7 @@ final class Upgrader {
 			}
 		}
 
-		self::drop_audit_flags( $this->unflagged );
-		$this->unflagged = array();
+		$this->clean_up_writes();
 
 		$this->flush_publish_queue( $started, $result );
 	}
@@ -839,8 +845,7 @@ final class Upgrader {
 			}
 		}
 
-		self::drop_audit_flags( $this->unflagged );
-		$this->unflagged = array();
+		$this->clean_up_writes();
 
 		$this->flush_publish_queue( $started, $result );
 	}
@@ -1923,7 +1928,7 @@ final class Upgrader {
 
 		// Matching the modified date as read skips the write if a user has
 		// edited the row since, so the edit is not overwritten.
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned below and in process().
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Deliberately bypasses wp_update_post(); see above. Caches are cleaned in clean_up_writes().
 		$written = $wpdb->update(
 			$wpdb->posts,
 			$update,
@@ -1983,10 +1988,12 @@ final class Upgrader {
 		} catch ( RuntimeException $e ) {
 			// Some of these may have landed, and the batch is about to stop
 			// before recording which. A rerun will find them already done, so
-			// their cached copies must go now or never.
+			// their cached copies, and those of the batch's earlier writes, must
+			// go now or never.
 			foreach ( $writes as $write ) {
 				$this->after_write( $write['post'], $write['update'] );
 			}
+			$this->clean_up_writes();
 			throw $e;
 		}
 
@@ -2064,7 +2071,7 @@ final class Upgrader {
 			$args   = array_merge( $args, $pairs );
 		}
 
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Every value is a placeholder; the interpolated parts are column names from plan() and placeholder lists. Deliberately bypasses wp_update_post(); see write(). Caches are cleaned in after_write().
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Every value is a placeholder; the interpolated parts are column names from plan() and placeholder lists. Deliberately bypasses wp_update_post(); see write(). Caches are cleaned in clean_up_writes().
 		$written = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE `{$wpdb->posts}` SET " . implode( ', ', $sets )
@@ -2174,29 +2181,53 @@ final class Upgrader {
 	}
 
 	/**
-	 * Clean up after a redirect's changes have been written.
+	 * Note a redirect whose changes have been written, for clean_up_writes().
 	 *
 	 * @param WP_Post               $post   The redirect as it was read.
 	 * @param array<string, string> $update The fields that changed.
 	 * @return void
 	 */
 	private function after_write( WP_Post $post, array $update ): void {
-		// The row itself, and core's cached post queries that could still list
-		// it under its old key or status.
-		wp_cache_delete( $post->ID, 'posts' );
-		wp_cache_set_posts_last_changed();
+		$this->written[]                      = $post->ID;
+		$this->stale_keys[ $post->post_name ] = true;
+		if ( isset( $update['post_name'] ) ) {
+			$this->stale_keys[ $update['post_name'] ] = true;
+		}
+	}
 
-		// Whatever the last scan said about the row described it before this
-		// write, so it goes, as on any save; see AuditFlags. All at once at
-		// the end of the batch, rather than two queries per row here.
-		$this->unflagged[] = $post->ID;
+	/**
+	 * Clear what the batch's writes left stale, once for the whole batch.
+	 *
+	 * Batched rather than per row: on a persistent object cache each delete is
+	 * a network round trip, several per row across millions of rows. Until
+	 * the batch ends, a request can see a row's pre-migration copy, as it
+	 * could before the batch reached it.
+	 *
+	 * @return void
+	 */
+	private function clean_up_writes(): void {
+		if ( array() === $this->written ) {
+			return;
+		}
+
+		// Whatever the last scan said about a row described it before this
+		// write, so it goes, as on any save; see AuditFlags.
+		self::drop_audit_flags( $this->written );
+
+		// The rows themselves, and core's cached post queries that could still
+		// list them under their old key or status.
+		wp_cache_delete_multiple( $this->written, 'posts' );
+		wp_cache_set_posts_last_changed();
 
 		// The lookup cache stores 0 for "no redirect here", so a path that was
 		// requested while the redirect was still a draft is cached as missing.
-		$this->invalidate( $post->post_name );
-		if ( isset( $update['post_name'] ) ) {
-			$this->invalidate( $update['post_name'] );
-		}
+		wp_cache_delete_multiple(
+			array_map( CachingRedirectRepository::cache_key( ... ), array_keys( $this->stale_keys ) ),
+			CachingRedirectRepository::CACHE_GROUP
+		);
+
+		$this->written    = array();
+		$this->stale_keys = array();
 	}
 
 	/**
@@ -2415,19 +2446,6 @@ final class Upgrader {
 	 */
 	private function home_path(): string {
 		return HomePath::current();
-	}
-
-	/**
-	 * Invalidate the lookup cache for a source hash.
-	 *
-	 * @param string $hash The MD5 hash of the source path.
-	 * @return void
-	 */
-	private function invalidate( string $hash ): void {
-		wp_cache_delete(
-			CachingRedirectRepository::cache_key( $hash ),
-			CachingRedirectRepository::CACHE_GROUP
-		);
 	}
 
 	/**
