@@ -22,9 +22,12 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * how a save that escaped every '&' went unnoticed.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager

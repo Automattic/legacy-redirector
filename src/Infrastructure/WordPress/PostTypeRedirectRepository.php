@@ -94,7 +94,7 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	/**
 	 * Check if a redirect exists for the given source URL.
 	 *
-	 * Includes all statuses (publish, draft, trash).
+	 * Draft or published; the trash holds no source. See get_id_by_source().
 	 *
 	 * @param SourceUrl $source The source URL to check.
 	 * @return bool True if a redirect exists.
@@ -107,8 +107,8 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	/**
 	 * Save a redirect.
 	 *
-	 * Inserts are refused when a redirect already exists for the source, in any
-	 * status. `post_name` holds the source hash and is how every lookup finds a
+	 * Inserts are refused when a redirect already exists for the source,
+	 * outside the trash. `post_name` holds the source hash and is how every lookup finds a
 	 * redirect, but WordPress only uniquifies slugs for published posts, so a
 	 * second draft insert would silently shadow the first and leave which one
 	 * resolves up to a `LIMIT 1`.
@@ -143,6 +143,8 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 				throw RedirectPersistenceException::source_taken( $redirect->source(), $holder );
 			}
 
+			$this->move_trash_aside( $redirect );
+
 			$args['ID'] = $redirect->id();
 			$result     = wp_update_post( $args, true );
 		} else {
@@ -150,6 +152,8 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
 				throw RedirectPersistenceException::duplicate_source( $redirect->source() );
 			}
+
+			$this->move_trash_aside( $redirect );
 
 			$result = wp_insert_post( $args, true );
 		}
@@ -188,6 +192,14 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	/**
 	 * Get the ID of a redirect for a source URL.
 	 *
+	 * A row in the trash holds no source, as core means by moving its slug
+	 * aside; one the 2.0 migration re-keyed keeps a bare key, and is ignored
+	 * all the same. Where more than one other row has the key, the live one
+	 * answers: the published row, then the oldest. Core never renames a
+	 * draft's slug, so restoring a redirect after its source was given to a
+	 * new one puts two rows on one key, and an unordered pick could answer
+	 * with the disabled row while the live redirect stopped firing.
+	 *
 	 * @param SourceUrl $source The source URL.
 	 * @return int The redirect ID, or 0 if not found.
 	 */
@@ -198,13 +210,44 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Performance-critical lookup, caching handled by caller.
 		$post_id = $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT ID FROM $wpdb->posts WHERE post_type = %s AND post_name = %s LIMIT 1",
+				"SELECT ID FROM $wpdb->posts WHERE post_type = %s AND post_name = %s AND post_status <> 'trash' ORDER BY post_status = 'publish' DESC, ID LIMIT 1",
 				self::POST_TYPE,
 				$source->hash()
 			)
 		);
 
 		return $post_id ? (int) $post_id : 0;
+	}
+
+	/**
+	 * Move any trashed row off the key a redirect is about to be saved on.
+	 *
+	 * Core does this itself when a post takes a slug a trashed post has, but
+	 * finds them by querying post type 'any', which leaves out a type hidden
+	 * from search, as this one is. A trashed row keeps a bare key where the
+	 * 2.0 migration re-keyed it, or where it was trashed before WordPress 4.5,
+	 * and publishing onto it would give the new redirect the key '<md5>-2',
+	 * which no request produces.
+	 *
+	 * @param Redirect $redirect The redirect about to be saved.
+	 * @return void
+	 */
+	private function move_trash_aside( Redirect $redirect ): void {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- A write-path check that must see the database as it is.
+		$trashed = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT ID FROM $wpdb->posts WHERE post_type = %s AND post_name = %s AND post_status = 'trash' AND ID <> %d",
+				self::POST_TYPE,
+				$redirect->source()->hash(),
+				(int) $redirect->id()
+			)
+		);
+
+		foreach ( $trashed as $id ) {
+			wp_add_trashed_suffix_to_post_name_for_post( (int) $id );
+		}
 	}
 
 	/**

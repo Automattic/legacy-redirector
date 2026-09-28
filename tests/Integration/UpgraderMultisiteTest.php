@@ -35,6 +35,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class UpgraderMultisiteTest extends TestCase {

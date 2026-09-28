@@ -34,6 +34,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  */
 final class UpgraderTest extends TestCase {
@@ -1288,6 +1289,123 @@ final class UpgraderTest extends TestCase {
 		$this->upgrader->run_batch( 100 );
 
 		$this->assertSame( '/find?q=a&page=2', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * A redirect core trashed under 1.x is restored onto the key the migration gave it.
+	 *
+	 * Core restores a trashed post onto the slug it had when trashed, which
+	 * for this row is its 1.x key.
+	 *
+	 * @return void
+	 */
+	public function test_trashed_row_is_restored_onto_its_migrated_key() {
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+		wp_trash_post( $post_id );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 1, $result['repathed'] );
+		$this->assertSame( 1, $pending['repathed'] );
+
+		wp_untrash_post( $post_id );
+
+		$this->assertSame( md5( '/old-page' ), get_post( $post_id )->post_name );
+		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * A trashed row re-keyed onto a key a live row then takes does not hide the live one.
+	 *
+	 * A lookup ignores the trash when the walk settles who holds a key, so the
+	 * trashed '/x/' and the live '/x//' both end up on '/x'.
+	 *
+	 * @return void
+	 */
+	public function test_trashed_row_on_a_live_key_does_not_hide_it() {
+		$trashed_id = $this->create_legacy_redirect( '/x/', 'https://example.com/old' );
+		wp_trash_post( $trashed_id );
+		$live_id = $this->create_legacy_redirect( '/x//' );
+
+		$this->upgrader->run_batch( 100 );
+		wp_cache_flush();
+
+		$this->assertSame( md5( '/x' ), get_post( $trashed_id )->post_name );
+		$this->assertSame( $live_id, ( new PostTypeRedirectRepository() )->find_by_source( SourceUrl::from_string( '/x' ) )?->id() );
+	}
+
+	/**
+	 * A redirect trashed under 1.x and enabled after the migration goes live on its 2.0 key.
+	 *
+	 * Enabling saves it with a new status, and core puts a post leaving the
+	 * trash back on the slug it had when trashed, as a restore does.
+	 *
+	 * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+	 *
+	 * @return void
+	 */
+	public function test_enabling_a_trashed_row_puts_it_on_its_migrated_key() {
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+		wp_trash_post( $post_id );
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertTrue( $this->manager()->enable( $post_id ) );
+
+		$this->assertSame( md5( '/old-page' ), get_post( $post_id )->post_name );
+		$this->clear_lookup_cache( '/old-page' );
+		$this->assertSame( $post_id, $this->repository()->find_by_source( SourceUrl::from_string( '/old-page' ) )?->id() );
+	}
+
+	/**
+	 * A kses-escaped 1.x row restored before the migration reaches it stays on the key it was hashed to.
+	 *
+	 * Keying it by its escaped title would move it off the right key for good:
+	 * the migration would then take the escaped text as what was hashed.
+	 *
+	 * @return void
+	 */
+	public function test_escaped_row_restored_before_the_walk_keeps_its_key() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/find?q=a&page=2' );
+		$wpdb->update( $wpdb->posts, array( 'post_title' => '/find?q=a&amp;page=2' ), array( 'ID' => $post_id ) );
+		clean_post_cache( $post_id );
+		wp_trash_post( $post_id );
+
+		wp_untrash_post( $post_id );
+
+		$this->assertSame( md5( '/find?q=a&page=2' ), get_post( $post_id )->post_name );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/find?q=a&page=2', get_post( $post_id )->post_title );
+	}
+
+	/**
+	 * A duplicate the migration trashed is restored onto its own key, and the live redirect still answers.
+	 *
+	 * @return void
+	 */
+	public function test_restored_duplicate_keeps_its_own_key() {
+		$kept_id  = $this->create_legacy_redirect( '/page' );
+		$spare_id = $this->create_legacy_redirect( '/page/' );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'trash', get_post_status( $spare_id ) );
+		$this->assertSame( 1, $result['deduped'] );
+		$this->assertSame( $result['changed'], $pending['changed'] );
+
+		wp_untrash_post( $spare_id );
+
+		$this->assertSame( md5( '/page/' ), get_post( $spare_id )->post_name );
+		$this->assertSame( $kept_id, ( new PostTypeRedirectRepository() )->find_by_source( SourceUrl::from_string( '/page' ) )?->id() );
 	}
 
 	/**

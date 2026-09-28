@@ -19,7 +19,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * Uses WordPress object cache (wp_cache_*) to cache redirect post IDs.
  * The full Redirect entity is not cached, only the ID mapping.
  *
- * A cache entry answers "which post holds this source", in any status, and 0
+ * A cache entry answers "which post holds this source", enabled or disabled, and 0
  * means no post holds it at all. find_by_source() applies its publish-only
  * filter to the loaded redirect, never to the cached ID, so the entry stays
  * usable by management lookups that must see disabled redirects.

@@ -1936,17 +1936,28 @@ final class Upgrader {
 	 * @return string The source text.
 	 */
 	private static function hashed_source( WP_Post $post ): string {
-		$key = str_ends_with( $post->post_name, '__trashed' ) ? substr( $post->post_name, 0, -9 ) : $post->post_name;
+		return self::hashed_text( $post->post_title, $post->post_name );
+	}
 
-		if ( md5( $post->post_title ) !== $key ) {
-			$unescaped = str_replace( '&amp;', '&', $post->post_title );
+	/**
+	 * The text a key was hashed from, given the title stored beside it; see hashed_source().
+	 *
+	 * @param string $title The stored title.
+	 * @param string $key   The stored key, with or without core's trash suffix.
+	 * @return string The title, unless it is the kses-escaped form of the text the key was hashed from.
+	 */
+	public static function hashed_text( string $title, string $key ): string {
+		$key = str_ends_with( $key, '__trashed' ) ? substr( $key, 0, -9 ) : $key;
+
+		if ( md5( $title ) !== $key ) {
+			$unescaped = str_replace( '&amp;', '&', $title );
 
 			if ( md5( $unescaped ) === $key ) {
 				return $unescaped;
 			}
 		}
 
-		return $post->post_title;
+		return $title;
 	}
 
 	/**
