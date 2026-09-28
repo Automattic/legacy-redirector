@@ -370,17 +370,13 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * the walk reaches it and makes it '/x'. Visited first, the double-prefixed
 	 * row waits for that rather than colliding. The pair is split across
 	 * batches too, so the wait outlives the request that began it.
-	 * Row by row, as when the key map cannot be read, it waits just the same.
 	 *
 	 * @dataProvider data_waiting_cases
 	 *
-	 * @param int  $between Rows between the two.
-	 * @param bool $by_row  Whether the run has to go row by row.
+	 * @param int $between Rows between the two.
 	 * @return void
 	 */
-	public function test_double_prefixed_source_created_first_takes_the_freed_key( int $between, bool $by_row ) {
-		global $wpdb;
-
+	public function test_double_prefixed_source_created_first_takes_the_freed_key( int $between ) {
 		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
 		for ( $i = 0; $i < $between; $i++ ) {
 			$this->create_legacy_redirect( '/filler-' . $i );
@@ -388,10 +384,6 @@ final class UpgraderMultisiteTest extends TestCase {
 		$single_id = $this->create_legacy_redirect( '/x' );
 
 		$pending = $this->upgrader->count_pending();
-
-		if ( $by_row ) {
-			add_filter( 'query', static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query );
-		}
 
 		$totals = $this->run_to_completion();
 
@@ -411,16 +403,14 @@ final class UpgraderMultisiteTest extends TestCase {
 	}
 
 	/**
-	 * Data provider: the pair in one batch and in two, planned in bulk and row by row.
+	 * Data provider: the pair in one batch and in two.
 	 *
-	 * @return array<string, array{int, bool}>
+	 * @return array<string, array{int}>
 	 */
 	public static function data_waiting_cases(): array {
 		return array(
-			'one batch'               => array( 0, false ),
-			'two batches'             => array( Upgrader::BATCH_SIZE, false ),
-			'row by row'              => array( 0, true ),
-			'row by row, two batches' => array( Upgrader::BATCH_SIZE, true ),
+			'one batch'   => array( 0 ),
+			'two batches' => array( Upgrader::BATCH_SIZE ),
 		);
 	}
 
@@ -661,9 +651,6 @@ final class UpgraderMultisiteTest extends TestCase {
 			update_option( 'wpcom_legacy_redirector_upgrade_cursor', 0, false );
 		} else {
 			$stop = static function ( string $query ) use ( $wpdb, $interruption ): string {
-				if ( 'row by row' === $interruption && str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ) {
-					return '';
-				}
 				if ( ! str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ) {
 					return $query;
 				}
@@ -703,10 +690,9 @@ final class UpgraderMultisiteTest extends TestCase {
 	 */
 	public static function data_interruptions(): array {
 		return array(
-			'the batch throws'      => array( 'throws' ),
-			'row by row, it throws' => array( 'row by row' ),
-			'the process dies'      => array( 'dies' ),
-			'two batches overlap'   => array( 'overlap' ),
+			'the batch throws'    => array( 'throws' ),
+			'the process dies'    => array( 'dies' ),
+			'two batches overlap' => array( 'overlap' ),
 		);
 	}
 

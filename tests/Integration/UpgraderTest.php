@@ -828,6 +828,39 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A refused read of who holds each key stops the batch before it writes anything.
+	 *
+	 * Every plan is made against that map, and the cursor stays put, so the
+	 * next run redoes the batch.
+	 *
+	 * @return void
+	 */
+	public function test_refused_key_map_stops_the_batch() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should have stopped.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringStartsWith( 'the database could not read the redirects', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+		$this->assertSame( '/old-page/', get_post( $post_id )->post_title );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
+	}
+
+	/**
 	 * A redirect disabled as a duplicate source can be listed later, until someone saves it.
 	 *
 	 * @return void
@@ -1746,20 +1779,17 @@ final class UpgraderTest extends TestCase {
 		$this->assertFalse( $this->upgrader->duplicates()[ $loser_id ]['never_fired'] );
 	}
 	/**
-	 * Writing a batch in bulk gives exactly what writing it row by row gives.
+	 * Writing a batch in bulk gives exactly what writing each row alone gives.
 	 *
 	 * The dry run must predict the bulk result exactly, and the same mixed set
-	 * is migrated three more ways: with every bulk statement made to fall
-	 * short, so each row is read back and written alone; with the key map
-	 * unavailable, so every row is looked up in the database and written
-	 * before the next is planned - the original behavior, and a reference
-	 * that shares none of the bulk machinery; and in batches of seven, so
+	 * is migrated two more ways: with every bulk statement made to fall short,
+	 * so each row is read back and written alone; and in batches of seven, so
 	 * rows interact across batches. Every row, marker, count and report line
 	 * must come out the same.
 	 *
 	 * @return void
 	 */
-	public function test_bulk_writes_match_row_by_row_writes() {
+	public function test_bulk_writes_match_writes_made_alone() {
 		global $wpdb;
 
 		$bulk_ids = $this->create_mixed_legacy_set();
@@ -1796,7 +1826,6 @@ final class UpgraderTest extends TestCase {
 		$keys[] = 'processed';
 		$runs   = array(
 			'every bulk statement falling short' => static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' ) ? $query . ' AND 1 = 0' : $query,
-			'no key map, as before'              => static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query,
 			'batches of seven'                   => null,
 		);
 

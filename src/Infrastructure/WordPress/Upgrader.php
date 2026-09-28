@@ -228,7 +228,7 @@ final class Upgrader {
 	/**
 	 * Drafts needing only the publish flip, keyed ID => stored hash.
 	 *
-	 * Filled by migrate_post() during a batch and applied by
+	 * Filled by process() during a batch and applied by
 	 * flush_publish_queue() as one bulk UPDATE at the end of it.
 	 *
 	 * @var array<int, string>
@@ -659,7 +659,18 @@ final class Upgrader {
 	}
 
 	/**
-	 * Apply every pass to a set of redirects, then flush the bulk publish.
+	 * Apply every pass to a set of redirects, writing their changes together wherever that changes nothing.
+	 *
+	 * Written one at a time, each write would be made before the next row is
+	 * planned, and a later row can depend on it: two rows converging on one
+	 * key collide, and a row can take a key an earlier one has left. Here each
+	 * planned write is recorded in the key map by move_owner() and held back,
+	 * and the held writes are made together only when a row about to be
+	 * planned would look up a key they touch, and at the end of the batch. So
+	 * every row is still planned against the writes before it as they really
+	 * landed - including one skipped because a user edited its row meanwhile -
+	 * and the outcome is the one writing each row alone gives, in far fewer
+	 * statements.
 	 *
 	 * @param array<WP_Post|null>  $posts     The redirects.
 	 * @param string               $started   The GMT timestamp at which the walk began.
@@ -668,44 +679,18 @@ final class Upgrader {
 	 * @param array<string, mixed> $result    Running totals, updated by reference.
 	 * @return void
 	 *
-	 * @throws RuntimeException When the database refuses a bulk write or the read behind it.
+	 * @throws RuntimeException When the database refuses the key map's read, the bulk publish or a read back.
 	 */
 	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
 		$this->from_1x = $publish;
 
-		// Without a complete map of who holds each key, rows can only be
-		// planned against writes that have already been made.
+		// The key map is what the plans are made against. Without it the
+		// batch stops, as a dry run does, and the next run redoes it.
 		if ( ! $this->prime_owners( $posts, $home_path ) ) {
-			$this->process_row_by_row( $posts, $started, $home_path, $publish, $result );
-			return;
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
 		}
 
-		$this->process_in_bulk( $posts, $started, $home_path, $publish, $result );
-	}
-
-	/**
-	 * Apply every pass to a batch, writing its changes together wherever that changes nothing.
-	 *
-	 * Row by row, each write is made before the next row is planned, and a
-	 * later row can depend on it: two rows converging on one key collide, and
-	 * a row can take a key an earlier one has left. Here each planned write
-	 * is recorded in the key map by move_owner() and held back, and the held
-	 * writes are made together only when a row about to be planned would look
-	 * up a key they touch, and at the end of the batch. So every row is still
-	 * planned against the writes before it as they really landed - including
-	 * one skipped because a user edited its row meanwhile - and the outcome is
-	 * the one row-by-row writing gives, in far fewer statements.
-	 *
-	 * @param array<WP_Post|null>  $posts     The redirects.
-	 * @param string               $started   The GMT timestamp at which the walk began.
-	 * @param string               $home_path The home path to strip, or ''.
-	 * @param bool                 $publish   Whether draft redirects should be published.
-	 * @param array<string, mixed> $result    Running totals, updated by reference.
-	 * @return void
-	 *
-	 * @throws RuntimeException When the database refuses the bulk publish or a read.
-	 */
-	private function process_in_bulk( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
 		$rows                 = array();
 		$this->pending_writes = array();
 		$this->touched        = array();
@@ -803,52 +788,6 @@ final class Upgrader {
 		$this->flush_publish_queue( $started, $result );
 	}
 
-	/**
-	 * Apply every pass one redirect at a time, writing each change as it is planned.
-	 *
-	 * For a batch whose key map could not be read, so each row's collision
-	 * check has to look in the database, after the writes before it are made.
-	 *
-	 * @param array<WP_Post|null>  $posts     The redirects.
-	 * @param string               $started   The GMT timestamp at which the walk began.
-	 * @param string               $home_path The home path to strip, or ''.
-	 * @param bool                 $publish   Whether draft redirects should be published.
-	 * @param array<string, mixed> $result    Running totals, updated by reference.
-	 * @return void
-	 *
-	 * @throws RuntimeException When the database refuses the bulk publish.
-	 */
-	private function process_row_by_row( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
-		foreach ( $this->in_walk_order( $posts ) as $post ) {
-			// A redirect touched since the upgrade began was acted on by a user
-			// under 2.0 rules, where 'draft' means "deliberately disabled".
-			// Republishing it would override an explicit choice.
-			if ( $post->post_modified_gmt > $started ) {
-				++$result['processed'];
-				++$result['skipped'];
-				continue;
-			}
-
-			$plan = $this->plan( $post, $home_path, $publish );
-
-			if ( null !== $plan['wait'] ) {
-				$this->waiting[ $post->ID ] = $plan['wait'];
-				continue;
-			}
-
-			++$result['processed'];
-
-			$this->record_rekey( $post, $plan['update'], $home_path );
-			$conflict = $this->migrate_post( $post, $plan, $result );
-			if ( null !== $conflict ) {
-				$result['conflicts'][] = $conflict;
-			}
-		}
-
-		$this->clean_up_writes();
-
-		$this->flush_publish_queue( $started, $result );
-	}
 
 	/**
 	 * A set of redirects in the order the walk plans them.
@@ -1503,8 +1442,8 @@ final class Upgrader {
 	 *
 	 * Mirrors find_post_by_hash(): every status WP_Query's 'any' includes,
 	 * which leaves out the trash, and the newest row where several share a
-	 * hash. A failed read leaves the map empty, so each row falls back to its
-	 * own lookup rather than trusting an answer that was never given.
+	 * hash. A failed read leaves the map empty, and the caller stops rather
+	 * than plan against an answer that was never given.
 	 *
 	 * @param array<WP_Post|null> $posts     The batch.
 	 * @param string              $home_path The home path to strip, or ''.
@@ -1664,54 +1603,6 @@ final class Upgrader {
 		wp_cache_delete_multiple( $ids, 'post_meta' );
 	}
 
-	/**
-	 * Apply every pass to a single redirect.
-	 *
-	 * A row needing only the draft→publish flip is not written here: it joins
-	 * the publish queue, which run_batch() flushes as one bulk UPDATE.
-	 *
-	 * @param WP_Post              $post   The redirect post.
-	 * @param array<string, mixed> $plan   The redirect's plan; see plan().
-	 * @param array<string, mixed> $result Running totals, updated by reference.
-	 * @return string|null A description of the conflict, or null when there was none.
-	 */
-	private function migrate_post( WP_Post $post, array $plan, array &$result ): ?string {
-		$update   = $plan['update'];
-		$conflict = $plan['conflict'];
-
-		if ( array() === $update ) {
-			++$result['unchanged'];
-			$this->mark_duplicate( $post->ID, $plan, $result );
-			return $conflict;
-		}
-
-		// A row needing nothing but the status flip - no repath, no dedupe, no
-		// destination rewrite - queues for one bulk UPDATE per batch instead of
-		// a write per row. On a 1.x site that is nearly every row. It is
-		// counted when the queue is flushed.
-		if ( array( 'post_status' => 'publish' ) === $update ) {
-			$this->publish_queue[ $post->ID ] = $post->post_name;
-			return $conflict;
-		}
-
-		$written = $this->write( $post, $update );
-
-		if ( false === $written ) {
-			$result['failed'][] = sprintf( '#%d (%s): %s', $post->ID, $post->post_title, self::write_error() );
-			$this->failed_ids[] = $post->ID;
-			return null;
-		}
-
-		if ( 0 === $written ) {
-			++$result['skipped'];
-			return null;
-		}
-
-		self::tally( $update, $result );
-		$this->mark_duplicate( $post->ID, $plan, $result );
-
-		return $conflict;
-	}
 
 	/**
 	 * Record which live redirect a disabled duplicate shares its source with; see DUPLICATE_META_KEY.
