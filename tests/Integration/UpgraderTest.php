@@ -115,6 +115,83 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A site with no redirects is recorded as current before it creates any.
+	 *
+	 * A disabled redirect is a draft, exactly as 1.x stored every redirect,
+	 * so one created on a fresh install before any page load has run a batch
+	 * - `wp legacy-redirector import` on a new site - would be published.
+	 *
+	 * @return void
+	 */
+	public function test_fresh_install_is_stamped_before_its_first_redirect() {
+		$this->upgrader->stamp_fresh_install();
+		$disabled_id = $this->create_legacy_redirect( '/disabled-on-purpose' );
+
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+
+		$this->upgrader->maybe_upgrade();
+
+		$this->assertSame( 'draft', get_post_status( $disabled_id ) );
+	}
+
+	/**
+	 * A site holding redirects is not stamped, so its 1.x data is still migrated.
+	 *
+	 * @return void
+	 */
+	public function test_site_with_redirects_is_not_stamped() {
+		$this->create_legacy_redirect( '/old-page' );
+
+		$this->upgrader->stamp_fresh_install();
+
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
+	 * A refused read is not taken for an empty table.
+	 *
+	 * Stamping a 1.x site would skip its migration for good.
+	 *
+	 * @return void
+	 */
+	public function test_refused_read_does_not_stamp() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$refuse = static fn( string $query ): string => str_starts_with( $query, "SELECT ID FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$this->upgrader->stamp_fresh_install();
+		remove_filter( 'query', $refuse );
+
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+	}
+
+	/**
+	 * A batch clears the caches its writes left stale once, not once per row.
+	 *
+	 * On a persistent object cache each clear is a network round trip.
+	 *
+	 * @return void
+	 */
+	public function test_batch_clears_caches_once() {
+		foreach ( array( '/a/', '/b/', '/c/' ) as $source ) {
+			$this->create_legacy_redirect( $source );
+		}
+		$bumps = 0;
+		$count = static function ( string $group ) use ( &$bumps ): void {
+			$bumps += (int) ( 'posts' === $group );
+		};
+
+		add_action( 'wp_cache_set_last_changed', $count );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_action( 'wp_cache_set_last_changed', $count );
+
+		$this->assertSame( 3, $result['repathed'] );
+		$this->assertSame( 1, $bumps );
+	}
+
+	/**
 	 * Redirects stored as drafts by 1.x are published.
 	 *
 	 * @return void
@@ -748,6 +825,39 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertTrue( $this->upgrader->needs_upgrade(), 'A failed read must not complete the upgrade.' );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * A refused read of who holds each key stops the batch before it writes anything.
+	 *
+	 * Every plan is made against that map, and the cursor stays put, so the
+	 * next run redoes the batch.
+	 *
+	 * @return void
+	 */
+	public function test_refused_key_map_stops_the_batch() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should have stopped.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringStartsWith( 'the database could not read the redirects', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+		$this->assertSame( '/old-page/', get_post( $post_id )->post_title );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
 	}
 
 	/**
@@ -1669,20 +1779,17 @@ final class UpgraderTest extends TestCase {
 		$this->assertFalse( $this->upgrader->duplicates()[ $loser_id ]['never_fired'] );
 	}
 	/**
-	 * Writing a batch in bulk gives exactly what writing it row by row gives.
+	 * Writing a batch in bulk gives exactly what writing each row alone gives.
 	 *
 	 * The dry run must predict the bulk result exactly, and the same mixed set
-	 * is migrated three more ways: with every bulk statement made to fall
-	 * short, so each row is read back and written alone; with the key map
-	 * unavailable, so every row is looked up in the database and written
-	 * before the next is planned - the original behavior, and a reference
-	 * that shares none of the bulk machinery; and in batches of seven, so
+	 * is migrated two more ways: with every bulk statement made to fall short,
+	 * so each row is read back and written alone; and in batches of seven, so
 	 * rows interact across batches. Every row, marker, count and report line
 	 * must come out the same.
 	 *
 	 * @return void
 	 */
-	public function test_bulk_writes_match_row_by_row_writes() {
+	public function test_bulk_writes_match_writes_made_alone() {
 		global $wpdb;
 
 		$bulk_ids = $this->create_mixed_legacy_set();
@@ -1719,7 +1826,6 @@ final class UpgraderTest extends TestCase {
 		$keys[] = 'processed';
 		$runs   = array(
 			'every bulk statement falling short' => static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}` SET" ) && str_contains( $query, 'CASE ID' ) ? $query . ' AND 1 = 0' : $query,
-			'no key map, as before'              => static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query,
 			'batches of seven'                   => null,
 		);
 

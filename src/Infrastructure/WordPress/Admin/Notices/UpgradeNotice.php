@@ -23,8 +23,16 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * via WP-CLI. It deliberately shows no remaining count: counting pending
  * work walks the whole redirect set (see Upgrader::count_pending()), which
  * is exactly what a screen aimed at large sites should not do on every load.
+ *
+ * Once the migration has finished, it stays while any redirect whose write
+ * failed is waiting for `wp legacy-redirector migrate` to retry it.
  */
 final class UpgradeNotice {
+
+	/**
+	 * The command that finishes the migration and retries failed writes.
+	 */
+	private const string COMMAND = '<code>wp legacy-redirector migrate</code>';
 
 	/**
 	 * The data upgrade routine.
@@ -57,10 +65,6 @@ final class UpgradeNotice {
 	 * @return void
 	 */
 	public function display(): void {
-		if ( ! $this->upgrader->needs_upgrade() ) {
-			return;
-		}
-
 		$screen = get_current_screen();
 		if ( null === $screen || PostType::POST_TYPE !== $screen->post_type ) {
 			return;
@@ -70,15 +74,46 @@ final class UpgradeNotice {
 			return;
 		}
 
-		$message = sprintf(
-			/* translators: %s: WP-CLI command */
-			__( 'Redirect data migration is in progress and completes automatically in the background. Older redirects may not work or display consistently until it finishes. To finish it now, run: %s', 'legacy-redirector' ),
-			'<code>wp legacy-redirector migrate</code>'
-		);
+		if ( $this->upgrader->needs_upgrade() ) {
+			self::show(
+				sprintf(
+					/* translators: %s: WP-CLI command */
+					__( 'Redirect data migration is in progress and completes automatically in the background. Older redirects may not work or display consistently until it finishes. To finish it now, run: %s', 'legacy-redirector' ),
+					self::COMMAND
+				),
+				'info'
+			);
+			return;
+		}
+
+		// Only the CLI retries a failed write, so a site that migrated on
+		// page loads would otherwise never hear of one.
+		$failed = $this->upgrader->pending_retries();
+		if ( $failed > 0 ) {
+			self::show(
+				sprintf(
+					/* translators: 1: number of redirects, 2: WP-CLI command */
+					_n( '%1$s redirect could not be migrated, and may not work until it is. To retry it, and see why if it fails again, run: %2$s', '%1$s redirects could not be migrated, and may not work until they are. To retry them, and see why any fail again, run: %2$s', $failed, 'legacy-redirector' ),
+					number_format_i18n( $failed ),
+					self::COMMAND
+				),
+				'warning'
+			);
+		}
+	}
+
+	/**
+	 * Print a dismissible notice.
+	 *
+	 * @param string $message The message; only <code> is kept.
+	 * @param string $type    The notice type.
+	 * @return void
+	 */
+	private static function show( string $message, string $type ): void {
 		wp_admin_notice(
 			wp_kses( $message, array( 'code' => array() ) ),
 			array(
-				'type'        => 'info',
+				'type'        => $type,
 				'dismissible' => true,
 			)
 		);

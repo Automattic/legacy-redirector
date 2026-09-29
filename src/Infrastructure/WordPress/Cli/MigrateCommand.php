@@ -157,7 +157,15 @@ final class MigrateCommand extends WP_CLI_Command {
 	private function dry_run( int $total ): void {
 		WP_CLI::line( 'Dry run - no changes will be made.' );
 
-		$pending = $this->upgrader->count_pending( $this->progress_reporter( 'Checked', 0, $total ) );
+		$report  = $this->progress_reporter( 'Checked', 0, $total );
+		$pending = $this->upgrader->count_pending(
+			static function ( int $checked ) use ( $report ): void {
+				// The same walk as a run, in one process, so the same housekeeping.
+				self::release_memory();
+				$report( $checked );
+			},
+			self::BATCH_SIZE
+		);
 
 		WP_CLI::line(
 			sprintf(
@@ -407,15 +415,28 @@ final class MigrateCommand extends WP_CLI_Command {
 	 * Housekeeping between batches on a long run.
 	 *
 	 * A multi-million-row walk holds one PHP process and one database primary
-	 * for its whole runtime, so the loop clears the request-lifetime caches
-	 * that would otherwise grow without bound, and pauses after each batch
-	 * that wrote so replicas keep pace. Batches that changed nothing skip the
-	 * pause: an already-migrated stretch replicates nothing.
+	 * for its whole runtime, so the loop frees memory (see release_memory()),
+	 * and pauses after each batch that wrote so replicas keep pace. Batches
+	 * that changed nothing skip the pause: an already-migrated stretch
+	 * replicates nothing.
 	 *
 	 * @param array{changed: int} $batch The batch totals just processed.
 	 * @return void
 	 */
 	private function rest_between_batches( array $batch ): void {
+		self::release_memory();
+
+		if ( $batch['changed'] > 0 ) {
+			usleep( self::BATCH_PAUSE_US );
+		}
+	}
+
+	/**
+	 * Clear the request-lifetime caches, which grow without bound over a walk of millions of rows.
+	 *
+	 * @return void
+	 */
+	private static function release_memory(): void {
 		if ( function_exists( 'vip_reset_local_object_cache' ) ) {
 			vip_reset_local_object_cache();
 		} elseif ( wp_cache_supports( 'flush_runtime' ) ) {
@@ -424,10 +445,6 @@ final class MigrateCommand extends WP_CLI_Command {
 
 		if ( function_exists( 'vip_reset_db_query_log' ) ) {
 			vip_reset_db_query_log();
-		}
-
-		if ( $batch['changed'] > 0 ) {
-			usleep( self::BATCH_PAUSE_US );
 		}
 	}
 }
