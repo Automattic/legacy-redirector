@@ -55,11 +55,12 @@ class RedirectAuditor {
 	 * corrupt row carries placeholder values, so checking them would report
 	 * nonsense; the corruption itself is the only finding.
 	 *
-	 * @param Redirect $redirect   The redirect to audit.
-	 * @param bool     $check_urls Whether to make HTTP requests to check URL destinations.
+	 * @param Redirect $redirect     The redirect to audit.
+	 * @param bool     $check_urls   Whether to make HTTP requests to check URL destinations.
+	 * @param bool     $check_source Whether to request the source to check the redirect fires.
 	 * @return AuditFinding[] The findings, empty if none.
 	 */
-	public function audit( Redirect $redirect, bool $check_urls = false ): array {
+	public function audit( Redirect $redirect, bool $check_urls = false, bool $check_source = false ): array {
 		if ( $redirect->is_corrupt() ) {
 			return array( new AuditFinding( $redirect, AuditFindingType::CORRUPT_DATA, $redirect->corruption() ) );
 		}
@@ -69,6 +70,13 @@ class RedirectAuditor {
 		$destination_finding = $this->audit_destination( $redirect, $check_urls );
 		if ( null !== $destination_finding ) {
 			$findings[] = $destination_finding;
+		}
+
+		if ( $check_source ) {
+			$source_finding = $this->audit_source( $redirect );
+			if ( null !== $source_finding ) {
+				$findings[] = $source_finding;
+			}
 		}
 
 		return array_merge( $findings, $this->warnings( $redirect ) );
@@ -136,6 +144,68 @@ class RedirectAuditor {
 		}
 
 		return array();
+	}
+
+	/**
+	 * Check that a redirect's source actually redirects to its destination.
+	 *
+	 * Every other check works from stored data. This one requests the source
+	 * and reads what came back, which is the only way to catch the two things
+	 * stored data cannot show: a source that answers with its own response
+	 * (a real page, post or archive winning over the redirect), and a
+	 * redirect that fires but lands somewhere other than its destination.
+	 *
+	 * The requesting and the comparing live in probe_source(), which the
+	 * admin Test action also uses; this turns its outcome into a finding so
+	 * the batch surfaces agree with it.
+	 *
+	 * A disabled redirect is skipped: it does not fire by design, so reporting
+	 * that as a fault would flag every disabled redirect on the site.
+	 *
+	 * @param Redirect $redirect The redirect to check.
+	 * @return AuditFinding|null The finding if the redirect does not fire as expected, null if it does.
+	 */
+	public function audit_source( Redirect $redirect ): ?AuditFinding {
+		// A disabled redirect does not fire, so it cannot be found wanting for
+		// not firing. A corrupt row has no source worth requesting.
+		if ( $redirect->is_corrupt() || ! $redirect->is_active() ) {
+			return null;
+		}
+
+		// A reserved source is already reported, and it is legitimate for a
+		// migrated site to hold legacy URLs there, so requesting it would add
+		// nothing to the reserved-source warning.
+		if ( $redirect->source()->is_reserved() ) {
+			return null;
+		}
+
+		// Without a resolvable destination there is nothing to compare the
+		// source's response against, so the probe could only misreport.
+		if ( null === $this->expected_destination_url( $redirect ) ) {
+			return null;
+		}
+
+		$probe = $this->probe_source( $redirect );
+
+		return match ( $probe['status'] ) {
+			// The source redirects to the stored destination.
+			'confirmed'   => null,
+			// The source serves content or a hop back to itself, so the 404
+			// our redirect answers never happens.
+			'dormant'     => new AuditFinding( $redirect, AuditFindingType::SOURCE_DID_NOT_REDIRECT ),
+			// The source 404s without the redirect firing.
+			'not-firing'  => new AuditFinding( $redirect, AuditFindingType::SOURCE_DID_NOT_REDIRECT, 'status: 404' ),
+			'diverted'    => new AuditFinding(
+				$redirect,
+				AuditFindingType::REDIRECT_MISMATCH,
+				empty( $probe['location'] ) ? null : 'to: ' . $probe['location']
+			),
+			// Unknown rather than broken, so it is a warning and --fix skips it.
+			'unreachable' => new AuditFinding( $redirect, AuditFindingType::SOURCE_REQUEST_FAILED ),
+			// A status this method does not know cannot be judged, so it is
+			// left alone rather than guessed at as a breakage.
+			default       => null,
+		};
 	}
 
 	/**
@@ -631,16 +701,17 @@ class RedirectAuditor {
 	 * @param Redirect[] $redirects         The redirects to audit.
 	 * @param bool       $check_urls        Whether to check URL destinations.
 	 * @param callable   $progress_callback Optional callback called after each redirect (receives count).
+	 * @param bool       $check_source      Whether to request each source to check the redirect fires.
 	 * @return AuditFinding[] The findings across the batch.
 	 */
-	public function audit_batch( array $redirects, bool $check_urls = false, ?callable $progress_callback = null ): array {
+	public function audit_batch( array $redirects, bool $check_urls = false, ?callable $progress_callback = null, bool $check_source = false ): array {
 		$findings = array();
 		$checked  = 0;
 
 		foreach ( $redirects as $redirect ) {
 			++$checked;
 
-			$findings = array_merge( $findings, $this->audit( $redirect, $check_urls ) );
+			$findings = array_merge( $findings, $this->audit( $redirect, $check_urls, $check_source ) );
 
 			if ( null !== $progress_callback ) {
 				$progress_callback( $checked );

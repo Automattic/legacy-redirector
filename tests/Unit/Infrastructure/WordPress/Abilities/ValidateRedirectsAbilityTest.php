@@ -146,7 +146,7 @@ final class ValidateRedirectsAbilityTest extends MonkeyStubs {
 
 		$this->auditor->shouldReceive( 'audit_batch' )
 			->once()
-			->with( Mockery::type( 'array' ), true )
+			->with( Mockery::type( 'array' ), true, null, false )
 			->andReturn( array() );
 
 		$result = $this->ability->execute(
