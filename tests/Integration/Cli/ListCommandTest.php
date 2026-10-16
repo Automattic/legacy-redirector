@@ -303,6 +303,55 @@ final class ListCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * A csv or ids export bigger than one page is read a page at a time, yet
+	 * prints every row once, in order, under a single header.
+	 */
+	public function test_large_exports_are_read_a_page_at_a_time(): void {
+		global $wpdb;
+
+		// One page is 5,000 rows; insert directly, as creating 5,001 redirects
+		// through the manager would take most of a minute.
+		$values = array();
+		for ( $i = 1; $i <= 5001; $i++ ) {
+			$values[] = "('2026-01-01 00:00:00', '2026-01-01 00:00:00', '', '/export-$i', '/target', 'publish', 'vip-legacy-redirect', '', '', '')";
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- Bulk fixture of literal values.
+		$wpdb->query( "INSERT INTO {$wpdb->posts} (post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_type, to_ping, pinged, post_content_filtered) VALUES " . implode( ',', $values ) );
+		$ids = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s ORDER BY ID DESC", PostType::POST_TYPE ) ) );
+
+		$page_sizes = array();
+		add_action(
+			'pre_get_posts',
+			static function ( \WP_Query $query ) use ( &$page_sizes ): void {
+				$page_sizes[] = (int) $query->get( 'posts_per_page' );
+			}
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'format' => 'ids',
+				'limit'  => '100000',
+			)
+		);
+		$this->assertSame( implode( ' ', $ids ), trim( $this->get_stdout() ) );
+		$this->assertSame( array( 5000, 5000 ), $page_sizes, 'Each query loads at most one page.' );
+
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'format' => 'csv',
+				'limit'  => '100000',
+			)
+		);
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'], 'One formatter call writes one header.' );
+		$this->assertSame( $ids, array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'ID' ) );
+	}
+
+	/**
 	 * Test combining status and destination type filters.
 	 */
 	public function test_list_combined_filters(): void {

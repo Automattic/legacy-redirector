@@ -11,12 +11,14 @@ if ( ! function_exists( 'WP_CLI\\Utils\\format_items' ) ) {
 	/**
 	 * Format items for display.
 	 *
-	 * @param string $format Output format.
-	 * @param array  $items  Items to format.
-	 * @param array  $fields Fields to display.
+	 * @param string   $format Output format.
+	 * @param iterable $items  Items to format; WP-CLI accepts an Iterator too.
+	 * @param array    $fields Fields to display.
 	 * @return void
 	 */
-	function format_items( string $format, array $items, array $fields ): void {
+	function format_items( string $format, iterable $items, array $fields ): void {
+		$items = is_array( $items ) ? $items : iterator_to_array( $items, false );
+
 		// Track calls for unit test assertions.
 		if ( ! isset( $GLOBALS['wp_cli_format_items_calls'] ) ) {
 			$GLOBALS['wp_cli_format_items_calls'] = array();

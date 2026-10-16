@@ -199,12 +199,15 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 		}
 
 		$args = array(
-			'post_type'      => PostType::POST_TYPE,
-			'post_status'    => $this->map_status_to_post_status( $criteria->status() ),
-			'posts_per_page' => $criteria->limit(),
-			'offset'         => $criteria->offset(),
-			'orderby'        => $order_by,
-			'order'          => $order,
+			'post_type'              => PostType::POST_TYPE,
+			'post_status'            => $this->map_status_to_post_status( $criteria->status() ),
+			'posts_per_page'         => $criteria->limit(),
+			'offset'                 => $criteria->offset(),
+			'orderby'                => $order_by,
+			'order'                  => $order,
+			// The mapper reads no meta or terms.
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
 		);
 
 		// Search source paths only; destinations live in post_excerpt.
