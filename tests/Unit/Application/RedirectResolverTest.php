@@ -295,12 +295,6 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( array(), '/old-page?utm_source=test&other=value' )
 			->andReturn( array( 'utm_source' ) );
 
-		// Mock remove_query_arg to strip preserved params before lookup.
-		Functions\expect( 'remove_query_arg' )
-			->once()
-			->with( array( 'utm_source' ), '/old-page?utm_source=test&other=value' )
-			->andReturn( '/old-page?other=value' );
-
 		// Repository receives path without preserved params - now the path includes the remaining query string.
 		$this->repository
 			->shouldReceive( 'find_by_source' )
@@ -322,6 +316,44 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		$this->assertIsArray( $result );
 		$this->assertSame( 'https://example.com/new-page?utm_source=test', $result['url'] );
+	}
+
+	/**
+	 * Stripping a preserved key leaves every other byte of the query alone.
+	 *
+	 * @dataProvider data_queries_around_a_preserved_key
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 *
+	 * @param string $request The request path, carrying utm_source.
+	 * @param string $lookup  The path the lookup should use.
+	 */
+	public function test_get_redirect_data_strips_preserved_key_without_respelling_the_query( string $request, string $lookup ): void {
+		$this->stub_home_url();
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )->andReturn( array( 'utm_source' ) );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->with( Mockery::on( fn( SourceUrl $source ) => $source->path() === SourceUrl::from_string( $lookup )->path() ) )
+			->andReturn( null );
+
+		$this->assertNull( $this->resolver->get_redirect_data( $request ) );
+	}
+
+	/**
+	 * Requests carrying utm_source, and the lookup path each should leave.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_queries_around_a_preserved_key(): array {
+		return array(
+			'encoded space'          => array( '/p?q=foo%20bar&utm_source=x', '/p?q=foo%20bar' ),
+			'dotted key'             => array( '/p?a.b=1&utm_source=x', '/p?a.b=1' ),
+			'duplicate keys'         => array( '/p?t=a&utm_source=x&t=b', '/p?t=a&t=b' ),
+			'array syntax'           => array( '/p?utm_source=x&x[]=1', '/p?x[]=1' ),
+			'only the preserved key' => array( '/p?utm_source=x', '/p' ),
+			'no preserved key'       => array( '/p?q=foo%20bar&t=a&t=b', '/p?q=foo%20bar&t=a&t=b' ),
+		);
 	}
 
 	/**

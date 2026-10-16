@@ -161,21 +161,21 @@ final class RedirectsTest extends TestCase {
 	 */
 	public function get_protected_redirect_data() {
 		return array(
-			'redirect_simple_protected'           => array(
+			'redirect_simple_protected'              => array(
 				'/simple-redirectA/',
 				'http://example.com/',
 				'/simple-redirectA/?utm_source=XYZ',
 				'http://example.com/?utm_source=XYZ',
 			),
 
-			'redirect_protected_with_querystring' => array(
+			'redirect_protected_with_querystring'    => array(
 				'/b-redirect/?with=query-string',
 				'http://example.com/',
 				'/b-redirect/?with=query-string&utm_medium=123',
 				'http://example.com/?utm_medium=123',
 			),
 
-			'redirect_protected_with_hashes'      => array(
+			'redirect_protected_with_hashes'         => array(
 				// The plugin should strip the hash and only store the URL path.
 				'/hash-redirectA/#with-hash',
 				'http://example.com/',
@@ -183,11 +183,27 @@ final class RedirectsTest extends TestCase {
 				'http://example.com/?utm_source=SDF',
 			),
 
-			'redirect_multiple_protected'         => array(
+			'redirect_multiple_protected'            => array(
 				'/simple-redirectC/',
 				'http://example.com/',
 				'/simple-redirectC/?utm_source=XYZ&utm_medium=FALSE&utm_campaign=543',
 				'http://example.com/?utm_source=XYZ&utm_medium=FALSE&utm_campaign=543',
+			),
+
+			// Stripping the preserved key must not re-spell the rest of the
+			// query, or it no longer matches the stored source.
+			'redirect_protected_with_encoded_space'  => array(
+				'/search?q=foo%20bar',
+				'http://example.com/',
+				'/search?q=foo%20bar&utm_source=news',
+				'http://example.com/?utm_source=news',
+			),
+
+			'redirect_protected_with_duplicate_keys' => array(
+				'/tags?t=a&t=b',
+				'http://example.com/',
+				'/tags?t=a&utm_source=news&t=b',
+				'http://example.com/?utm_source=news',
 			),
 		);
 	}
