@@ -183,9 +183,17 @@ final class ColumnsManager {
 	 * @return void
 	 */
 	private function render_from_column( Redirect $redirect ): void {
-		$source    = $redirect->source()->path();
-		$edit_link = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect->id() );
+		$source = $redirect->source()->path();
 		$this->render_home_url_prefix( $source );
+
+		// A trashed redirect can't be edited until it is restored, so, as core
+		// does for row titles in the Trash, there is nothing to link to.
+		if ( 'trash' === $redirect->status() ) {
+			printf( '<strong>%s</strong>', esc_html( $source ) );
+			return;
+		}
+
+		$edit_link = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect->id() );
 		printf(
 			'<strong><a class="row-title" href="%1$s" aria-label="%2$s">%3$s</a></strong>',
 			esc_url( $edit_link ),
