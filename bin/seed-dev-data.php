@@ -463,7 +463,7 @@ for ( $i = 1; $i <= $bulk_count; $i++ ) {
 	$rows[] = array( sprintf( '/bulk/article-%04d', $i ), sprintf( '/archive/%04d', $i ) );
 }
 
-$csv = tempnam( sys_get_temp_dir(), 'seed' ) . '.csv';
+$csv = tempnam( sys_get_temp_dir(), 'seed' );
 $fh  = fopen( $csv, 'w' );
 foreach ( $rows as $row ) {
 	fputcsv( $fh, $row, ',', '"', '\\' );
@@ -543,7 +543,7 @@ $rejects = array(
 	array( '', '/no-source' ),
 );
 
-$csv = tempnam( sys_get_temp_dir(), 'seedreject' ) . '.csv';
+$csv = tempnam( sys_get_temp_dir(), 'seedreject' );
 $fh  = fopen( $csv, 'w' );
 foreach ( $rejects as $row ) {
 	fputcsv( $fh, $row, ',', '"', '\\' );
