@@ -18,9 +18,10 @@ Handles large volumes of redirects for a site's legacy URLs.
 | **Requires PHP** | 8.3+ |
 | **Requires WP** | 6.8+ |
 
-The plugin was renamed from "WPCOM Legacy Redirector" in 2.0. Four things deliberately keep the old name, and each would cost a user something to change. Do not "tidy" them:
+The plugin was renamed from "WPCOM Legacy Redirector" in 2.0. Five things deliberately keep the old name, and each would cost a user something to change. Do not "tidy" them:
 
 - **`wpcom-legacy-redirector.php`** — renaming the main file deactivates the plugin on update.
+- **`wpcom-legacy-redirector/`** — the plugin folder, hard-coded as the release ZIP's root in `release.yml`. 1.x sites and Composer installs use it, and a ZIP with another root installs a second copy beside 1.x instead of replacing it.
 - **`automattic/wpcom-legacy-redirector`** — Packagist cannot rename a package, so moving means publishing a new one and abandoning this one, and every consumer has to edit their own `require` line or silently stop receiving updates. `dev-develop` is the most-installed version, so that is the majority of users.
 - **`vip-legacy-redirect`** — the post type is in the database.
 - **`wpcom_legacy_redirector_db_version` / `_upgrade_started_gmt` / `_upgrade_cursor`** — these options hold live upgrade state.

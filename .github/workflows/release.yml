@@ -80,7 +80,11 @@ jobs:
           set -eu
 
           VERSION="${TAG#v}"
-          SLUG="${GITHUB_REPOSITORY#*/}"
+          # The plugin folder, not the repository name. WordPress identifies a
+          # plugin by folder plus main file, and 1.x sites and Composer installs
+          # have it in wpcom-legacy-redirector/. A ZIP with any other root
+          # installs a second copy beside 1.x instead of replacing it.
+          SLUG=wpcom-legacy-redirector
 
           # Staged outside the checkout: a destination inside the source would
           # have rsync copy the staging directory into itself.
