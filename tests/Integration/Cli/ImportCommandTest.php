@@ -31,6 +31,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectReposit
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException::duplicate_source
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
@@ -202,20 +203,100 @@ final class ImportCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test create mode reports duplicates as errors.
+	 * Test create mode skips a row that matches its existing redirect, so
+	 * re-running an unchanged CSV is a clean no-op.
+	 *
+	 * @dataProvider data_validation_flags
+	 *
+	 * @param array<string, bool> $flags Extra command flags.
 	 */
-	public function test_import_create_mode_rejects_duplicates(): void {
-		$this->create_redirect( '/import-dupe', 'https://example.com/original' );
-		$file = $this->create_csv( "/import-dupe,https://example.com/replacement\n" );
+	public function test_import_create_mode_skips_unchanged_duplicate( array $flags ): void {
+		$file = $this->create_csv( "/import-same,https://example.com/original\n/import-same-disabled,https://example.com/a,disabled\n" );
 
-		$this->invoke_command(
-			$this->command,
-			array( $file ),
-			array()
+		$this->invoke_command( $this->command, array( $file ), $flags );
+		$this->assert_command_success();
+
+		$this->invoke_command( $this->command, array( $file ), $flags );
+
+		$this->assert_command_success();
+		$this->assert_success_contains( 'Processed 0 redirects, skipped 2 unchanged.' );
+		$this->assertSame( 1, $this->count_redirect_posts( '/import-same' ) );
+	}
+
+	/**
+	 * Flags that do and do not validate.
+	 *
+	 * @return array<string, array{array<string, bool>}>
+	 */
+	public static function data_validation_flags(): array {
+		return array(
+			'validating'      => array( array() ),
+			'skip-validation' => array( array( 'skip-validation' => true ) ),
 		);
+	}
+
+	/**
+	 * Test an unchanged internal destination is matched in its normalized form.
+	 */
+	public function test_import_create_mode_skips_duplicate_with_equivalent_destination(): void {
+		$this->create_redirect( '/import-same-internal', '/import-target' );
+		$file = $this->create_csv( '/import-same-internal,' . home_url( '/import-target' ) . "\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array( 'skip-validation' => true ) );
+
+		$this->assert_command_success();
+		$this->assert_stdout_contains( 'Skipped: 1' );
+	}
+
+	/**
+	 * Test create mode fails a row whose source has a redirect elsewhere,
+	 * pointing the user at upsert, and leaves the existing redirect alone.
+	 *
+	 * @dataProvider data_changed_duplicates
+	 *
+	 * @param string $row The CSV row.
+	 */
+	public function test_import_create_mode_rejects_changed_duplicate( string $row ): void {
+		$this->create_redirect( '/import-dupe', 'https://example.com/original' );
+		$file = $this->create_csv( $row . "\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array() );
 
 		$this->assert_command_error();
 		$this->assert_stdout_contains( 'Error: 1' );
+		$this->assert_stdout_contains( '--mode=upsert' );
+
+		$redirect = $this->repository()->find_by_id(
+			$this->repository()->get_id_by_source( SourceUrl::from_string( '/import-dupe' ) )
+		);
+		$this->assertSame( 'https://example.com/original', $redirect->destination()->as_url()->value() );
+		$this->assertTrue( $redirect->is_active() );
+	}
+
+	/**
+	 * Rows that differ from the existing redirect.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_changed_duplicates(): array {
+		return array(
+			'destination' => array( '/import-dupe,https://example.com/replacement' ),
+			'status'      => array( '/import-dupe,https://example.com/original,disabled' ),
+		);
+	}
+
+	/**
+	 * Test a live run with a failed row stores the good rows but fails,
+	 * naming the count, instead of reporting success.
+	 */
+	public function test_import_partial_failure_is_an_error(): void {
+		$file = $this->create_csv( "/import-good,https://example.com/a\n/import-bad\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array( 'skip-validation' => true ) );
+
+		$this->assertTrue( $this->redirect_exists( '/import-good' ) );
+		$this->assertFalse( $this->output->had_success() );
+		$this->assert_error_contains( 'Processed 1 of 2 rows: 1 failed.' );
 	}
 
 	/**

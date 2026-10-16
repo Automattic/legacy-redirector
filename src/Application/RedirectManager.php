@@ -394,6 +394,27 @@ class RedirectManager {
 	}
 
 	/**
+	 * Whether a redirect for this source already exists with this destination
+	 * and status, so creating it again would change nothing.
+	 *
+	 * The destination is compared in its stored form, so an internal
+	 * destination given as an absolute URL matches its relative form.
+	 *
+	 * @param SourceUrl   $source      The source URL.
+	 * @param Destination $destination The destination.
+	 * @param string|null $status      The status ('publish' or 'draft'), or null for the create default.
+	 * @return bool True when an identical redirect exists.
+	 */
+	public function exists_unchanged( SourceUrl $source, Destination $destination, ?string $status = null ): bool {
+		$existing = $this->find_any_by_source( $source );
+
+		return null !== $existing
+			&& ! $existing->is_corrupt()
+			&& ( $status ?? 'publish' ) === $existing->status()
+			&& $this->normalizer->normalize( $destination )->raw_value() === $existing->destination()->raw_value();
+	}
+
+	/**
 	 * Find a redirect by source URL regardless of its status.
 	 *
 	 * `RedirectRepositoryInterface::find_by_source()` is publish-only, which is

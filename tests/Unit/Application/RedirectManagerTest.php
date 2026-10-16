@@ -768,6 +768,46 @@ final class RedirectManagerTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test exists_unchanged compares destination and status with the stored redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::exists_unchanged
+	 * @dataProvider data_exists_unchanged
+	 *
+	 * @param int         $existing_id The ID the source lookup returns (0 for none).
+	 * @param string      $destination The destination being imported.
+	 * @param string|null $status      The status being imported.
+	 * @param bool        $expected    Whether the redirect is unchanged.
+	 */
+	public function test_exists_unchanged( int $existing_id, string $destination, ?string $status, bool $expected ): void {
+		$source = SourceUrl::from_string( '/old-page' );
+
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->repository->shouldReceive( 'get_id_by_source' )->andReturn( $existing_id );
+		$this->repository->shouldReceive( 'find_by_id' )->with( 123 )->andReturn( $this->create_test_redirect( 123, $source, 'publish' ) );
+
+		$this->assertSame(
+			$expected,
+			$this->manager->exists_unchanged( $source, Destination::from_mixed( $destination ), $status )
+		);
+	}
+
+	/**
+	 * Cases for exists_unchanged; the stored redirect is enabled and points at /destination.
+	 *
+	 * @return array<string, array{int, string, string|null, bool}>
+	 */
+	public static function data_exists_unchanged(): array {
+		return array(
+			'no redirect'           => array( 0, '/destination', null, false ),
+			'same, default status'  => array( 123, '/destination', null, true ),
+			'same, explicit status' => array( 123, '/destination', 'publish', true ),
+			'same once normalized'  => array( 123, 'https://example.com/destination', null, true ),
+			'different destination' => array( 123, '/elsewhere', null, false ),
+			'different status'      => array( 123, '/destination', 'draft', false ),
+		);
+	}
+
+	/**
 	 * Create a real redirect object for testing.
 	 *
 	 * @param int       $id     The redirect ID.

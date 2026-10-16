@@ -388,6 +388,48 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a live run with failed rows ends in an error naming the count.
+	 */
+	public function test_failed_rows_are_an_error(): void {
+		$this->create_post_with_legacy_url( '/meta-good' );
+		$draft = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		add_post_meta( $draft, $this->meta_key, '/meta-bad' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$this->assertNotNull( $this->find_redirect( '/meta-good' ) );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+		$this->assert_error_contains( 'Processed 1 of 2 rows: 1 failed.' );
+	}
+
+	/**
+	 * Test a dry run does not fail on rows only a live run would refuse.
+	 */
+	public function test_dry_run_with_invalid_row_is_not_an_error(): void {
+		$this->create_post_with_legacy_url( 'https://example.com' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+				'dry-run'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Invalid source URL - no path found' );
+		$this->assertFalse( $this->output->had_error() );
+	}
+
+	/**
 	 * Test an error is raised when the meta key matches no rows.
 	 */
 	public function test_errors_when_no_meta_rows_found(): void {
