@@ -123,6 +123,7 @@ composer cs-fix
 - Include a clear description of what and why
 - Reference related issues
 - Ensure CI passes before requesting review
+- **Sign your commits.** `develop` and `main` only accept commits with a verified signature, so a pull request with an unsigned commit cannot be merged until it is re-signed and force-pushed. See GitHub's guide to [signing commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
 - Respond to feedback promptly
 
 ## Architecture Overview
