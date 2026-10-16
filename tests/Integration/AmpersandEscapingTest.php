@@ -97,6 +97,37 @@ final class AmpersandEscapingTest extends TestCase {
 	}
 
 	/**
+	 * Test a 1.x row with an escaped title keeps its key when saved before the migration reaches it.
+	 *
+	 * 1.x let kses write the title as '/a&amp;b' after hashing the key from
+	 * '/a&b'. Read from the title alone, the first save re-keyed the row onto
+	 * md5( '/a&amp;b' ), which no request produces, and the migration then saw
+	 * a title and key that agreed and left it broken.
+	 */
+	public function test_escaped_legacy_title_keeps_its_key_when_saved(): void {
+		global $wpdb;
+
+		$id = $this->create_redirect( '/a&b', '/new' );
+		$wpdb->update(
+			$wpdb->posts,
+			array(
+				'post_title'  => '/a&amp;b',
+				'post_status' => 'draft',
+			),
+			array( 'ID' => $id )
+		);
+		clean_post_cache( $id );
+
+		$this->assertSame( '/a&b', $this->repository()->find_by_id( $id )->source()->path() );
+
+		$this->assertTrue( $this->manager()->enable( $id ) );
+
+		$this->assertSame( md5( '/a&b' ), get_post( $id )->post_name );
+		$this->clear_lookup_cache( '/a&b' );
+		$this->assertInstanceOf( Redirect::class, $this->repository()->find_by_source( SourceUrl::from_string( '/a&b' ) ) );
+	}
+
+	/**
 	 * Test markup in a destination is still stripped: only the ampersand escaping is undone.
 	 */
 	public function test_markup_is_still_filtered(): void {

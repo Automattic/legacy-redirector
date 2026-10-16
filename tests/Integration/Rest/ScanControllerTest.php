@@ -51,6 +51,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  */
 final class ScanControllerTest extends TestCase {
 
