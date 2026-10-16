@@ -156,6 +156,20 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 			$this->move_trash_aside( $redirect );
 
 			$result = wp_insert_post( $args, true );
+
+			// Nothing makes the check and the insert atomic, so another insert
+			// of the source can land in between: a published row is then given
+			// a suffixed key no request produces, and a draft shares the key
+			// with a row the lookup answers with first. Either way this row
+			// would never fire. A writer committing after this read-back can
+			// still slip through; closing that needs a lock or unique index.
+			if ( ! is_wp_error( $result )
+				&& ( get_post_field( 'post_name', $result ) !== $redirect->source()->hash() || $this->get_id_by_source( $redirect->source() ) !== $result )
+			) {
+				wp_delete_post( $result, true );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+				throw RedirectPersistenceException::duplicate_source( $redirect->source() );
+			}
 		}
 
 		if ( is_wp_error( $result ) ) {

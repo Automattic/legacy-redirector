@@ -334,6 +334,79 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	}
 
 	/**
+	 * Test an insert WordPress gave a suffixed key is undone and refused.
+	 *
+	 * A suffixed key is one no request produces, so the redirect would be
+	 * reported as saved and never fire.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 */
+	public function test_save_refuses_an_insert_given_a_suffixed_key(): void {
+		$source      = SourceUrl::from_string( '/save-suffixed-key' );
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/first' ) );
+		$suffix      = static fn(): string => $source->hash() . '-2';
+		add_filter( 'pre_wp_unique_post_slug', $suffix );
+
+		try {
+			$this->repository->save( Redirect::create( $source, $destination ) );
+			$this->fail( 'An insert on a suffixed key was not refused.' );
+		} catch ( RedirectPersistenceException $e ) {
+			$this->assertSame( RedirectPersistenceException::duplicate_source( $source )->getMessage(), $e->getMessage() );
+		} finally {
+			remove_filter( 'pre_wp_unique_post_slug', $suffix );
+		}
+
+		$this->assertSame( array(), $this->rows_on( $source ) );
+	}
+
+	/**
+	 * Test the later of two inserts racing for one source is undone and refused.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
+	 */
+	public function test_save_refuses_an_insert_that_lost_a_race_for_the_source(): void {
+		$source      = SourceUrl::from_string( '/save-race' );
+		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/first' ) );
+		$competitor  = 0;
+		$race        = function ( array $data ) use ( &$race, &$competitor, $source ): array {
+			remove_filter( 'wp_insert_post_data', $race, 99 );
+			$competitor = $this->insert_redirect_post(
+				array(
+					'post_title' => $source->path(),
+					'post_name'  => $source->hash(),
+				)
+			);
+
+			return $data;
+		};
+		add_filter( 'wp_insert_post_data', $race, 99 );
+
+		try {
+			$this->repository->save( Redirect::create( $source, $destination ) );
+			$this->fail( 'The insert that lost the race was not refused.' );
+		} catch ( RedirectPersistenceException $e ) {
+			$this->assertSame( RedirectPersistenceException::duplicate_source( $source )->getMessage(), $e->getMessage() );
+		} finally {
+			remove_filter( 'wp_insert_post_data', $race, 99 );
+		}
+
+		$this->assertSame( array( $competitor ), $this->rows_on( $source ) );
+	}
+
+	/**
+	 * The IDs of the non-trashed redirect rows on a source's key, or on that key suffixed.
+	 *
+	 * @param SourceUrl $source The source.
+	 * @return array<int, int> The row IDs.
+	 */
+	private function rows_on( SourceUrl $source ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Test assertion on the stored rows.
+		return array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM $wpdb->posts WHERE post_type = %s AND post_status <> 'trash' AND post_name IN ( %s, %s )", PostTypeRedirectRepository::POST_TYPE, $source->hash(), $source->hash() . '-2' ) ) );
+	}
+
+	/**
 	 * Test save creates a new redirect with post ID destination.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save

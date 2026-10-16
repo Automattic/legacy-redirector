@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\RedirectPersistenceException;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
@@ -28,6 +29,7 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
@@ -603,6 +605,31 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		$result = $this->repository->save( $new_redirect );
 
 		$this->assertSame( 456, $result->id() );
+	}
+
+	/**
+	 * Test save does not pre-warm the cache when the inner save throws.
+	 *
+	 * An insert refused after the fact has deleted its row, so there is no ID to cache.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::save
+	 */
+	public function test_save_does_not_prewarm_cache_when_inner_save_throws(): void {
+		$new_redirect = Redirect::create(
+			SourceUrl::from_string( '/new-source' ),
+			Destination::from_url( DestinationUrl::from_string( '/destination' ) )
+		);
+
+		Functions\expect( 'wp_cache_delete' )->once()->andReturn( true );
+		Functions\expect( 'wp_cache_set' )->never();
+
+		$this->inner
+			->shouldReceive( 'save' )
+			->once()
+			->andThrow( RedirectPersistenceException::duplicate_source( $new_redirect->source() ) );
+
+		$this->expectException( RedirectPersistenceException::class );
+		$this->repository->save( $new_redirect );
 	}
 
 	/**
