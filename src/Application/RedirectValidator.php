@@ -112,8 +112,10 @@ class RedirectValidator {
 			if ( false !== $post_permalink ) {
 				// Url::parse() so the comparison below is like for like: the
 				// source path arrives decoded from SourceUrl, and a bare
-				// parse_url() would also corrupt a multibyte permalink.
-				$destination_path = Url::parse( (string) $post_permalink )['path'] ?? '';
+				// parse_url() would also corrupt a multibyte permalink. Rebased onto
+				// home, because the permalink carries the home path and the source
+				// does not.
+				$destination_path = HomePath::make_relative( Url::parse( (string) $post_permalink )['path'] ?? '', HomePath::current() );
 				if ( $destination_path && $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 					return ValidationResult::invalid(
 						'invalid-values',
@@ -133,6 +135,14 @@ class RedirectValidator {
 		if ( ! empty( $parsed['host'] ) ) {
 			$home_host = wp_parse_url( home_url(), PHP_URL_HOST );
 			if ( 0 !== strcasecmp( $parsed['host'], (string) $home_host ) ) {
+				return ValidationResult::valid();
+			}
+
+			// An absolute URL on this site carries the home path, which the
+			// home-relative source does not. A path outside home cannot be a
+			// self-loop. Relative destinations are already home-relative.
+			$destination_path = HomePath::make_relative( $destination_path, HomePath::current() );
+			if ( null === $destination_path ) {
 				return ValidationResult::valid();
 			}
 		}

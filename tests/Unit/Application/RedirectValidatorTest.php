@@ -26,6 +26,7 @@ use WP_Post;
  * RedirectValidatorTest class.
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\ValidationResult
@@ -603,9 +604,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$source      = $this->create_source( '/contact' );
 		$destination = $this->create_url_destination( 'https://example.com/contact' );
 
-		Functions\expect( 'home_url' )
-			->once()
-			->andReturn( 'https://example.com' );
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 
 		$result = $this->validator->validate_source_destination_different( $source, $destination );
 
@@ -622,6 +621,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$source      = $this->create_source( '/sample-page' );
 		$destination = $this->create_post_id_destination( 123 );
 
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		Functions\expect( 'get_permalink' )
 			->once()
 			->with( 123 )
@@ -642,6 +642,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$source      = $this->create_source( '/old-page' );
 		$destination = $this->create_post_id_destination( 123 );
 
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 		Functions\expect( 'get_permalink' )
 			->once()
 			->with( 123 )
@@ -683,5 +684,72 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$result = $this->validator->validate_source_destination_different( $source, $destination );
 
 		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * On a site served from a subdirectory, a same-host URL carries the home
+	 * path; the source does not. Rebased, the source's own full URL is a self-loop.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 */
+	public function test_validate_source_destination_different_rebases_own_url_on_subdirectory_home(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com/blog' );
+
+		$result = $this->validator->validate_source_destination_different(
+			$this->create_source( '/old' ),
+			$this->create_url_destination( 'https://example.com/blog/old' )
+		);
+
+		$this->assertSame( 'invalid-values', $result->error_code() );
+	}
+
+	/**
+	 * On a subdirectory home, a post's permalink carries the home path too.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 */
+	public function test_validate_source_destination_different_rebases_permalink_on_subdirectory_home(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com/blog' );
+		Functions\when( 'get_permalink' )->justReturn( 'https://example.com/blog/old/' );
+
+		$result = $this->validator->validate_source_destination_different(
+			$this->create_source( '/old' ),
+			$this->create_post_id_destination( 123 )
+		);
+
+		$this->assertSame( 'invalid-values', $result->error_code() );
+	}
+
+	/**
+	 * On a subdirectory home, a same-host path outside home and a relative
+	 * destination (already home-relative, taken as entered) are not self-loops.
+	 *
+	 * @dataProvider data_not_self_loops_on_subdirectory_home
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate_source_destination_different
+	 *
+	 * @param string $destination The destination URL.
+	 */
+	public function test_validate_source_destination_different_allows_other_paths_on_subdirectory_home( string $destination ): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com/blog' );
+
+		$result = $this->validator->validate_source_destination_different(
+			$this->create_source( '/old' ),
+			$this->create_url_destination( $destination )
+		);
+
+		$this->assertTrue( $result->is_valid() );
+	}
+
+	/**
+	 * Destinations that are not the source on a home of example.com/blog.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_not_self_loops_on_subdirectory_home(): array {
+		return array(
+			'same path outside home'   => array( 'https://example.com/old' ),
+			'home prefix only as text' => array( 'https://example.com/blogold' ),
+			'relative, as entered'     => array( '/blog/old' ),
+		);
 	}
 }

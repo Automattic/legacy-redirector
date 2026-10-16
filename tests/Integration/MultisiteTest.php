@@ -29,6 +29,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
@@ -149,6 +150,31 @@ final class MultisiteTest extends TestCase {
 
 		$this->assertNotNull( $in_subsite );
 		$this->assertStringContainsString( 'stripped-destination', $in_subsite['url'] );
+	}
+
+	/**
+	 * On a subdirectory subsite, the source's own full URL is refused as a
+	 * self-redirect, while the same path at the network root is not one.
+	 *
+	 * Without rebasing, '/old' to 'example.org/sub/old' would be saved as
+	 * '/old' to '/old', and every request for it would loop.
+	 *
+	 * @return void
+	 */
+	public function test_own_full_url_is_refused_as_a_destination_on_subsite(): void {
+		$path    = 'selfloop' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $path . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$own_url  = $this->create_redirect_result( '/old', home_url( '/old' ), true );
+		$root_url = $this->create_redirect_result( '/old', network_home_url( '/old' ), true );
+
+		restore_current_blog();
+		wp_delete_site( $site_id );
+
+		$this->assertSame( 'invalid-values', $own_url->error_code() );
+		$this->assertTrue( $root_url->is_success(), (string) $root_url->error_message() );
 	}
 
 	/**
