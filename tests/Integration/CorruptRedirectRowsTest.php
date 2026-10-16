@@ -35,6 +35,7 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
@@ -95,6 +96,50 @@ final class CorruptRedirectRowsTest extends TestCase {
 		);
 
 		$this->assertNull( $this->repository()->find_by_source( $source ) );
+	}
+
+	/**
+	 * A row with no stored destination is not served, but stays visible and reported.
+	 *
+	 * 1.x served no redirect for such a row. Reading it as a redirect to '/'
+	 * sent its visitors to the homepage, and nothing flagged it.
+	 */
+	public function test_row_with_no_destination_is_not_served_but_stays_visible(): void {
+		$source  = SourceUrl::from_string( '/no-destination-row' );
+		$post_id = $this->insert_redirect_post(
+			array(
+				'post_name'    => $source->hash(),
+				'post_title'   => $source->path(),
+				'post_excerpt' => '',
+			)
+		);
+
+		$this->assertNull( $this->repository()->find_by_source( $source ) );
+		$this->assertNull( $this->resolver()->get_redirect_data( '/no-destination-row' ) );
+
+		$redirect = $this->repository()->find_by_id( $post_id );
+		$this->assertTrue( $redirect->is_corrupt() );
+		$this->assertSame( AuditFindingType::CORRUPT_DATA, ( new RedirectAuditor() )->audit_destination( $redirect )->type() );
+	}
+
+	/**
+	 * A stored destination of '/' is a redirect home, not a missing destination.
+	 */
+	public function test_row_with_home_destination_is_served(): void {
+		$source = SourceUrl::from_string( '/home-destination-row' );
+		$this->insert_redirect_post(
+			array(
+				'post_name'    => $source->hash(),
+				'post_title'   => $source->path(),
+				'post_excerpt' => '/',
+			)
+		);
+
+		$found = $this->repository()->find_by_source( $source );
+
+		$this->assertInstanceOf( Redirect::class, $found );
+		$this->assertFalse( $found->is_corrupt() );
+		$this->assertSame( '/', $found->destination()->as_url()->value() );
 	}
 
 	/**
