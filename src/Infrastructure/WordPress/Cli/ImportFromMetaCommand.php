@@ -161,8 +161,14 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 
 				// A 1.x source out of postmeta can hold raw multibyte bytes, which
 				// a bare parse_url() corrupts on some hosts. The path stays
-				// percent-encoded; SourceUrl below does the only decode.
-				$from_path = Url::parse_encoded( (string) $redirect->meta_value )['path'] ?? '';
+				// percent-encoded; SourceUrl below does the only decode. Sources
+				// are keyed on path and query, so the query must come along, and
+				// a bare '?p=123' is a query on the root, as it was in 1.x.
+				$parts     = Url::parse_encoded( (string) $redirect->meta_value ) ?? array();
+				$from_path = $parts['path'] ?? '';
+				if ( '' !== ( $parts['query'] ?? '' ) ) {
+					$from_path = ( '' === $from_path ? '/' : $from_path ) . '?' . $parts['query'];
+				}
 				if ( '' === $from_path ) {
 					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Invalid source URL - no path found' );
 					continue;

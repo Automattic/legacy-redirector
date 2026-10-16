@@ -24,6 +24,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaComma
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
@@ -148,6 +149,115 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$redirect = $this->find_redirect( '/archive/old-story' );
 		$this->assertNotNull( $redirect );
 		$this->assertSame( $post_id, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test legacy URLs that differ only by query import as separate redirects.
+	 */
+	public function test_keeps_query_string_of_legacy_url(): void {
+		$first  = $this->create_post_with_legacy_url( '/article.php?id=5' );
+		$second = $this->create_post_with_legacy_url( '/article.php?id=6' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$this->assert_stdout_contains( 'All of your redirects have been imported' );
+		$this->assertNull( $this->find_redirect( '/article.php' ) );
+
+		$redirect = $this->resolver()->find_redirect( '/article.php?id=5' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $first, $redirect->destination()->as_post_id()->value() );
+
+		$redirect = $this->resolver()->find_redirect( '/article.php?id=6' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $second, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test a legacy URL that is only a query on the root keeps the query.
+	 *
+	 * @dataProvider data_query_only_legacy_urls
+	 *
+	 * @param string $legacy_url The meta value.
+	 */
+	public function test_imports_query_on_root( string $legacy_url ): void {
+		$post_id = $this->create_post_with_legacy_url( $legacy_url );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$redirect = $this->find_redirect( '/?p=123' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( '/?p=123', $redirect->source()->path() );
+		$this->assertSame( $post_id, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Meta values that are a query on the root.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_query_only_legacy_urls(): array {
+		return array(
+			'rooted'   => array( '/?p=123' ),
+			'no path'  => array( '?p=123' ),
+			'full URL' => array( 'https://old.example.com?p=123' ),
+		);
+	}
+
+	/**
+	 * Test a full URL keeps its query as well as its path.
+	 */
+	public function test_imports_full_url_with_query(): void {
+		$post_id = $this->create_post_with_legacy_url( 'https://old.example.com/a?b=1' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$redirect = $this->find_redirect( '/a?b=1' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( '/a?b=1', $redirect->source()->path() );
+		$this->assertSame( $post_id, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test --skip-dupes matches an existing redirect on path and query.
+	 */
+	public function test_skip_dupes_matches_on_query(): void {
+		$this->create_redirect( '/article.php?id=7', '/original-destination' );
+		$this->create_post_with_legacy_url( '/article.php?id=7' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key'   => $this->meta_key,
+				'format'     => 'csv',
+				'skip-dupes' => true,
+				'verbose'    => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Skipped - Redirect for this from URL already exists' );
+		$this->assertSame( '/original-destination', $this->find_redirect( '/article.php?id=7' )->destination()->as_url()->value() );
 	}
 
 	/**
