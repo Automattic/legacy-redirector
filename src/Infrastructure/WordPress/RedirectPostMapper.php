@@ -43,7 +43,11 @@ trait RedirectPostMapper {
 		$corruption = null;
 
 		try {
-			$source = SourceUrl::from_string( $post->post_title );
+			// A 1.x row the migration has yet to reach may hold a kses-escaped
+			// title beside a key hashed from the '&'; see Upgrader::hashed_text().
+			// Read from the title alone, the next save would re-key it onto a
+			// key no request produces.
+			$source = SourceUrl::from_string( Upgrader::hashed_text( $post->post_title, $post->post_name ) );
 		} catch ( InvalidArgumentException $e ) {
 			$source     = SourceUrl::from_string( '/__corrupt__/' . $post->ID );
 			$corruption = 'Invalid source: ' . $e->getMessage();
