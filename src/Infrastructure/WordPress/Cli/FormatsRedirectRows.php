@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema;
 
 /**
  * Formats a redirect as a row for WP-CLI output.
@@ -37,7 +38,7 @@ trait FormatsRedirectRows {
 			// 'corrupt' flags a row whose from/to are placeholders because the
 			// stored data is unreadable; `validate` reports the reason.
 			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $is_post_id ? 'post' : 'url' ),
-			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
+			'status' => RedirectSchema::status_label( $redirect ),
 		);
 	}
 }

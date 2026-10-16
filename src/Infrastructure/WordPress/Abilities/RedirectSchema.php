@@ -45,8 +45,8 @@ final class RedirectSchema {
 			),
 			'status' => array(
 				'type'        => 'string',
-				'enum'        => array( 'enabled', 'disabled' ),
-				'description' => __( 'Whether the redirect is served to visitors.', 'legacy-redirector' ),
+				'enum'        => array( 'enabled', 'disabled', 'trashed' ),
+				'description' => __( 'Whether the redirect is served to visitors. "trashed" marks a redirect in the Trash, which is not served; enabling it restores it from the Trash.', 'legacy-redirector' ),
 			),
 		);
 	}
@@ -80,8 +80,26 @@ final class RedirectSchema {
 			'from'   => $redirect->source()->path(),
 			'to'     => $is_post_id ? $destination->as_post_id()->value() : $destination->as_url()->value(),
 			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $is_post_id ? 'post' : 'url' ),
-			'status' => $redirect->is_active() ? 'enabled' : 'disabled',
+			'status' => self::status_label( $redirect ),
 		);
+	}
+
+	/**
+	 * The status a redirect is reported with, by the CLI as well as the abilities.
+	 *
+	 * An output label only: what is stored stays publish, draft or trash.
+	 * A trashed redirect is named as one, or it would read as disabled, and
+	 * enabling it would restore it from the Trash unnoticed.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return string 'enabled', 'disabled' or 'trashed'.
+	 */
+	public static function status_label( Redirect $redirect ): string {
+		return match ( $redirect->status() ) {
+			'publish' => 'enabled',
+			'trash'   => 'trashed',
+			default   => 'disabled',
+		};
 	}
 
 	/**
