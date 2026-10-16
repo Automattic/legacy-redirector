@@ -184,13 +184,27 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * @return array<string, mixed> The query arguments.
 	 */
 	private function build_query_args( RedirectCriteria $criteria ): array {
+		$order_by = $criteria->order_by();
+		$order    = $criteria->order();
+
+		// Non-unique orderings need an ID tiebreaker: an import creates hundreds
+		// of rows in the same second, and ties ordered arbitrarily by the
+		// database let paging repeat one row and skip another. The admin list
+		// does the same in ColumnsManager::handle_sorting().
+		if ( ! in_array( $order_by, array( 'ID', 'rand' ), true ) ) {
+			$order_by = array(
+				$order_by => $order,
+				'ID'      => $order,
+			);
+		}
+
 		$args = array(
 			'post_type'      => PostType::POST_TYPE,
 			'post_status'    => $this->map_status_to_post_status( $criteria->status() ),
 			'posts_per_page' => $criteria->limit(),
 			'offset'         => $criteria->offset(),
-			'orderby'        => $criteria->order_by(),
-			'order'          => $criteria->order(),
+			'orderby'        => $order_by,
+			'order'          => $order,
 		);
 
 		// Add search filter.
