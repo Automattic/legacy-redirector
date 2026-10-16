@@ -220,6 +220,29 @@ final class PostTypeRedirectRepository implements RedirectRepositoryInterface {
 	}
 
 	/**
+	 * Get the IDs of the redirects the migration marked as duplicates of a redirect.
+	 *
+	 * @param int $id The live redirect's ID.
+	 * @return array<int, int> The duplicates' IDs, in ascending order.
+	 */
+	#[\Override]
+	public function duplicate_ids( int $id ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Management lookup, never on the request path.
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT p.ID FROM $wpdb->posts p INNER JOIN $wpdb->postmeta m ON m.post_id = p.ID WHERE p.post_type = %s AND p.post_status <> 'trash' AND m.meta_key = %s AND m.meta_value = %d ORDER BY p.ID",
+				self::POST_TYPE,
+				Upgrader::DUPLICATE_META_KEY,
+				$id
+			)
+		);
+
+		return array_map( 'intval', $ids );
+	}
+
+	/**
 	 * Move any trashed row off the key a redirect is about to be saved on.
 	 *
 	 * Core does this itself when a post takes a slug a trashed post has, but

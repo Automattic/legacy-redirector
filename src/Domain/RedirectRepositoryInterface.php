@@ -82,4 +82,16 @@ interface RedirectRepositoryInterface {
 	 * @return int The redirect ID, or 0 if not found.
 	 */
 	public function get_id_by_source( SourceUrl $source ): int;
+
+	/**
+	 * Get the IDs of the redirects marked as duplicates of a redirect.
+	 *
+	 * A duplicate is a disabled redirect whose source, once normalized, is the
+	 * same as the live redirect it is marked against. Redirects in the trash
+	 * are left out, as they hold no source.
+	 *
+	 * @param int $id The live redirect's ID.
+	 * @return array<int, int> The duplicates' IDs, in ascending order.
+	 */
+	public function duplicate_ids( int $id ): array;
 }

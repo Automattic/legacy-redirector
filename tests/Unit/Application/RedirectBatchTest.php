@@ -103,12 +103,35 @@ final class RedirectBatchTest extends MonkeyStubs {
 		$redirect = $this->redirect( 7, '/old-page' );
 
 		$this->repository->shouldReceive( 'get_id_by_source' )->once()->andReturn( 7 );
+		$this->repository->shouldReceive( 'duplicate_ids' )->with( 7 )->andReturn( array() );
 		$this->repository->shouldReceive( 'find_by_id' )->with( 7 )->andReturn( $redirect );
 
 		$items = $this->batch->resolve( array( '/old-page' ) );
 
 		$this->assertSame( '/old-page', $items[0]['identifier'] );
 		$this->assertSame( BatchOutcome::SUCCESS, $items[0]['outcome'] );
+	}
+
+	/**
+	 * Test a source path shared with a disabled duplicate is refused, naming every row on it.
+	 *
+	 * Resolving it would pick the live redirect, when the spelling typed may
+	 * be the duplicate's.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectBatch::resolve
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectFetcher::fetch
+	 */
+	public function test_resolve_refuses_a_source_path_shared_with_a_duplicate(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		$this->repository->shouldReceive( 'get_id_by_source' )->once()->andReturn( 7 );
+		$this->repository->shouldReceive( 'duplicate_ids' )->with( 7 )->andReturn( array( 9 ) );
+		$this->repository->shouldNotReceive( 'find_by_id' );
+
+		$items = $this->batch->resolve( array( '/clash/' ) );
+
+		$this->assertSame( BatchOutcome::INVALID, $items[0]['outcome'] );
+		$this->assertSame( '2 redirects share this source, IDs 7, 9; use an ID', $items[0]['error'] );
 	}
 
 	/**

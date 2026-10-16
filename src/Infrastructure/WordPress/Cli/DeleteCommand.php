@@ -20,6 +20,7 @@ use WP_CLI_Command;
  */
 final class DeleteCommand extends WP_CLI_Command {
 
+	use FormatsRedirectRows;
 	use ReportsBatchFailures;
 
 	/**
@@ -78,14 +79,16 @@ final class DeleteCommand extends WP_CLI_Command {
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
+		// Name the row a single identifier resolves to, so a path that resolves
+		// to a different row than the one meant shows before it goes for good.
+		$single = 1 === count( $args ) ? $this->batch->resolve( $args )[0]['redirect'] : null;
+
 		WP_CLI::confirm(
-			sprintf(
-				1 === count( $args )
-					? 'Are you sure you want to delete the redirect "%s"?'
-					: 'Are you sure you want to delete %2$d redirects?',
-				$args[0],
-				count( $args )
-			),
+			match ( true ) {
+				null !== $single     => sprintf( 'Are you sure you want to delete the redirect %s?', $this->describe( $single ) ),
+				1 === count( $args ) => sprintf( 'Are you sure you want to delete the redirect "%s"?', $args[0] ),
+				default              => sprintf( 'Are you sure you want to delete %d redirects?', count( $args ) ),
+			},
 			$assoc_args
 		);
 
@@ -104,8 +107,20 @@ final class DeleteCommand extends WP_CLI_Command {
 
 		WP_CLI::success(
 			1 === $deleted
-				? sprintf( 'Deleted redirect: %s', $args[0] )
+				? sprintf( 'Deleted redirect: %s', $this->describe( $items[0]['redirect'] ) )
 				: sprintf( 'Deleted %d redirects.', $deleted )
 		);
+	}
+
+	/**
+	 * Describe a redirect by its source, ID and destination.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return string The description.
+	 */
+	private function describe( Redirect $redirect ): string {
+		$row = $this->redirect_row( $redirect );
+
+		return sprintf( '%s (ID %d, to %s)', $row['from'], $row['ID'], $row['to'] );
 	}
 }
