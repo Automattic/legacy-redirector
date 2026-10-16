@@ -250,16 +250,36 @@ final class RedirectResolver {
 	/**
 	 * Strip preservable parameters from a URL for lookup.
 	 *
-	 * @param string                $url    The URL.
+	 * Every other byte of the query is left as it arrived, because stored
+	 * sources keep their query verbatim. remove_query_arg() would rebuild the
+	 * rest of the query and re-spell it ('%20' as '+', 'a.b' as 'a_b',
+	 * duplicate keys collapsed), and the lookup would miss.
+	 *
+	 * Each segment is judged by parse_str(), the same parser that picked the
+	 * preserved values out, so what is stripped is exactly what is carried to
+	 * the destination.
+	 *
+	 * @param string                $url    The URL: a path and query, no fragment.
 	 * @param array<string, string> $params Parameters to strip.
 	 * @return string URL without the preservable parameters.
 	 */
 	private function strip_preservable_params( string $url, array $params ): string {
-		if ( empty( $params ) ) {
+		$query_start = strpos( $url, '?' );
+		if ( empty( $params ) || false === $query_start ) {
 			return $url;
 		}
 
-		return remove_query_arg( array_keys( $params ), $url );
+		$kept = array_filter(
+			explode( '&', substr( $url, $query_start + 1 ) ),
+			static function ( string $segment ) use ( $params ): bool {
+				$parsed = array();
+				parse_str( $segment, $parsed );
+
+				return array() === array_intersect_key( $parsed, $params );
+			}
+		);
+
+		return substr( $url, 0, $query_start ) . ( array() === $kept ? '' : '?' . implode( '&', $kept ) );
 	}
 
 	/**
