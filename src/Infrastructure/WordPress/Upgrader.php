@@ -2392,10 +2392,21 @@ final class Upgrader {
 	/**
 	 * Mark the upgrade as finished and clean up its working state.
 	 *
+	 * The version goes first, and must be recorded: without it, cleared state
+	 * reads as 1.x data with nothing walked, and the next batch would strip
+	 * the home path from every source again. Under the lock the stored
+	 * version is always below DB_VERSION, so false means refused.
+	 *
 	 * @return void
+	 *
+	 * @throws RuntimeException When the database refuses the version write.
 	 */
 	private function complete(): void {
-		update_option( self::VERSION_OPTION, self::DB_VERSION );
+		if ( ! update_option( self::VERSION_OPTION, self::DB_VERSION ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not record the upgrade as complete: ' . self::write_error() );
+		}
+
 		delete_option( self::STARTED_OPTION );
 		delete_option( self::CURSOR_OPTION );
 		delete_option( self::CEILING_OPTION );

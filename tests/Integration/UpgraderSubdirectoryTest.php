@@ -70,6 +70,8 @@ final class UpgraderSubdirectoryTest extends TestCase {
 		delete_option( Upgrader::VERSION_OPTION );
 		delete_option( 'wpcom_legacy_redirector_upgrade_started_gmt' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_cursor' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
+		delete_option( 'wpcom_legacy_redirector_upgrade_rekeyed' );
 	}
 
 	/**
@@ -221,5 +223,39 @@ final class UpgraderSubdirectoryTest extends TestCase {
 		$pending = $this->upgrader->count_pending();
 
 		$this->assertSame( 1, $pending['repathed'], 'The dry run should count the repath it would perform.' );
+	}
+
+	/**
+	 * A refused final version write keeps the walk's state, so the home path is not stripped twice.
+	 *
+	 * Were the state cleared, the next batch would take the site for 1.x data
+	 * with nothing walked yet and strip the home path from every source again.
+	 *
+	 * @return void
+	 */
+	public function test_refused_version_write_does_not_strip_the_home_path_twice(): void {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/blog/old-page' );
+		$refuse  = static fn( string $query ): string => str_contains( $query, Upgrader::VERSION_OPTION ) && ! str_starts_with( $query, 'SELECT' ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should have stopped.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'could not record', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertSame( $post_id, (int) get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+		$this->assertSame( $post_id, (int) get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
+		$this->assertNotEmpty( get_option( 'wpcom_legacy_redirector_upgrade_rekeyed' ) );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+		$this->assertSame( '/blog/old-page', get_post( $post_id )->post_title );
 	}
 }
