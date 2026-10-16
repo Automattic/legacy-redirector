@@ -201,6 +201,19 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	}
 
 	/**
+	 * Get the IDs of the redirects marked as duplicates of a redirect.
+	 *
+	 * Not cached: only management commands ask.
+	 *
+	 * @param int $id The live redirect's ID.
+	 * @return array<int, int> The duplicates' IDs, in ascending order.
+	 */
+	#[\Override]
+	public function duplicate_ids( int $id ): array {
+		return $this->inner->duplicate_ids( $id );
+	}
+
+	/**
 	 * Invalidate the cache for a source URL.
 	 *
 	 * @param SourceUrl $source The source URL to invalidate.

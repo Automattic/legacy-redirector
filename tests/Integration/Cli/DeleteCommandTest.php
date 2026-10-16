@@ -12,6 +12,8 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Integration tests for DeleteCommand.
@@ -75,7 +77,7 @@ final class DeleteCommandTest extends CliTestCase {
 			array( 'yes' => true )
 		);
 
-		$this->assert_success_contains( 'Deleted redirect: /delete-me' );
+		$this->assert_success_contains( 'Deleted redirect: /delete-me (ID ' . $redirect_id . ', to https://example.com/dest)' );
 		$this->assertNull( get_post( $redirect_id ) );
 	}
 
@@ -161,7 +163,7 @@ final class DeleteCommandTest extends CliTestCase {
 	 * Test that a confirmation prompt is issued.
 	 */
 	public function test_confirmation_requested(): void {
-		$this->create_redirect( '/confirm-me', 'https://example.com/dest' );
+		$redirect_id = $this->create_redirect( '/confirm-me', 'https://example.com/dest' );
 
 		$this->invoke_command(
 			$this->command,
@@ -171,5 +173,83 @@ final class DeleteCommandTest extends CliTestCase {
 
 		// The stub records the confirm call; a real run would prompt.
 		$this->assertTrue( \WP_CLI::was_called( 'confirm' ) );
+		$this->assertSame(
+			'Are you sure you want to delete the redirect /confirm-me (ID ' . $redirect_id . ', to https://example.com/dest)?',
+			\WP_CLI::get_call( 'confirm' )[1]
+		);
+	}
+
+	/**
+	 * Test a path shared with a disabled duplicate deletes nothing and names both rows.
+	 */
+	public function test_delete_refuses_a_path_shared_with_a_duplicate(): void {
+		list( $live_id, $duplicate_id ) = $this->create_duplicate_pair();
+
+		$this->invoke_command(
+			$this->command,
+			array( '/clash/' ),
+			array( 'yes' => true )
+		);
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( sprintf( '2 redirects share this source, IDs %d, %d; use an ID', $live_id, $duplicate_id ) );
+		$this->assertNotNull( get_post( $live_id ) );
+		$this->assertNotNull( get_post( $duplicate_id ) );
+	}
+
+	/**
+	 * Test deleting a duplicate by ID deletes only that row and leaves the live redirect serving.
+	 */
+	public function test_delete_duplicate_by_id_leaves_the_live_redirect_serving(): void {
+		list( $live_id, $duplicate_id ) = $this->create_duplicate_pair();
+		$source                         = SourceUrl::from_string( '/clash' );
+		$this->assertSame( $live_id, $this->repository()->find_by_source( $source )?->id() );
+
+		$this->invoke_command(
+			$this->command,
+			array( (string) $duplicate_id ),
+			array( 'yes' => true )
+		);
+
+		$this->assert_command_success();
+		$this->assertNull( get_post( $duplicate_id ) );
+		$this->assertSame( $live_id, $this->repository()->find_by_source( $source )?->id() );
+	}
+
+	/**
+	 * Test a duplicate in the trash does not make the path ambiguous.
+	 */
+	public function test_delete_by_path_ignores_a_trashed_duplicate(): void {
+		list( $live_id, $duplicate_id ) = $this->create_duplicate_pair();
+		wp_trash_post( $duplicate_id );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/clash' ),
+			array( 'yes' => true )
+		);
+
+		$this->assert_command_success();
+		$this->assertNull( get_post( $live_id ) );
+	}
+
+	/**
+	 * Create a live redirect and a disabled duplicate of it, as the upgrade leaves them.
+	 *
+	 * @return array{0: int, 1: int} The live and duplicate IDs.
+	 */
+	private function create_duplicate_pair(): array {
+		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
+		$duplicate_id = $this->insert_redirect_post(
+			array(
+				'post_title'   => '/clash/',
+				'post_name'    => md5( '/clash/' ),
+				'post_excerpt' => 'https://example.com/two',
+				'post_status'  => 'draft',
+			)
+		);
+		update_post_meta( $duplicate_id, Upgrader::DUPLICATE_META_KEY, $live_id );
+
+		return array( $live_id, $duplicate_id );
 	}
 }

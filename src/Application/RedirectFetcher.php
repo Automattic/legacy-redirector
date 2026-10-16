@@ -43,7 +43,11 @@ final class RedirectFetcher {
 	 * @param string $identifier A numeric redirect ID or a source path.
 	 * @return Redirect|null The redirect, or null if not found.
 	 *
-	 * @throws \InvalidArgumentException If the identifier is not a valid ID or source path.
+	 * A path a disabled duplicate shares with the live redirect is refused.
+	 * It would resolve to the live one, whichever spelling was typed, and the
+	 * usual reason to name a duplicate is to delete it.
+	 *
+	 * @throws \InvalidArgumentException If the identifier is not a valid ID or source path, or more than one redirect has the source.
 	 */
 	public function fetch( string $identifier ): ?Redirect {
 		if ( ctype_digit( $identifier ) ) {
@@ -53,6 +57,25 @@ final class RedirectFetcher {
 		$source      = SourceUrl::from_string( $identifier, HomePath::current() );
 		$redirect_id = $this->repository->get_id_by_source( $source );
 
-		return $redirect_id > 0 ? $this->repository->find_by_id( $redirect_id ) : null;
+		if ( 0 === $redirect_id ) {
+			return null;
+		}
+
+		$duplicate_ids = $this->repository->duplicate_ids( $redirect_id );
+
+		if ( array() !== $duplicate_ids ) {
+			$ids     = array_merge( array( $redirect_id ), $duplicate_ids );
+			$message = sprintf(
+				/* translators: 1: number of redirects, 2: comma-separated redirect IDs. */
+				__( '%1$d redirects share this source, IDs %2$s; use an ID', 'legacy-redirector' ),
+				count( $ids ),
+				implode( ', ', $ids )
+			);
+
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw new \InvalidArgumentException( $message );
+		}
+
+		return $this->repository->find_by_id( $redirect_id );
 	}
 }

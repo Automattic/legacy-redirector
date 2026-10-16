@@ -138,9 +138,11 @@ final class ListCommand extends WP_CLI_Command {
 	 * disabled redirect's spelling as 1.x stored it, and `never_fired` says
 	 * whether any browser could ever have requested it: if not, disabling it
 	 * changed nothing for visitors. To keep the live redirect's destination,
-	 * delete the disabled one; to keep the disabled one's, update the live
-	 * redirect to it, then delete the disabled one. Deleting or trashing it
-	 * takes it off this list. The filters and pagination above do not apply.
+	 * delete the disabled one by its ID; to keep the disabled one's, update
+	 * the live redirect to it, then delete the disabled one by its ID. Its
+	 * `from` path is refused, because it is the live redirect's source too.
+	 * Deleting or trashing it takes it off this list. The filters and
+	 * pagination above do not apply.
 	 *
 	 * [--fields=<fields>]
 	 * : Limit output to specific fields (comma-separated). Available: ID, from, to, type, status. With --duplicates: ID, from, to, never_fired, duplicate_of, duplicate_of_from, duplicate_of_to.

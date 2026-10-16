@@ -116,9 +116,10 @@ wp legacy-redirector update <live ID> --to=<destination>
 wp legacy-redirector delete <disabled ID>
 ```
 
-A disabled duplicate can't be enabled or edited in place while the live redirect has its
-source. Once it's deleted or trashed, it drops off the list. The admin's Duplicate sources
-view on the Redirects screen shows the same list, with the same choices.
+Use the IDs: a source path the two share is refused, since it can't say which one you
+mean. A disabled duplicate can't be enabled or edited in place while the live redirect has
+its source. Once it's deleted or trashed, it drops off the list. The admin's Duplicate
+sources view on the Redirects screen shows the same list, with the same choices.
 
 See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and why.
 
