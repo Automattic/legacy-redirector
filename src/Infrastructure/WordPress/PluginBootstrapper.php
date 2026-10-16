@@ -84,8 +84,11 @@ final class PluginBootstrapper {
 		// Register post type on init.
 		add_action( 'init', array( $this, 'register_post_type' ) );
 
-		// Register capability on admin_init.
-		add_action( 'admin_init', array( $this, 'register_capability' ) );
+		// Grant the capability on init, not admin_init: a headless site may
+		// never load wp-admin, and the abilities and REST routes check it.
+		// Version-gated, so this is one option read per request. Priority 11,
+		// after the post type.
+		add_action( 'init', array( $this, 'register_capability' ), 11 );
 
 		// Migrate 1.x redirect data. Runs on init rather than admin_init
 		// because the data it repairs is what serves front-end redirects, and

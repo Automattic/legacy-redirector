@@ -63,6 +63,24 @@ final class CapabilityTest extends TestCase {
 	}
 
 	/**
+	 * Test a revoked capability stays revoked while the stored version is current.
+	 *
+	 * The grant runs on every request's init, so it must not undo a site's
+	 * deliberate remove_cap().
+	 *
+	 * @return void
+	 */
+	public function test_revocation_survives_later_registration() {
+		$capability = new Capability();
+		$capability->register();
+
+		get_role( 'editor' )->remove_cap( Capability::MANAGE_REDIRECTS_CAPABILITY );
+
+		$this->assertFalse( $capability->register() );
+		$this->assertRoleNotHasRedirectsCapability( 'editor' );
+	}
+
+	/**
 	 * Check if a specific user has Redirects capability.
 	 *
 	 * @param int|WP_User $user ID of the user, or WP_User object.

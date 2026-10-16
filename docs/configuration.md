@@ -2,19 +2,16 @@
 
 ## Permissions
 
-All redirect management — the admin screens, the WP-CLI commands, and the abilities — is
-gated on a single custom capability, `manage_redirects`.
+All redirect management in the admin screens and through the abilities is gated on a single
+custom capability, `manage_redirects`. WP-CLI is trusted by virtue of being WP-CLI and does
+not check it.
 
-The plugin grants it to the **administrator** and **editor** roles on the first admin
-request after installation. The grant is version-gated, so it runs once rather than on
-every request, and it is written to the roles in the database — which means deactivating
-the plugin leaves it in place, as WordPress core does for any plugin's role capabilities.
+The plugin grants it to the **administrator** and **editor** roles on the first request of
+any kind after installation: front end, admin, REST or WP-CLI. The grant is version-gated,
+so it runs once rather than on every request, and it is written to the roles in the
+database — which means deactivating the plugin leaves it in place, as WordPress core does
+for any plugin's role capabilities.
 See [Revoking it](#revoking-it) if you need it gone.
-
-Because the grant happens on `admin_init`, a site that is only ever driven by WP-CLI will
-not have the capability on its roles until someone loads an admin page. That does not stop
-you working: WP-CLI is trusted by virtue of being WP-CLI and does not check the capability
-at all.
 
 ### Granting it to another role
 
@@ -77,7 +74,7 @@ wp cap remove editor manage_redirects
 
 A revocation sticks. The plugin records that it has granted the capability in the
 `manage_redirects_capability_version` option, and while that option is current it does not
-grant it again, so an editor you have revoked stays revoked across later admin requests. The
+grant it again, so an editor you have revoked stays revoked across later requests. The
 exception is a future release that bumps that version to grant something new, which would
 grant it to both default roles again.
 
@@ -91,14 +88,14 @@ wp option delete manage_redirects_capability_version
 ```
 
 Delete the option only if the plugin is going away. With the plugin still active, the next
-admin request sees no option and grants the capability to administrators and editors again.
+request sees no option and grants the capability to administrators and editors again.
 On a multisite network, roles are stored per site, so run the commands against each site with
 `--url`.
 
 ### Read-only access is not separable
 
 There is no view-only capability. `manage_redirects` covers reading the redirect list as
-well as changing it, and the read-only WP-CLI commands and abilities require it too.
+well as changing it, and the read-only abilities require it too.
 
 This is deliberate: the redirect list is a map of a site's old and new URL structure, and
 includes destinations that may not be published yet. Authors and contributors are not given

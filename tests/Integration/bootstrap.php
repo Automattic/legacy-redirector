@@ -41,6 +41,14 @@ require_once "{$_tests_dir}/includes/functions.php";
  */
 WPIntegration\bootstrap_it();
 
+// The plugin grants manage_redirects on init, which has just run and committed
+// the grant outside any test transaction. Remove it, so every test starts from
+// a site that has not granted it and TestCase::tear_down() restores that state.
+foreach ( array( 'administrator', 'editor' ) as $_role_name ) {
+	get_role( $_role_name )?->remove_cap( \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::MANAGE_REDIRECTS_CAPABILITY );
+}
+delete_option( \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::MANAGE_REDIRECTS_CAPABILITY . '_capability_version' );
+
 // Load WP_CLI stubs for CLI integration tests.
 // This must be loaded after WordPress bootstrap but before tests run.
 require_once dirname( __DIR__ ) . '/Stubs/WpCliUtilsStubs.php';
