@@ -29,6 +29,12 @@ namespace Automattic\LegacyRedirector;
 use Automattic\LegacyRedirector\Infrastructure\DI\Container;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper;
 
+// A second copy loaded in code from another folder (Composer and a ZIP, say)
+// does nothing: the first copy loaded wins.
+if ( \defined( __NAMESPACE__ . '\\PLUGIN_FILE' ) ) {
+	return;
+}
+
 // Namespaced constants.
 const PLUGIN_FILE = __FILE__;
 const VERSION     = '2.0.0-alpha';
@@ -66,21 +72,25 @@ register_deactivation_hook(
 	array( \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditScheduler::class, 'unschedule' )
 );
 
-/**
- * Get the plugin's DI container instance.
- *
- * This function is provided for third-party developers who need to access
- * plugin services. Internal plugin code should use Container::instance() directly.
- *
- * Usage:
- *   use function Automattic\LegacyRedirector\container;
- *   $manager = container()->manager();
- *
- * Or with full namespace:
- *   $manager = \Automattic\LegacyRedirector\container()->manager();
- *
- * @return Container The container.
- */
-function container(): Container {
-	return Container::instance();
+// Declared conditionally because an unconditional function is bound when the
+// file compiles, before the early return above can stop a second copy.
+if ( ! \function_exists( __NAMESPACE__ . '\\container' ) ) {
+	/**
+	 * Get the plugin's DI container instance.
+	 *
+	 * This function is provided for third-party developers who need to access
+	 * plugin services. Internal plugin code should use Container::instance() directly.
+	 *
+	 * Usage:
+	 *   use function Automattic\LegacyRedirector\container;
+	 *   $manager = container()->manager();
+	 *
+	 * Or with full namespace:
+	 *   $manager = \Automattic\LegacyRedirector\container()->manager();
+	 *
+	 * @return Container The container.
+	 */
+	function container(): Container {
+		return Container::instance();
+	}
 }
