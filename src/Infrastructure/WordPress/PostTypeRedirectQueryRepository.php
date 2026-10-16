@@ -193,9 +193,10 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 			'order'          => $criteria->order(),
 		);
 
-		// Add search filter.
+		// Search source paths only; destinations live in post_excerpt.
 		if ( $criteria->has_search() ) {
-			$args['s'] = $criteria->search();
+			$args['s']              = $criteria->search();
+			$args['search_columns'] = array( 'post_title' );
 		}
 
 		// Add destination type filter.
