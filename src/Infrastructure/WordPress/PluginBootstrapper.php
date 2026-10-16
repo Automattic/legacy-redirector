@@ -171,11 +171,12 @@ final class PluginBootstrapper {
 	/**
 	 * Migrate redirect data created by version 1.x, a batch at a time.
 	 *
-	 * A site with no redirects yet is first recorded as current, in every
-	 * context: under WP-CLI it may be about to import its first ones. Batches
-	 * only run outside WP-CLI: `wp legacy-redirector migrate` is how the CLI
-	 * migrates, and a batch on the bootstrap of every command would have even
-	 * `migrate --dry-run` write.
+	 * A site with no redirects yet is first recorded as current, and a site
+	 * with some has its upgrade anchored, in every context: under WP-CLI it
+	 * may be about to create redirects. Batches only run outside WP-CLI:
+	 * `wp legacy-redirector migrate` is how the CLI migrates, and a batch on
+	 * the bootstrap of every command would have even `migrate --dry-run`
+	 * write redirect data.
 	 *
 	 * @return void
 	 */
