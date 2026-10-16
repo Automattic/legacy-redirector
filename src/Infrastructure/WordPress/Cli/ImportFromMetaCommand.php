@@ -117,6 +117,8 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 		$dry_run    = isset( $assoc_args['dry-run'] );
 		$verbose    = isset( $assoc_args['verbose'] );
 		$notices    = array();
+		$processed  = 0;
+		$failed     = 0;
 
 		if ( $dry_run ) {
 			WP_CLI::line( '---Dry Run---' );
@@ -157,6 +159,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 
 			foreach ( $redirects as $redirect ) {
 				++$i;
+				++$processed;
 				$progress->tick();
 
 				// A 1.x source out of postmeta can hold raw multibyte bytes, which
@@ -170,6 +173,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 					$from_path = ( '' === $from_path ? '/' : $from_path ) . '?' . $parts['query'];
 				}
 				if ( '' === $from_path ) {
+					++$failed;
 					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Invalid source URL - no path found' );
 					continue;
 				}
@@ -177,6 +181,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 				try {
 					$source = SourceUrl::from_string( $from_path, HomePath::current() );
 				} catch ( \InvalidArgumentException $e ) {
+					++$failed;
 					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
 					continue;
 				}
@@ -195,11 +200,13 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 						$result      = $this->manager->create_redirect( $source, $destination );
 
 						if ( $result->is_error() ) {
+							++$failed;
 							$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $result->error_message() ?? 'Could not insert redirect' );
 						} elseif ( $verbose ) {
 							$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Successfully imported' );
 						}
 					} catch ( \InvalidArgumentException $e ) {
+						++$failed;
 						$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
 					}
 				}
@@ -218,6 +225,12 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 
 		if ( count( $notices ) > 0 ) {
 			\WP_CLI\Utils\format_items( $format, $notices, array( 'redirect_from', 'redirect_to', 'message' ) );
+
+			// Any failed row fails a live run, so scripts do not mistake a
+			// partial import for a clean one.
+			if ( ! $dry_run && $failed > 0 ) {
+				WP_CLI::error( sprintf( 'Processed %d of %d rows: %d failed.', $processed - $failed, $processed, $failed ) );
+			}
 		} else {
 			WP_CLI::log( WP_CLI::colorize( '%GAll of your redirects have been imported. Nice work!%n ' ) );
 		}

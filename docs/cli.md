@@ -153,15 +153,24 @@ intermediate file — `-` reads from STDIN:
 cut -d, -f2,3 old-export.csv | wp legacy-redirector import -
 ```
 
-Re-running an import is safe: by default a row whose source already has a redirect is
-reported as a duplicate and skipped. To make the CSV authoritative instead — updating
-destinations that have changed and creating the rest — use `--mode=upsert`:
+Re-running an import is safe. In the default create mode, a row whose source already has
+a redirect with the same destination and status is skipped, so re-importing an unchanged
+CSV changes nothing. A row whose source already redirects somewhere else, or with a
+different status, is an error that suggests `--mode=upsert`, so a corrected CSV is never
+silently left unapplied. Destinations are compared in their stored form, so
+`https://your-site.example/b` and `/b` are the same destination. To make the CSV
+authoritative instead — updating destinations that have changed and creating the rest —
+use `--mode=upsert`:
 
 ```bash
 wp legacy-redirector import redirects.csv --mode=upsert
 ```
 
 Only errors are reported by default. Add `--verbose` to see every row.
+
+A live import exits with status 1 if any row fails, after importing the rows that
+succeeded, and names how many failed; a clean run, including one where every row was
+skipped as unchanged, exits 0. A dry run fails only when every row fails.
 
 ### Retire a domain
 
@@ -286,7 +295,8 @@ wp legacy-redirector import-from-meta --meta-key=legacy-url --start=0 --end=1000
 ```
 
 `--skip-dupes` passes over sources that already have a redirect, which makes re-runs
-cheap.
+cheap. Without it, each source that already has a redirect is a failed row. A live run
+with any failed row exits with status 1 after importing the rest, naming how many failed.
 
 ### Capture a new redirect's ID
 

@@ -242,6 +242,18 @@ final class ImportCommand extends WP_CLI_Command {
 		$result = $this->manager->create_redirect( $source, $destination, $validate, $post_status );
 
 		if ( $result->is_error() ) {
+			// Re-running an unchanged CSV is a no-op, not a failure. A source
+			// that already redirects somewhere else is still an error, so a
+			// corrected CSV re-imported without upsert does not silently fail
+			// to apply.
+			if ( 'create' === $mode && $this->manager->exists_unchanged( $source, $destination, $post_status ) ) {
+				return $this->result_row( $redirect_from, $redirect_to, 'skipped', 'Already exists with this destination and status' );
+			}
+
+			if ( 'create' === $mode && 'duplicate-redirect-uri' === $result->error_code() ) {
+				return $this->result_row( $redirect_from, $redirect_to, 'error', 'A redirect for this source already exists with a different destination or status. Use --mode=upsert to update it.' );
+			}
+
 			return $this->result_row( $redirect_from, $redirect_to, 'error', $result->error_message() ?? 'Could not create redirect' );
 		}
 
@@ -325,14 +337,31 @@ final class ImportCommand extends WP_CLI_Command {
 			\WP_CLI\Utils\format_items( $format, $errors, array( 'source', 'dest', 'message' ) );
 		}
 
-		if ( count( $errors ) === count( $results ) ) {
-			WP_CLI::error( sprintf( 'All %d rows failed.', count( $results ) ) );
+		$total  = count( $results );
+		$failed = count( $errors );
+
+		if ( $failed === $total ) {
+			WP_CLI::error( sprintf( 'All %d rows failed.', $total ) );
 			return;
 		}
 
-		if ( ! $dry_run ) {
-			WP_CLI::success( sprintf( 'Processed %d redirects.', count( $results ) ) );
+		if ( $dry_run ) {
+			return;
 		}
+
+		// Any failed row fails the run, so scripts do not mistake a partial
+		// import for a clean one.
+		if ( $failed > 0 ) {
+			WP_CLI::error( sprintf( 'Processed %d of %d rows: %d failed.', $total - $failed, $total, $failed ) );
+			return;
+		}
+
+		$skipped = count( array_filter( $results, fn( $r ) => 'skipped' === $r['action'] ) );
+		$message = sprintf( 'Processed %d redirects', $total - $skipped );
+		if ( $skipped > 0 ) {
+			$message .= sprintf( ', skipped %d unchanged', $skipped );
+		}
+		WP_CLI::success( $message . '.' );
 	}
 
 	/**
