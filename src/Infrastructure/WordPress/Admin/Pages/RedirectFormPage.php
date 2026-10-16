@@ -252,21 +252,28 @@ final class RedirectFormPage {
 		}
 
 		// Values preserved from a rejected save override the stored ones, so the
-		// form shows what the user submitted alongside the error it caused.
-		// The URLs are left unsanitized because sanitize_text_field() deletes
-		// every %xx sequence; the view escapes them on output.
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading preserved form values for display.
-		if ( isset( $_GET['redirect_from'] ) ) {
-			$redirect_from = trim( wp_unslash( $_GET['redirect_from'] ) );
+		// form shows what the user submitted alongside the error it caused. The
+		// nonce limits that to this user's own save: a crafted link could
+		// otherwise show a different destination over a stored redirect, and a
+		// save meant only to change its status would store it.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- This is the nonce.
+		$form_nonce = isset( $_GET['form_nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['form_nonce'] ) ) : '';
+		if ( wp_verify_nonce( $form_nonce, 'redirect_form_values' ) ) {
+			// The URLs are left unsanitized because sanitize_text_field() deletes
+			// every %xx sequence; the view escapes them on output.
+			// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Escaped on output.
+			if ( isset( $_GET['redirect_from'] ) ) {
+				$redirect_from = trim( wp_unslash( $_GET['redirect_from'] ) );
+			}
+			if ( isset( $_GET['redirect_to'] ) ) {
+				$destination_value   = trim( wp_unslash( $_GET['redirect_to'] ) );
+				$destination_display = $destination_value;
+			}
+			// phpcs:enable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			if ( isset( $_GET['redirect_status'] ) && in_array( $_GET['redirect_status'], array( 'publish', 'draft' ), true ) ) {
+				$redirect_status = sanitize_text_field( wp_unslash( $_GET['redirect_status'] ) );
+			}
 		}
-		if ( isset( $_GET['redirect_to'] ) ) {
-			$destination_value   = trim( wp_unslash( $_GET['redirect_to'] ) );
-			$destination_display = $destination_value;
-		}
-		if ( isset( $_GET['redirect_status'] ) && in_array( $_GET['redirect_status'], array( 'publish', 'draft' ), true ) ) {
-			$redirect_status = sanitize_text_field( wp_unslash( $_GET['redirect_status'] ) );
-		}
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		// Check for success/error messages.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Just reading message params for display.
@@ -495,6 +502,7 @@ final class RedirectFormPage {
 			'redirect_from'   => rawurlencode( $from ),
 			'redirect_to'     => rawurlencode( $to ),
 			'redirect_status' => $status,
+			'form_nonce'      => wp_create_nonce( 'redirect_form_values' ),
 		);
 
 		if ( $redirect_id > 0 ) {

@@ -673,6 +673,7 @@ final class RedirectFormPageTest extends TestCase {
 		$_GET = array(
 			'redirect_from' => '/caf%C3%A9',
 			'redirect_to'   => 'https://example.com/search?q=a%26b',
+			'form_nonce'    => wp_create_nonce( 'redirect_form_values' ),
 		);
 
 		ob_start();
@@ -979,6 +980,30 @@ final class RedirectFormPageTest extends TestCase {
 
 		$this->assertSame( 'old?a=1&b=2', $this->rendered_value( $html, 'redirect_from' ) );
 		$this->assertSame( '/no-such-page?c=3+4#frag', $this->rendered_value( $html, 'redirect_to_display' ) );
+	}
+
+	/**
+	 * Test a crafted link cannot prefill the Edit page over the stored values.
+	 *
+	 * Without the nonce a rejected save adds, anyone could send an admin a
+	 * link that shows a different destination, and a save meant only to
+	 * change the status would store it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_edit_page_ignores_values_without_nonce(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-crafted-link', '/destination' );
+
+		$_GET = array(
+			'redirect_id'   => (string) $redirect_id,
+			'redirect_from' => '/elsewhere',
+			'redirect_to'   => 'https://example.com/attacker',
+		);
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'form-crafted-link', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( '/destination', $this->rendered_value( $html, 'redirect_to' ) );
 	}
 
 	/**
