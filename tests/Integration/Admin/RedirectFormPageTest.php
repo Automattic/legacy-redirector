@@ -105,6 +105,7 @@ final class RedirectFormPageTest extends TestCase {
 	public function tear_down(): void {
 		remove_filter( 'pre_http_request', $this->http_ok );
 		$_POST = array();
+		$_GET  = array();
 
 		parent::tear_down();
 	}
@@ -547,6 +548,98 @@ final class RedirectFormPageTest extends TestCase {
 		$redirect = $this->find_redirect( '/form-created-url' );
 		$this->assertNotNull( $redirect );
 		$this->assertSame( 'https://example.com/elsewhere', $redirect->destination()->as_url()->value() );
+	}
+
+	/**
+	 * Test a percent-encoded source is stored as the CLI stores it.
+	 *
+	 * A URL copied from the address bar arrives encoded. The form must hand it
+	 * to SourceUrl as typed, not strip every %xx sequence first.
+	 *
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
+	 * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
+	 */
+	public function test_percent_encoded_source_matches_cli(): void {
+		$this->login_as_redirect_manager();
+
+		$this->submit(
+			array(
+				'redirect_from' => '/caf%C3%A9',
+				'redirect_to'   => 'https://example.com/elsewhere',
+			)
+		);
+
+		$this->assertStringContainsString( 'message=created', $this->capture_redirect() );
+
+		$redirect = $this->find_redirect( '/caf%C3%A9' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( SourceUrl::from_string( '/caf%C3%A9' )->path(), $redirect->source()->path() );
+		$this->assertNotNull( $this->resolver()->get_redirect_data( '/caf%C3%A9' ) );
+	}
+
+	/**
+	 * Test an encoded space in the source and an encoded query in the
+	 * destination both survive the save.
+	 */
+	public function test_percent_encoded_space_and_destination_query_round_trip(): void {
+		$this->login_as_redirect_manager();
+
+		$this->submit(
+			array(
+				'redirect_from' => '/old%20page',
+				'redirect_to'   => 'https://example.com/search?q=a%26b',
+			)
+		);
+
+		$this->capture_redirect();
+
+		$redirect = $this->find_redirect( '/old%20page' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( 'https://example.com/search?q=a%26b', $redirect->destination()->as_url()->value() );
+	}
+
+	/**
+	 * Test editing to a percent-encoded source stores it as the CLI would.
+	 */
+	public function test_edit_to_percent_encoded_source(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-edit-encoded', '/old-destination' );
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => '/caf%C3%A9-edited',
+				'redirect_to'     => '/old-destination',
+				'redirect_status' => 'publish',
+			)
+		);
+
+		$this->assertStringContainsString( 'message=updated', $this->capture_redirect() );
+
+		$redirect = $this->find_redirect( '/caf%C3%A9-edited' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $redirect_id, $redirect->id() );
+	}
+
+	/**
+	 * Test the Add page re-renders preserved encoded values intact.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_add_page
+	 */
+	public function test_add_page_renders_preserved_encoded_values(): void {
+		$this->login_as_redirect_manager();
+
+		$_GET = array(
+			'redirect_from' => '/caf%C3%A9',
+			'redirect_to'   => 'https://example.com/search?q=a%26b',
+		);
+
+		ob_start();
+		$this->page->render_add_page();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'value="caf%C3%A9"', $html );
+		$this->assertStringContainsString( 'value="https://example.com/search?q=a%26b"', $html );
 	}
 
 	/**

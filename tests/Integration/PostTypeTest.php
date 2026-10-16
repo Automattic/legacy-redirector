@@ -61,4 +61,32 @@ final class PostTypeTest extends TestCase {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
 		$this->assertTrue( current_user_can( $list_screen_capability ) );
 	}
+
+	/**
+	 * Test the single-item trash notice shows an encoded source as stored.
+	 *
+	 * The source arrives already decoded once by PHP. Decoding it again turned
+	 * a stored %2F into a slash, and sanitize_text_field() then deleted any
+	 * %xx sequence left, so the notice named a different redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::bulk_post_updated_messages
+	 */
+	public function test_trash_notice_shows_encoded_source_as_stored() {
+		$_GET['redirect_source'] = wp_slash( '/a%2Fb?q=a%26b' );
+
+		$messages = ( new PostType() )->bulk_post_updated_messages(
+			array(),
+			array(
+				'updated'   => 0,
+				'locked'    => 0,
+				'deleted'   => 0,
+				'trashed'   => 1,
+				'untrashed' => 0,
+			)
+		);
+
+		unset( $_GET['redirect_source'] );
+
+		$this->assertStringContainsString( '<code>/a%2Fb?q=a%26b</code>', $messages[ PostType::POST_TYPE ]['trashed'] );
+	}
 }

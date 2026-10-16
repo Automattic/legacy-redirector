@@ -167,6 +167,21 @@ final class ChecksControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test a percent-encoded source finds the redirect stored for it.
+	 *
+	 * The form sends what the user typed, so an address-bar URL arrives
+	 * encoded; stripping the %xx sequences would test a different path.
+	 */
+	public function test_percent_encoded_source_reports_duplicate(): void {
+		$this->login_as_redirect_manager();
+		$this->create_redirect( '/caf%C3%A9', 'https://example.com/destination' );
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/caf%C3%A9' ) );
+
+		$this->assertTrue( $response->get_data()['exists'] );
+	}
+
+	/**
 	 * Test a source URL without a redirect reports no duplicate.
 	 */
 	public function test_unknown_source_reports_no_duplicate(): void {
