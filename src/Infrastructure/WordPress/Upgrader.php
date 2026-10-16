@@ -364,7 +364,8 @@ final class Upgrader {
 	}
 
 	/**
-	 * Record a site with no redirects as already on the current data version.
+	 * Record a site with no redirects as already on the current data version,
+	 * or anchor the upgrade of a site with some.
 	 *
 	 * 1.x stored no data version, so a missing one means 1.x data or a fresh
 	 * install, and the walk treats it as 1.x: it publishes drafts and strips
@@ -374,9 +375,14 @@ final class Upgrader {
 	 * double-prefixed sources rewritten. With no redirect rows there is no
 	 * 1.x data, so the version is recorded before any are created.
 	 *
-	 * For every context, WP-CLI included. One indexed query per request
-	 * while the version is missing, which on a 1.x site is until the upgrade
-	 * completes.
+	 * With redirect rows, the upgrade's start time and ceiling are recorded
+	 * instead, before anything else can write: under WP-CLI no batch runs on
+	 * bootstrap, so a redirect created disabled before `migrate` would
+	 * otherwise sit below the ceiling and be published as 1.x data.
+	 *
+	 * For every context, WP-CLI included. One indexed query, plus two option
+	 * reads on a 1.x site, per request while the version is missing, which on
+	 * a 1.x site is until the upgrade completes.
 	 *
 	 * @return void
 	 */
@@ -394,6 +400,12 @@ final class Upgrader {
 		// skip its upgrade for good.
 		if ( 0 === $found ) {
 			update_option( self::VERSION_OPTION, self::DB_VERSION );
+			return;
+		}
+
+		if ( is_numeric( $found ) && (int) $found > 0 ) {
+			$this->started_at();
+			$this->ceiling();
 		}
 	}
 

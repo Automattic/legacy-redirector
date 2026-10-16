@@ -148,6 +148,35 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A site holding redirects records where its upgrade begins before it creates more.
+	 *
+	 * Under WP-CLI no batch runs on bootstrap, so without this a redirect
+	 * created disabled before `wp legacy-redirector migrate` - a never-dated
+	 * draft, exactly what 1.x stored - would sit below the ceiling and be
+	 * published.
+	 *
+	 * @return void
+	 */
+	public function test_site_with_redirects_records_its_anchors_before_new_redirects() {
+		$legacy_id = $this->create_legacy_redirect( '/old-page' );
+
+		$this->upgrader->stamp_fresh_install();
+
+		$this->assertNotFalse( get_option( 'wpcom_legacy_redirector_upgrade_started_gmt' ) );
+		$this->assertSame( $legacy_id, (int) get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+
+		$disabled_id = $this->create_legacy_redirect( '/disabled-on-purpose' );
+
+		do {
+			$result = $this->upgrader->run_batch( 100 );
+		} while ( ! $result['complete'] );
+
+		$this->assertSame( 'publish', get_post_status( $legacy_id ) );
+		$this->assertSame( 'draft', get_post_status( $disabled_id ) );
+	}
+
+	/**
 	 * A refused read is not taken for an empty table.
 	 *
 	 * Stamping a 1.x site would skip its migration for good.
@@ -165,6 +194,8 @@ final class UpgraderTest extends TestCase {
 		remove_filter( 'query', $refuse );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_started_gmt' ) );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
 	}
 
 	/**
