@@ -136,9 +136,11 @@ The CSV takes one redirect per row. A header row is skipped only when its first 
 
 The destination can be a path, an absolute URL, or the ID of a post on this site. The
 third column is optional and accepts `enabled` or `disabled`; omitted, new redirects are
-created enabled.
+created enabled. Any other value is an error for that row, so a typo cannot quietly put a
+redirect live.
 
-Preview first, then import:
+Preview first, then import. The preview validates each row as the import would, so a row
+the import will refuse is shown as an error rather than as one it would create:
 
 ```bash
 wp legacy-redirector import redirects.csv --dry-run
