@@ -42,6 +42,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::duplicate_count
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  */
 final class AuditFlagsTest extends TestCase {
 
