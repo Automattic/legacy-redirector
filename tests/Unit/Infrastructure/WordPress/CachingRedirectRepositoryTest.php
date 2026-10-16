@@ -312,11 +312,11 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test find_by_source updates cache to zero when cached post no longer exists.
+	 * Test find_by_source drops the cache entry when the cached post no longer exists.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
 	 */
-	public function test_find_by_source_updates_cache_when_cached_post_deleted(): void {
+	public function test_find_by_source_drops_cache_when_cached_post_deleted(): void {
 		$source = $this->create_source();
 
 		Functions\expect( 'wp_cache_get' )
@@ -324,9 +324,9 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
 			->andReturn( 789 );
 
-		Functions\expect( 'wp_cache_set' )
+		Functions\expect( 'wp_cache_delete' )
 			->once()
-			->with( '1:' . $source->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
+			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
 			->andReturn( true );
 
 		$this->inner
@@ -606,67 +606,21 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test delete invalidates cache before deleting.
+	 * Test delete drops the cache entry rather than caching 0.
+	 *
+	 * A disabled duplicate shares its source with the live redirect, so a
+	 * cached 0 would stop the live one firing.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::delete
 	 */
-	public function test_delete_invalidates_cache_before_deleting(): void {
+	public function test_delete_drops_cache_entry_on_success(): void {
 		$redirect = $this->create_redirect( 123 );
-
-		Functions\expect( 'wp_cache_delete' )
-			->once()
-			->with( '1:' . $redirect->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( true );
-
-		Functions\expect( 'wp_cache_set' )
-			->once()
-			->with( '1:' . $redirect->source()->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
-			->andReturn( true );
 
 		$this->inner
 			->shouldReceive( 'delete' )
 			->once()
 			->with( $redirect )
 			->andReturn( true );
-
-		$result = $this->repository->delete( $redirect );
-
-		$this->assertTrue( $result );
-	}
-
-	/**
-	 * Test delete marks as deleted (0) in cache on success.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::delete
-	 */
-	public function test_delete_marks_as_deleted_in_cache(): void {
-		$redirect = $this->create_redirect( 789 );
-
-		Functions\expect( 'wp_cache_delete' )
-			->once()
-			->with( '1:' . $redirect->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( true );
-
-		Functions\expect( 'wp_cache_set' )
-			->once()
-			->with( '1:' . $redirect->source()->hash(), 0, CachingRedirectRepository::CACHE_GROUP, CachingRedirectRepository::NEGATIVE_CACHE_TTL )
-			->andReturn( true );
-
-		$this->inner
-			->shouldReceive( 'delete' )
-			->once()
-			->andReturn( true );
-
-		$this->repository->delete( $redirect );
-	}
-
-	/**
-	 * Test delete does not mark as deleted in cache on failure.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::delete
-	 */
-	public function test_delete_does_not_mark_as_deleted_on_failure(): void {
-		$redirect = $this->create_redirect( 123 );
 
 		Functions\expect( 'wp_cache_delete' )
 			->once()
@@ -676,14 +630,29 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		Functions\expect( 'wp_cache_set' )
 			->never();
 
+		$this->assertTrue( $this->repository->delete( $redirect ) );
+	}
+
+	/**
+	 * Test delete leaves the cache alone on failure.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::delete
+	 */
+	public function test_delete_leaves_cache_on_failure(): void {
+		$redirect = $this->create_redirect( 123 );
+
 		$this->inner
 			->shouldReceive( 'delete' )
 			->once()
 			->andReturn( false );
 
-		$result = $this->repository->delete( $redirect );
+		Functions\expect( 'wp_cache_delete' )
+			->never();
 
-		$this->assertFalse( $result );
+		Functions\expect( 'wp_cache_set' )
+			->never();
+
+		$this->assertFalse( $this->repository->delete( $redirect ) );
 	}
 
 	/**

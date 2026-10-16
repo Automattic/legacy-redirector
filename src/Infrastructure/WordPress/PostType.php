@@ -36,6 +36,7 @@ final class PostType {
 		add_filter( 'ep_indexable_post_types', array( $this, 'exclude_from_elasticpress' ) );
 		add_filter( 'wp_insert_post_data', array( $this, 'undo_ampersand_escaping' ), 10, 3 );
 		add_filter( 'wp_insert_post_data', array( $this, 'key_redirect_leaving_the_trash' ), 11, 2 );
+		add_action( 'clean_post_cache', array( $this, 'invalidate_lookup_cache' ), 10, 2 );
 	}
 
 	/**
@@ -131,6 +132,32 @@ final class PostType {
 		$data['post_name'] = $key;
 
 		return $data;
+	}
+
+	/**
+	 * Drop the lookup cache entry for a redirect core has just changed.
+	 *
+	 * The caching repository keeps its entries in step with its own saves
+	 * and deletes, but core's trash, restore, status changes and permanent
+	 * delete go round it. A positive entry never expires, so one still
+	 * naming a trashed or deleted redirect would hold its source until
+	 * evicted, and a new redirect for it would be refused as a duplicate.
+	 * Each of those writes ends in clean_post_cache(), so the entry for the
+	 * key the row is on goes then, and the next lookup reads the database.
+	 *
+	 * @param int      $post_id The post ID.
+	 * @param \WP_Post $post    The post.
+	 * @return void
+	 */
+	public function invalidate_lookup_cache( int $post_id, \WP_Post $post ): void {
+		if ( self::POST_TYPE !== $post->post_type ) {
+			return;
+		}
+
+		// A trashed row keeps its key with core's '__trashed' suffix.
+		$key = str_ends_with( $post->post_name, '__trashed' ) ? substr( $post->post_name, 0, -9 ) : $post->post_name;
+
+		wp_cache_delete( CachingRedirectRepository::cache_key( $key ), CachingRedirectRepository::CACHE_GROUP );
 	}
 
 	/**
