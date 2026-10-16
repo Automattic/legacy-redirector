@@ -808,6 +808,67 @@ final class RedirectManagerTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test check validates a new redirect without saving it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::check
+	 */
+	public function test_check_validates_new_redirect_without_saving(): void {
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+		$invalid     = ValidationResult::invalid( 'duplicate-redirect-uri', 'A redirect for this URI already exists' );
+
+		$this->repository->shouldNotReceive( 'get_id_by_source' );
+		$this->repository->shouldNotReceive( 'save' );
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->with( Mockery::on( fn( $r ) => null === $r->id() && '/new-page' === $r->destination()->as_url()->value() ) )
+			->andReturn( $invalid );
+
+		$this->assertSame( $invalid, $this->manager->check( $source, $destination, false ) );
+	}
+
+	/**
+	 * Test check judges an update against the existing redirect's ID.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::check
+	 */
+	public function test_check_update_judges_existing_redirect(): void {
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+
+		$this->repository->shouldReceive( 'get_id_by_source' )->andReturn( 123 );
+		$this->repository->shouldReceive( 'find_by_id' )->with( 123 )->andReturn( $this->create_test_redirect( 123, $source, 'publish' ) );
+		$this->repository->shouldNotReceive( 'save' );
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->with( Mockery::on( fn( $r ) => 123 === $r->id() && '/new-page' === $r->destination()->as_url()->value() ) )
+			->andReturn( ValidationResult::valid() );
+
+		$this->assertTrue( $this->manager->check( $source, $destination, true )->is_valid() );
+	}
+
+	/**
+	 * Test check judges an update to a missing source as a create.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::check
+	 */
+	public function test_check_update_of_missing_source_judges_create(): void {
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+
+		$this->repository->shouldReceive( 'get_id_by_source' )->andReturn( 0 );
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->with( Mockery::on( fn( $r ) => null === $r->id() ) )
+			->andReturn( ValidationResult::valid() );
+
+		$this->assertTrue( $this->manager->check( $source, $destination, true )->is_valid() );
+	}
+
+	/**
 	 * Create a real redirect object for testing.
 	 *
 	 * @param int       $id     The redirect ID.

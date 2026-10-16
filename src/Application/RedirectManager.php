@@ -394,6 +394,29 @@ class RedirectManager {
 	}
 
 	/**
+	 * Validate a write without making it, so a preview can report what the
+	 * real write would refuse.
+	 *
+	 * An update is judged as update_by_source() judges it, against the
+	 * redirect that already holds the source, so that redirect is not taken
+	 * for a duplicate of itself; with no such redirect, it is judged as the
+	 * create it would fall through to.
+	 *
+	 * @param SourceUrl   $source      The source URL.
+	 * @param Destination $destination The destination.
+	 * @param bool        $update      Whether the write would update an existing redirect for the source.
+	 * @return ValidationResult The validation result.
+	 */
+	public function check( SourceUrl $source, Destination $destination, bool $update ): ValidationResult {
+		$existing = $update ? $this->find_any_by_source( $source ) : null;
+		$redirect = null === $existing
+			? Redirect::create( $source, $destination )
+			: $this->with_new_mapping( $existing, $source, $destination );
+
+		return $this->validator->validate( $redirect );
+	}
+
+	/**
 	 * Whether a redirect for this source already exists with this destination
 	 * and status, so creating it again would change nothing.
 	 *

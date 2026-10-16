@@ -217,9 +217,31 @@ final class ImportCommand extends WP_CLI_Command {
 			return $this->result_row( $redirect_from, $redirect_to, 'error', 'Invalid destination: ' . $e->getMessage() );
 		}
 
-		$post_status = $this->resolve_status( $status );
+		try {
+			$post_status = $this->resolve_status( $status );
+		} catch ( \InvalidArgumentException $e ) {
+			return $this->result_row( $redirect_from, $redirect_to, 'error', $e->getMessage() );
+		}
+
+		// Re-running an unchanged CSV is a no-op, not a failure. A source
+		// that already redirects somewhere else is still an error, so a
+		// corrected CSV re-imported without upsert does not silently fail
+		// to apply.
+		if ( 'create' === $mode && $this->manager->exists_unchanged( $source, $destination, $post_status ) ) {
+			return $this->result_row( $redirect_from, $redirect_to, $dry_run ? 'would skip' : 'skipped', 'Already exists with this destination and status' );
+		}
 
 		if ( $dry_run ) {
+			// Ask the same questions the live write would, so the preview
+			// does not promise rows the import will refuse.
+			if ( $validate ) {
+				$check = $this->manager->check( $source, $destination, 'upsert' === $mode );
+
+				if ( $check->is_invalid() ) {
+					return $this->refused_row( $redirect_from, $redirect_to, $mode, $check->error_code(), $check->error_message() ?? 'Would not be imported' );
+				}
+			}
+
 			$action = 'upsert' === $mode ? 'would update/create' : 'would create';
 			return $this->accepted_row( $source, $destination, $redirect_from, $redirect_to, $action, 'Dry run - no change made' );
 		}
@@ -242,23 +264,31 @@ final class ImportCommand extends WP_CLI_Command {
 		$result = $this->manager->create_redirect( $source, $destination, $validate, $post_status );
 
 		if ( $result->is_error() ) {
-			// Re-running an unchanged CSV is a no-op, not a failure. A source
-			// that already redirects somewhere else is still an error, so a
-			// corrected CSV re-imported without upsert does not silently fail
-			// to apply.
-			if ( 'create' === $mode && $this->manager->exists_unchanged( $source, $destination, $post_status ) ) {
-				return $this->result_row( $redirect_from, $redirect_to, 'skipped', 'Already exists with this destination and status' );
-			}
-
-			if ( 'create' === $mode && 'duplicate-redirect-uri' === $result->error_code() ) {
-				return $this->result_row( $redirect_from, $redirect_to, 'error', 'A redirect for this source already exists with a different destination or status. Use --mode=upsert to update it.' );
-			}
-
-			return $this->result_row( $redirect_from, $redirect_to, 'error', $result->error_message() ?? 'Could not create redirect' );
+			return $this->refused_row( $redirect_from, $redirect_to, $mode, $result->error_code(), $result->error_message() ?? 'Could not create redirect' );
 		}
 
 		return $this->accepted_row( $source, $destination, $redirect_from, $redirect_to, 'created', 'Successfully imported' );
 	}
+
+	/**
+	 * Build the error row for a refused write, pointing a create-mode
+	 * duplicate at upsert.
+	 *
+	 * @param string      $source  The source path.
+	 * @param string      $dest    The destination.
+	 * @param string      $mode    The operation mode ('create' or 'upsert').
+	 * @param string|null $code    The error code.
+	 * @param string      $message The error message.
+	 * @return array{source: string, dest: string, action: string, message: string}
+	 */
+	private function refused_row( string $source, string $dest, string $mode, ?string $code, string $message ): array {
+		if ( 'create' === $mode && 'duplicate-redirect-uri' === $code ) {
+			$message = 'A redirect for this source already exists with a different destination or status. Use --mode=upsert to update it.';
+		}
+
+		return $this->result_row( $source, $dest, 'error', $message );
+	}
+
 
 	/**
 	 * Build the result row for an accepted redirect, reporting the auditor's
@@ -369,23 +399,26 @@ final class ImportCommand extends WP_CLI_Command {
 	 *
 	 * @param string|null $status The status from CSV ('enabled', 'disabled', or null).
 	 * @return string|null Post status ('publish', 'draft') or null if not specified.
+	 *
+	 * @throws \InvalidArgumentException If the status is not one this command recognizes.
 	 */
 	private function resolve_status( ?string $status ): ?string {
 		if ( null === $status || '' === trim( $status ) ) {
 			return null;
 		}
 
-		$status = strtolower( trim( $status ) );
+		$normalized = strtolower( trim( $status ) );
 
-		if ( 'enabled' === $status || 'publish' === $status ) {
+		if ( 'enabled' === $normalized || 'publish' === $normalized ) {
 			return 'publish';
 		}
 
-		if ( 'disabled' === $status || 'draft' === $status ) {
+		if ( 'disabled' === $normalized || 'draft' === $normalized ) {
 			return 'draft';
 		}
 
-		// Unknown status - use the default.
-		return null;
+		// A typo such as "disbled" must not quietly create a live redirect.
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+		throw new \InvalidArgumentException( sprintf( "Unknown status '%s'; use enabled or disabled", trim( $status ) ) );
 	}
 }

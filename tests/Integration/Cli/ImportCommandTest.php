@@ -358,6 +358,162 @@ final class ImportCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a dry run reports the rows the live run would refuse, and changes nothing.
+	 *
+	 * @dataProvider data_dry_run_refusals
+	 *
+	 * @param string $row      The CSV row.
+	 * @param string $expected Text the error row carries.
+	 */
+	public function test_import_dry_run_reports_refused_rows( string $row, string $expected ): void {
+		$this->create_redirect( '/import-dry-dupe', 'https://example.com/original' );
+		$file = $this->create_csv( $row . "\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array(
+				'dry-run' => true,
+			)
+		);
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( "\terror\t" );
+		$this->assert_stdout_contains( $expected );
+		$this->assert_stdout_not_contains( 'would create' );
+		$this->assertSame( 1, $this->count_redirect_posts( '/import-dry-dupe' ) );
+		$this->assertFalse( $this->redirect_exists( '/import-dry-external' ) );
+	}
+
+	/**
+	 * Rows a live run would refuse.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_dry_run_refusals(): array {
+		return array(
+			'changed duplicate'     => array( '/import-dry-dupe,https://example.com/replacement', '--mode=upsert' ),
+			'disallowed host'       => array( '/import-dry-external,https://not-allowed.invalid/x', 'destination host is not allowed' ),
+			'source is destination' => array( '/import-dry-external,/import-dry-external', 'error' ),
+		);
+	}
+
+	/**
+	 * Test a dry run previews the skip a live run gives an unchanged row.
+	 */
+	public function test_import_dry_run_previews_unchanged_row_as_skipped(): void {
+		$this->create_redirect( '/import-dry-same', 'https://example.com/original' );
+		$file = $this->create_csv( "/import-dry-same,https://example.com/original\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array( 'dry-run' => true ) );
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( 'would skip' );
+	}
+
+	/**
+	 * Test an upsert dry run judges an existing source as the update it would be.
+	 */
+	public function test_import_upsert_dry_run_accepts_existing_source(): void {
+		$this->create_redirect( '/import-dry-upsert', 'https://example.com/original' );
+		$file = $this->create_csv( "/import-dry-upsert,https://example.com/replacement\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array(
+				'dry-run' => true,
+				'mode'    => 'upsert',
+			)
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( 'would update/create' );
+	}
+
+	/**
+	 * Test --skip-validation still previews rows the validator would refuse.
+	 */
+	public function test_import_dry_run_skip_validation_does_not_validate(): void {
+		$file = $this->create_csv( "/import-dry-unchecked,https://not-allowed.invalid/x\n" );
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array(
+				'dry-run'         => true,
+				'skip-validation' => true,
+			)
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( 'would create' );
+	}
+
+	/**
+	 * Test an unrecognized status is an error row, live and dry, and creates nothing.
+	 *
+	 * @dataProvider data_dry_run_flag
+	 *
+	 * @param array<string, bool> $flags Extra command flags.
+	 */
+	public function test_import_rejects_unknown_status( array $flags ): void {
+		$file = $this->create_csv( "/import-bad-status,https://example.com/a,inactive\n" );
+
+		$this->invoke_command( $this->command, array( $file ), $flags + array( 'skip-validation' => true ) );
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( "Unknown status 'inactive'; use enabled or disabled" );
+		$this->assertSame( 0, $this->count_redirect_posts( '/import-bad-status' ) );
+	}
+
+	/**
+	 * Live and dry runs.
+	 *
+	 * @return array<string, array{array<string, bool>}>
+	 */
+	public static function data_dry_run_flag(): array {
+		return array(
+			'live' => array( array() ),
+			'dry'  => array( array( 'dry-run' => true ) ),
+		);
+	}
+
+	/**
+	 * Test the recognized status spellings still apply.
+	 *
+	 * @dataProvider data_known_statuses
+	 *
+	 * @param string $status   The status column.
+	 * @param bool   $expected Whether the redirect is enabled.
+	 */
+	public function test_import_accepts_known_status( string $status, bool $expected ): void {
+		$file = $this->create_csv( "/import-known-status,https://example.com/a,{$status}\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array( 'skip-validation' => true ) );
+
+		$this->assert_command_success();
+		$redirect = $this->repository()->find_by_id(
+			$this->repository()->get_id_by_source( SourceUrl::from_string( '/import-known-status' ) )
+		);
+		$this->assertSame( $expected, $redirect->is_active() );
+	}
+
+	/**
+	 * Recognized status spellings.
+	 *
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function data_known_statuses(): array {
+		return array(
+			'enabled'            => array( 'enabled', true ),
+			'padded capitalized' => array( 'Disabled ', false ),
+			'draft'              => array( 'draft', false ),
+			'empty'              => array( '', true ),
+		);
+	}
+
+	/**
 	 * Test rows with a missing destination are reported as errors.
 	 */
 	public function test_import_reports_missing_destination(): void {
