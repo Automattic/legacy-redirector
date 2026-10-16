@@ -249,23 +249,24 @@ final class RedirectFormPage {
 				$destination_value   = $destination->as_url()->value();
 				$destination_display = $destination_value;
 			}
-		} else {
-			// Adding new redirect - check for preserved values from validation error.
-			// The URLs are left unsanitized because sanitize_text_field() deletes
-			// every %xx sequence; the view escapes them on output.
-			// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading preserved form values for display.
-			if ( isset( $_GET['redirect_from'] ) ) {
-				$redirect_from = trim( wp_unslash( $_GET['redirect_from'] ) );
-			}
-			if ( isset( $_GET['redirect_to'] ) ) {
-				$destination_value   = trim( wp_unslash( $_GET['redirect_to'] ) );
-				$destination_display = $destination_value;
-			}
-			if ( isset( $_GET['redirect_status'] ) && in_array( $_GET['redirect_status'], array( 'publish', 'draft' ), true ) ) {
-				$redirect_status = sanitize_text_field( wp_unslash( $_GET['redirect_status'] ) );
-			}
-			// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		}
+
+		// Values preserved from a rejected save override the stored ones, so the
+		// form shows what the user submitted alongside the error it caused.
+		// The URLs are left unsanitized because sanitize_text_field() deletes
+		// every %xx sequence; the view escapes them on output.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading preserved form values for display.
+		if ( isset( $_GET['redirect_from'] ) ) {
+			$redirect_from = trim( wp_unslash( $_GET['redirect_from'] ) );
+		}
+		if ( isset( $_GET['redirect_to'] ) ) {
+			$destination_value   = trim( wp_unslash( $_GET['redirect_to'] ) );
+			$destination_display = $destination_value;
+		}
+		if ( isset( $_GET['redirect_status'] ) && in_array( $_GET['redirect_status'], array( 'publish', 'draft' ), true ) ) {
+			$redirect_status = sanitize_text_field( wp_unslash( $_GET['redirect_status'] ) );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		// Check for success/error messages.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Just reading message params for display.
@@ -321,7 +322,7 @@ final class RedirectFormPage {
 		$is_edit = $redirect_id > 0;
 
 		// Validate required fields.
-		if ( empty( $redirect_from ) || empty( $redirect_to ) ) {
+		if ( '' === $redirect_from || '' === $redirect_to ) {
 			$this->redirect_with_error( $redirect_id, 'empty_fields', $redirect_from, $redirect_to, $redirect_status );
 		}
 
@@ -485,21 +486,22 @@ final class RedirectFormPage {
 	 * @return never
 	 */
 	private function redirect_with_error( int $redirect_id, string $error, string $from = '', string $to = '', string $status = 'publish' ): void {
+		// add_query_arg() does not encode the values it adds, so the URLs are
+		// encoded here or a & # or + in them would corrupt the query string.
+		$args = array(
+			'post_type'       => PostType::POST_TYPE,
+			'page'            => $redirect_id > 0 ? 'edit-redirect' : 'add-redirect',
+			'error'           => $error,
+			'redirect_from'   => rawurlencode( $from ),
+			'redirect_to'     => rawurlencode( $to ),
+			'redirect_status' => $status,
+		);
+
 		if ( $redirect_id > 0 ) {
-			$url = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect_id . '&error=' . $error );
-		} else {
-			$url = add_query_arg(
-				array(
-					'post_type'       => PostType::POST_TYPE,
-					'page'            => 'add-redirect',
-					'error'           => $error,
-					'redirect_from'   => rawurlencode( $from ),
-					'redirect_to'     => rawurlencode( $to ),
-					'redirect_status' => $status,
-				),
-				admin_url( 'edit.php' )
-			);
+			$args['redirect_id'] = $redirect_id;
 		}
+
+		$url = add_query_arg( $args, admin_url( 'edit.php' ) );
 
 		wp_safe_redirect( $url );
 		exit;

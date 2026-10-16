@@ -221,6 +221,47 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
+	 * Load $_GET from a redirect location, as a browser following it would.
+	 *
+	 * PHP decodes the query string once and WordPress slashes the result.
+	 *
+	 * @param string $location The redirect location.
+	 * @return void
+	 */
+	private function follow( string $location ): void {
+		$query = array();
+		parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
+
+		$_GET = wp_slash( $query );
+	}
+
+	/**
+	 * Render the Edit page for the redirect named in $_GET.
+	 *
+	 * @return string The page HTML.
+	 */
+	private function render_edit_page(): string {
+		ob_start();
+		$this->page->render_edit_page();
+
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Read a text input's value back out of rendered HTML.
+	 *
+	 * @param string $html The page HTML.
+	 * @param string $id   The input ID.
+	 * @return string The decoded value.
+	 */
+	private function rendered_value( string $html, string $id ): string {
+		$this->assertMatchesRegularExpression( '/id="' . $id . '" value="([^"]*)"/', $html );
+		preg_match( '/id="' . $id . '" value="([^"]*)"/', $html, $matches );
+
+		return html_entity_decode( $matches[1], ENT_QUOTES );
+	}
+
+	/**
 	 * Test a missing nonce stops the request.
 	 */
 	public function test_missing_nonce_dies(): void {
@@ -865,5 +906,146 @@ final class RedirectFormPageTest extends TestCase {
 		$this->capture_redirect();
 
 		$this->assertSame( 'draft', get_post( $redirect_id )->post_status );
+	}
+	/**
+	 * Test a rejected edit re-renders what was submitted, not what is stored.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_rejected_edit_rerenders_submitted_values(): void {
+		$this->login_as_redirect_manager();
+		$this->create_redirect( '/form-round-trip-a', '/destination-a' );
+		$redirect_id = $this->create_redirect( '/form-round-trip-b', '/destination-b' );
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => '/form-round-trip-a',
+				'redirect_to'     => 'https://example.com/changed',
+				'redirect_status' => 'draft',
+			)
+		);
+
+		$location = $this->capture_redirect();
+		$this->assertStringContainsString( 'error=duplicate', $location );
+
+		$this->follow( $location );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'form-round-trip-a', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( 'https://example.com/changed', $this->rendered_value( $html, 'redirect_to_display' ) );
+		$this->assertMatchesRegularExpression( '/value="draft"\s+checked=\'checked\'/', $html );
+		$this->assertStringContainsString( 'A redirect already exists for this source URL.', $html );
+
+		$stored = $this->find_redirect( '/form-round-trip-b' );
+		$this->assertNotNull( $stored );
+		$this->assertSame( '/destination-b', $stored->destination()->as_url()->value() );
+		$this->assertSame( 'publish', get_post( $redirect_id )->post_status );
+	}
+
+	/**
+	 * Test a source and destination holding &, # and + survive a rejected edit.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_rejected_edit_keeps_reserved_characters(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-round-trip-chars', '/destination' );
+
+		$respond_404 = static function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_404 );
+
+		$this->submit(
+			array(
+				'redirect_id'   => (string) $redirect_id,
+				'redirect_from' => '/old?a=1&b=2',
+				'redirect_to'   => '/no-such-page?c=3+4#frag',
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		remove_filter( 'pre_http_request', $respond_404 );
+
+		$this->assertStringContainsString( 'error=path_not_found', $location );
+
+		$this->follow( $location );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'old?a=1&b=2', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( '/no-such-page?c=3+4#frag', $this->rendered_value( $html, 'redirect_to_display' ) );
+	}
+
+	/**
+	 * Test the Edit page without preserved values renders the stored redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_edit_page_renders_stored_values(): void {
+		$this->login_as_redirect_manager();
+		$post_id     = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => 'Stored Destination',
+			)
+		);
+		$redirect_id = $this->create_redirect( '/form-stored-values', $post_id );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'form-stored-values', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( 'Stored Destination (ID: ' . $post_id . ')', $this->rendered_value( $html, 'redirect_to_display' ) );
+		$this->assertSame( (string) $post_id, $this->rendered_value( $html, 'redirect_to' ) );
+	}
+
+	/**
+	 * Test a root source can be saved from its own edit screen untouched.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_root_source_resubmits_unchanged(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/', 'https://example.com/elsewhere' );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => $this->rendered_value( $html, 'redirect_from' ),
+				'redirect_to'     => $this->rendered_value( $html, 'redirect_to' ),
+				'redirect_status' => 'publish',
+			)
+		);
+
+		$this->assertStringContainsString( 'message=updated', $this->capture_redirect() );
+
+		$redirect = $this->find_redirect( '/' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $redirect_id, $redirect->id() );
+	}
+
+	/**
+	 * Test a source of 0 is a path, not an empty field.
+	 */
+	public function test_zero_source_creates_slash_zero(): void {
+		$this->login_as_redirect_manager();
+
+		$this->submit(
+			array(
+				'redirect_from' => '0',
+				'redirect_to'   => 'https://example.com/elsewhere',
+			)
+		);
+
+		$this->assertStringContainsString( 'message=created', $this->capture_redirect() );
+		$this->assertNotNull( $this->find_redirect( '/0' ) );
 	}
 }
