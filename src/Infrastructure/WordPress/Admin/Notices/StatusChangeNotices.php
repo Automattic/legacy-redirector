@@ -51,8 +51,8 @@ final class StatusChangeNotices {
 		}
 
 		// Get the redirect source if provided.
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.
-		$redirect_source = isset( $_GET['redirect_source'] ) ? sanitize_text_field( rawurldecode( wp_unslash( $_GET['redirect_source'] ) ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading URL param for notice display; escaped on output, where sanitize_text_field() would delete %xx sequences.
+		$redirect_source = isset( $_GET['redirect_source'] ) ? wp_unslash( $_GET['redirect_source'] ) : '';
 
 		// Single redirect enabled.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.

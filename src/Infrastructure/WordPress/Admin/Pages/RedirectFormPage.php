@@ -251,18 +251,20 @@ final class RedirectFormPage {
 			}
 		} else {
 			// Adding new redirect - check for preserved values from validation error.
-			// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Reading preserved form values for display.
+			// The URLs are left unsanitized because sanitize_text_field() deletes
+			// every %xx sequence; the view escapes them on output.
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading preserved form values for display.
 			if ( isset( $_GET['redirect_from'] ) ) {
-				$redirect_from = sanitize_text_field( wp_unslash( $_GET['redirect_from'] ) );
+				$redirect_from = trim( wp_unslash( $_GET['redirect_from'] ) );
 			}
 			if ( isset( $_GET['redirect_to'] ) ) {
-				$destination_value   = sanitize_text_field( wp_unslash( $_GET['redirect_to'] ) );
+				$destination_value   = trim( wp_unslash( $_GET['redirect_to'] ) );
 				$destination_display = $destination_value;
 			}
 			if ( isset( $_GET['redirect_status'] ) && in_array( $_GET['redirect_status'], array( 'publish', 'draft' ), true ) ) {
 				$redirect_status = sanitize_text_field( wp_unslash( $_GET['redirect_status'] ) );
 			}
-			// phpcs:enable WordPress.Security.NonceVerification.Recommended
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		}
 
 		// Check for success/error messages.
@@ -306,11 +308,15 @@ final class RedirectFormPage {
 			wp_die( esc_html__( 'You do not have permission to manage redirects.', 'legacy-redirector' ) );
 		}
 
-		// Get form values.
+		// Get form values. The URLs reach SourceUrl and Destination as typed,
+		// as they do from the CLI: those sanitize and canonicalize them, while
+		// sanitize_text_field() would delete every %xx sequence first.
 		$redirect_id     = isset( $_POST['redirect_id'] ) ? absint( $_POST['redirect_id'] ) : 0;
-		$redirect_from   = isset( $_POST['redirect_from'] ) ? sanitize_text_field( wp_unslash( $_POST['redirect_from'] ) ) : '';
-		$redirect_to     = isset( $_POST['redirect_to'] ) ? sanitize_text_field( wp_unslash( $_POST['redirect_to'] ) ) : '';
 		$redirect_status = isset( $_POST['redirect_status'] ) ? sanitize_text_field( wp_unslash( $_POST['redirect_status'] ) ) : 'publish';
+		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized by SourceUrl and Destination.
+		$redirect_from = isset( $_POST['redirect_from'] ) ? trim( wp_unslash( $_POST['redirect_from'] ) ) : '';
+		$redirect_to   = isset( $_POST['redirect_to'] ) ? trim( wp_unslash( $_POST['redirect_to'] ) ) : '';
+		// phpcs:enable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		$is_edit = $redirect_id > 0;
 
