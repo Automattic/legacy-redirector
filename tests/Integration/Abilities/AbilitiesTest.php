@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Abilities;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 use WP_Ability;
 
@@ -342,6 +343,43 @@ final class AbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'ability_invalid_input', $result->get_error_code() );
+	}
+
+	/**
+	 * Test an administrator can use the abilities on a site nobody has opened wp-admin on.
+	 *
+	 * A headless site (abilities over REST or MCP) may never fire admin_init,
+	 * so the plugin's init callback alone has to grant the capability.
+	 *
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper::register_capability
+	 *
+	 * @return void
+	 */
+	public function test_administrator_is_granted_the_capability_on_init(): void {
+		$this->reset_manage_redirects_capability();
+
+		$this->assertSame( 0, did_action( 'admin_init' ) );
+
+		$granted = false;
+		foreach ( $GLOBALS['wp_filter']['init']->callbacks as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( is_array( $callback['function'] )
+					&& $callback['function'][0] instanceof PluginBootstrapper
+					&& 'register_capability' === $callback['function'][1]
+				) {
+					call_user_func( $callback['function'] );
+					$granted = true;
+				}
+			}
+		}
+
+		$this->assertTrue( $granted, 'The plugin should grant its capability on init.' );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$listed = $this->ability( 'list-redirects' )->execute( array() );
+
+		$this->assertIsArray( $listed );
 	}
 
 	/**
