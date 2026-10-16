@@ -170,10 +170,11 @@ final class RedirectFormPageTest extends TestCase {
 	 * The WordPress test suite's default wp_die handler prints the message and
 	 * returns, so this installs a handler that throws instead.
 	 *
-	 * @param string $expected The expected wp_die() message.
+	 * @param string        $expected The expected wp_die() message.
+	 * @param callable|null $action   What to run; handle_save() by default.
 	 * @return void
 	 */
-	private function assert_dies_with( string $expected ): void {
+	private function assert_dies_with( string $expected, ?callable $action = null ): void {
 		$thrower = static function () {
 			return static function ( $message ) {
 				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Message is only read back by the test.
@@ -185,7 +186,7 @@ final class RedirectFormPageTest extends TestCase {
 
 		$message = null;
 		try {
-			$this->page->handle_save();
+			( $action ?? array( $this->page, 'handle_save' ) )();
 		} catch ( WPDieException $e ) {
 			$message = $e->getMessage();
 		} finally {
@@ -193,7 +194,7 @@ final class RedirectFormPageTest extends TestCase {
 		}
 
 		if ( null === $message ) {
-			$this->fail( 'Expected handle_save() to call wp_die().' );
+			$this->fail( 'Expected wp_die() to be called.' );
 		}
 
 		$this->assertSame( $expected, $message );
@@ -772,5 +773,61 @@ final class RedirectFormPageTest extends TestCase {
 		$this->capture_redirect();
 
 		$this->assertSame( 'draft', get_post( $redirect_id )->post_status );
+	}
+
+	/**
+	 * The refusal shown for a redirect in the Trash.
+	 *
+	 * @return string The wp_die() message.
+	 */
+	private function trashed_message(): string {
+		return 'This redirect is in the Trash. Restore it before editing. <a href="' . admin_url( 'edit.php?post_type=vip-legacy-redirect&#038;post_status=trash' ) . '">Go to the Trash</a>';
+	}
+
+	/**
+	 * Test the Edit page refuses a trashed redirect instead of showing the form.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_edit_page_refuses_trashed_redirect(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-trashed-render', '/destination' );
+		wp_trash_post( $redirect_id );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+
+		ob_start();
+		try {
+			$this->assert_dies_with( $this->trashed_message(), array( $this->page, 'render_edit_page' ) );
+		} finally {
+			$html = (string) ob_get_clean();
+			$_GET = array();
+		}
+
+		$this->assertStringNotContainsString( '<form', $html );
+	}
+
+	/**
+	 * Test saving a trashed redirect leaves it in the Trash.
+	 *
+	 * A save with no status would otherwise default to publish and put the
+	 * redirect back live.
+	 */
+	public function test_save_refuses_trashed_redirect(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-trashed-save', '/destination' );
+		wp_trash_post( $redirect_id );
+
+		$this->submit(
+			array(
+				'redirect_id'   => (string) $redirect_id,
+				'redirect_from' => '/form-trashed-save',
+				'redirect_to'   => '/destination',
+			)
+		);
+
+		$this->assert_dies_with( $this->trashed_message() );
+
+		$this->assertSame( 'trash', get_post( $redirect_id )->post_status );
 	}
 }

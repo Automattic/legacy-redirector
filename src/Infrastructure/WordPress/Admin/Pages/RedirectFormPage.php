@@ -212,6 +212,10 @@ final class RedirectFormPage {
 			wp_die( esc_html__( 'Redirect not found.', 'legacy-redirector' ) );
 		}
 
+		if ( 'trash' === $redirect->status() ) {
+			self::refuse_trashed();
+		}
+
 		$this->render_form_page( $redirect );
 	}
 
@@ -350,6 +354,11 @@ final class RedirectFormPage {
 				$this->redirect_with_error( $redirect_id, 'save_failed', $redirect_from, $redirect_to, $redirect_status );
 			}
 
+			// The form has no trash status to submit, so saving would publish it.
+			if ( 'trash' === $existing->status() ) {
+				self::refuse_trashed();
+			}
+
 			$proposed = $existing->with_source( $source )->with_destination( $destination );
 		} else {
 			$proposed = Redirect::create( $source, $destination );
@@ -402,6 +411,23 @@ final class RedirectFormPage {
 			);
 			exit;
 		}
+	}
+
+	/**
+	 * Refuse to edit a redirect in the Trash until it is restored, as core
+	 * refuses to edit a trashed post.
+	 *
+	 * @return never
+	 */
+	private static function refuse_trashed(): void {
+		wp_die(
+			sprintf(
+				'%1$s <a href="%2$s">%3$s</a>',
+				esc_html__( 'This redirect is in the Trash. Restore it before editing.', 'legacy-redirector' ),
+				esc_url( admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&post_status=trash' ) ),
+				esc_html__( 'Go to the Trash', 'legacy-redirector' )
+			)
+		);
 	}
 
 	/**
