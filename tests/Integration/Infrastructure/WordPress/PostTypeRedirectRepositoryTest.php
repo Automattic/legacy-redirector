@@ -986,13 +986,12 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	}
 
 	/**
-	 * Test fallback destination when both post_parent and post_excerpt are empty.
+	 * Test a row with neither a post_parent nor a post_excerpt reads back as corrupt, not as a redirect home.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::find_by_id
 	 */
-	public function test_fallback_destination_to_home_when_both_empty(): void {
-		// Directly create a redirect post with no destination (edge case).
-		$source  = SourceUrl::from_string( '/fallback-home-test' );
+	public function test_row_with_no_destination_is_corrupt(): void {
+		$source  = SourceUrl::from_string( '/no-destination-test' );
 		$post_id = wp_insert_post(
 			array(
 				'post_type'    => PostTypeRedirectRepository::POST_TYPE,
@@ -1007,7 +1006,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 		$found = $this->repository->find_by_id( $post_id );
 
 		$this->assertInstanceOf( Redirect::class, $found );
-		$this->assertTrue( $found->destination()->is_url() );
-		$this->assertSame( '/', $found->destination()->as_url()->value() );
+		$this->assertTrue( $found->is_corrupt() );
+		$this->assertStringContainsString( 'No destination stored', $found->corruption() );
 	}
 }

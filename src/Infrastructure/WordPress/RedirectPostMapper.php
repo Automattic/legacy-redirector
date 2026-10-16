@@ -76,7 +76,7 @@ trait RedirectPostMapper {
 	 * @param WP_Post $post The redirect post.
 	 * @return Destination The destination.
 	 *
-	 * @throws InvalidArgumentException If the stored destination is invalid.
+	 * @throws InvalidArgumentException If the stored destination is missing or invalid.
 	 */
 	private function extract_destination_from_post( WP_Post $post ): Destination {
 		// Check for internal redirect (post_parent).
@@ -94,8 +94,9 @@ trait RedirectPostMapper {
 			);
 		}
 
-		// Fallback to home if no destination found.
-		return Destination::from_url( DestinationUrl::home() );
+		// Not home: 1.x served no redirect for such a row, and reading it as a
+		// redirect to '/' would send visitors to the homepage unreported.
+		throw new InvalidArgumentException( 'No destination stored.' );
 	}
 
 	/**

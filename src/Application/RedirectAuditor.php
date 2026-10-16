@@ -166,7 +166,7 @@ class RedirectAuditor {
 		}
 
 		// Check URL destinations. DestinationUrl rejects empty strings, and a
-		// redirect row with no stored destination is read back as '/', so
+		// redirect row with no stored destination is read back as corrupt, so
 		// there is no empty case to check for here.
 		$url = $destination->as_url()->value();
 
