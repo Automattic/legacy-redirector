@@ -211,6 +211,38 @@ final class ListCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Search matches source paths only, so a redirect that merely points at
+	 * the term is neither listed nor counted.
+	 */
+	public function test_list_search_ignores_destinations(): void {
+		$source_match = $this->create_redirect( '/old-section/y', '/new' );
+		$this->create_redirect( '/a', 'https://example.com/old-section/x' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'search' => 'old-section',
+				'format' => 'ids',
+			)
+		);
+
+		$this->assertSame( (string) $source_match, trim( $this->get_stdout() ) );
+
+		$this->output->reset();
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'search' => 'old-section',
+				'format' => 'count',
+			)
+		);
+
+		$this->assertSame( '1', trim( $this->get_stdout() ) );
+	}
+
+	/**
 	 * Test listing with limit.
 	 */
 	public function test_list_with_limit(): void {
