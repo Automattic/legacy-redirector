@@ -47,6 +47,9 @@ interface RedirectQueryRepositoryInterface {
 	/**
 	 * Get destination URLs for redirects pointing at external (absolute) URLs.
 	 *
+	 * Disabled redirects count, since re-enabling one needs its host allowed;
+	 * the Trash does not.
+	 *
 	 * @param int $limit  Maximum number of URLs to return.
 	 * @param int $offset Number of URLs to skip.
 	 * @return string[] The destination URLs.
@@ -54,7 +57,7 @@ interface RedirectQueryRepositoryInterface {
 	public function get_external_destination_urls( int $limit, int $offset ): array;
 
 	/**
-	 * Count redirects pointing at external (absolute) URLs.
+	 * Count redirects pointing at external (absolute) URLs, outside the Trash.
 	 *
 	 * @return int The total count.
 	 */

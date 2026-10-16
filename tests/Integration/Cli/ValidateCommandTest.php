@@ -44,6 +44,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
  */
 final class ValidateCommandTest extends CliTestCase {
 

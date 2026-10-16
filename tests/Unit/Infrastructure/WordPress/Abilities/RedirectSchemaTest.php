@@ -91,6 +91,38 @@ final class RedirectSchemaTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test each stored status maps to a label the output schema allows.
+	 *
+	 * A label missing from the enum fails the ability at runtime.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::properties
+	 * @dataProvider data_status_labels
+	 *
+	 * @param string $status The stored status.
+	 * @param string $label  The expected label.
+	 */
+	public function test_status_label_is_in_the_schema_enum( string $status, string $label ): void {
+		$redirect = Redirect::reconstitute( 4, SourceUrl::from_string( '/old' ), Destination::from_mixed( '/new' ), $status );
+
+		$this->assertSame( $label, RedirectSchema::status_label( $redirect ) );
+		$this->assertContains( $label, RedirectSchema::properties()['status']['enum'] );
+	}
+
+	/**
+	 * Every stored status and its label.
+	 *
+	 * @return array<string, array{0: string, 1: string}> The cases.
+	 */
+	public static function data_status_labels(): array {
+		return array(
+			'publish' => array( 'publish', 'enabled' ),
+			'draft'   => array( 'draft', 'disabled' ),
+			'trash'   => array( 'trash', 'trashed' ),
+		);
+	}
+
+	/**
 	 * Test the output schema covers every field the formatter produces.
 	 *
 	 * A mismatch here fails the ability at runtime, because WordPress

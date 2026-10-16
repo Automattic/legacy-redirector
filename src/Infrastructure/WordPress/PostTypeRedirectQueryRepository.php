@@ -106,6 +106,9 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	/**
 	 * Get destination URLs for redirects pointing at external (absolute) URLs.
 	 *
+	 * Disabled redirects count, since re-enabling one needs its host allowed;
+	 * the Trash does not.
+	 *
 	 * @param int $limit  Maximum number of URLs to return.
 	 * @param int $offset Number of URLs to skip.
 	 * @return string[] The destination URLs.
@@ -117,7 +120,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk query for CLI reporting; WP_Query cannot filter on post_excerpt.
 		return $wpdb->get_col(
 			$wpdb->prepare(
-				"SELECT post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s ORDER BY ID ASC LIMIT %d, %d",
+				"SELECT post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s ORDER BY ID ASC LIMIT %d, %d",
 				PostType::POST_TYPE,
 				self::EXTERNAL_LIKE,
 				$offset,
@@ -127,7 +130,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	}
 
 	/**
-	 * Count redirects pointing at external (absolute) URLs.
+	 * Count redirects pointing at external (absolute) URLs, outside the Trash.
 	 *
 	 * @return int The total count.
 	 */
@@ -138,7 +141,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk query for CLI reporting; WP_Query cannot filter on post_excerpt.
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT( ID ) FROM $wpdb->posts WHERE post_type = %s AND post_excerpt LIKE %s",
+				"SELECT COUNT( ID ) FROM $wpdb->posts WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s",
 				PostType::POST_TYPE,
 				self::EXTERNAL_LIKE
 			)

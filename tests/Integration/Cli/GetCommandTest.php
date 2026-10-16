@@ -39,6 +39,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
  */
 final class GetCommandTest extends CliTestCase {
 
@@ -122,6 +123,23 @@ final class GetCommandTest extends CliTestCase {
 
 		$this->assertFalse( $this->output->had_error() );
 		$this->assert_stdout_contains( 'disabled' );
+	}
+
+	/**
+	 * Test a trashed redirect is reported as trashed, not disabled.
+	 */
+	public function test_get_trashed_redirect(): void {
+		$redirect_id = $this->create_redirect( '/trashed-page', 'https://example.com/dest' );
+		wp_trash_post( $redirect_id );
+
+		$this->invoke_command(
+			$this->command,
+			array( (string) $redirect_id ),
+			array( 'field' => 'status' )
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertSame( 'trashed', trim( $this->get_stdout() ) );
 	}
 
 	/**

@@ -294,7 +294,21 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
-	 * Test the outbound domains of external redirects are reported.
+	 * Test a trashed redirect is reported as trashed, not disabled, and passes output validation.
+	 *
+	 * @return void
+	 */
+	public function test_get_redirect_reports_a_trashed_redirect(): void {
+		$redirect_id = $this->create_redirect( '/trashed', '/new' );
+		wp_trash_post( $redirect_id );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $redirect_id ) );
+
+		$this->assertSame( 'trashed', $fetched['status'] );
+	}
+
+	/**
+	 * Test the outbound domains of external redirects are reported, leaving out the trash.
 	 *
 	 * @return void
 	 */
@@ -302,6 +316,7 @@ final class AbilitiesTest extends TestCase {
 		$this->create_redirect( '/one', 'https://example.org/a' );
 		$this->create_redirect( '/two', 'https://example.org/b' );
 		$this->create_redirect( '/three', 'https://example.net/c' );
+		wp_trash_post( $this->create_redirect( '/four', 'https://example.com/d' ) );
 
 		$result = $this->ability( 'find-redirect-domains' )->execute();
 
