@@ -27,6 +27,8 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * Cache invalidation:
  * - save() invalidates the cache for the source URL
  * - delete() invalidates the cache for the source URL
+ * - PostType::invalidate_lookup_cache() covers core's own trash, restore,
+ *   status changes and deletes, which bypass this class
  */
 final class CachingRedirectRepository implements RedirectRepositoryInterface {
 
@@ -90,8 +92,9 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 		$redirect = $this->inner->find_by_id( $post_id );
 
 		if ( null === $redirect ) {
-			// Post no longer exists - update cache.
-			wp_cache_set( self::cache_key( $source->hash() ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
+			// Post no longer exists. Another row may still hold the source, so the
+			// next lookup asks the database rather than finding a cached 0.
+			$this->invalidate_cache( $source );
 			return null;
 		}
 
@@ -163,13 +166,12 @@ final class CachingRedirectRepository implements RedirectRepositoryInterface {
 	 */
 	#[\Override]
 	public function delete( Redirect $redirect ): bool {
-		$this->invalidate_cache( $redirect->source() );
-
 		$result = $this->inner->delete( $redirect );
 
+		// Not cached as 0: a duplicate the 2.0 migration disabled shares its
+		// source with the live redirect, which still holds the key.
 		if ( $result ) {
-			// Mark as deleted in cache.
-			wp_cache_set( self::cache_key( $redirect->source()->hash() ), 0, self::CACHE_GROUP, self::NEGATIVE_CACHE_TTL );
+			$this->invalidate_cache( $redirect->source() );
 		}
 
 		return $result;

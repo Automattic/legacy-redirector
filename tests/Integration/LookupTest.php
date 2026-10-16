@@ -37,6 +37,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectReposito
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -179,9 +180,6 @@ final class LookupTest extends TestCase {
 		// Trash the redirect.
 		wp_trash_post( $post_id );
 
-		// Clear the cache to ensure we're testing the post_status check.
-		$this->clear_lookup_cache( $from_url );
-
 		// Verify the redirect no longer works.
 		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertNull( $redirect_data );
@@ -208,9 +206,6 @@ final class LookupTest extends TestCase {
 				'post_status' => 'draft',
 			)
 		);
-
-		// Clear the cache.
-		$this->clear_lookup_cache( $from_url );
 
 		// Verify the redirect does not work.
 		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
@@ -470,5 +465,80 @@ final class LookupTest extends TestCase {
 
 		remove_all_filters( 'wpcom_legacy_redirector_redirect_status' );
 		remove_all_filters( 'legacy_redirector_redirect_status' );
+	}
+
+	/**
+	 * Test that trashing a redirect frees its source, with the lookup cache warm.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+	 */
+	public function test_trashing_a_redirect_frees_its_source(): void {
+		$post_id = $this->create_redirect( '/trash-frees-source', '/new' );
+		$source  = SourceUrl::from_string( '/trash-frees-source' );
+		$this->assertSame( $post_id, $this->repository()->get_id_by_source( $source ) );
+
+		wp_trash_post( $post_id );
+
+		$this->assertSame( 0, $this->repository()->get_id_by_source( $source ) );
+		$this->assertTrue( $this->create_redirect_result( '/trash-frees-source', '/other' )->is_success() );
+	}
+
+	/**
+	 * Test that deleting a redirect outside the plugin frees its source, with the lookup cache warm.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+	 */
+	public function test_deleting_a_redirect_outside_the_plugin_frees_its_source(): void {
+		$post_id = $this->create_redirect( '/delete-frees-source', '/new' );
+		$source  = SourceUrl::from_string( '/delete-frees-source' );
+		$this->assertSame( $post_id, $this->repository()->get_id_by_source( $source ) );
+
+		wp_delete_post( $post_id, true );
+
+		$this->assertSame( 0, $this->repository()->get_id_by_source( $source ) );
+		$this->assertTrue( $this->create_redirect_result( '/delete-frees-source', '/other' )->is_success() );
+	}
+
+	/**
+	 * Test that deleting a disabled duplicate leaves the live redirect it shares a source with working.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::delete
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 */
+	public function test_deleting_a_duplicate_keeps_the_live_redirect(): void {
+		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
+		$duplicate_id = $this->insert_redirect_post(
+			array(
+				'post_title'   => '/clash/',
+				'post_name'    => md5( '/clash/' ),
+				'post_excerpt' => 'https://example.com/two',
+				'post_status'  => 'draft',
+			)
+		);
+		$source       = SourceUrl::from_string( '/clash' );
+		$this->assertSame( $live_id, $this->repository()->find_by_source( $source )?->id() );
+
+		$this->assertTrue( $this->repository()->delete( $this->repository()->find_by_id( $duplicate_id ) ) );
+
+		$this->assertSame( $live_id, $this->repository()->find_by_source( $source )?->id() );
+		$this->assertSame( $live_id, $this->repository()->find_by_source( $source )?->id() );
+	}
+
+	/**
+	 * Test that deleting a redirect with no twin leaves its source resolving to nothing.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::delete
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 */
+	public function test_deleting_a_redirect_leaves_its_source_resolving_to_nothing(): void {
+		$post_id = $this->create_redirect( '/deleted-no-twin', '/new' );
+		$source  = SourceUrl::from_string( '/deleted-no-twin' );
+
+		$this->assertTrue( $this->repository()->delete( $this->repository()->find_by_id( $post_id ) ) );
+
+		$this->assertNull( $this->repository()->find_by_source( $source ) );
+		$this->assertSame( 0, $this->repository()->get_id_by_source( $source ) );
 	}
 }
