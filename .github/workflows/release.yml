@@ -109,7 +109,8 @@ jobs:
           for path in \
             'wpcom-legacy-redirector.php' \
             'src/Infrastructure/DI/Container.php' \
-            'src/Infrastructure/WordPress/PluginBootstrapper.php'
+            'src/Infrastructure/WordPress/PluginBootstrapper.php' \
+            'js/admin-redirect-form.js'
           do
             if ! grep -qxF "${SLUG}/${path}" "$RUNNER_TEMP/zip.list"; then
               echo "::error::The ZIP is missing ${path}"
@@ -117,8 +118,10 @@ jobs:
             fi
           done
 
-          # These three are what the plugin file loads and instantiates the
-          # moment WordPress includes it, so their absence is a dead install.
+          # The first three are what the plugin file loads and instantiates
+          # the moment WordPress includes it, so their absence is a dead
+          # install. Without the form script, the Add/Edit Redirect screens
+          # still work but silently lose their live warnings.
           [ "$MISSING" -eq 0 ]
 
           echo "SLUG=${SLUG}" >> "$GITHUB_ENV"
