@@ -190,45 +190,6 @@ class RedirectManager {
 	}
 
 	/**
-	 * Bulk enable redirects.
-	 *
-	 * @param int[] $redirect_ids Array of redirect IDs.
-	 * @return int Number of redirects successfully enabled.
-	 */
-	public function bulk_enable( array $redirect_ids ): int {
-		return $this->bulk_change_status( $redirect_ids, 'publish' );
-	}
-
-	/**
-	 * Bulk disable redirects.
-	 *
-	 * @param int[] $redirect_ids Array of redirect IDs.
-	 * @return int Number of redirects successfully disabled.
-	 */
-	public function bulk_disable( array $redirect_ids ): int {
-		return $this->bulk_change_status( $redirect_ids, 'draft' );
-	}
-
-	/**
-	 * Bulk change status for multiple redirects.
-	 *
-	 * @param int[]  $redirect_ids Array of redirect IDs.
-	 * @param string $new_status   The new status.
-	 * @return int Number of redirects successfully updated.
-	 */
-	private function bulk_change_status( array $redirect_ids, string $new_status ): int {
-		$updated = 0;
-
-		foreach ( $redirect_ids as $redirect_id ) {
-			if ( $this->change_status( (int) $redirect_id, $new_status )->is_success() ) {
-				++$updated;
-			}
-		}
-
-		return $updated;
-	}
-
-	/**
 	 * Update a redirect's destination.
 	 *
 	 * @param int         $redirect_id The redirect ID.

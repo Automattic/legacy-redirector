@@ -11,6 +11,8 @@ namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
@@ -25,6 +27,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
@@ -306,7 +310,7 @@ final class RedirectsTest extends TestCase {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler::modify_bulk_actions
 	 */
 	public function test_bulk_actions_handler_removes_edit_and_adds_enable_disable(): void {
-		$handler = new BulkActionsHandler( $this->manager() );
+		$handler = new BulkActionsHandler( $this->manager(), new RedirectBatch( new RedirectFetcher( $this->repository() ) ) );
 
 		$actions = array(
 			'edit'   => 'Edit',
@@ -433,37 +437,6 @@ final class RedirectsTest extends TestCase {
 		$result = $manager->enable( $post_id );
 		$this->assertTrue( $result );
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
-	}
-
-	/**
-	 * Test RedirectManager bulk_enable and bulk_disable methods.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::bulk_enable
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::bulk_disable
-	 */
-	public function test_bulk_enable_and_disable(): void {
-		$post_ids = array();
-		for ( $i = 0; $i < 3; $i++ ) {
-			$post_ids[] = $this->create_redirect( '/bulk-test-' . $i . '-' . wp_generate_uuid4(), 'http://example.com/' );
-		}
-
-		$manager = $this->manager();
-
-		// Bulk disable.
-		$disabled = $manager->bulk_disable( $post_ids );
-		$this->assertSame( 3, $disabled );
-
-		foreach ( $post_ids as $post_id ) {
-			$this->assertSame( 'draft', get_post_status( $post_id ) );
-		}
-
-		// Bulk enable.
-		$enabled = $manager->bulk_enable( $post_ids );
-		$this->assertSame( 3, $enabled );
-
-		foreach ( $post_ids as $post_id ) {
-			$this->assertSame( 'publish', get_post_status( $post_id ) );
-		}
 	}
 
 	/**
