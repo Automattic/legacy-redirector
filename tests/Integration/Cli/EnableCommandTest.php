@@ -179,4 +179,22 @@ final class EnableCommandTest extends CliTestCase {
 		$this->assert_command_error();
 		$this->assert_stdout_contains( 'Invalid source path' );
 	}
+
+	/**
+	 * Test a refused change names the action that failed.
+	 *
+	 * A corrupt row cannot be re-saved, so its status cannot change.
+	 */
+	public function test_enable_refused_names_the_action(): void {
+		$redirect_id = $this->insert_redirect_post( array( 'post_status' => 'draft' ) );
+
+		$this->invoke_command(
+			$this->command,
+			array( (string) $redirect_id ),
+			array()
+		);
+
+		$this->assert_command_error();
+		$this->assert_stdout_contains( 'Could not enable redirect: ' . $redirect_id );
+	}
 }
