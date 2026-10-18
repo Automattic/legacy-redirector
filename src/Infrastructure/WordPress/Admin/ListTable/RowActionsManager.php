@@ -234,7 +234,6 @@ final class RowActionsManager {
 				var $healthColumn = $row.find( 'td.health' ).empty();
 				var warnings = result.warnings || [];
 				var probe = result.probe || null;
-				var confirmed = probe && 'confirmed' === probe.status;
 
 				// The live behaviour leads - "the redirect works" - and any
 				// problem or warning follows as the "but...".
@@ -244,7 +243,9 @@ final class RowActionsManager {
 				}
 
 				if ( result.valid ) {
-					if ( ! warnings.length && ! confirmed ) {
+					// A probe line is the row's verdict, so the plain tick is
+					// only for a response that has none.
+					if ( ! warnings.length && ! probe ) {
 						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
 					}
 				} else {

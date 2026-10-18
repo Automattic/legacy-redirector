@@ -596,4 +596,24 @@ final class ListRedirectsTest extends TestCase {
 		$this->assertNotFalse( has_action( 'manage_vip-legacy-redirect_posts_custom_column', array( $columns_manager, 'render_column' ) ) );
 		$this->assertNotFalse( has_filter( 'post_row_actions', array( $row_actions_manager, 'modify_row_actions' ) ) );
 	}
+
+	/**
+	 * Test the Test result shows no green "No issues found" beside a live check.
+	 *
+	 * The live check is the row's verdict, so a probe that found the redirect
+	 * not firing must not be followed by a tick. There is no JS harness, so
+	 * this asserts on the gate in the rendered script.
+	 */
+	public function test_validate_script_gates_the_tick_on_any_probe(): void {
+		set_current_screen( 'edit-' . PostType::POST_TYPE );
+
+		ob_start();
+		$this->row_actions_manager->render_validate_script();
+		$script = (string) ob_get_clean();
+
+		set_current_screen( 'front' );
+
+		$this->assertStringContainsString( 'if ( ! warnings.length && ! probe ) {', $script );
+		$this->assertStringNotContainsString( "'confirmed' === probe.status", $script );
+	}
 }
