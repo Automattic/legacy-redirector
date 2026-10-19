@@ -501,34 +501,6 @@ final class RedirectsTest extends TestCase {
 	}
 
 	/**
-	 * Test that external redirect hosts are added to allowed_redirect_hosts filter.
-	 *
-	 * This verifies that when a redirect to an external URL is created,
-	 * the external host will be allowed by wp_safe_redirect().
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_external_redirect_host_is_allowed(): void {
-		$from_url = '/external-host-test-' . wp_generate_uuid4();
-		$to_url   = 'https://external-example.com/page';
-
-		// Create the redirect.
-		$post_id = $this->create_redirect( $from_url, $to_url );
-		$this->assertIsInt( $post_id );
-
-		// Verify the redirect data resolves correctly.
-		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
-		$this->assertIsArray( $redirect_data );
-		$this->assertSame( $to_url, $redirect_data['url'] );
-
-		// Verify the external host would be allowed by wp_safe_redirect.
-		// We can't test the actual redirect (it calls exit), but we can verify
-		// the host is properly extracted and would be added to allowed hosts.
-		$external_host = wp_parse_url( $to_url, PHP_URL_HOST );
-		$this->assertSame( 'external-example.com', $external_host );
-	}
-
-	/**
 	 * Test that redirect to external URL resolves correctly.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data

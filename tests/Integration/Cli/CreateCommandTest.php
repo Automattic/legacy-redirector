@@ -155,8 +155,8 @@ final class CreateCommandTest extends CliTestCase {
 	/**
 	 * Test creating a redirect to a full URL on an external host.
 	 *
-	 * External hosts are accepted at creation time; RedirectRequestHandler auto-allows
-	 * the stored host at redirect time.
+	 * With validation skipped, any host is stored. It only redirects once it is
+	 * in allowed_redirect_hosts; see RedirectRequestHandlerTest.
 	 */
 	public function test_create_redirect_to_external_url(): void {
 		$this->invoke_command(
