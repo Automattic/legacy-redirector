@@ -15,7 +15,7 @@ Feature: Validate redirects
     When I run `wp legacy-redirector validate`
     Then STDOUT should contain:
       """
-      Validated 2 redirect(s): 0 with problems, 0 with warnings.
+      Validated 2 redirects: 0 with problems, 0 with warnings.
       """
 
   # Contract test: verifies WordPress post state integration.

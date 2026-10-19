@@ -132,7 +132,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/single-broken' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Post trashed' );
 	}
 
@@ -164,7 +164,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/single-disabled' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 	}
 
 	/**
@@ -189,7 +189,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/trashed-path-source' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Post trashed' );
 	}
 
@@ -254,7 +254,7 @@ final class ValidateCommandTest extends CliTestCase {
 			unregister_post_type( 'book' );
 		}
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Post not published' );
 	}
 
@@ -297,7 +297,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/dated-source' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Post not published' );
 	}
 
@@ -312,7 +312,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/external-source' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Destination host not allowed' );
 	}
 
@@ -325,7 +325,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/loop-a', '/loop-b' ), array() );
 
-		$this->assert_warning_contains( 'Found 2 issue(s).' );
+		$this->assert_warning_contains( 'Found 2 issues.' );
 		$this->assert_stdout_contains( 'Possible redirect loop' );
 	}
 
@@ -340,7 +340,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/self-loop' ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Possible redirect loop' );
 	}
 
@@ -386,7 +386,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( (string) $redirect_id ), array() );
 
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_warning_contains( 'Found 1 issue.' );
 		$this->assert_stdout_contains( 'Reserved WordPress path' );
 		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
 		$this->assertSame( 'warning', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
@@ -442,7 +442,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_success_contains( 'Validated 3 redirect(s): 2 with problems, 0 with warnings.' );
+		$this->assert_success_contains( 'Validated 3 redirects: 2 with problems, 0 with warnings.' );
 		$this->assert_stdout_contains( 'wp legacy-redirector list --has-issues' );
 		$this->assertSame( 'problem', get_post_meta( $broken, AuditFlags::META_KEY, true ) );
 		$this->assertSame( 'problem', get_post_meta( $disabled, AuditFlags::META_KEY, true ) );
@@ -460,7 +460,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_success_contains( 'Validated 2 redirect(s): 0 with problems, 0 with warnings.' );
+		$this->assert_success_contains( 'Validated 2 redirects: 0 with problems, 0 with warnings.' );
 		$this->assert_stdout_not_contains( 'list --has-issues' );
 	}
 

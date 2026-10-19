@@ -145,7 +145,7 @@ final class TestCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/test-ok' ), array() );
 
-		$this->assert_success_contains( 'Tested 1 redirect(s): no issues found.' );
+		$this->assert_success_contains( 'Tested 1 redirect: no issues found.' );
 		$this->assert_stdout_contains( 'Destination responds' );
 		$this->assert_stdout_contains( 'Source redirects to the destination' );
 	}
@@ -238,7 +238,7 @@ final class TestCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array( '/test-unrecorded' ), array() );
 
-		$this->assert_warning_contains( 'Tested 1 redirect(s): 2 result(s) need attention.' );
+		$this->assert_warning_contains( 'Tested 1 redirect: 2 results need attention.' );
 		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 		$this->assertFalse( get_option( AuditFlags::COUNTS_OPTION ) );
 	}

@@ -147,19 +147,22 @@ final class ValidateAllButton {
 	 */
 	private function status_text( array $status, array $counts ): string {
 		if ( $status['in_progress'] ) {
-			$text = sprintf(
-				/* translators: 1: redirects checked so far, 2: total redirects */
-				__( 'Validation in progress: %1$s of %2$s redirects checked. It carries on in the background if you leave this page.', 'legacy-redirector' ),
-				number_format_i18n( $status['checked'] ),
-				number_format_i18n( $status['total'] )
-			);
+			$text = self::progress_text( $status['checked'], $status['total'] );
 		} elseif ( null !== $status['checked_at'] ) {
 			$text = sprintf(
-				/* translators: 1: time since the last full check, e.g. "3 hours", 2: redirects with problems, 3: redirects with warnings */
-				__( 'Every redirect was last checked %1$s ago: %2$s with problems, %3$s with warnings.', 'legacy-redirector' ),
+				/* translators: 1: time since the last full check, e.g. "3 hours", 2: how many redirects have problems, e.g. "3 with problems", 3: how many have warnings, e.g. "1 with a warning" */
+				__( 'Every redirect was last checked %1$s ago: %2$s, %3$s.', 'legacy-redirector' ),
 				human_time_diff( $status['checked_at'] ),
-				number_format_i18n( $counts['problem'] ),
-				number_format_i18n( $counts['warning'] )
+				sprintf(
+					/* translators: %s: number of redirects with problems */
+					_n( '%s with a problem', '%s with problems', $counts['problem'], 'legacy-redirector' ),
+					number_format_i18n( $counts['problem'] )
+				),
+				sprintf(
+					/* translators: %s: number of redirects with warnings */
+					_n( '%s with a warning', '%s with warnings', $counts['warning'], 'legacy-redirector' ),
+					number_format_i18n( $counts['warning'] )
+				)
 			);
 		} else {
 			$text = __( 'Not every redirect has been checked yet.', 'legacy-redirector' );
@@ -181,6 +184,31 @@ final class ValidateAllButton {
 	}
 
 	/**
+	 * Say how far a pass has got, and that leaving the page is fine.
+	 *
+	 * Shared with the REST route behind the button, so the line reads the
+	 * same whether the page rendered it or a batch request returned it, and
+	 * follows the language's plural rules either way.
+	 *
+	 * @param int $checked Redirects checked so far.
+	 * @param int $total   Redirects in the pass.
+	 * @return string The progress line.
+	 */
+	public static function progress_text( int $checked, int $total ): string {
+		return sprintf(
+			/* translators: 1: redirects checked so far, 2: total redirects */
+			_n(
+				'Validation in progress: %1$s of %2$s redirect checked. It carries on in the background if you leave this page.',
+				'Validation in progress: %1$s of %2$s redirects checked. It carries on in the background if you leave this page.',
+				$total,
+				'legacy-redirector'
+			),
+			number_format_i18n( $checked ),
+			number_format_i18n( $total )
+		);
+	}
+
+	/**
 	 * Render the batch loop script.
 	 *
 	 * @return void
@@ -191,10 +219,8 @@ final class ValidateAllButton {
 		}
 
 		$config = array(
-			'path'     => '/legacy-redirector/v1/validate',
-			/* translators: 1: redirects validated so far, 2: total redirects */
-			'progress' => __( 'Validated %1$s of %2$s redirects… You can leave this page: validation carries on in the background.', 'legacy-redirector' ),
-			'failed'   => __( 'Validation stopped; the redirects validated so far are flagged. Reload and try again.', 'legacy-redirector' ),
+			'path'   => '/legacy-redirector/v1/validate',
+			'failed' => __( 'Validation stopped; the redirects validated so far are flagged. Reload and try again.', 'legacy-redirector' ),
 		);
 		?>
 		<script>
@@ -209,10 +235,12 @@ final class ValidateAllButton {
 			var bar = box.querySelector('progress');
 			var status = box.querySelector('span');
 
-			function report(checked, total) {
-				bar.max = Math.max(total, 1);
-				bar.value = checked;
-				status.textContent = config.progress.replace('%1$s', checked).replace('%2$s', total);
+			// The message comes phrased from the server, which knows the
+			// language's plural rules.
+			function report(data) {
+				bar.max = Math.max(data.total, 1);
+				bar.value = data.checked;
+				status.textContent = data.message;
 			}
 
 			function runBatch(restart) {
@@ -233,7 +261,7 @@ final class ValidateAllButton {
 					for (;;) {
 						var data = await runBatch(restart);
 						restart = false;
-						report(data.checked, data.total);
+						report(data);
 						if (data.done) {
 							window.location.reload();
 							return;

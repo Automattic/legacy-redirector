@@ -138,7 +138,7 @@ final class ValidateAllButtonTest extends TestCase {
 
 		$this->assertStringContainsString( 'Validate all redirects', $html );
 		$this->assertStringContainsString( 'data-restart="1"', $html );
-		$this->assertStringContainsString( '1 with problems, 0 with warnings.', $html );
+		$this->assertStringContainsString( '1 with a problem, 0 with warnings.', $html );
 		$this->assertStringContainsString( 'audit_flagged=1', $html );
 	}
 

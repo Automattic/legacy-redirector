@@ -21,6 +21,7 @@ use WP_CLI_Command;
  */
 final class ValidateCommand extends WP_CLI_Command {
 
+	use CountsInWords;
 	use FormatsRedirectRows;
 	use ReportsBatchFailures;
 
@@ -150,7 +151,7 @@ final class ValidateCommand extends WP_CLI_Command {
 		}
 
 		if ( 'table' === $format ) {
-			WP_CLI::warning( sprintf( 'Found %d issue(s).', count( $findings ) ) );
+			WP_CLI::warning( 'Found ' . self::count_of( count( $findings ), 'issue', 'issues' ) . '.' );
 		}
 
 		\WP_CLI\Utils\format_items(
@@ -209,10 +210,10 @@ final class ValidateCommand extends WP_CLI_Command {
 
 		WP_CLI::success(
 			sprintf(
-				'Validated %d redirect(s): %d with problems, %d with warnings.',
-				$total,
-				$counts['problem'],
-				$counts['warning']
+				'Validated %s: %s, %s.',
+				self::count_of( $total, 'redirect', 'redirects' ),
+				self::count_of( $counts['problem'], 'with a problem', 'with problems' ),
+				self::count_of( $counts['warning'], 'with a warning', 'with warnings' )
 			)
 		);
 

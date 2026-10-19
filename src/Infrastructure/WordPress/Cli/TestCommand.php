@@ -20,6 +20,7 @@ use WP_CLI_Command;
  */
 final class TestCommand extends WP_CLI_Command {
 
+	use CountsInWords;
 	use FormatsRedirectRows;
 	use ReportsBatchFailures;
 
@@ -138,9 +139,9 @@ final class TestCommand extends WP_CLI_Command {
 
 		if ( 'table' === $format ) {
 			if ( array() === $not_ok ) {
-				WP_CLI::success( sprintf( 'Tested %d redirect(s): no issues found.', count( $redirects ) ) );
+				WP_CLI::success( 'Tested ' . self::count_of( count( $redirects ), 'redirect', 'redirects' ) . ': no issues found.' );
 			} else {
-				WP_CLI::warning( sprintf( 'Tested %d redirect(s): %d result(s) need attention.', count( $redirects ), count( $not_ok ) ) );
+				WP_CLI::warning( sprintf( 'Tested %s: %s attention.', self::count_of( count( $redirects ), 'redirect', 'redirects' ), self::count_of( count( $not_ok ), 'result needs', 'results need' ) ) );
 			}
 		}
 	}

@@ -113,7 +113,7 @@ Feature: Upgrading from version 1.3.0
       """
     And STDOUT should contain:
       """
-      1 of them never fired under 1.x (marked above), so disabling them changed nothing for visitors.
+      1 of them never fired under 1.x (marked above), so disabling it changed nothing for visitors.
       """
     And every request version 1.3.0 redirected is redirected to the same destination
 

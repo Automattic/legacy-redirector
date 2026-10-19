@@ -53,6 +53,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ValidateAllButton::progress_text
  */
 final class ValidateAllControllerTest extends TestCase {
 
@@ -149,6 +150,7 @@ final class ValidateAllControllerTest extends TestCase {
 				'checked' => 2,
 				'total'   => 2,
 				'done'    => true,
+				'message' => 'Validation in progress: 2 of 2 redirects checked. It carries on in the background if you leave this page.',
 			),
 			$response->get_data()
 		);

@@ -115,10 +115,10 @@ final class MigrateCommandTest extends CliTestCase {
 		$this->assert_stdout_contains( 'Dry run - no changes will be made.' );
 		$this->assert_stdout_contains( 'Checked 2 of 2 (100%)' );
 		$this->assert_stdout_contains(
-			'2 redirect(s) would be inspected: 2 would change, 0 need no change, and 0 would be left alone because they were edited after the upgrade began.'
+			'2 redirects would be inspected: 2 would change, 0 need no change, and 0 would be left alone because they were edited after the upgrade began.'
 		);
 		$this->assert_stdout_contains(
-			'Of those changing, 2 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 1 would have their destination made relative.'
+			'Of those changing, 2 would be published, 0 would have their source path rewritten, 0 would be trashed as duplicates, and 1 would have its destination made relative.'
 		);
 
 		$this->assertSame( 'draft', get_post_status( $external_id ) );
@@ -136,11 +136,11 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_stdout_contains( 'Migrating 2 redirect(s).' );
+		$this->assert_stdout_contains( 'Migrating 2 redirects.' );
 		$this->assert_stdout_contains( 'Processed 2 of 2 (100%)' );
 		$this->assert_stdout_not_contains( 'Resuming' );
 		$this->assert_success_contains(
-			'Migration complete. 2 redirect(s) inspected in this run: 2 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 0 could not be written. Of those changed, 2 published, 0 source path(s) rewritten, 0 duplicate(s) trashed, 1 destination(s) made relative.'
+			'Migration complete. 2 redirects inspected in this run: 2 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 0 could not be written. Of those changed, 2 published, 0 source paths rewritten, 0 duplicates trashed, 1 destination made relative.'
 		);
 
 		$this->assertSame( 'publish', get_post_status( $external_id ) );
@@ -162,10 +162,10 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_stdout_contains( 'Resuming where the last run stopped: 1 of 3 redirect(s) already done.' );
-		$this->assert_stdout_contains( 'Migrating 2 redirect(s)' );
+		$this->assert_stdout_contains( 'Resuming where the last run stopped: 1 of 3 redirects already done.' );
+		$this->assert_stdout_contains( 'Migrating 2 redirects' );
 		$this->assert_stdout_contains( 'Processed 3 of 3 (100%)' );
-		$this->assert_success_contains( 'Migration complete. 2 redirect(s) inspected in this run' );
+		$this->assert_success_contains( 'Migration complete. 2 redirects inspected in this run' );
 	}
 
 	/**
@@ -179,7 +179,7 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
 
-		$this->assert_warning_contains( '21 redirect(s) would have the same source as another redirect with a different destination.' );
+		$this->assert_warning_contains( '21 redirects would have the same source as another redirect with a different destination.' );
 		$this->assert_stdout_contains( '  ...and 1 more. To list every one, repeat this dry run with --debug=legacy-redirector; like this one, it changes nothing.' );
 		$this->assertSame( 20, substr_count( $this->get_stdout(), 'has the same source as' ) );
 
@@ -200,18 +200,18 @@ final class MigrateCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array(), array() );
 		remove_filter( 'query', $refuse );
 
-		$this->assert_warning_contains( '1 redirect(s) could not be written' );
+		$this->assert_warning_contains( '1 redirect could not be written' );
 		$this->assert_stdout_contains( '  #' . $post_id . ' (/old-page/): ' );
 		$this->assert_stdout_contains( '0 changed, 0 needed no change, 0 left alone because they were edited after the upgrade began, and 1 could not be written.' );
-		$this->assert_error_contains( '1 redirect(s) are waiting to be retried. Once the cause is fixed, run `wp legacy-redirector migrate` again: it retries just those, without walking the rest again.' );
+		$this->assert_error_contains( '1 redirect is waiting to be retried. Once the cause is fixed, run `wp legacy-redirector migrate` again: it retries just that one, without walking the rest again.' );
 		$this->assertFalse( $this->output->had_success() );
 
 		$this->invoke_command( $this->command, array(), array( 'dry-run' => true ) );
-		$this->assert_stdout_contains( '1 redirect(s) could not be written in an earlier run. Running `wp legacy-redirector migrate` without --dry-run retries just those.' );
+		$this->assert_stdout_contains( '1 redirect could not be written in an earlier run. Running `wp legacy-redirector migrate` without --dry-run retries just that one.' );
 
 		$this->invoke_command( $this->command, array(), array() );
-		$this->assert_stdout_contains( 'Retrying the 1 redirect(s) that could not be written in an earlier run.' );
-		$this->assert_success_contains( 'Retry complete. 1 redirect(s) inspected in this run: 1 changed' );
+		$this->assert_stdout_contains( 'Retrying the 1 redirect that could not be written in an earlier run.' );
+		$this->assert_success_contains( 'Retry complete. 1 redirect inspected in this run: 1 changed' );
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
 		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
 
@@ -246,7 +246,7 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->invoke_command( $this->command, array(), array() );
 
-		$this->assert_warning_contains( '1 redirect(s) now have the same source as another redirect with a different destination.' );
+		$this->assert_warning_contains( '1 redirect now has the same source as another redirect with a different destination.' );
 		$this->assert_warning_contains( 'the one already there stays live, and the other has been disabled.' );
 		$this->assert_stdout_contains( sprintf( '  /clash/ → https://external.example.net/two (#%d) has the same source as /clash → https://external.example.net/one (#%d)', $loser_id, $kept_id ) );
 		$this->assert_stdout_contains( '  - To keep the live one\'s, delete the disabled redirect: wp legacy-redirector delete <disabled ID>' );
@@ -278,7 +278,7 @@ final class MigrateCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array(), array() );
 
 		$this->assert_stdout_contains( '(never fired under 1.x)' );
-		$this->assert_stdout_contains( '1 of them never fired under 1.x (marked above), so disabling them changed nothing for visitors. Delete them unless you want their destination.' );
+		$this->assert_stdout_contains( '1 of them never fired under 1.x (marked above), so disabling it changed nothing for visitors. Delete it unless you want its destination.' );
 		$this->assert_stdout_not_contains( 'For each, decide which destination is right' );
 	}
 }

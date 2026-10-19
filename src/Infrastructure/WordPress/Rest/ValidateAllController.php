@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Rest;
 
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ValidateAllButton;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
@@ -109,7 +110,7 @@ final class ValidateAllController {
 	 * Handle one batch request.
 	 *
 	 * @param \WP_REST_Request $request The request.
-	 * @return array{checked: int, total: int, done: bool}|\WP_Error The pass progress, or an error when the sweep stayed busy.
+	 * @return array{checked: int, total: int, done: bool, message: string}|\WP_Error The pass progress and a line describing it, or an error when the sweep stayed busy.
 	 */
 	public function run_batch_request( \WP_REST_Request $request ) { // phpcs:ignore NeutronStandard.Functions.TypeHint.NoReturnType -- Array or WP_Error.
 		return $this->run_batch( (bool) $request->get_param( 'restart' ) );
@@ -122,7 +123,7 @@ final class ValidateAllController {
 	 * when a background tick has audited batches between requests.
 	 *
 	 * @param bool $restart Whether to start a fresh pass from the lowest ID.
-	 * @return array{checked: int, total: int, done: bool}|\WP_Error The pass progress, or an error when the sweep stayed busy.
+	 * @return array{checked: int, total: int, done: bool, message: string}|\WP_Error The pass progress and a line describing it, or an error when the sweep stayed busy.
 	 */
 	public function run_batch( bool $restart ) { // phpcs:ignore NeutronStandard.Functions.TypeHint.NoReturnType -- Array or WP_Error.
 		if ( ! $this->sweep->lock( $this->lock_wait ) ) {
@@ -143,12 +144,14 @@ final class ValidateAllController {
 			$this->sweep->unlock();
 		}
 
-		$status = $this->sweep->status();
+		$status  = $this->sweep->status();
+		$checked = $batch['done'] ? $status['total'] : $status['checked'];
 
 		return array(
-			'checked' => $batch['done'] ? $status['total'] : $status['checked'],
+			'checked' => $checked,
 			'total'   => $status['total'],
 			'done'    => $batch['done'],
+			'message' => ValidateAllButton::progress_text( $checked, $status['total'] ),
 		);
 	}
 }
