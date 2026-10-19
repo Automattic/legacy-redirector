@@ -42,9 +42,11 @@ jobs:
           # Check lowest supported WP version, with the lowest supported PHP.
           - wordpress: '6.8'
             php: '8.3'
-          # Check latest WP with the latest PHP.
-          - wordpress: 'master'
-            php: '8.5'
+          # Check multisite on the lowest supported WP version too: subsite
+          # routing and home URLs come from core, so they can differ by version.
+          - wordpress: '6.8'
+            php: '8.3'
+            multisite: true
           # Check multisite on latest WP with the latest PHP. The multisite-only
           # tests skip elsewhere, so this is the only run that can check their
           # covers annotations, hence coverage rather than a plain run.
@@ -94,8 +96,12 @@ jobs:
         run: npx wp-env start ${{ matrix.coverage && '--xdebug=coverage' || '' }}
 
       - name: Run integration tests (single site)
-        if: ${{ ! matrix.coverage }}
+        if: ${{ ! matrix.coverage && ! matrix.multisite }}
         run: composer test:integration
+
+      - name: Run integration tests (multisite)
+        if: ${{ ! matrix.coverage && matrix.multisite }}
+        run: composer test:integration-ms
 
       - name: Run integration tests (single site) with strict coverage
         if: ${{ matrix.coverage && ! matrix.multisite }}
