@@ -108,6 +108,7 @@ final class RedirectFormPageTest extends TestCase {
 		remove_filter( 'pre_http_request', $this->http_ok );
 		$_POST = array();
 		$_GET  = array();
+		unset( $GLOBALS['wp_scripts'] );
 
 		parent::tear_down();
 	}
@@ -1132,5 +1133,60 @@ final class RedirectFormPageTest extends TestCase {
 		$this->assert_dies_with( $this->trashed_message() );
 
 		$this->assertSame( 'trash', get_post( $redirect_id )->post_status );
+	}
+
+	/**
+	 * The two form screens' hook suffixes.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public function data_form_hook_suffixes(): array {
+		return array(
+			'add'  => array( 'vip-legacy-redirect_page_add-redirect' ),
+			'edit' => array( 'vip-legacy-redirect_page_edit-redirect' ),
+		);
+	}
+
+	/**
+	 * Test the form script and the settings it reads are enqueued on both form screens.
+	 *
+	 * Without the script the duplicate-source, reserved-path and disallowed-host
+	 * warnings silently vanish, and every other test still passes.
+	 *
+	 * @dataProvider data_form_hook_suffixes
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::enqueue_assets
+	 *
+	 * @param string $hook_suffix The screen's hook suffix.
+	 */
+	public function test_form_script_is_enqueued_on_form_screens( string $hook_suffix ): void {
+		unset( $GLOBALS['wp_scripts'] );
+
+		$this->page->enqueue_assets( $hook_suffix );
+
+		$this->assertTrue( wp_script_is( 'legacy-redirector-form', 'enqueued' ) );
+
+		$src = wp_scripts()->registered['legacy-redirector-form']->src;
+		$this->assertStringEndsWith( '/js/admin-redirect-form.js', $src );
+		$this->assertFileExists( dirname( \Automattic\LegacyRedirector\PLUGIN_FILE ) . '/js/admin-redirect-form.js' );
+
+		$data = (string) wp_scripts()->get_data( 'legacy-redirector-form', 'data' );
+		$this->assertMatchesRegularExpression( '/^var legacyRedirectorForm = (\{.*\});$/s', $data );
+		preg_match( '/^var legacyRedirectorForm = (\{.*\});$/s', $data, $matches );
+
+		$settings = json_decode( $matches[1], true );
+		$this->assertSame( array( 'postId', 'duplicateMessage', 'reservedMessage', 'hostNotAllowedMessage' ), array_keys( $settings ) );
+	}
+
+	/**
+	 * Test the form script stays off every other admin screen.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::enqueue_assets
+	 */
+	public function test_form_script_is_not_enqueued_elsewhere(): void {
+		unset( $GLOBALS['wp_scripts'] );
+
+		$this->page->enqueue_assets( 'edit.php' );
+
+		$this->assertFalse( wp_script_is( 'legacy-redirector-form', 'registered' ) );
 	}
 }
