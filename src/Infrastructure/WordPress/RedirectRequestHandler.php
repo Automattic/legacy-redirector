@@ -108,16 +108,25 @@ final class RedirectRequestHandler {
 	 * caching to 301 responses, which can make a wrong redirect very
 	 * sticky. An explicit max-age bounds how long a redirect is cached.
 	 *
+	 * Nothing is sent to a logged-in user. Core has already marked the
+	 * response no-cache, and a redirect to a post ID can carry a permalink
+	 * only that user may see, so it must not be made cacheable.
+	 *
 	 * @param string $url         The destination URL.
 	 * @param int    $status_code The HTTP status code.
 	 * @return void
 	 */
 	private function send_cache_control_header( string $url, int $status_code ): void {
+		if ( is_user_logged_in() ) {
+			return;
+		}
+
 		/**
 		 * Filter the Cache-Control max-age sent with redirect responses.
 		 *
 		 * Defaults to one day for permanent redirects (301, 308) and one
 		 * minute otherwise.
+		 * Not applied to logged-in users, who get no max-age at all.
 		 * Return zero or a negative number to suppress the header, e.g.
 		 * where an edge cache manages redirect caching instead.
 		 *

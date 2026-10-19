@@ -178,6 +178,9 @@ add_filter( 'legacy_redirector_redirect_max_age', function( $max_age, $url, $sta
 Return `0` to suppress the header entirely, for example where an edge cache manages
 redirect caching instead.
 
+Logged-in users never get the header, whatever the filter returns, so their redirects keep
+the no-cache headers WordPress sends them.
+
 ### Alter the request path
 
 The path is still percent-encoded at this point, because decoding happens during lookup:
