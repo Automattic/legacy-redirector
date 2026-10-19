@@ -33,7 +33,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectorCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\TestCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ValidateAllController;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ChecksController;
 
 /**
@@ -114,10 +114,10 @@ final class PluginBootstrapper {
 		$checks = new ChecksController( $this->container->repository(), $this->container->auditor() );
 		$checks->register();
 
-		// The batched scan behind the list screen's button; a REST
+		// The batched validation behind the list screen's button; a REST
 		// route for the same reason as above.
-		$scan = new ScanController( $this->container->audit_sweep() );
-		$scan->register();
+		$validate_all = new ValidateAllController( $this->container->audit_sweep() );
+		$validate_all->register();
 
 		// Clear a row's audit flag on every save of that row. Registered in
 		// every context, not just the admin: WP-CLI and code save redirects

@@ -1,6 +1,6 @@
 <?php
 /**
- * The "Scan for issues" button on the redirects list screen.
+ * The "Validate all redirects" button on the redirects list screen.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -14,21 +14,21 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
- * Renders a toolbar button that scans every redirect in batches against the
- * scan REST route, with a native progress element, then reloads so the "Has
+ * Renders a toolbar button that validates every redirect in batches against
+ * the validate REST route, with a native progress element, then reloads so the "Has
  * issues" view and its counts reflect the finished pass. Beside it, a status
  * line says where the background check stands, so nobody has to press the
  * button to learn whether the site has been checked.
  *
- * "Scan" (stored data only, whole table, no requests) is deliberately a
- * different word from the Test row action (requests the source live): a
- * scan is the partial, safe check, and the button must not read as the
- * complete one.
+ * "Validate" (stored details only, no requests) is deliberately a different
+ * word from the Test row action (requests the destination and source live),
+ * matching `wp legacy-redirector validate` and `test`: validation is the
+ * partial, safe check, and the button must not read as the complete one.
  *
  * Lives in the list table's top toolbar, to the right of the bulk actions
  * and date filter controls, where the other whole-table operations are.
  */
-final class ScanButton {
+final class ValidateAllButton {
 
 	/**
 	 * The audit sweep.
@@ -96,8 +96,8 @@ final class ScanButton {
 			return;
 		}
 		?>
-		<div class="alignleft actions" id="legacy-redirector-scan">
-			<button type="button" class="button" title="<?php esc_attr_e( 'Checks every redirect’s stored details for problems, without requesting any URLs. Use the Test action on a row to check live behavior.', 'legacy-redirector' ); ?>"><?php esc_html_e( 'Scan for issues', 'legacy-redirector' ); ?></button>
+		<div class="alignleft actions" id="legacy-redirector-validate-all">
+			<button type="button" class="button" title="<?php esc_attr_e( 'Checks every redirect’s stored details for problems, without requesting any URLs. Use the Test action on a row to check live behavior.', 'legacy-redirector' ); ?>"><?php esc_html_e( 'Validate all redirects', 'legacy-redirector' ); ?></button>
 			<progress max="1" value="0" hidden></progress>
 			<span role="status"><?php echo esc_html( $this->status_text() ); ?></span>
 		</div>
@@ -155,16 +155,16 @@ final class ScanButton {
 		}
 
 		$config = array(
-			'path'     => '/legacy-redirector/v1/scan',
-			/* translators: 1: redirects scanned so far, 2: total redirects */
-			'progress' => __( 'Scanned %1$s of %2$s redirects…', 'legacy-redirector' ),
-			'failed'   => __( 'The scan failed; the flags cover the redirects scanned so far. Reload and try again.', 'legacy-redirector' ),
+			'path'     => '/legacy-redirector/v1/validate',
+			/* translators: 1: redirects validated so far, 2: total redirects */
+			'progress' => __( 'Validated %1$s of %2$s redirects…', 'legacy-redirector' ),
+			'failed'   => __( 'Validation stopped; the redirects validated so far are flagged. Reload and try again.', 'legacy-redirector' ),
 		);
 		?>
 		<script>
 		document.addEventListener('DOMContentLoaded', function () {
 			var config = <?php echo wp_json_encode( $config ); ?>;
-			var box = document.getElementById('legacy-redirector-scan');
+			var box = document.getElementById('legacy-redirector-validate-all');
 			if (!box) {
 				return;
 			}

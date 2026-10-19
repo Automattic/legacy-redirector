@@ -91,8 +91,7 @@ final class ValidateCommandTest extends CliTestCase {
 	 * Test an attachment destination is not reported as unpublished.
 	 *
 	 * Attachments carry post_status 'inherit', never 'publish', so reading the
-	 * raw property flags every media destination as broken - and --fix then
-	 * disables a redirect that resolves perfectly well.
+	 * raw property would flag every media destination as broken.
 	 */
 	public function test_validate_accepts_attachment_destination(): void {
 		$attachment_id = self::factory()->attachment->create_object(
@@ -170,7 +169,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 	/**
 	 * Test a relative-path destination whose post is trashed is reported
-	 * without needing --check-destination.
+	 * without a request.
 	 *
 	 * Trashing renames the post's slug with a __trashed suffix, so a plain
 	 * path lookup misses it; the validator must check the renamed slug.

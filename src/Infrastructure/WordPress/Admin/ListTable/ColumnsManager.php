@@ -252,9 +252,9 @@ final class ColumnsManager {
 	 * Render the "health" column: every finding the auditor can report
 	 * without HTTP requests, or a tick when there are none.
 	 *
-	 * The same auditor backs the `validate` CLI command, the admin scan,
-	 * and the per-row Validate action - whose fresh, HTTP-inclusive result
-	 * replaces this cell's content - so no surface can disagree.
+	 * The same auditor backs `validate`, the background check and the Test
+	 * row action - whose fresh, HTTP-inclusive result replaces this cell's
+	 * content - so no surface can disagree.
 	 *
 	 * @param Redirect $redirect The redirect.
 	 * @return void

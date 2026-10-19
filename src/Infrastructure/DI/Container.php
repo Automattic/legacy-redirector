@@ -183,7 +183,7 @@ final class Container {
 	}
 
 	/**
-	 * Get the audit sweep, the one runner behind the background check, Scan and `scan`.
+	 * Get the audit sweep, the one runner behind the background check and `validate` over every redirect.
 	 *
 	 * @return AuditSweep
 	 */

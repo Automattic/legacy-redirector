@@ -105,9 +105,9 @@ enum AuditFindingType: string {
 	 *
 	 * A problem means the redirect is broken: its destination is gone or the
 	 * redirect will not run. A warning means it works but deserves a human
-	 * look, so automated fixes (like `validate --fix`) must leave it alone.
-	 * A loop is a warning because it is only live while every source in it
-	 * returns a 404; any member serving real content keeps it dormant.
+	 * look. A loop is a warning because it is only live while every source in
+	 * it returns a 404; any member serving real content keeps it dormant, as
+	 * live content at a source does for a single redirect.
 	 *
 	 * @return bool
 	 */
@@ -123,8 +123,8 @@ enum AuditFindingType: string {
 	 * failed (a timeout, a refused connection, a host the VIP request helper
 	 * has stopped calling for a while), or the destination answered with a
 	 * server error that is as likely to be passing as permanent. It is still
-	 * reported, but automated fixes (like `validate --fix`) must leave the
-	 * redirect alone, or one slow host could switch off every redirect to it.
+	 * reported, but as inconclusive rather than broken, so nobody treats one
+	 * slow host as every redirect to it having gone.
 	 *
 	 * @return bool
 	 */

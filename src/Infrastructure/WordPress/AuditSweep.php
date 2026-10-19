@@ -220,7 +220,7 @@ final class AuditSweep {
 		 * The background check runs every five minutes and audits redirects
 		 * until this budget is spent, so the time a full pass takes grows with
 		 * the number of redirects. Return 0 to turn it off, for example on a
-		 * very large site that runs `wp legacy-redirector scan` off-peak instead.
+		 * very large site that runs `wp legacy-redirector validate` off-peak instead.
 		 *
 		 * @param int|float $seconds Seconds per tick. Default 20.
 		 */

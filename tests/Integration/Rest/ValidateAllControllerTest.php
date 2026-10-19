@@ -1,6 +1,6 @@
 <?php
 /**
- * ScanController REST integration tests.
+ * ValidateAllController REST integration tests.
  *
  * @package Automattic\LegacyRedirector\Tests\Integration\Rest
  */
@@ -12,19 +12,19 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Rest;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ValidateAllController;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 
 /**
- * Integration tests for the batched scan route.
+ * Integration tests for the batched "Validate all redirects" route.
  *
  * Requests are dispatched through a real WP_REST_Server, so the route,
  * argument handling, the permission callback, and the response shape
- * consumed by the ScanButton batch loop (checked, total, done) are all
+ * consumed by the ValidateAllButton batch loop (checked, total, done) are all
  * exercised end to end. The route is registered by the plugin's own
  * rest_api_init hook, wired in PluginBootstrapper.
  *
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ValidateAllController
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep
  * @uses \Automattic\LegacyRedirector\Application\HomePath
@@ -54,7 +54,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
-final class ScanControllerTest extends TestCase {
+final class ValidateAllControllerTest extends TestCase {
 
 	/**
 	 * Spin up a REST server.
@@ -107,7 +107,7 @@ final class ScanControllerTest extends TestCase {
 	 * @return \WP_REST_Response The dispatched response.
 	 */
 	private function do_request( bool $restart = true ): \WP_REST_Response {
-		$request = new \WP_REST_Request( 'POST', '/legacy-redirector/v1/scan' );
+		$request = new \WP_REST_Request( 'POST', '/legacy-redirector/v1/validate' );
 		$request->set_param( 'restart', $restart );
 
 		return rest_get_server()->dispatch( $request );
@@ -216,7 +216,7 @@ final class ScanControllerTest extends TestCase {
 	}
 
 	/**
-	 * Test pressing Scan again starts the pass over from the lowest ID.
+	 * Test pressing "Validate all redirects" again starts the pass over from the lowest ID.
 	 */
 	public function test_restart_starts_the_pass_over(): void {
 		$this->login_as_redirect_manager();
@@ -239,7 +239,7 @@ final class ScanControllerTest extends TestCase {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixture: a lock just taken by another runner.
 		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, UNIX_TIMESTAMP(), 'off')", AuditSweep::LOCK_OPTION ) );
-		$controller = new ScanController( new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() ), 0 );
+		$controller = new ValidateAllController( new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() ), 0 );
 		$result     = $controller->run_batch( true );
 
 		$this->assertWPError( $result );
