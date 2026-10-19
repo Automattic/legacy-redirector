@@ -69,7 +69,7 @@ if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
 // firing into a void.
 register_deactivation_hook(
 	__FILE__,
-	array( \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditScheduler::class, 'unschedule' )
+	array( \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep::class, 'unschedule' )
 );
 
 // Declared conditionally because an unconditional function is bound when the

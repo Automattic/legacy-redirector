@@ -208,8 +208,8 @@ final class ViewFilters {
 			esc_attr( $current ),
 			esc_html(
 				sprintf(
-					/* translators: %s: how long ago the last scan completed, e.g. "2 hours" */
-					__( 'Has issues (scanned %s ago)', 'legacy-redirector' ),
+					/* translators: %s: how long ago the last full check completed, e.g. "2 hours" */
+					__( 'Has issues (checked %s ago)', 'legacy-redirector' ),
 					human_time_diff( $checked_at )
 				)
 			),

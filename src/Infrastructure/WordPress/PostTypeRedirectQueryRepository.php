@@ -116,6 +116,38 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	}
 
 	/**
+	 * Find enabled and disabled redirects with an ID above a cursor, in ID order.
+	 *
+	 * Reads the rows directly rather than through WP_Query, which has no
+	 * "ID greater than" argument. get_post() on a row sanitizes it without
+	 * adding it to the object cache, where a pass over millions of rows would
+	 * only evict the posts the site is actually serving.
+	 *
+	 * @param int $after_id Only rows with an ID above this.
+	 * @param int $limit    Maximum rows to return.
+	 * @return Redirect[] The redirects, lowest ID first.
+	 */
+	#[\Override]
+	public function find_after_id( int $after_id, int $limit ): array {
+		global $wpdb;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Keyset page over the primary key; WP_Query cannot express ID > n, and caching a full-table walk would evict live entries.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft') AND ID > %d ORDER BY ID ASC LIMIT %d",
+				PostType::POST_TYPE,
+				$after_id,
+				$limit
+			)
+		);
+
+		return array_map(
+			fn( object $row ): Redirect => $this->map_post_to_redirect( get_post( $row ) ),
+			$rows
+		);
+	}
+
+	/**
 	 * Get destination URLs for redirects pointing at external (absolute) URLs.
 	 *
 	 * Disabled redirects count, since re-enabling one needs its host allowed;

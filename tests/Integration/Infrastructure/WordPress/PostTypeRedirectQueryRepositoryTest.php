@@ -173,4 +173,28 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 
 		return $ids;
 	}
+
+	/**
+	 * Test the keyset page returns enabled and disabled rows above the cursor, in ID order.
+	 */
+	public function test_find_after_id_pages_by_id(): void {
+		$first    = $this->create_redirect( '/keyset-a', '/target-a' );
+		$second   = $this->create_redirect( '/keyset-b', '/target-b' );
+		$disabled = $this->create_redirect( '/keyset-c', '/target-c' );
+		$trashed  = $this->create_redirect( '/keyset-d', '/target-d' );
+		$last     = $this->create_redirect( '/keyset-e', '/target-e' );
+		wp_update_post(
+			array(
+				'ID'          => $disabled,
+				'post_status' => 'draft',
+			)
+		);
+		wp_trash_post( $trashed );
+
+		$ids = static fn( array $redirects ): array => array_map( static fn( $redirect ) => $redirect->id(), $redirects );
+
+		$this->assertSame( array( $first, $second ), $ids( $this->query_repository()->find_after_id( 0, 2 ) ) );
+		$this->assertSame( array( $disabled, $last ), $ids( $this->query_repository()->find_after_id( $second, 10 ) ) );
+		$this->assertSame( array(), $this->query_repository()->find_after_id( $last, 10 ) );
+	}
 }

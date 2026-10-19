@@ -9,35 +9,35 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
-use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
- * Shows the last recorded audit's problem count on the Redirects menu item,
+ * Shows how many redirects are flagged as problems on the Redirects menu item,
  * the way core badges the Plugins menu with its update count.
  *
  * Problems only: a warning is a judgement call for a person who is already
  * looking, but a problem means visitors are hitting broken redirects, and
  * the badge points at the list screen, whose "Has issues" view shows the
- * flagged rows. Reads the recorded summary rather than auditing, because it
- * renders on every admin page.
+ * same flagged rows, so the two always agree. Reads the stored count rather
+ * than counting, because it renders on every admin page.
  */
 final class MenuBadge {
 
 	/**
-	 * The stored audit results.
+	 * The per-row audit flags.
 	 *
-	 * @var AuditResults
+	 * @var AuditFlags
 	 */
-	private AuditResults $results;
+	private AuditFlags $flags;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param AuditResults $results The stored audit results.
+	 * @param AuditFlags $flags The per-row audit flags.
 	 */
-	public function __construct( AuditResults $results ) {
-		$this->results = $results;
+	public function __construct( AuditFlags $flags ) {
+		$this->flags = $flags;
 	}
 
 	/**
@@ -56,7 +56,7 @@ final class MenuBadge {
 	 * @return void
 	 */
 	public function add_badge(): void {
-		$problems = $this->results->problem_count();
+		$problems = $this->flags->problem_count();
 
 		if ( $problems < 1 ) {
 			return;

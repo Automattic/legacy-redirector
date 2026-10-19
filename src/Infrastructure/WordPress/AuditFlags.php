@@ -46,6 +46,16 @@ final class AuditFlags {
 	public const string CHECKED_AT_OPTION = 'legacy_redirector_audit_flags_checked_at';
 
 	/**
+	 * The option holding the flagged-row counts the menu badge shows.
+	 *
+	 * Stored when a pass completes and whenever a flag is cleared, and
+	 * autoloaded because the badge reads it on every admin page.
+	 *
+	 * @var string
+	 */
+	public const string COUNTS_OPTION = 'legacy_redirector_audit_flag_counts';
+
+	/**
 	 * Register hooks.
 	 *
 	 * Registered in every context, not just the admin: WP-CLI and code can
@@ -69,7 +79,11 @@ final class AuditFlags {
 	 * @return void
 	 */
 	public function clear( int $post_id ): void {
-		delete_post_meta( $post_id, self::META_KEY );
+		// Only a row that was flagged changes the counts, so only it pays
+		// for a recount; the badge drops the moment a problem row is saved.
+		if ( delete_post_meta( $post_id, self::META_KEY ) ) {
+			$this->store_counts();
+		}
 	}
 
 	/**
@@ -118,6 +132,29 @@ final class AuditFlags {
 		$checked_at = (int) get_option( self::CHECKED_AT_OPTION, 0 );
 
 		return $checked_at > 0 ? $checked_at : null;
+	}
+
+	/**
+	 * Store the current flagged-row counts for the menu badge.
+	 *
+	 * @return void
+	 */
+	public function store_counts(): void {
+		update_option( self::COUNTS_OPTION, $this->counts(), true );
+	}
+
+	/**
+	 * How many rows were flagged as problems when the counts were last stored.
+	 *
+	 * Read on every admin page, so it reads the stored number rather than
+	 * counting.
+	 *
+	 * @return int The problem count; zero before any pass has completed.
+	 */
+	public function problem_count(): int {
+		$counts = get_option( self::COUNTS_OPTION );
+
+		return is_array( $counts ) ? (int) ( $counts['problem'] ?? 0 ) : 0;
 	}
 
 	/**

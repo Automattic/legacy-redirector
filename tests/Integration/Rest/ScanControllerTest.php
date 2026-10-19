@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Rest;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
@@ -26,7 +26,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
- * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
@@ -79,8 +79,9 @@ final class ScanControllerTest extends TestCase {
 		global $wp_rest_server;
 		$wp_rest_server = null;
 
-		delete_option( AuditFlags::CHECKED_AT_OPTION );
-		delete_option( AuditResults::OPTION );
+		foreach ( array( AuditSweep::STATE_OPTION, AuditSweep::LOCK_OPTION, AuditFlags::CHECKED_AT_OPTION, AuditFlags::COUNTS_OPTION ) as $option ) {
+			delete_option( $option );
+		}
 
 		wp_set_current_user( 0 );
 
@@ -101,12 +102,12 @@ final class ScanControllerTest extends TestCase {
 	/**
 	 * Dispatch a batch request and return the response.
 	 *
-	 * @param int $offset The batch offset.
+	 * @param bool $restart Whether to start a fresh pass.
 	 * @return \WP_REST_Response The dispatched response.
 	 */
-	private function do_request( int $offset = 0 ): \WP_REST_Response {
+	private function do_request( bool $restart = true ): \WP_REST_Response {
 		$request = new \WP_REST_Request( 'POST', '/legacy-redirector/v1/scan' );
-		$request->set_param( 'offset', $offset );
+		$request->set_param( 'restart', $restart );
 
 		return rest_get_server()->dispatch( $request );
 	}
@@ -156,11 +157,7 @@ final class ScanControllerTest extends TestCase {
 
 		$this->assertNotNull( ( new AuditFlags() )->checked_at() );
 
-		$summary = $this->audit_results()->summary();
-		$this->assertSame( 1, $summary['problems'] );
-		$this->assertSame( 0, $summary['warnings'] );
-		$this->assertSame( 2, $summary['checked'] );
-		$this->assertFalse( $summary['with_urls'] );
+		$this->assertSame( 1, ( new AuditFlags() )->problem_count() );
 	}
 
 	/**
@@ -187,13 +184,13 @@ final class ScanControllerTest extends TestCase {
 	}
 
 	/**
-	 * Test a run larger than one batch pages through on rising offsets and
-	 * only reports done on the final batch.
+	 * Test a run larger than one batch continues where the last batch stopped
+	 * and only reports done on the final batch.
 	 */
-	public function test_batches_page_through_on_rising_offsets(): void {
+	public function test_batches_continue_the_pass_until_done(): void {
 		$this->login_as_redirect_manager();
 
-		$total = ScanController::BATCH_SIZE + 1;
+		$total = AuditSweep::BATCH_SIZE + 1;
 		for ( $i = 1; $i <= $total; $i++ ) {
 			$this->insert_redirect_post(
 				array(
@@ -205,15 +202,46 @@ final class ScanControllerTest extends TestCase {
 
 		$first = $this->do_request()->get_data();
 
-		$this->assertSame( ScanController::BATCH_SIZE, $first['checked'] );
+		$this->assertSame( AuditSweep::BATCH_SIZE, $first['checked'] );
 		$this->assertSame( $total, $first['total'] );
 		$this->assertFalse( $first['done'] );
 		$this->assertNull( ( new AuditFlags() )->checked_at() );
 
-		$second = $this->do_request( ScanController::BATCH_SIZE )->get_data();
+		$second = $this->do_request( false )->get_data();
 
-		$this->assertSame( 1, $second['checked'] );
+		$this->assertSame( $total, $second['checked'] );
 		$this->assertTrue( $second['done'] );
 		$this->assertNotNull( ( new AuditFlags() )->checked_at() );
+	}
+
+	/**
+	 * Test pressing Scan again starts the pass over from the lowest ID.
+	 */
+	public function test_restart_starts_the_pass_over(): void {
+		$this->login_as_redirect_manager();
+
+		for ( $i = 1; $i <= AuditSweep::BATCH_SIZE + 1; $i++ ) {
+			$this->insert_redirect_post( array( 'post_title' => "/scan-restart-{$i}" ) );
+		}
+
+		$this->assertSame( AuditSweep::BATCH_SIZE, $this->do_request()->get_data()['checked'] );
+		$this->assertSame( AuditSweep::BATCH_SIZE, $this->do_request()->get_data()['checked'] );
+	}
+
+	/**
+	 * Test a request reports a conflict while another runner holds the lock throughout.
+	 */
+	public function test_busy_sweep_reports_a_conflict(): void {
+		global $wpdb;
+
+		$this->login_as_redirect_manager();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixture: a lock just taken by another runner.
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, UNIX_TIMESTAMP(), 'off')", AuditSweep::LOCK_OPTION ) );
+		$controller = new ScanController( new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() ), 0 );
+		$result     = $controller->run_batch( true );
+
+		$this->assertWPError( $result );
+		$this->assertSame( 409, $result->get_error_data()['status'] );
 	}
 }
