@@ -72,11 +72,14 @@ interface RedirectQueryRepositoryInterface {
 	 * Disabled redirects count, since re-enabling one needs its host allowed;
 	 * the Trash does not.
 	 *
-	 * @param int $limit  Maximum number of URLs to return.
-	 * @param int $offset Number of URLs to skip.
-	 * @return string[] The destination URLs.
+	 * Pages by keyset: pass the last ID of one page as $after_id for the next,
+	 * so each page costs the same however deep into the table it starts.
+	 *
+	 * @param int $after_id Return only redirects with an ID above this; 0 to start.
+	 * @param int $limit    Maximum number of URLs to return.
+	 * @return array<int, string> The destination URLs, keyed by redirect ID, lowest first.
 	 */
-	public function get_external_destination_urls( int $limit, int $offset ): array;
+	public function get_external_destination_urls( int $after_id, int $limit ): array;
 
 	/**
 	 * Count redirects pointing at external (absolute) URLs, outside the Trash.

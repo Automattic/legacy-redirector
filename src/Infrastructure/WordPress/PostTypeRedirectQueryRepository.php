@@ -182,24 +182,30 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * Disabled redirects count, since re-enabling one needs its host allowed;
 	 * the Trash does not.
 	 *
-	 * @param int $limit  Maximum number of URLs to return.
-	 * @param int $offset Number of URLs to skip.
-	 * @return string[] The destination URLs.
+	 * Pages by keyset: pass the last ID of one page as $after_id for the next,
+	 * so each page costs the same however deep into the table it starts.
+	 *
+	 * @param int $after_id Return only redirects with an ID above this; 0 to start.
+	 * @param int $limit    Maximum number of URLs to return.
+	 * @return array<int, string> The destination URLs, keyed by redirect ID, lowest first.
 	 */
 	#[\Override]
-	public function get_external_destination_urls( int $limit, int $offset ): array {
+	public function get_external_destination_urls( int $after_id, int $limit ): array {
 		global $wpdb;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Bulk query for CLI reporting; WP_Query cannot filter on post_excerpt.
-		return $wpdb->get_col(
+		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s ORDER BY ID ASC LIMIT %d, %d",
+				"SELECT ID, post_excerpt FROM $wpdb->posts WHERE post_type = %s AND post_status IN ('publish', 'draft') AND post_excerpt LIKE %s AND ID > %d ORDER BY ID ASC LIMIT %d",
 				PostType::POST_TYPE,
 				self::EXTERNAL_LIKE,
-				$offset,
+				$after_id,
 				$limit
-			)
+			),
+			ARRAY_A
 		);
+
+		return array_column( $rows, 'post_excerpt', 'ID' );
 	}
 
 	/**

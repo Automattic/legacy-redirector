@@ -201,6 +201,45 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 	}
 
 	/**
+	 * Test external destinations page by ID with no row skipped or repeated
+	 * across a page boundary, counting disabled rows but not the Trash or paths.
+	 */
+	public function test_external_destination_urls_page_by_id(): void {
+		$expected = array();
+		foreach ( array( 'a', 'b', 'c', 'd', 'e' ) as $letter ) {
+			$id              = $this->insert_redirect_post( array( 'post_excerpt' => "https://$letter.example/" ) );
+			$expected[ $id ] = "https://$letter.example/";
+
+			$this->insert_redirect_post( array( 'post_excerpt' => "/path-$letter" ) );
+		}
+		$disabled              = $this->insert_redirect_post(
+			array(
+				'post_status'  => 'draft',
+				'post_excerpt' => 'https://disabled.example/',
+			)
+		);
+		$expected[ $disabled ] = 'https://disabled.example/';
+		$this->insert_redirect_post(
+			array(
+				'post_status'  => 'trash',
+				'post_excerpt' => 'https://trashed.example/',
+			)
+		);
+
+		$seen     = array();
+		$after_id = 0;
+		do {
+			$page = $this->query_repository()->get_external_destination_urls( $after_id, 4 );
+			$this->assertEmpty( array_intersect_key( $seen, $page ), 'No row may appear on two pages.' );
+			$seen    += $page;
+			$after_id = (int) array_key_last( $page );
+			$fetched  = count( $page );
+		} while ( 4 === $fetched );
+
+		$this->assertSame( $expected, $seen );
+	}
+
+	/**
 	 * Test the destination lookup finds enabled and disabled redirects to a post, and nothing else.
 	 */
 	public function test_find_by_destination_post(): void {

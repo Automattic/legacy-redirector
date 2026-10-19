@@ -77,13 +77,13 @@ final class FindDomainsCommand extends WP_CLI_Command {
 		$format   = $assoc_args['format'] ?? 'table';
 		$is_table = 'table' === $format;
 		$domains  = array();
-		$offset   = 0;
+		$after_id = 0;
 
 		$total    = $this->query_repository->count_external_destinations();
 		$progress = $is_table ? \WP_CLI\Utils\make_progress_bar( 'Finding domains', $total ) : null;
 
 		do {
-			$redirect_urls = $this->query_repository->get_external_destination_urls( self::PAGE_SIZE, $offset );
+			$redirect_urls = $this->query_repository->get_external_destination_urls( $after_id, self::PAGE_SIZE );
 
 			foreach ( $redirect_urls as $redirect_url ) {
 				if ( null !== $progress ) {
@@ -100,7 +100,7 @@ final class FindDomainsCommand extends WP_CLI_Command {
 				}
 			}
 
-			$offset            += self::PAGE_SIZE;
+			$after_id           = (int) array_key_last( $redirect_urls );
 			$fetched_urls_count = count( $redirect_urls );
 		} while ( self::PAGE_SIZE === $fetched_urls_count );
 

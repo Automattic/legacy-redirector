@@ -58,13 +58,13 @@ final class FindRedirectDomainsAbilityTest extends MonkeyStubs {
 	public function test_execute_returns_unique_sorted_domains(): void {
 		$this->query_repository->shouldReceive( 'get_external_destination_urls' )
 			->once()
-			->with( 500, 0 )
+			->with( 0, 500 )
 			->andReturn(
 				array(
-					'https://example.org/one',
-					'https://example.com/two',
-					'https://example.org/three',
-					'',
+					3 => 'https://example.org/one',
+					5 => 'https://example.com/two',
+					8 => 'https://example.org/three',
+					9 => '',
 				)
 			);
 
@@ -78,22 +78,22 @@ final class FindRedirectDomainsAbilityTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test a full page of results is followed by a request for the next page.
+	 * Test a full page is followed by a request for the redirects after its last ID.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility::execute
 	 */
 	public function test_execute_pages_through_the_destinations(): void {
-		$first_page = array_fill( 0, 500, 'https://example.org/page' );
+		$first_page = array_fill( 101, 500, 'https://example.org/page' );
 
 		$this->query_repository->shouldReceive( 'get_external_destination_urls' )
 			->once()
-			->with( 500, 0 )
+			->with( 0, 500 )
 			->andReturn( $first_page );
 
 		$this->query_repository->shouldReceive( 'get_external_destination_urls' )
 			->once()
-			->with( 500, 500 )
-			->andReturn( array( 'https://example.net/last' ) );
+			->with( 600, 500 )
+			->andReturn( array( 700 => 'https://example.net/last' ) );
 
 		$result = $this->ability->execute();
 
