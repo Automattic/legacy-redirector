@@ -271,6 +271,10 @@ Live destination checks — the admin Test action and `wp legacy-redirector test
 WordPress's safe HTTP functions, which refuse to request loopback, private, and reserved IP
 addresses. The site's own host is always allowed.
 
+When a destination redirects, the check follows up to five hops, but only to the site's own
+host and hosts in `allowed_redirect_hosts`. A hop to any other host is not requested: the
+destination has answered, so it passes. More than five hops is reported as a failed request.
+
 If your redirects legitimately point at other internal hosts, such as an intranet or a
 staging network, allow them with core's filter:
 

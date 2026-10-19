@@ -18,7 +18,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\TestCommand;
  * Integration tests for TestCommand.
  *
  * Every HTTP request is answered by a canned response: the source probe is
- * told apart by asking not to follow redirects.
+ * told apart by its host, the site's own.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\TestCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
@@ -99,8 +99,7 @@ final class TestCommandTest extends CliTestCase {
 		add_filter(
 			'pre_http_request',
 			function ( $preempt, $args, $url ) use ( $source, $destination ) {
-				// The probe does not follow redirects; the destination check does.
-				if ( 0 === ( $args['redirection'] ?? 5 ) ) {
+				if ( str_starts_with( $url, home_url( '/' ) ) ) {
 					$this->source_requests[] = $url;
 					return $source;
 				}
@@ -164,6 +163,70 @@ final class TestCommandTest extends CliTestCase {
 		$this->assertSame( 'problem', $rows[0]['severity'] );
 		$this->assertSame( 'Destination returns 404', $rows[0]['issue'] );
 		$this->assertSame( 'Point this redirect at a page that exists, or delete it', $rows[0]['remedy'] );
+	}
+
+	/**
+	 * Answer destination requests by URL, recording each one.
+	 *
+	 * @param array<string, array> $responses Responses by URL; any other URL gets a 200.
+	 * @return \ArrayObject<int, string> The URLs requested, filled in as the command runs.
+	 */
+	private function respond_by_url( array $responses ): \ArrayObject {
+		$requested = new \ArrayObject();
+
+		add_filter(
+			'pre_http_request',
+			static function ( $preempt, $args, $url ) use ( $responses, $requested ) {
+				$requested[] = $url;
+
+				return $responses[ $url ] ?? array( 'response' => array( 'code' => 200 ) );
+			},
+			10,
+			3
+		);
+
+		return $requested;
+	}
+
+	/**
+	 * Test a destination redirecting within allowed hosts is followed to where it ends.
+	 */
+	public function test_a_destination_hop_to_an_allowed_host_is_followed(): void {
+		$this->create_redirect( '/test-hop-allowed', self::DESTINATION );
+		$requested = $this->respond_by_url(
+			array(
+				self::DESTINATION           => array(
+					'response' => array( 'code' => 302 ),
+					'headers'  => array( 'location' => 'https://example.com/moved' ),
+				),
+				'https://example.com/moved' => array( 'response' => array( 'code' => 404 ) ),
+			)
+		);
+
+		$issues = array_column( $this->rows( array( '/test-hop-allowed' ), array( 'only' => 'destination' ) ), 'issue' );
+
+		$this->assertSame( array( 'Destination returns 404' ), $issues );
+		$this->assertSame( array( self::DESTINATION, 'https://example.com/moved' ), $requested->getArrayCopy() );
+	}
+
+	/**
+	 * Test a destination redirecting outside allowed hosts is not followed there.
+	 */
+	public function test_a_destination_hop_to_another_host_is_not_requested(): void {
+		$this->create_redirect( '/test-hop-elsewhere', self::DESTINATION );
+		$requested = $this->respond_by_url(
+			array(
+				self::DESTINATION => array(
+					'response' => array( 'code' => 302 ),
+					'headers'  => array( 'location' => 'http://169.254.169.254/latest/' ),
+				),
+			)
+		);
+
+		$issues = array_column( $this->rows( array( '/test-hop-elsewhere' ), array( 'only' => 'destination' ) ), 'issue' );
+
+		$this->assertSame( array( 'Destination responds' ), $issues );
+		$this->assertSame( array( self::DESTINATION ), $requested->getArrayCopy() );
 	}
 
 	/**

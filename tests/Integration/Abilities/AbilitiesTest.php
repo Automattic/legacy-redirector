@@ -551,9 +551,8 @@ final class AbilitiesTest extends TestCase {
 	public function test_test_redirects_checks_a_redirect_live(): void {
 		$redirect_id = $this->create_redirect( '/tested-live', 'https://example.com/live-target' );
 
-		$respond = static function ( $preempt, $args ) {
-			// The source probe does not follow redirects; the destination check does.
-			if ( 0 === ( $args['redirection'] ?? 5 ) ) {
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( $url, '/tested-live' ) ) {
 				return array(
 					'response' => array( 'code' => 301 ),
 					'headers'  => array( 'location' => 'https://example.com/live-target' ),
@@ -562,7 +561,7 @@ final class AbilitiesTest extends TestCase {
 
 			return array( 'response' => array( 'code' => 404 ) );
 		};
-		add_filter( 'pre_http_request', $respond, 10, 2 );
+		add_filter( 'pre_http_request', $respond, 10, 3 );
 
 		try {
 			$result = $this->ability( 'test-redirects' )->execute( array( 'redirects' => array( '/tested-live' ) ) );

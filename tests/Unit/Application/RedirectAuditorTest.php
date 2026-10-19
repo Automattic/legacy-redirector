@@ -410,6 +410,136 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Allow only allowed.com as a redirect host, as wp_validate_redirect() would.
+	 *
+	 * @return void
+	 */
+	private function allow_only_allowed_com(): void {
+		Functions\when( 'wp_validate_redirect' )->alias(
+			static fn( $location, $fallback ) => 'allowed.com' === wp_parse_url( $location, PHP_URL_HOST ) ? $location : $fallback
+		);
+	}
+
+	/**
+	 * A redirect response.
+	 *
+	 * @param string $location The Location header.
+	 * @return array The response.
+	 */
+	private static function redirect_to( string $location ): array {
+		return array(
+			'response' => array( 'code' => 301 ),
+			'headers'  => array( 'location' => $location ),
+		);
+	}
+
+	/**
+	 * Test a hop to an allowed host is followed, so a chain ending in a 404 fails.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_follows_a_hop_to_an_allowed_host(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 404, array( 'https://allowed.com/old' => self::redirect_to( 'https://allowed.com/new' ) ) );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
+		$this->assertSame( array( 'https://allowed.com/old', 'https://allowed.com/new' ), $auditor->requested );
+	}
+
+	/**
+	 * Test a hop to a host that is not allowed is never requested, and passes.
+	 *
+	 * The destination answered; only where it forwards to is out of bounds.
+	 * Failing it would flag every ordinary canonical redirect to another host.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_does_not_follow_a_hop_to_another_host(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 404, array( 'https://allowed.com/old' => self::redirect_to( 'http://169.254.169.254/latest/' ) ) );
+
+		$this->assertNull( $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true ) );
+		$this->assertSame( array( 'https://allowed.com/old' ), $auditor->requested );
+	}
+
+	/**
+	 * Test a root-relative Location is resolved against the URL that sent it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_resolves_a_relative_hop(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 404, array( 'https://allowed.com/old' => self::redirect_to( '/new' ) ) );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
+		$this->assertSame( 'https://allowed.com/new', $auditor->requested[1] );
+	}
+
+	/**
+	 * Test a chain longer than five hops is a failed request, as the HTTP API reported it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_gives_up_after_five_hops(): void {
+		$this->allow_only_allowed_com();
+
+		$responses = array();
+		for ( $hop = 0; $hop <= 5; $hop++ ) {
+			$responses[ 'https://allowed.com/' . $hop ] = self::redirect_to( 'https://allowed.com/' . ( $hop + 1 ) );
+		}
+
+		$auditor = new TestableRedirectAuditor( 200, $responses );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/0' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_REQUEST_FAILED, $finding->type() );
+		$this->assertSame( 'Too many redirects', $finding->extra_info() );
+		$this->assertCount( 6, $auditor->requested );
+	}
+
+	/**
+	 * Test a five-hop chain is followed to its end.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_follows_five_hops(): void {
+		$this->allow_only_allowed_com();
+
+		$responses = array();
+		for ( $hop = 0; $hop < 5; $hop++ ) {
+			$responses[ 'https://allowed.com/' . $hop ] = self::redirect_to( 'https://allowed.com/' . ( $hop + 1 ) );
+		}
+
+		$auditor = new TestableRedirectAuditor( 404, $responses );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/0' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
+		$this->assertSame( 'https://allowed.com/5', end( $auditor->requested ) );
+	}
+
+	/**
+	 * Test a redirect with no Location is taken as the final answer.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_a_redirect_without_a_location(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 302 );
+
+		$this->assertNull( $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true ) );
+		$this->assertCount( 1, $auditor->requested );
+	}
+
+	/**
 	 * Test the probe confirms a source that redirects to its destination.
 	 *
 	 * A trailing-slash difference in the Location header is not a divergence.
@@ -522,7 +652,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 				'https://allowed.com/large.pdf',
 				\Mockery::on(
 					static fn( array $args ): bool => 5 === $args['timeout']
-						&& ! isset( $args['redirection'] )
+						&& 0 === $args['redirection']
 						&& ( $args['limit_response_size'] ?? 0 ) > 0
 				)
 			)
@@ -801,7 +931,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			}
 
 			/**
-			 * Every request is answered with the site's own content.
+			 * Every request, source and destination, is answered with content.
 			 *
 			 * @param string $url The URL (ignored).
 			 * @return array The response.
@@ -810,15 +940,6 @@ final class RedirectAuditorTest extends MonkeyStubs {
 				return array( 'response' => array( 'code' => 200 ) );
 			}
 
-			/**
-			 * Every destination request succeeds.
-			 *
-			 * @param string $url The URL (ignored).
-			 * @return array The response.
-			 */
-			protected function remote_get( string $url ) {
-				return array( 'response' => array( 'code' => 200 ) );
-			}
 		};
 
 		$result = $auditor->test( $this->create_redirect( '/about', 'https://example.com/target' ) );
@@ -1085,37 +1206,55 @@ final class RedirectAuditorTest extends MonkeyStubs {
 }
 
 /**
- * Testable subclass that allows controlling HTTP response codes.
+ * Testable subclass that allows controlling HTTP responses.
  *
- * Overriding remote_get() lets tests drive the HTTP check without mocking
- * WordPress HTTP functions.
+ * Overriding remote_get_without_redirects() lets tests drive the HTTP check
+ * without mocking WordPress HTTP functions.
  */
 class TestableRedirectAuditor extends RedirectAuditor {
 
 	/**
-	 * The response code to return.
+	 * The URLs requested, in order.
+	 *
+	 * @var string[]
+	 */
+	public array $requested = array();
+
+	/**
+	 * The response code for any URL without a canned response.
 	 *
 	 * @var int
 	 */
 	private int $response_code;
 
 	/**
+	 * Canned responses, by URL.
+	 *
+	 * @var array<string, array>
+	 */
+	private array $responses;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param int $response_code The response code to return.
+	 * @param int                  $response_code The response code for any URL without a canned response.
+	 * @param array<string, array> $responses     Canned responses, by URL.
 	 */
-	public function __construct( int $response_code ) {
+	public function __construct( int $response_code, array $responses = array() ) {
 		$this->response_code = $response_code;
+		$this->responses     = $responses;
 	}
 
 	/**
-	 * Override to return a fixed response.
+	 * Override to record the request and return its canned response.
 	 *
-	 * @param string $url The URL to request (ignored).
+	 * @param string $url The URL to request.
 	 * @return array The canned response.
 	 */
-	protected function remote_get( string $url ) {
-		return array( 'response' => array( 'code' => $this->response_code ) );
+	protected function remote_get_without_redirects( string $url ) {
+		$this->requested[] = $url;
+
+		return $this->responses[ $url ] ?? array( 'response' => array( 'code' => $this->response_code ) );
 	}
 }
 
