@@ -49,6 +49,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class ValidateCommandTest extends CliTestCase {
 
@@ -501,5 +503,31 @@ final class ValidateCommandTest extends CliTestCase {
 		}
 
 		$this->assertSame( 0, $requests );
+	}
+
+	/**
+	 * Test a source that a published page now answers is a warning, with what to do.
+	 *
+	 * Redirects only answer 404s, so the page wins and the redirect lies
+	 * dormant: found from stored details, without a request.
+	 */
+	public function test_validate_warns_about_content_at_the_source(): void {
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'occupied-source',
+			)
+		);
+		$redirect_id = $this->create_redirect( '/occupied-source', '/somewhere-else' );
+
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+		$this->invoke_command( $this->command, array( '/occupied-source' ), array() );
+
+		$rows = $GLOBALS['wp_cli_format_items_calls'][0][1];
+		$this->assertSame( 'warning', $rows[0]['severity'] );
+		$this->assertSame( 'Source serves content', $rows[0]['issue'] );
+		$this->assertStringContainsString( 'Unpublish the content at the source', $rows[0]['remedy'] );
+		$this->assertSame( 'warning', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
 }

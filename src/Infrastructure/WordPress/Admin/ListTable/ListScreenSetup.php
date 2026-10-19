@@ -205,6 +205,7 @@ final class ListScreenSetup {
 		return '<p>' . __( 'The source path (Redirect From) is checked for:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
 			'<li>' . __( '<strong>Reserved WordPress paths</strong> (warning): a source WordPress itself serves, such as <code>/wp-admin</code>, <code>/wp-login.php</code>, the other root <code>wp-*.php</code> files, <code>/xmlrpc.php</code>, or anything under <code>/wp-json</code>, <code>/wp-content</code> or <code>/wp-includes</code>. Such a redirect lies dormant while the path works, because redirects only answer 404s, but it takes over the moment that path breaks; for <code>/wp-admin</code> or <code>/wp-login.php</code> that locks you out of the dashboard. Keep it only if it is a genuine legacy URL.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Published content at the source</strong> (warning): a published post or page of any public type already lives at the source path. Redirects only answer 404s, so the redirect lies dormant while that content is there. Unpublish the content if the redirect should fire; otherwise it is a fallback for when the content goes. Other content, such as an archive or a feed, is only found by Test.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
 			'<p>' . __( 'The destination (Redirect To) is checked according to its form:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .

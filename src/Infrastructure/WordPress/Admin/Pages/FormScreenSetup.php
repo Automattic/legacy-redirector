@@ -118,7 +118,7 @@ final class FormScreenSetup {
 			'</ul>' .
 			'<p>' . __( 'The path is relative to your site\'s root. Do not include the domain name.', 'legacy-redirector' ) . '</p>' .
 			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'Each source path can only have one redirect. Duplicate sources are not allowed.', 'legacy-redirector' ) . '</p>' .
-			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'A source on a path WordPress itself serves, such as <code>wp-admin</code> or <code>wp-login.php</code>, is accepted with a warning: the redirect lies dormant while that path works, but takes over if the path ever returns a 404.', 'legacy-redirector' ) . '</p>';
+			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'A source on a path WordPress itself serves, such as <code>wp-admin</code> or <code>wp-login.php</code>, is accepted with a warning: the redirect lies dormant while that path works, but takes over if the path ever returns a 404. A source a published post or page already answers gets a warning too: the redirect stays dormant until that content goes.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**

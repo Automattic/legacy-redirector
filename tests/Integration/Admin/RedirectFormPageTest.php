@@ -52,6 +52,8 @@ use WPDieException;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class RedirectFormPageTest extends TestCase {
 
@@ -1175,7 +1177,7 @@ final class RedirectFormPageTest extends TestCase {
 		preg_match( '/^var legacyRedirectorForm = (\{.*\});$/s', $data, $matches );
 
 		$settings = json_decode( $matches[1], true );
-		$this->assertSame( array( 'postId', 'duplicateMessage', 'reservedMessage', 'hostNotAllowedMessage' ), array_keys( $settings ) );
+		$this->assertSame( array( 'postId', 'duplicateMessage', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage' ), array_keys( $settings ) );
 	}
 
 	/**

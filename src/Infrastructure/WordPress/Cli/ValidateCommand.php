@@ -74,6 +74,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * - Destination hosts missing from the allowed_redirect_hosts filter
 	 * - Rows whose stored data cannot be read
 	 * - Sources on a path WordPress itself serves, such as /wp-admin (a warning)
+	 * - Sources a published post or page already answers (a warning)
 	 * - Possible loops through other redirects (a warning)
 	 *
 	 * With no redirects given, checks every redirect, enabled and disabled:

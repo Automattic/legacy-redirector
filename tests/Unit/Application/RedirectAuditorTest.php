@@ -13,6 +13,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Application;
 
 use Automattic\LegacyRedirector\Application\LoopDetector;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\SourceOccupancy;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -36,6 +37,7 @@ use WP_Post;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  */
 final class RedirectAuditorTest extends MonkeyStubs {
 
@@ -740,6 +742,89 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			array( AuditFindingType::RESERVED_SOURCE ),
 			$this->auditor->source_warnings( SourceUrl::from_string( '/wp-admin' ) )
 		);
+	}
+
+	/**
+	 * Test a source that published content occupies is a warning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_source_warnings_flags_a_source_with_content(): void {
+		$occupancy = \Mockery::mock( SourceOccupancy::class );
+		$occupancy->shouldReceive( 'occupying_post' )->andReturn( $this->create_mock_post() );
+		$auditor = new RedirectAuditor( null, $occupancy );
+
+		$this->assertSame( array( AuditFindingType::SOURCE_SERVES_CONTENT ), $auditor->source_warnings( SourceUrl::from_string( '/about' ) ) );
+
+		$warnings = $auditor->warnings( $this->create_redirect( '/about', '/target' ) );
+		$this->assertCount( 1, $warnings );
+		$this->assertSame( 'warning', $warnings[0]->severity() );
+	}
+
+	/**
+	 * Test a reserved source is reported as reserved, without a content lookup.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
+	 */
+	public function test_source_warnings_reports_a_reserved_source_without_looking_it_up(): void {
+		$occupancy = \Mockery::mock( SourceOccupancy::class );
+		$occupancy->shouldNotReceive( 'occupying_post' );
+
+		$this->assertSame(
+			array( AuditFindingType::RESERVED_SOURCE ),
+			( new RedirectAuditor( null, $occupancy ) )->source_warnings( SourceUrl::from_string( '/wp-admin' ) )
+		);
+	}
+
+	/**
+	 * Test the live probe finding content at the source does not report it a second time.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::test
+	 */
+	public function test_live_test_reports_content_at_the_source_once(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\when( 'wp_validate_redirect' )->returnArg();
+
+		$occupancy = \Mockery::mock( SourceOccupancy::class );
+		$occupancy->shouldReceive( 'occupying_post' )->andReturn( $this->create_mock_post() );
+
+		$auditor = new class( $occupancy ) extends RedirectAuditor {
+
+			/**
+			 * Constructor.
+			 *
+			 * @param SourceOccupancy $occupancy The source occupancy check.
+			 */
+			public function __construct( SourceOccupancy $occupancy ) {
+				parent::__construct( null, $occupancy );
+			}
+
+			/**
+			 * Every request is answered with the site's own content.
+			 *
+			 * @param string $url The URL (ignored).
+			 * @return array The response.
+			 */
+			protected function remote_get_without_redirects( string $url ) {
+				return array( 'response' => array( 'code' => 200 ) );
+			}
+
+			/**
+			 * Every destination request succeeds.
+			 *
+			 * @param string $url The URL (ignored).
+			 * @return array The response.
+			 */
+			protected function remote_get( string $url ) {
+				return array( 'response' => array( 'code' => 200 ) );
+			}
+		};
+
+		$result = $auditor->test( $this->create_redirect( '/about', 'https://example.com/target' ) );
+		$types  = array_map( static fn( AuditFinding $finding ) => $finding->type(), $result['findings'] );
+
+		$this->assertSame( array( AuditFindingType::SOURCE_SERVES_CONTENT ), $types );
 	}
 
 	/**

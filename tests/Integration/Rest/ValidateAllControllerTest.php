@@ -54,6 +54,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ValidateAllButton::progress_text
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class ValidateAllControllerTest extends TestCase {
 

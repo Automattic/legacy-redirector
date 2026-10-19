@@ -14,8 +14,7 @@
  * @var string   $destination_display Human-readable destination for the display field.
  * @var string   $message             Success message code ('created', 'updated', or '').
  * @var string   $error_message       Resolved error message, or '' if none.
- * @var bool     $reserved_source     Whether the source is a path WordPress itself serves.
- * @var string   $reserved_message    The warning shown for a reserved source.
+ * @var string   $source_warning      The warning for the stored source, or '' if none.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -50,9 +49,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 		</div>
 	<?php endif; ?>
 
-	<?php if ( $reserved_source ) : ?>
+	<?php if ( '' !== $source_warning ) : ?>
 		<div class="notice notice-warning">
-			<p><?php echo esc_html( $reserved_message ); ?></p>
+			<p><?php echo esc_html( $source_warning ); ?></p>
 		</div>
 	<?php endif; ?>
 

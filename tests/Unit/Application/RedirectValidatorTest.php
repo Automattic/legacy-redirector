@@ -38,6 +38,7 @@ use WP_Post;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  */
 final class RedirectValidatorTest extends MonkeyStubs {
 

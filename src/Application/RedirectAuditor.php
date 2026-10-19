@@ -50,12 +50,25 @@ class RedirectAuditor {
 	private ?LoopDetector $loop_detector;
 
 	/**
+	 * The source occupancy check, the one audit rule looking up the source.
+	 *
+	 * Optional for the same reason as the loop detector: the write gate never
+	 * asks about it. Without it, audits carry no "source serves content"
+	 * finding from stored details; the live probe can still report one.
+	 *
+	 * @var SourceOccupancy|null
+	 */
+	private ?SourceOccupancy $source_occupancy;
+
+	/**
 	 * Constructor.
 	 *
-	 * @param LoopDetector|null $loop_detector The loop detector (optional).
+	 * @param LoopDetector|null    $loop_detector    The loop detector (optional).
+	 * @param SourceOccupancy|null $source_occupancy The source occupancy check (optional).
 	 */
-	public function __construct( ?LoopDetector $loop_detector = null ) {
-		$this->loop_detector = $loop_detector;
+	public function __construct( ?LoopDetector $loop_detector = null, ?SourceOccupancy $source_occupancy = null ) {
+		$this->loop_detector    = $loop_detector;
+		$this->source_occupancy = $source_occupancy;
 	}
 
 	/**
@@ -88,8 +101,8 @@ class RedirectAuditor {
 	 * The warnings a redirect deserves, stored or proposed.
 	 *
 	 * Everything that flags a working redirect for a human look: reserved
-	 * sources and possible loops. Create and import report these after a
-	 * successful write.
+	 * sources, published content at the source, and possible loops. Create
+	 * and import report these after a successful write.
 	 *
 	 * @param Redirect $redirect The redirect to check.
 	 * @return AuditFinding[] The warnings, empty if none.
@@ -120,7 +133,17 @@ class RedirectAuditor {
 	 * @return AuditFindingType[] The warning types, empty if none.
 	 */
 	public function source_warnings( SourceUrl $source ): array {
-		return $source->is_reserved() ? array( AuditFindingType::RESERVED_SOURCE ) : array();
+		if ( $source->is_reserved() ) {
+			return array( AuditFindingType::RESERVED_SOURCE );
+		}
+
+		// Published content at the source answers it first, so the redirect
+		// lies dormant: a fallback for when that content goes.
+		if ( null !== $this->source_occupancy && null !== $this->source_occupancy->occupying_post( $source ) ) {
+			return array( AuditFindingType::SOURCE_SERVES_CONTENT );
+		}
+
+		return array();
 	}
 
 	/**
@@ -261,7 +284,7 @@ class RedirectAuditor {
 			return true;
 		}
 
-		$slug = $this->lookup_slug( $url );
+		$slug = PostPathResolver::slug( $url );
 
 		// WordPress always serves something for the home path - the front
 		// controller never 404s '/' - so landing there is conclusive.
@@ -269,7 +292,7 @@ class RedirectAuditor {
 			return false;
 		}
 
-		if ( null !== $this->resolve_path_to_post( $slug ) ) {
+		if ( null !== PostPathResolver::post( $slug ) ) {
 			return false;
 		}
 
@@ -314,13 +337,13 @@ class RedirectAuditor {
 			return false;
 		}
 
-		$end_slug = $this->lookup_slug( $end_url );
+		$end_slug = PostPathResolver::slug( $end_url );
 
 		if ( '' === $end_slug ) {
 			return true;
 		}
 
-		$post = $this->resolve_path_to_post( $end_slug );
+		$post = PostPathResolver::post( $end_slug );
 
 		return null !== $post && $this->is_published( $post );
 	}
@@ -355,7 +378,7 @@ class RedirectAuditor {
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
 	private function check_relative_path_destination( Redirect $redirect, string $path, bool $check_destination ): ?AuditFinding {
-		$slug = $this->lookup_slug( $path );
+		$slug = PostPathResolver::slug( $path );
 
 		// The home page has no slug to look up. get_page_by_path( '' ) matches
 		// any post with an empty post_name - every draft and pending post has
@@ -366,7 +389,7 @@ class RedirectAuditor {
 			return $check_destination ? $this->check_url_destination( $redirect, home_url( $path ) ) : null;
 		}
 
-		$post = $this->resolve_path_to_post( $slug );
+		$post = PostPathResolver::post( $slug );
 
 		// Trashing renames post_name with a __trashed suffix, so a direct
 		// lookup misses trashed destinations - check for the renamed slug.
@@ -388,38 +411,6 @@ class RedirectAuditor {
 
 		// Can't determine without HTTP check - assume OK.
 		return null;
-	}
-
-	/**
-	 * The slug form of a relative path, ready for a post lookup.
-	 *
-	 * A query string or fragment can never be part of a slug match.
-	 *
-	 * @param string $path The relative path.
-	 * @return string The path with surrounding slashes, query, and fragment removed.
-	 */
-	private function lookup_slug( string $path ): string {
-		return trim( substr( $path, 0, strcspn( $path, '?#' ) ), '/' );
-	}
-
-	/**
-	 * Resolve a relative path to the post it serves, if any.
-	 *
-	 * @param string $slug The path with surrounding slashes, query, and fragment removed.
-	 * @return \WP_Post|null The post, or null if the path resolves to none.
-	 */
-	private function resolve_path_to_post( string $slug ): ?\WP_Post {
-		$post = get_page_by_path( $slug, OBJECT, get_post_types() );
-
-		// get_page_by_path() only walks hierarchical slugs; url_to_postid()
-		// resolves anything matching the site's permalink structure, such as
-		// dated permalinks.
-		if ( null === $post ) {
-			$post_id = url_to_postid( home_url( '/' . $slug ) );
-			$post    = 0 !== $post_id ? get_post( $post_id ) : null;
-		}
-
-		return $post;
 	}
 
 	/**
@@ -599,7 +590,9 @@ class RedirectAuditor {
 			$probe          = $this->probe_source( $redirect );
 			$source_finding = $this->finding_for_probe( $redirect, $probe );
 
-			if ( null !== $source_finding ) {
+			// The stored-details lookup may already have found content at the
+			// source; the probe confirming it is the same finding, not a second.
+			if ( null !== $source_finding && ! in_array( $source_finding->type(), array_map( static fn( AuditFinding $finding ) => $finding->type(), $findings ), true ) ) {
 				$findings[] = $source_finding;
 			}
 		}
