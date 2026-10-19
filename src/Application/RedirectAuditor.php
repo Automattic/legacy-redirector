@@ -640,7 +640,7 @@ class RedirectAuditor {
 		foreach ( $redirects as $redirect ) {
 			++$checked;
 
-			$findings = array_merge( $findings, $this->audit( $redirect, $check_urls ) );
+			array_push( $findings, ...$this->audit( $redirect, $check_urls ) );
 
 			if ( null !== $progress_callback ) {
 				$progress_callback( $checked );

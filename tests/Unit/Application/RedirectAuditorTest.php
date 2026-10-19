@@ -786,6 +786,39 @@ final class RedirectAuditorTest extends MonkeyStubs {
 		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $findings[0]->type() );
 		$this->assertSame( array( 1, 2 ), $progress );
 	}
+
+	/**
+	 * Test audit_batch returns every row's findings, in row order.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_batch
+	 */
+	public function test_audit_batch_returns_each_rows_findings_in_order(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+		Functions\when( 'get_page_by_path' )->alias(
+			fn ( string $path ) => $this->create_mock_post( 'draft-page' === $path ? 'draft' : 'publish' )
+		);
+
+		$redirects = array(
+			$this->create_redirect( '/wp-admin', '/draft-page' ),
+			$this->create_redirect( '/two', '/live-page' ),
+			$this->create_redirect( '/wp-login.php', '/live-page' ),
+		);
+
+		$expected = array();
+		foreach ( $redirects as $redirect ) {
+			foreach ( $this->auditor->audit( $redirect ) as $finding ) {
+				$expected[] = array( $redirect->source()->path(), $finding->type() );
+			}
+		}
+
+		$actual = array_map(
+			static fn ( AuditFinding $finding ): array => array( $finding->redirect()->source()->path(), $finding->type() ),
+			$this->auditor->audit_batch( $redirects )
+		);
+
+		$this->assertCount( 3, $expected );
+		$this->assertSame( $expected, $actual );
+	}
 }
 
 /**
