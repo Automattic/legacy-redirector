@@ -166,7 +166,7 @@ final class FormScreenSetup {
 	 */
 	private function get_help_sidebar(): string {
 		return '<p><strong>' . __( 'For more information:', 'legacy-redirector' ) . '</strong></p>' .
-			'<p><a href="https://github.com/Automattic/legacy-redirector" target="_blank">' . __( 'Plugin Documentation', 'legacy-redirector' ) . '</a></p>' .
-			'<p><a href="https://github.com/Automattic/legacy-redirector/issues" target="_blank">' . __( 'Report an Issue', 'legacy-redirector' ) . '</a></p>';
+			'<p><a href="https://github.com/Automattic/legacy-redirector" target="_blank">' . __( 'Plugin Documentation', 'legacy-redirector' ) . '<span class="screen-reader-text"> ' . __( '(opens in a new tab)', 'legacy-redirector' ) . '</span></a></p>' .
+			'<p><a href="https://github.com/Automattic/legacy-redirector/issues" target="_blank">' . __( 'Report an Issue', 'legacy-redirector' ) . '<span class="screen-reader-text"> ' . __( '(opens in a new tab)', 'legacy-redirector' ) . '</span></a></p>';
 	}
 }

@@ -6,6 +6,11 @@
  * and destination checks call the plugin's legacy-redirector/v1 routes, and
  * the autocomplete searches with core's /wp/v2/search endpoint.
  *
+ * The autocomplete follows the ARIA combobox pattern: the destination field
+ * owns a listbox, the highlighted option is exposed through
+ * aria-activedescendant, and wp.a11y.speak() says when suggestions appear,
+ * as do the inline source and destination messages.
+ *
  * Configuration is provided by wp_localize_script() as
  * `legacyRedirectorForm`:
  * - postId            Redirect post ID being edited (0 on the Add page).
@@ -18,6 +23,8 @@
  * - hostNotAllowedMessage  Error shown when the destination host is missing
  *                          from allowed_redirect_hosts. Saving would be
  *                          refused with the same message.
+ * - suggestionsMessage    Announced when destination suggestions appear.
+ * - noSuggestionsMessage  Announced when a search finds nothing.
  */
 jQuery( document ).ready( function ( $ ) {
 	var settings = window.legacyRedirectorForm || {};
@@ -26,6 +33,8 @@ jQuery( document ).ready( function ( $ ) {
 	var searchTimeout;
 	var selectedIndex = -1;
 	var entityDecoder = document.createElement( 'textarea' );
+	var $display = $( '#redirect_to_display' );
+	var $suggestions = $( '#redirect_to_suggestions' );
 
 	// Core's search endpoint returns titles with texturized HTML entities
 	// (e.g. &#8217; for an apostrophe), which .text() would show literally.
@@ -35,22 +44,56 @@ jQuery( document ).ready( function ( $ ) {
 		return entityDecoder.value;
 	}
 
-	// Render search results into the suggestions dropdown; the fetch code
+	// Show or clear one of the inline messages under a field. A visible
+	// message is announced, since the field has lost focus by the time it
+	// appears; an error also marks the field invalid.
+	function setMessage( $message, $field, text ) {
+		if ( ! text ) {
+			$message.hide().text( '' );
+			if ( $field ) {
+				$field.removeAttr( 'aria-invalid' );
+			}
+			return;
+		}
+
+		$message.text( text ).show();
+		if ( $field ) {
+			$field.attr( 'aria-invalid', 'true' );
+		}
+		wp.a11y.speak( text );
+	}
+
+	function showSuggestions() {
+		$suggestions.show();
+		$display.attr( 'aria-expanded', 'true' );
+	}
+
+	function hideSuggestions() {
+		$suggestions.hide();
+		$display.attr( 'aria-expanded', 'false' ).removeAttr( 'aria-activedescendant' );
+		selectedIndex = -1;
+	}
+
+	// Render search results into the suggestions listbox; the fetch code
 	// decides when to call this, this decides what the results look like.
 	function renderSuggestions( posts ) {
 		if ( ! posts.length ) {
-			$( '#redirect_to_suggestions' ).hide();
+			hideSuggestions();
+			wp.a11y.speak( settings.noSuggestionsMessage );
 			return;
 		}
 
 		// Build via DOM APIs, not string concatenation: titles and
 		// type labels are attacker-influenced and must be escaped
 		// in both attribute and text positions.
-		var $container = $( '#redirect_to_suggestions' ).empty();
+		$suggestions.empty();
 		$.each( posts, function ( i, post ) {
 			var title = decodeEntities( post.title );
 			$( '<div>', {
 				'class': 'redirect-suggestion',
+				'id': 'redirect_to_suggestion_' + i,
+				'role': 'option',
+				'aria-selected': 'false',
 				'data-id': post.id,
 				'data-title': title,
 				'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
@@ -58,108 +101,102 @@ jQuery( document ).ready( function ( $ ) {
 				.append(
 					$( '<strong>' ).text( title ),
 					'<br>',
-					$( '<small>' ).css( 'color', '#666' ).text( post.subtype + ' (ID: ' + post.id + ')' )
+					$( '<small>' ).css( 'color', '#646970' ).text( post.subtype + ' (ID: ' + post.id + ')' )
 				)
-				.appendTo( $container );
+				.appendTo( $suggestions );
 		} );
-		$container.show();
 		selectedIndex = -1; // Reset selection when new results appear.
+		$display.removeAttr( 'aria-activedescendant' );
+		showSuggestions();
+		wp.a11y.speak( settings.suggestionsMessage );
 	}
 
 	// Check the source on blur: a duplicate blocks the save, a reserved path
 	// only warns, so both are known before anything is submitted.
 	$( '#redirect_from' ).on( 'blur', function () {
-		var newFrom = $( this ).val().trim();
+		var $field = $( this );
+		var newFrom = $field.val().trim();
 		if ( newFrom === originalFrom || newFrom === '' ) {
-			$( '#redirect_from_error' ).hide();
-			$( '#redirect_from_warning' ).hide();
+			setMessage( $( '#redirect_from_error' ), $field, '' );
+			setMessage( $( '#redirect_from_warning' ), null, '' );
 			return;
 		}
 
 		wp.apiFetch( {
 			path: '/legacy-redirector/v1/check-source?source=' + encodeURIComponent( newFrom ) + '&exclude_id=' + postId
 		} ).then( function ( result ) {
-			if ( result.exists ) {
-				$( '#redirect_from_error' )
-					.text( settings.duplicateMessage )
-					.show();
-			} else {
-				$( '#redirect_from_error' ).hide();
-			}
+			setMessage( $( '#redirect_from_error' ), $field, result.exists ? settings.duplicateMessage : '' );
 
-			if ( result.reserved || result.occupied ) {
-				$( '#redirect_from_warning' )
-					.text( result.reserved ? settings.reservedMessage : settings.occupiedMessage )
-					.show();
-			} else {
-				$( '#redirect_from_warning' ).hide();
+			var warning = '';
+			if ( result.reserved ) {
+				warning = settings.reservedMessage;
+			} else if ( result.occupied ) {
+				warning = settings.occupiedMessage;
 			}
+			setMessage( $( '#redirect_from_warning' ), null, warning );
 		} ).catch( function () {
-			$( '#redirect_from_error' ).hide();
-			$( '#redirect_from_warning' ).hide();
+			setMessage( $( '#redirect_from_error' ), $field, '' );
+			setMessage( $( '#redirect_from_warning' ), null, '' );
 		} );
 	} );
 
 	// Check the destination on blur: a host missing from allowed_redirect_hosts
 	// will be refused at save, so it is flagged before anything is submitted.
-	$( '#redirect_to_display' ).on( 'blur', function () {
+	// Leaving the field also closes the suggestions, as Escape does.
+	$display.on( 'blur', function () {
 		var destination = $( '#redirect_to' ).val().trim();
+
+		hideSuggestions();
 
 		// Only absolute URLs have a host to check.
 		if ( ! /^https?:\/\//i.test( destination ) ) {
-			$( '#redirect_to_error' ).hide();
+			setMessage( $( '#redirect_to_error' ), $display, '' );
 			return;
 		}
 
 		wp.apiFetch( {
 			path: '/legacy-redirector/v1/check-destination?destination=' + encodeURIComponent( destination )
 		} ).then( function ( result ) {
-			if ( false === result.host_allowed ) {
-				$( '#redirect_to_error' )
-					.text( settings.hostNotAllowedMessage )
-					.show();
-			} else {
-				$( '#redirect_to_error' ).hide();
-			}
+			setMessage( $( '#redirect_to_error' ), $display, false === result.host_allowed ? settings.hostNotAllowedMessage : '' );
 		} ).catch( function () {
-			$( '#redirect_to_error' ).hide();
+			setMessage( $( '#redirect_to_error' ), $display, '' );
 		} );
 	} );
 
-	// Update visual highlight for selected suggestion.
+	// Mark the highlighted suggestion, for sight through aria-selected's
+	// styling and for assistive technology through aria-activedescendant.
 	function updateHighlight() {
-		var $suggestions = $( '#redirect_to_suggestions .redirect-suggestion' );
-		$suggestions.css( 'background-color', '#fff' );
-		if ( selectedIndex >= 0 && selectedIndex < $suggestions.length ) {
-			$suggestions.eq( selectedIndex ).css( 'background-color', '#f0f0f1' );
+		var $options = $suggestions.find( '.redirect-suggestion' );
+		$options.attr( 'aria-selected', 'false' );
+		if ( selectedIndex >= 0 && selectedIndex < $options.length ) {
+			var $option = $options.eq( selectedIndex ).attr( 'aria-selected', 'true' );
+			$display.attr( 'aria-activedescendant', $option.attr( 'id' ) );
+			$option[ 0 ].scrollIntoView( { block: 'nearest' } );
+		} else {
+			$display.removeAttr( 'aria-activedescendant' );
 		}
 	}
 
-	// Select the currently highlighted suggestion.
-	function selectCurrentSuggestion() {
-		var $suggestions = $( '#redirect_to_suggestions .redirect-suggestion' );
-		if ( selectedIndex >= 0 && selectedIndex < $suggestions.length ) {
-			var $selected = $suggestions.eq( selectedIndex );
-			var id = $selected.data( 'id' );
-			var title = $selected.data( 'title' );
-			$( '#redirect_to_display' ).val( title + ' (ID: ' + id + ')' );
-			$( '#redirect_to' ).val( id );
-			$( '#redirect_to_suggestions' ).hide();
-			selectedIndex = -1;
-		}
+	// Use a suggestion as the destination.
+	function selectSuggestion( $option ) {
+		var id = $option.data( 'id' );
+		var title = $option.data( 'title' );
+		$display.val( title + ' (ID: ' + id + ')' );
+		$( '#redirect_to' ).val( id );
+		hideSuggestions();
 	}
 
 	// Handle keyboard navigation.
-	$( '#redirect_to_display' ).on( 'keydown', function ( e ) {
-		var $suggestions = $( '#redirect_to_suggestions .redirect-suggestion' );
-		if ( ! $suggestions.length || ! $( '#redirect_to_suggestions' ).is( ':visible' ) ) {
+	$display.on( 'keydown', function ( e ) {
+		var $options = $suggestions.find( '.redirect-suggestion' );
+		if ( ! $options.length || ! $suggestions.is( ':visible' ) ) {
 			return;
 		}
 
 		switch ( e.keyCode ) {
 			case 40: // Down arrow
 				e.preventDefault();
-				selectedIndex = Math.min( selectedIndex + 1, $suggestions.length - 1 );
+				selectedIndex = Math.min( selectedIndex + 1, $options.length - 1 );
 				updateHighlight();
 				break;
 			case 38: // Up arrow
@@ -170,18 +207,18 @@ jQuery( document ).ready( function ( $ ) {
 			case 13: // Enter
 				if ( selectedIndex >= 0 ) {
 					e.preventDefault();
-					selectCurrentSuggestion();
+					selectSuggestion( $options.eq( selectedIndex ) );
 				}
 				break;
 			case 27: // Escape
-				$( '#redirect_to_suggestions' ).hide();
-				selectedIndex = -1;
+				e.preventDefault();
+				hideSuggestions();
 				break;
 		}
 	} );
 
 	// Sync display field to hidden field when user types directly.
-	$( '#redirect_to_display' ).on( 'input', function () {
+	$display.on( 'input', function () {
 		var val = $( this ).val().trim();
 		$( '#redirect_to' ).val( val );
 		selectedIndex = -1; // Reset selection on new input.
@@ -189,44 +226,27 @@ jQuery( document ).ready( function ( $ ) {
 		// Only search if it looks like text (not a URL or path or number).
 		clearTimeout( searchTimeout );
 		if ( val.length < 2 || /^[\/0-9]/.test( val ) || /^https?:/.test( val ) ) {
-			$( '#redirect_to_suggestions' ).hide();
+			hideSuggestions();
 			return;
 		}
 
 		searchTimeout = setTimeout( function () {
 			wp.apiFetch( {
 				path: '/wp/v2/search?search=' + encodeURIComponent( val ) + '&subtype=post,page&per_page=10'
-			} ).then( renderSuggestions ).catch( function () {
-				$( '#redirect_to_suggestions' ).hide();
-			} );
+			} ).then( renderSuggestions ).catch( hideSuggestions );
 		}, 300 );
 	} );
 
-	// Handle suggestion click.
-	$( document ).on( 'click', '.redirect-suggestion', function () {
-		var id = $( this ).data( 'id' );
-		var title = $( this ).data( 'title' );
-		$( '#redirect_to_display' ).val( title + ' (ID: ' + id + ')' );
-		$( '#redirect_to' ).val( id );
-		$( '#redirect_to_suggestions' ).hide();
-		selectedIndex = -1;
+	// Select on mousedown, before the field's blur closes the list, and keep
+	// focus in the field so typing can carry on.
+	$suggestions.on( 'mousedown', '.redirect-suggestion', function ( e ) {
+		e.preventDefault();
+		selectSuggestion( $( this ) );
 	} );
 
 	// Highlight on hover (also updates selectedIndex for consistency).
-	$( document ).on( 'mouseenter', '.redirect-suggestion', function () {
-		var $suggestions = $( '#redirect_to_suggestions .redirect-suggestion' );
-		selectedIndex = $suggestions.index( this );
+	$suggestions.on( 'mouseenter', '.redirect-suggestion', function () {
+		selectedIndex = $suggestions.find( '.redirect-suggestion' ).index( this );
 		updateHighlight();
-	} ).on( 'mouseleave', '.redirect-suggestion', function () {
-		// Keep highlight if using keyboard, otherwise clear.
-		$( this ).css( 'background-color', '#fff' );
-	} );
-
-	// Hide suggestions on click outside.
-	$( document ).on( 'click', function ( e ) {
-		if ( ! $( e.target ).closest( '#redirect_to_display, #redirect_to_suggestions' ).length ) {
-			$( '#redirect_to_suggestions' ).hide();
-			selectedIndex = -1;
-		}
 	} );
 } );

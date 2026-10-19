@@ -55,6 +55,7 @@ final class RowActionsManager {
 		$screen = get_current_screen();
 		if ( $screen && 'edit-' . PostType::POST_TYPE === $screen->id ) {
 			wp_enqueue_script( 'wp-api-fetch' );
+			wp_enqueue_script( 'wp-a11y' );
 		}
 	}
 
@@ -89,9 +90,12 @@ final class RowActionsManager {
 
 		// Edit link - use our custom Edit Redirect page.
 		$edit_link       = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $post->ID );
+		$source          = $redirect->source()->path();
 		$actions['edit'] = sprintf(
-			'<a href="%1$s">%2$s</a>',
+			'<a href="%1$s" aria-label="%2$s">%3$s</a>',
 			esc_url( $edit_link ),
+			/* translators: %s: redirect source path */
+			esc_attr( sprintf( __( 'Edit redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
 			esc_html__( 'Edit', 'legacy-redirector' )
 		);
 
@@ -108,8 +112,10 @@ final class RowActionsManager {
 				'disable_redirect_' . $post->ID
 			);
 			$actions['disable'] = sprintf(
-				'<a href="%1$s">%2$s</a>',
+				'<a href="%1$s" aria-label="%2$s">%3$s</a>',
 				esc_url( $disable_link ),
+				/* translators: %s: redirect source path */
+				esc_attr( sprintf( __( 'Disable redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
 				esc_html__( 'Disable', 'legacy-redirector' )
 			);
 		} elseif ( '' === (string) get_post_meta( $post->ID, Upgrader::DUPLICATE_META_KEY, true ) ) {
@@ -127,8 +133,10 @@ final class RowActionsManager {
 				'enable_redirect_' . $post->ID
 			);
 			$actions['enable'] = sprintf(
-				'<a href="%1$s">%2$s</a>',
+				'<a href="%1$s" aria-label="%2$s">%3$s</a>',
 				esc_url( $enable_link ),
+				/* translators: %s: redirect source path */
+				esc_attr( sprintf( __( 'Enable redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
 				esc_html__( 'Enable', 'legacy-redirector' )
 			);
 		}
@@ -146,10 +154,12 @@ final class RowActionsManager {
 			'_validate_redirect'
 		);
 		$actions['validate'] = sprintf(
-			'<a href="%1$s" class="validate-redirect" data-redirect-id="%2$d" data-source="%3$s">%4$s</a>',
+			'<a href="%1$s" class="validate-redirect" data-redirect-id="%2$d" data-source="%3$s" aria-label="%4$s">%5$s</a>',
 			esc_url( $validate_link ),
 			$post->ID,
-			esc_attr( $redirect->source()->path() ),
+			esc_attr( $source ),
+			/* translators: %s: redirect source path */
+			esc_attr( sprintf( __( 'Test redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
 			esc_html__( 'Test', 'legacy-redirector' )
 		);
 
@@ -157,8 +167,10 @@ final class RowActionsManager {
 		// resolved against the site's base URL, which is not the domain root
 		// on a subsite or on a single site installed at example.com/blog.
 		$actions['follow'] = sprintf(
-			'<a href="%1$s" target="_blank">%2$s</a>',
-			esc_url( home_url( $redirect->source()->path() ) ),
+			'<a href="%1$s" target="_blank" aria-label="%2$s">%3$s</a>',
+			esc_url( home_url( $source ) ),
+			/* translators: %s: redirect source path */
+			esc_attr( sprintf( __( 'Follow redirect from &#8220;%s&#8221; (opens in a new tab)', 'legacy-redirector' ), $source ) ),
 			esc_html__( 'Follow', 'legacy-redirector' )
 		);
 
@@ -186,6 +198,12 @@ final class RowActionsManager {
 				opacity: 0.5;
 				pointer-events: none;
 			}
+			.legacy-redirector-finding summary {
+				cursor: pointer;
+			}
+			.legacy-redirector-finding p {
+				margin: 4px 0 0;
+			}
 		</style>
 		<script>
 		jQuery(document).ready(function($) {
@@ -193,35 +211,38 @@ final class RowActionsManager {
 				testing: '<?php echo esc_js( __( 'Testing...', 'legacy-redirector' ) ); ?>',
 				test: '<?php echo esc_js( __( 'Test', 'legacy-redirector' ) ); ?>',
 				noIssues: '<?php echo esc_js( __( 'No issues found', 'legacy-redirector' ) ); ?>',
-				requestFailed: '<?php echo esc_js( __( 'Test request failed.', 'legacy-redirector' ) ); ?>'
+				requestFailed: '<?php echo esc_js( __( 'Test request failed.', 'legacy-redirector' ) ); ?>',
+				problem: '<?php echo esc_js( __( 'Problem:', 'legacy-redirector' ) ); ?>',
+				warning: '<?php echo esc_js( __( 'Warning:', 'legacy-redirector' ) ); ?>',
+				tested: '<?php /* translators: %s: redirect source path */ echo esc_js( __( 'Tested %s:', 'legacy-redirector' ) ); ?>',
+				bulkDone: '<?php echo esc_js( __( 'Finished testing the selected redirects. The results are in the Health column.', 'legacy-redirector' ) ); ?>'
 			};
 
-			// One line in the Health cell, in the same visual language the
-			// column renders with: severity icon plus text.
-			function healthLine( icon, color, text, title ) {
-				// No text node between icon and label, matching the markup the
-				// column renders server-side, so a tested row reads identically.
-				var $line = $( '<div/>' )
-					.append( $( '<span>', {
-						'class': 'dashicons ' + icon,
-						'style': 'color: ' + color + ';',
-						'aria-hidden': 'true'
-					} ) );
+			// One line in the Health cell, in the same markup the column
+			// renders server-side, so a tested row reads identically: a
+			// severity icon and label, opening to the detail when there is one.
+			function healthLine( icon, color, severity, text, detailText ) {
+				var $icon = $( '<span>', {
+					'class': 'dashicons ' + icon,
+					'style': 'color: ' + color + ';',
+					'aria-hidden': 'true'
+				} );
 
-				var $text = $( '<span/>' ).text( text );
-				$line.append( $text );
-
-				// What to do about it: on hover, and as text for screen
-				// readers, which do not reliably announce a title.
-				if ( title ) {
-					$text.attr( 'title', title );
-					$line.append( $( '<span class="screen-reader-text"/>' ).text( ' ' + title ) );
+				if ( ! detailText ) {
+					return $( '<div/>' ).append( $icon, $( '<span/>' ).text( text ) );
 				}
 
-				return $line;
+				var $summary = $( '<summary/>' ).append( $icon );
+				if ( severity ) {
+					$summary.append( $( '<span class="screen-reader-text"/>' ).text( severity + ' ' ) );
+				}
+				$summary.append( document.createTextNode( text ) );
+
+				return $( '<details class="legacy-redirector-finding"/>' )
+					.append( $summary, $( '<p/>' ).text( detailText ) );
 			}
 
-			// The hover detail for a line: what is wrong, then what to do.
+			// The detail for a line: what is wrong, then what to do.
 			function detail( description, remedy ) {
 				return [ description, remedy ].filter( Boolean ).join( ' ' );
 			}
@@ -233,44 +254,61 @@ final class RowActionsManager {
 			// tick, dormant is a judgement call, the rest mean it is not doing
 			// its job right now.
 			var probeStyles = {
-				'confirmed': { icon: 'dashicons-yes-alt', color: '#46b450' },
-				'dormant': { icon: 'dashicons-flag', color: '#dba617' },
-				'diverted': { icon: 'dashicons-warning', color: '#d63638' },
-				'not-firing': { icon: 'dashicons-warning', color: '#d63638' },
-				'unreachable': { icon: 'dashicons-editor-help', color: '#787c82' }
+				'confirmed': { icon: 'dashicons-yes-alt', color: '#00a32a', severity: '' },
+				'dormant': { icon: 'dashicons-flag', color: '#dba617', severity: i18n.warning },
+				'diverted': { icon: 'dashicons-warning', color: '#d63638', severity: i18n.problem },
+				'not-firing': { icon: 'dashicons-warning', color: '#d63638', severity: i18n.problem },
+				'unreachable': { icon: 'dashicons-editor-help', color: '#787c82', severity: '' }
 			};
 
+			// Returns the lines' labels, for announcing the result.
 			function renderResult( $row, result ) {
 				var $healthColumn = $row.find( 'td.health' ).empty();
 				var warnings = result.warnings || [];
 				var probe = result.probe || null;
+				var labels = [];
+
+				function add( icon, color, severity, text, detailText ) {
+					$healthColumn.append( healthLine( icon, color, severity, text, detailText ) );
+					labels.push( severity ? severity + ' ' + text : text );
+				}
 
 				// The live behaviour leads - "the redirect works" - and any
 				// problem or warning follows as the "but...".
 				if ( probe && probeStyles[ probe.status ] ) {
 					var style = probeStyles[ probe.status ];
-					$healthColumn.append( healthLine( style.icon, style.color, probe.message, probe.remedy ) );
+					add( style.icon, style.color, style.severity, probe.message, probe.remedy );
 				}
 
 				if ( result.valid ) {
 					// A probe line is the row's verdict, so the plain tick is
 					// only for a response that has none.
 					if ( ! warnings.length && ! probe ) {
-						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
+						add( 'dashicons-yes-alt', '#00a32a', '', i18n.noIssues );
 					}
 				} else {
-					$healthColumn.append( healthLine( 'dashicons-warning', '#d63638', result.message || i18n.requestFailed, result.remedy ) );
+					add( 'dashicons-warning', '#d63638', i18n.problem, result.message || i18n.requestFailed, result.remedy );
 				}
 
 				$.each( warnings, function ( i, warning ) {
-					$healthColumn.append( healthLine( 'dashicons-flag', '#dba617', warning.label, detail( warning.description, warning.remedy ) ) );
+					add( 'dashicons-flag', '#dba617', i18n.warning, warning.label, detail( warning.description, warning.remedy ) );
 				} );
+
+				return labels;
 			}
 
 			// Test one row; returns the request promise so callers can chain.
-			function testRow( $row ) {
+			// A single test announces its result; a bulk run announces once,
+			// at the end, rather than talking over itself.
+			function testRow( $row, quiet ) {
 				var $link = $row.find( '.validate-redirect' );
 				var redirectId = $link.data( 'redirect-id' );
+
+				function report( labels ) {
+					if ( ! quiet ) {
+						wp.a11y.speak( i18n.tested.replace( '%s', $link.data( 'source' ) ) + ' ' + labels.join( ' ' ) );
+					}
+				}
 
 				$link.addClass( 'validating' ).text( i18n.testing );
 
@@ -278,9 +316,9 @@ final class RowActionsManager {
 					path: '/legacy-redirector/v1/redirects/' + redirectId + '/test',
 					method: 'POST'
 				} ).then( function ( result ) {
-					renderResult( $row, result );
+					report( renderResult( $row, result ) );
 				} ).catch( function ( error ) {
-					renderResult( $row, { valid: false, message: ( error && error.message ) || i18n.requestFailed } );
+					report( renderResult( $row, { valid: false, message: ( error && error.message ) || i18n.requestFailed } ) );
 				} ).then( function () {
 					$link.removeClass( 'validating' ).text( i18n.test );
 				} );
@@ -288,12 +326,16 @@ final class RowActionsManager {
 
 			$(document).on('click', '.validate-redirect', function(e) {
 				e.preventDefault();
-				testRow( $( this ).closest( 'tr' ) );
+				// pointer-events only stops the mouse; Enter still reaches here.
+				if ( $( this ).hasClass( 'validating' ) ) {
+					return;
+				}
+				testRow( $( this ).closest( 'tr' ), false );
 			});
 
 			// The Test bulk action runs the same per-row check for every
 			// ticked row, one at a time so a full-page selection does not
-			// fire a burst of HTTP checks at the server.
+			// fire a burst of HTTP checks at the server, then says it is done.
 			$( '#posts-filter' ).on( 'submit', function ( e ) {
 				var action = $( '#bulk-action-selector-top' ).val();
 				var action2 = $( '#bulk-action-selector-bottom' ).val();
@@ -308,11 +350,19 @@ final class RowActionsManager {
 					return $( this ).closest( 'tr' )[ 0 ];
 				} ).get();
 
+				$( '#legacy-redirector-bulk-test-notice' ).remove();
+
 				( function next() {
 					var row = rows.shift();
 					if ( row ) {
-						testRow( $( row ) ).then( next, next );
+						testRow( $( row ), true ).then( next, next );
+						return;
 					}
+
+					$( '<div id="legacy-redirector-bulk-test-notice" class="notice notice-success"/>' )
+						.append( $( '<p/>' ).text( i18n.bulkDone ) )
+						.insertAfter( '.wp-header-end' );
+					wp.a11y.speak( i18n.bulkDone );
 				} )();
 
 				$( '#bulk-action-selector-top, #bulk-action-selector-bottom' ).val( '-1' );

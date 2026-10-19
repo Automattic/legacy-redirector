@@ -380,6 +380,11 @@ final class ListRedirectsTest extends TestCase {
 		$output = ob_get_clean();
 
 		$this->assertStringContainsString( 'Not fully checked', $output );
+		// The hint is in a disclosure keyboard and touch users can open, not a
+		// hover-only title.
+		$this->assertStringContainsString( '<details class="legacy-redirector-finding">', $output );
+		$this->assertStringContainsString( 'Use Test to check it responds.</p>', $output );
+		$this->assertStringNotContainsString( 'title=', $output );
 		$this->assertStringNotContainsString( 'No issues found', $output );
 	}
 
@@ -531,6 +536,12 @@ final class ListRedirectsTest extends TestCase {
 		// Follow link should contain the from URL.
 		$this->assertStringContainsString( $from_url, $actions['follow'] );
 		$this->assertStringContainsString( 'target="_blank"', $actions['follow'] );
+
+		// Each action names its redirect, as core's row actions name their post.
+		$this->assertStringContainsString( 'aria-label="Edit redirect from &#8220;/test-row-actions&#8221;"', $actions['edit'] );
+		$this->assertStringContainsString( 'aria-label="Disable redirect from &#8220;/test-row-actions&#8221;"', $actions['disable'] );
+		$this->assertStringContainsString( 'aria-label="Test redirect from &#8220;/test-row-actions&#8221;"', $actions['validate'] );
+		$this->assertStringContainsString( '(opens in a new tab)', $actions['follow'] );
 	}
 
 	/**

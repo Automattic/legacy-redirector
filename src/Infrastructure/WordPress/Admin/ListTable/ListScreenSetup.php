@@ -193,7 +193,7 @@ final class ListScreenSetup {
 			'<li>' . __( '<strong>Validate all redirects</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. Validation never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals. The same check runs in the background, a few seconds every five minutes, so every redirect is checked regularly without anyone pressing the button; the line beside the button says when the last full check finished and how long one takes.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored, because a timeout says nothing definite about a redirect.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'So a clean validation does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector test</code>) can see that. On the command line, <code>wp legacy-redirector validate</code> and <code>test</code> do the same two jobs. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look. Every finding says what to do about it: hover over it in the Health column. Nothing disables a redirect automatically, because almost no problem has a fix the plugin can safely apply.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'So a clean validation does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector test</code>) can see that. On the command line, <code>wp legacy-redirector validate</code> and <code>test</code> do the same two jobs. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look. Every finding says what to do about it: select it in the Health column to read more. Nothing disables a redirect automatically, because almost no problem has a fix the plugin can safely apply.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
@@ -256,8 +256,8 @@ final class ListScreenSetup {
 	 */
 	private function get_help_sidebar(): string {
 		return '<p><strong>' . __( 'For more information:', 'legacy-redirector' ) . '</strong></p>' .
-			'<p><a href="https://github.com/Automattic/legacy-redirector" target="_blank">' . __( 'Plugin Documentation', 'legacy-redirector' ) . '</a></p>' .
-			'<p><a href="https://github.com/Automattic/legacy-redirector/issues" target="_blank">' . __( 'Report an Issue', 'legacy-redirector' ) . '</a></p>';
+			'<p><a href="https://github.com/Automattic/legacy-redirector" target="_blank">' . __( 'Plugin Documentation', 'legacy-redirector' ) . '<span class="screen-reader-text"> ' . __( '(opens in a new tab)', 'legacy-redirector' ) . '</span></a></p>' .
+			'<p><a href="https://github.com/Automattic/legacy-redirector/issues" target="_blank">' . __( 'Report an Issue', 'legacy-redirector' ) . '<span class="screen-reader-text"> ' . __( '(opens in a new tab)', 'legacy-redirector' ) . '</span></a></p>';
 	}
 
 	/**
