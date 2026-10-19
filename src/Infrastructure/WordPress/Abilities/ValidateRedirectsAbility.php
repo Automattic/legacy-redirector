@@ -111,6 +111,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 						'items'       => array(
 							'type' => array( 'string', 'integer' ),
 						),
+						'maxItems'    => RedirectSchema::MAX_IDENTIFIERS,
 						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, the redirects the background check flagged are re-checked.', 'legacy-redirector' ),
 					),
 					'limit'     => array(

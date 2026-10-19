@@ -20,6 +20,16 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 final class RedirectSchema {
 
 	/**
+	 * Most redirects one call may name.
+	 *
+	 * Each identifier is a lookup, so an uncapped list is unbounded work in a
+	 * single request. Larger sets belong on the command line.
+	 *
+	 * @var int
+	 */
+	public const int MAX_IDENTIFIERS = 1000;
+
+	/**
 	 * Get the JSON Schema properties describing a single redirect.
 	 *
 	 * @return array<string, array<string, mixed>> The schema properties.
@@ -115,6 +125,7 @@ final class RedirectSchema {
 				'type' => array( 'string', 'integer' ),
 			),
 			'minItems'    => 1,
+			'maxItems'    => self::MAX_IDENTIFIERS,
 			'description' => $description,
 		);
 	}

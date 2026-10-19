@@ -12,7 +12,7 @@ requests pay nothing for this.
 
 ## What gets registered
 
-One ability category, `legacy-redirects`, and eight abilities within it.
+One ability category, `legacy-redirects`, and nine abilities within it.
 
 The annotations matter: MCP clients read them to decide what to confirm with a user before
 calling. `readonly` means the ability cannot change anything, `destructive` means data is
@@ -73,7 +73,7 @@ foreach ( array( "create-redirect", "get-redirect", "list-redirects", "update-re
 }'
 ```
 
-Eight `ok` lines means everything is in place. On WordPress 6.8 the function does not
+Nine `ok` lines means everything is in place. On WordPress 6.8 the function does not
 exist, which is expected rather than a fault.
 
 ## Batch operations report per-redirect failures
@@ -97,6 +97,10 @@ by `delete-redirect`. `failed` is the same shape on all three.
 
 An agent should read `failed` rather than inferring success from a non-error response: a
 call that changed nothing at all still returns normally.
+
+A list may name up to 1,000 redirects, here and in `validate-redirects`. A longer list is
+rejected by the input schema before anything is looked up or changed: split it across
+calls, or use [WP-CLI](cli.md) for bulk work.
 
 ## What is deliberately not an ability
 
