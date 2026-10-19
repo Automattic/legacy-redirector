@@ -32,6 +32,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
@@ -525,5 +526,94 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
 		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+	}
+	/**
+	 * Test --fix leaves a redirect enabled when its URL check could not connect.
+	 *
+	 * A failed request says nothing about the destination, so switching the
+	 * redirect off would turn a slow host into a 404 for every visitor.
+	 */
+	public function test_validate_fix_leaves_a_failed_url_check_enabled(): void {
+		$redirect_id = $this->create_redirect( '/fix-unreachable', 'https://example.com/slow' );
+
+		$this->fix_with_url_response( new \WP_Error( 'http_request_failed', 'Operation timed out' ) );
+
+		$this->assert_stdout_contains( 'Request failed' );
+		$this->assert_warning_contains( '1 redirect(s) could not be checked conclusively and were left enabled.' );
+		$this->assert_success_contains( 'Disabled 0 broken redirect(s).' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test --fix leaves a redirect enabled when its destination answers with a server error.
+	 */
+	public function test_validate_fix_leaves_a_server_error_enabled(): void {
+		$redirect_id = $this->create_redirect( '/fix-erroring', 'https://example.com/down' );
+
+		$this->fix_with_url_response( array( 'response' => array( 'code' => 503 ) ) );
+
+		$this->assert_stdout_contains( 'Destination returns server error' );
+		$this->assert_warning_contains( '1 redirect(s) could not be checked conclusively and were left enabled.' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test --fix still disables a redirect whose destination returns a 404.
+	 */
+	public function test_validate_fix_disables_a_url_returning_404(): void {
+		$redirect_id = $this->create_redirect( '/fix-gone', 'https://example.com/gone' );
+
+		$this->fix_with_url_response( array( 'response' => array( 'code' => 404 ) ) );
+
+		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test --fix reports a redirect it could not disable, and fails the run.
+	 *
+	 * Ending with a success line would tell a scheduled job everything broken
+	 * had been switched off when it had not.
+	 */
+	public function test_validate_fix_reports_a_redirect_it_could_not_disable(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/fix-refused', $post_id );
+		wp_delete_post( $post_id, true );
+
+		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+
+		try {
+			$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
+		} finally {
+			remove_filter( 'wp_insert_post_empty_content', '__return_true' );
+		}
+
+		$this->assert_warning_contains( sprintf( 'Could not disable redirect: %d', $redirect_id ) );
+		$this->assert_error_contains( 'Only disabled 0 of 1 broken redirect(s).' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Run validate --check-urls --fix with every HTTP request answered by a canned response.
+	 *
+	 * @param array|\WP_Error $response The response to return.
+	 * @return void
+	 */
+	private function fix_with_url_response( $response ): void {
+		$respond = static fn() => $response;
+		add_filter( 'pre_http_request', $respond );
+
+		try {
+			$this->invoke_command(
+				$this->command,
+				array(),
+				array(
+					'check-urls' => true,
+					'fix'        => true,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_http_request', $respond );
+		}
 	}
 }

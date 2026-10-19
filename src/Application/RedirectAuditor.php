@@ -471,6 +471,13 @@ class RedirectAuditor {
 
 		$status_code = (int) wp_remote_retrieve_response_code( $response );
 
+		// Core and the VIP helper report transport failures as a WP_Error, so
+		// a response without a status only comes from a misbehaving
+		// pre_http_request filter. It says nothing about the destination.
+		if ( $status_code <= 0 ) {
+			return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, 'no status code' );
+		}
+
 		if ( 404 === $status_code ) {
 			return new AuditFinding( $redirect, AuditFindingType::URL_NOT_FOUND );
 		}
@@ -501,7 +508,8 @@ class RedirectAuditor {
 	 *         'diverted'    the source redirects somewhere else ('location');
 	 *         'dormant'     the source serves content, so the redirect never fires;
 	 *         'not-firing'  the source 404s without redirecting;
-	 *         'unreachable' the site could not request itself.
+	 *         'unreachable' the check could not tell: the request failed, or the
+	 *                     site answered with a server error, a 429 or no status.
 	 */
 	public function probe_source( Redirect $redirect ): array {
 		$source_url = home_url( $redirect->source()->path() );
@@ -513,6 +521,13 @@ class RedirectAuditor {
 
 		$code     = (int) wp_remote_retrieve_response_code( $response );
 		$location = (string) wp_remote_retrieve_header( $response, 'location' );
+
+		// A server error, or a 429 from a site rate-limiting a run of requests
+		// to itself, is the site failing to answer, not the source serving
+		// content. A missing status only comes from a misbehaving filter.
+		if ( $code <= 0 || 429 === $code || $code >= 500 ) {
+			return array( 'status' => 'unreachable' );
+		}
 
 		if ( $code >= 300 && $code < 400 ) {
 			// A hop back to the source itself (a trailing-slash canonical, a

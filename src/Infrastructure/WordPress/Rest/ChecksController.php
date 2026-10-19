@@ -277,7 +277,7 @@ final class ChecksController {
 			'diverted'   => sprintf( __( 'The source redirects, but to %s rather than the stored destination.', 'legacy-redirector' ), $location ),
 			'dormant'    => __( 'The source currently serves content, so the redirect lies dormant and did not fire.', 'legacy-redirector' ),
 			'not-firing' => __( 'The source returns a 404 without redirecting: the redirect did not fire.', 'legacy-redirector' ),
-			default      => __( 'Could not confirm live behaviour: the site could not request itself.', 'legacy-redirector' ),
+			default      => __( 'Could not confirm live behavior: the request to the source failed, or the site answered with an error. Try again later.', 'legacy-redirector' ),
 		};
 
 		return array(

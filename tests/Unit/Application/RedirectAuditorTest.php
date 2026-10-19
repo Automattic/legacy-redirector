@@ -392,6 +392,22 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test a response without a status code is a failed request, not a pass.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_missing_status_as_a_failed_request(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+
+		$auditor = new TestableRedirectAuditor( 0 );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/page' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_REQUEST_FAILED, $finding->type() );
+		$this->assertFalse( $finding->is_conclusive() );
+	}
+
+	/**
 	 * Test the probe confirms a source that redirects to its destination.
 	 *
 	 * A trailing-slash difference in the Location header is not a divergence.
@@ -536,6 +552,56 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
 
 		$this->assertSame( array( 'status' => 'dormant' ), $this->auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test a source answering with an error is unreachable, not dormant.
+	 *
+	 * A server error, a 429 from a site rate-limiting requests to itself, or
+	 * no status at all is the site failing to answer. None of them means
+	 * content is winning over the redirect.
+	 *
+	 * @dataProvider unreachable_status_provider
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 *
+	 * @param int $code The status the source answers with.
+	 */
+	public function test_probe_source_reports_an_erroring_site_as_unreachable( int $code ): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => $code ) ) );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Statuses that mean the site failed to answer.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public function unreachable_status_provider(): array {
+		return array(
+			'server error'        => array( 500 ),
+			'service unavailable' => array( 503 ),
+			'too many requests'   => array( 429 ),
+			'no status'           => array( 0 ),
+		);
+	}
+
+	/**
+	 * Test a forbidden source is still dormant.
+	 *
+	 * The site answered with its own response, so the 404 the redirect
+	 * needs never happened.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_treats_a_forbidden_source_as_dormant(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 403 ) ) );
+
+		$this->assertSame( array( 'status' => 'dormant' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
 	}
 
 	/**
