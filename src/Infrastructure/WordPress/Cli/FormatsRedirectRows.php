@@ -52,24 +52,10 @@ trait FormatsRedirectRows {
 	 */
 	private function finding_row( AuditFinding $finding ): array {
 		return $this->redirect_row( $finding->redirect() ) + array(
-			'severity' => self::severity( $finding ),
+			'severity' => $finding->severity(),
 			'issue'    => $finding->label(),
 			'detail'   => $finding->description(),
 			'remedy'   => $finding->remedy(),
 		);
-	}
-
-	/**
-	 * How seriously to take a finding: a problem, a warning, or a check that could not tell.
-	 *
-	 * @param AuditFinding $finding The finding.
-	 * @return string 'problem', 'warning' or 'inconclusive'.
-	 */
-	private static function severity( AuditFinding $finding ): string {
-		if ( $finding->is_warning() ) {
-			return 'warning';
-		}
-
-		return $finding->is_conclusive() ? 'problem' : 'inconclusive';
 	}
 }

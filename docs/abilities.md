@@ -27,7 +27,7 @@ calling once.
 | `legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects | No | No | Yes |
 | `legacy-redirector/set-redirect-status` | Enable or disable one or more redirects | No | No | Yes |
 | `legacy-redirector/delete-redirect` | Delete one or more redirects | No | **Yes** | Yes |
-| `legacy-redirector/validate-redirects` | Check redirects' stored details for problems, say what to do about each, and record the result; given none, re-check the flagged ones | No | No | Yes |
+| `legacy-redirector/validate-redirects` | Check redirects' stored details for problems, say what to do about each, and record the result; given none, re-check the flagged ones, a page at a time | No | No | Yes |
 | `legacy-redirector/test-redirects` | Check up to 20 named redirects live: whether the destination responds and the source redirects | Yes | No | Yes |
 | `legacy-redirector/find-redirect-domains` | List the domains destinations point at | Yes | No | Yes |
 

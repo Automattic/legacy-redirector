@@ -171,6 +171,45 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * Test paging through flagged redirects reaches every one, even as checking unflags some.
+	 *
+	 * A redirect found fine drops off the flagged list when it is checked,
+	 * so a plain offset would skip the one that moved into its place.
+	 *
+	 * @return void
+	 */
+	public function test_validate_pages_through_flagged_redirects_without_skipping(): void {
+		$fixed  = $this->create_redirect( '/page-a', 'https://later-allowed.example.net/a' );
+		$second = $this->create_redirect( '/page-b', 'https://not-allowed.example.net/b' );
+		$third  = $this->create_redirect( '/page-c', 'https://not-allowed.example.net/c' );
+		foreach ( array( $fixed, $second, $third ) as $id ) {
+			update_post_meta( $id, AuditFlags::META_KEY, 'problem' );
+		}
+
+		// The first redirect's host is allowed after it was flagged.
+		$allow = static fn( array $hosts ): array => array_merge( $hosts, array( 'later-allowed.example.net' ) );
+		add_filter( 'allowed_redirect_hosts', $allow );
+
+		try {
+			$first_page  = $this->ability( 'validate-redirects' )->execute( array( 'limit' => 2 ) );
+			$second_page = $this->ability( 'validate-redirects' )->execute(
+				array(
+					'limit'  => 2,
+					'offset' => $first_page['next_offset'],
+				)
+			);
+		} finally {
+			remove_filter( 'allowed_redirect_hosts', $allow );
+		}
+
+		$this->assertSame( 2, $first_page['checked'] );
+		$this->assertSame( 1, $first_page['next_offset'] );
+		$this->assertSame( 2, $first_page['flagged'] );
+		$this->assertSame( array( '/page-c' ), array_column( $second_page['issues'], 'from' ) );
+		$this->assertNull( $second_page['next_offset'] );
+	}
+
+	/**
 	 * Test a redirect can be created, read, updated and deleted through the abilities.
 	 *
 	 * @return void

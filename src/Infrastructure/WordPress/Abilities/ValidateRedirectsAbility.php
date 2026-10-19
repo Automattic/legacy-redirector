@@ -101,7 +101,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
-			'description'         => __( 'Checks redirects\' stored details for problems, without requesting any URL: destination posts that have been deleted, trashed, or unpublished, external hosts missing from the allowed_redirect_hosts filter, and rows whose data cannot be read. Also warns about sources on paths WordPress itself serves, such as /wp-admin, and possible loops through other redirects. Each finding says what is wrong and what to do about it. Records the result, so the admin "Has issues" view and menu badge stay in step. Given no redirects, it re-checks the ones the background check flagged. To check whether a redirect works live, use test-redirects.', 'legacy-redirector' ),
+			'description'         => __( 'Checks redirects\' stored details for problems, without requesting any URL: destination posts that have been deleted, trashed, or unpublished, external hosts missing from the allowed_redirect_hosts filter, and rows whose data cannot be read. Also warns about sources on paths WordPress itself serves, such as /wp-admin, and possible loops through other redirects. Each finding says what is wrong and what to do about it. Records the result, so the admin "Has issues" view and menu badge stay in step. Given no redirects, it re-checks the ones the background check flagged, a page at a time: pass next_offset back as offset to continue. To check whether a redirect works live, use test-redirects.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -120,13 +120,19 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 						'default'     => 100,
 						'description' => __( 'How many flagged redirects to re-check when none are given.', 'legacy-redirector' ),
 					),
+					'offset'    => array(
+						'type'        => 'integer',
+						'minimum'     => 0,
+						'default'     => 0,
+						'description' => __( 'How many flagged redirects to skip when none are given. Use the next_offset from the previous call.', 'legacy-redirector' ),
+					),
 				),
 				'additionalProperties' => false,
 				'default'              => array(),
 			),
 			'output_schema'       => array(
 				'type'                 => 'object',
-				'required'             => array( 'checked', 'issues', 'last_full_check', 'failed' ),
+				'required'             => array( 'checked', 'issues', 'flagged', 'next_offset', 'last_full_check', 'failed' ),
 				'properties'           => array(
 					'checked'         => array(
 						'type'        => 'integer',
@@ -136,6 +142,14 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 						'type'        => 'array',
 						'description' => __( 'What was found, one entry per finding.', 'legacy-redirector' ),
 						'items'       => self::finding_schema(),
+					),
+					'flagged'         => array(
+						'type'        => 'integer',
+						'description' => __( 'How many redirects are flagged now, after this check.', 'legacy-redirector' ),
+					),
+					'next_offset'     => array(
+						'type'        => array( 'integer', 'null' ),
+						'description' => __( 'The offset for the next page of flagged redirects, or null when there are no more (or redirects were named).', 'legacy-redirector' ),
 					),
 					'last_full_check' => array(
 						'type'        => array( 'string', 'null' ),
@@ -162,28 +176,42 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	/**
 	 * Validate the redirects.
 	 *
+	 * Given no redirects, it pages through the flagged ones. A redirect
+	 * found fine is unflagged by checking it, which shifts every later one
+	 * forward, so the next page starts after only those still flagged; a
+	 * plain offset would skip one redirect for every one fixed.
+	 *
 	 * @param mixed $input The validated ability input.
-	 * @return array{checked: int, issues: array<int, array<string, mixed>>, last_full_check: string|null, failed: array<int, array{redirect: string, reason: string}>} The outcome.
+	 * @return array{checked: int, issues: array<int, array<string, mixed>>, flagged: int, next_offset: int|null, last_full_check: string|null, failed: array<int, array{redirect: string, reason: string}>} The outcome.
 	 */
 	public function execute( $input = array() ): array {
 		$input    = is_array( $input ) ? $input : array();
 		$failures = array();
+		$named    = ! empty( $input['redirects'] );
+		$offset   = (int) ( $input['offset'] ?? 0 );
+		$limit    = (int) ( $input['limit'] ?? 100 );
 
-		if ( ! empty( $input['redirects'] ) ) {
+		if ( $named ) {
 			$items     = $this->batch->resolve( $input['redirects'] );
 			$failures  = BatchFailures::format( $items );
 			$redirects = RedirectBatch::redirects( $items );
 		} else {
 			$redirects = $this->query_repository->find_matching(
-				new RedirectCriteria( null, null, null, 'ID', 'ASC', (int) ( $input['limit'] ?? 100 ), 0, 'any' )
+				new RedirectCriteria( null, null, null, 'ID', 'ASC', $limit, $offset, 'any' )
 			);
 		}
 
-		$checked_at = $this->flags->checked_at();
+		$findings      = $this->sweep->validate_redirects( $redirects );
+		$still_flagged = count( array_unique( array_map( static fn( AuditFinding $finding ) => $finding->redirect_id(), $findings ) ) );
+		$flagged       = $this->query_repository->count_matching( new RedirectCriteria( null, null, null, 'ID', 'ASC', 1, 0, 'any' ) );
+		$next_offset   = $offset + $still_flagged;
+		$checked_at    = $this->flags->checked_at();
 
 		return array(
 			'checked'         => count( $redirects ),
-			'issues'          => array_map( array( self::class, 'finding_to_array' ), $this->sweep->validate_redirects( $redirects ) ),
+			'issues'          => array_map( array( self::class, 'finding_to_array' ), $findings ),
+			'flagged'         => $flagged,
+			'next_offset'     => ! $named && count( $redirects ) === $limit && $next_offset < $flagged ? $next_offset : null,
 			'last_full_check' => null === $checked_at ? null : gmdate( 'c', $checked_at ),
 			'failed'          => $failures,
 		);
@@ -231,17 +259,10 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	 * @return array<string, mixed> The formatted finding.
 	 */
 	public static function finding_to_array( AuditFinding $finding ): array {
-		$severity = 'problem';
-		if ( $finding->is_warning() ) {
-			$severity = 'warning';
-		} elseif ( ! $finding->is_conclusive() ) {
-			$severity = 'inconclusive';
-		}
-
 		return array_merge(
 			RedirectSchema::to_array( $finding->redirect() ),
 			array(
-				'severity'    => $severity,
+				'severity'    => $finding->severity(),
 				'issue'       => $finding->label(),
 				'description' => $finding->description(),
 				'remedy'      => $finding->remedy(),
