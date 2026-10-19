@@ -47,6 +47,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class UpdateCommandTest extends CliTestCase {
 
@@ -67,7 +68,8 @@ final class UpdateCommandTest extends CliTestCase {
 
 		$this->command = new UpdateCommand(
 			$this->manager(),
-			new RedirectBatch( new RedirectFetcher( $this->repository() ) )
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
+			$this->auditor()
 		);
 	}
 
@@ -251,6 +253,24 @@ final class UpdateCommandTest extends CliTestCase {
 		);
 
 		$this->assert_error_contains( 'Invalid destination' );
+	}
+
+	/**
+	 * Test an update that closes a loop warns as create does, but still updates.
+	 */
+	public function test_update_warns_when_closing_a_loop(): void {
+		$this->create_redirect( '/update-loop-first', '/update-loop-second' );
+		$this->create_redirect( '/update-loop-second', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-loop-second' ),
+			array( 'to' => '/update-loop-first' )
+		);
+
+		$this->assert_warning_contains( '/update-loop-second: Following the destination through the stored redirects leads back to this one' );
+		$this->assert_success_contains( 'Updated redirect: /update-loop-second' );
+		$this->assertSame( '/update-loop-first', $this->get_destination( '/update-loop-second' ) );
 	}
 
 	/**

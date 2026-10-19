@@ -9,7 +9,9 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -36,14 +38,23 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	private RedirectBatch $batch;
 
 	/**
+	 * The redirect auditor, which owns the warning rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
 	 * @param RedirectBatch   $batch   The batch resolver.
+	 * @param RedirectAuditor $auditor The redirect auditor.
 	 */
-	public function __construct( RedirectManager $manager, RedirectBatch $batch ) {
+	public function __construct( RedirectManager $manager, RedirectBatch $batch, RedirectAuditor $auditor ) {
 		$this->manager = $manager;
 		$this->batch   = $batch;
+		$this->auditor = $auditor;
 	}
 
 	/**
@@ -65,7 +76,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Update Redirects', 'legacy-redirector' ),
-			'description'         => __( 'Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead.', 'legacy-redirector' ),
+			'description'         => __( 'Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead. Returns any warnings about the redirects as saved, such as a possible loop.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -88,13 +99,14 @@ final class UpdateRedirectAbility implements AbilityInterface {
 			),
 			'output_schema'       => array(
 				'type'                 => 'object',
-				'required'             => array( 'updated', 'failed' ),
+				'required'             => array( 'updated', 'failed', 'warnings' ),
 				'properties'           => array(
-					'updated' => array(
+					'updated'  => array(
 						'type'        => 'integer',
 						'description' => __( 'How many redirects were updated.', 'legacy-redirector' ),
 					),
-					'failed'  => RedirectSchema::failures_schema(),
+					'failed'   => RedirectSchema::failures_schema(),
+					'warnings' => RedirectSchema::warnings_schema(),
 				),
 				'additionalProperties' => false,
 			),
@@ -115,7 +127,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	 * Update the redirects.
 	 *
 	 * @param mixed $input The validated ability input.
-	 * @return array{updated: int, failed: array<int, array{redirect: string, reason: string}>}|WP_Error The outcome, or an error if the input asks for no change.
+	 * @return array{updated: int, failed: array<int, array{redirect: string, reason: string}>, warnings: array<int, array<string, mixed>>}|WP_Error The outcome, or an error if the input asks for no change.
 	 */
 	public function execute( $input = array() ) {
 		$input       = is_array( $input ) ? $input : array();
@@ -151,20 +163,28 @@ final class UpdateRedirectAbility implements AbilityInterface {
 			$status = 'disabled' === $input['status'] ? 'draft' : 'publish';
 		}
 
+		$saved = array();
 		$items = $this->batch->apply(
 			$input['redirects'] ?? array(),
-			function ( Redirect $redirect ) use ( $destination, $status ) {
+			function ( Redirect $redirect ) use ( $destination, $status, &$saved ): RedirectCreationResult {
 				$redirect_id = (int) $redirect->id();
 
-				return null !== $destination
+				$result = null !== $destination
 					? $this->manager->update_destination( $redirect_id, $destination, $status )
 					: $this->manager->change_status( $redirect_id, (string) $status );
+
+				if ( $result->is_success() ) {
+					$saved[] = $result->redirect();
+				}
+
+				return $result;
 			}
 		);
 
 		return array(
-			'updated' => RedirectBatch::count_succeeded( $items ),
-			'failed'  => BatchFailures::format( $items, __( 'The redirect could not be saved.', 'legacy-redirector' ) ),
+			'updated'  => RedirectBatch::count_succeeded( $items ),
+			'failed'   => BatchFailures::format( $items, __( 'The redirect could not be saved.', 'legacy-redirector' ) ),
+			'warnings' => RedirectSchema::warnings( $this->auditor, $saved ),
 		);
 	}
 }

@@ -217,8 +217,8 @@ since been deleted, trashed, or unpublished; a relative path whose post has gone
 way; an external destination whose host is no longer in `allowed_redirect_hosts`; a row
 whose stored data is corrupt. It also warns about possible loops (a destination that is
 itself another redirect's source, with the hops leading back to where they started) and
-about sources on a path WordPress itself serves, such as `/wp-admin`. `create` and `import`
-give the same warnings as they write.
+about sources on a path WordPress itself serves, such as `/wp-admin`. `create`, `update`,
+and `import` give the same warnings as they write.
 
 With no redirects named, `validate` checks every redirect, enabled and disabled: the same
 check the site runs in the background, run now. It requests nothing, so it is safe at any

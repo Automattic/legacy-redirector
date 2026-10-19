@@ -33,8 +33,15 @@ calling once.
 | `legacy-redirector/find-redirect-domains` | List the domains destinations point at | Yes | No | Yes |
 
 `create-redirect` is not idempotent because a second call with the same source is a
-duplicate, and fails. Use `update-redirect` when you mean "make it so" rather than "add a
-new one".
+duplicate, and fails with an error naming the redirect that already has that source. Use
+`update-redirect` when you mean "make it so" rather than "add a new one".
+
+`create-redirect` and `update-redirect` also return `warnings`, the same ones
+`wp legacy-redirector create` and `update` print: a redirect that was saved, but deserves a
+look, such as a possible loop, a source on a path WordPress itself serves, or a source a
+published post or page already answers. Each warning has the shape `validate-redirects`
+reports a finding in: the redirect, plus `severity`, `issue`, `description`, and `remedy`.
+A warning never stops the write, so read `warnings` as well as checking for an error.
 
 Disabling a redirect is not destructive: the redirect and its destination are kept, it
 just stops being served to visitors. Only `delete-redirect` loses data.
@@ -90,13 +97,14 @@ reason for each:
 {
   "updated": 2,
   "failed": [
-    { "redirect": "/never-existed", "reason": "No redirect found for /never-existed." }
+    { "redirect": "/never-existed", "reason": "No redirect found." }
   ]
 }
 ```
 
 The count is named `updated` by `update-redirect` and `set-redirect-status`, and `deleted`
-by `delete-redirect`. `failed` is the same shape on all three.
+by `delete-redirect`. `failed` is the same shape on all three, and `update-redirect` adds
+the `warnings` described above.
 
 An agent should read `failed` rather than inferring success from a non-error response: a
 call that changed nothing at all still returns normally.

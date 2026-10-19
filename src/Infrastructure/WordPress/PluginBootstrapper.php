@@ -290,7 +290,7 @@ final class PluginBootstrapper {
 			'migrate'          => new MigrateCommand( $this->container->upgrader() ),
 			'get'              => new GetCommand( $fetcher ),
 			'list'             => new ListCommand( $this->container->query_repository(), $this->container->repository(), $this->container->upgrader() ),
-			'update'           => new UpdateCommand( $manager, $batch ),
+			'update'           => new UpdateCommand( $manager, $batch, $this->container->auditor() ),
 			'delete'           => new DeleteCommand( $manager, $batch ),
 			'enable'           => new EnableCommand( $manager, $batch ),
 			'disable'          => new DisableCommand( $manager, $batch ),
