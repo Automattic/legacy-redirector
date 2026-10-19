@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
@@ -97,6 +98,7 @@ final class UninstallTest extends TestCase {
 			$this->assertFalse( get_option( $option ), "{$option} should be deleted." );
 		}
 		$this->assertFalse( wp_next_scheduled( AuditSweep::HOOK ) );
+		$this->assertFalse( wp_next_scheduled( DestinationPostWatcher::HOOK, array( 123 ) ) );
 		foreach ( self::UPGRADER_TRANSIENTS as $transient ) {
 			$this->assertFalse( get_transient( $transient ), "{$transient} should be deleted." );
 		}
@@ -143,6 +145,7 @@ final class UninstallTest extends TestCase {
 			update_option( $option, 1, false );
 		}
 		wp_schedule_single_event( time() + HOUR_IN_SECONDS, AuditSweep::HOOK );
+		wp_schedule_single_event( time() + HOUR_IN_SECONDS, DestinationPostWatcher::HOOK, array( 123 ) );
 		foreach ( self::UPGRADER_TRANSIENTS as $transient ) {
 			set_transient( $transient, 1, MINUTE_IN_SECONDS );
 		}
