@@ -110,7 +110,8 @@ jobs:
             'wpcom-legacy-redirector.php' \
             'src/Infrastructure/DI/Container.php' \
             'src/Infrastructure/WordPress/PluginBootstrapper.php' \
-            'js/admin-redirect-form.js'
+            'js/admin-redirect-form.js' \
+            'uninstall.php'
           do
             if ! grep -qxF "${SLUG}/${path}" "$RUNNER_TEMP/zip.list"; then
               echo "::error::The ZIP is missing ${path}"
