@@ -283,3 +283,42 @@ add_filter( 'http_request_host_is_external', function( $external, $host ) {
 Even with this filter, safe requests only use ports 80, 443, and 8080, plus the site's own
 port. Destinations on other ports report as failed in validation; the redirects themselves
 still work.
+
+## Uninstalling
+
+Deleting the plugin from the Plugins screen runs its `uninstall.php`, which removes only what
+the plugin can rebuild: the background check's progress, counts, and lock
+(`legacy_redirector_audit_sweep`, `legacy_redirector_audit_flag_counts`,
+`legacy_redirector_audit_flags_checked_at`, `legacy_redirector_audit_lock`), its scheduled
+event (`legacy_redirector_scheduled_audit`), and the migration's WP-CLI lock transient. On a
+multisite network it does this on every site.
+
+Sites that load the plugin in code, as on WordPress VIP, never run `uninstall.php`. Removing
+the code leaves everything in place.
+
+Everything else is kept on purpose, so reinstalling picks up where it left off:
+
+| What | Stored as | Why it is kept |
+|------|-----------|----------------|
+| Redirects, including trashed ones | `vip-legacy-redirect` posts | A redirect map is expensive to rebuild |
+| Per-redirect state | Post meta on those posts: `_legacy_redirector_audit_issues`, `_legacy_redirector_duplicate_of`, `_legacy_redirector_duplicate_never_fired`, `_legacy_redirector_upgrade_waits_for` | It describes the redirects, and goes when they do |
+| Migration state | `wpcom_legacy_redirector_db_version`, plus `wpcom_legacy_redirector_upgrade_*` options while a migration is unfinished | Without the version, a reinstall would treat 2.0 redirects as 1.x data and migrate them again |
+| The capability | `manage_redirects` on the administrator and editor roles, and `manage_redirects_capability_version` | Roles may have been changed deliberately; see [Revoking it](#revoking-it) |
+
+To remove all of it once the plugin is gone for good, delete the redirects (their meta goes
+with them), then the migration options, then the capability:
+
+```bash
+wp post list --post_type=vip-legacy-redirect --post_status=any,trash --format=ids \
+	| xargs -r -n 1000 wp post delete --force
+wp option list --search='wpcom_legacy_redirector_*' --field=option_name \
+	| xargs -r -n 1 wp option delete
+wp cap remove administrator manage_redirects
+wp cap remove editor manage_redirects
+wp option delete manage_redirects_capability_version
+```
+
+Deleting redirects cannot be undone. If there is any chance you will want them back, export
+them first while the plugin is still installed; see [Export and back up](cli.md#export-and-back-up).
+
+On a multisite network, run the commands against each site with `--url`.
