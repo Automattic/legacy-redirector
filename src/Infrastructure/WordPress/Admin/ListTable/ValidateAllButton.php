@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
@@ -38,12 +39,21 @@ final class ValidateAllButton {
 	private AuditSweep $sweep;
 
 	/**
+	 * The per-row audit flags.
+	 *
+	 * @var AuditFlags
+	 */
+	private AuditFlags $flags;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param AuditSweep $sweep The audit sweep.
+	 * @param AuditFlags $flags The per-row audit flags.
 	 */
-	public function __construct( AuditSweep $sweep ) {
+	public function __construct( AuditSweep $sweep, AuditFlags $flags ) {
 		$this->sweep = $sweep;
+		$this->flags = $flags;
 	}
 
 	/**
@@ -95,35 +105,61 @@ final class ValidateAllButton {
 		if ( 'top' !== $which || ! $this->should_render() ) {
 			return;
 		}
+		$status = $this->sweep->status();
+		$counts = $this->flags->stored_counts();
+
+		// A pass already under way, in the background or from another visit,
+		// is continued rather than restarted, so pressing the button never
+		// throws away progress.
+		$label = $status['in_progress']
+			? __( 'Continue validating', 'legacy-redirector' )
+			: __( 'Validate all redirects', 'legacy-redirector' );
+		$title = $status['in_progress']
+			? __( 'Validation is already under way in the background. Continue it here to finish sooner; you can leave this page at any time.', 'legacy-redirector' )
+			: __( 'Checks every redirect’s stored details for problems, without requesting any URLs. You can leave this page at any time: validation carries on in the background. Use the Test action on a row to check live behavior.', 'legacy-redirector' );
+
+		$show_flagged = ! $status['in_progress'] && null !== $status['checked_at'] && $counts['problem'] + $counts['warning'] > 0;
+		$flagged_url  = add_query_arg(
+			array(
+				'post_type'     => PostType::POST_TYPE,
+				'audit_flagged' => 1,
+			),
+			admin_url( 'edit.php' )
+		);
 		?>
 		<div class="alignleft actions" id="legacy-redirector-validate-all">
-			<button type="button" class="button" title="<?php esc_attr_e( 'Checks every redirect’s stored details for problems, without requesting any URLs. Use the Test action on a row to check live behavior.', 'legacy-redirector' ); ?>"><?php esc_html_e( 'Validate all redirects', 'legacy-redirector' ); ?></button>
+			<button type="button" class="button" data-restart="<?php echo $status['in_progress'] ? '0' : '1'; ?>" title="<?php echo esc_attr( $title ); ?>"><?php echo esc_html( $label ); ?></button>
 			<progress max="1" value="0" hidden></progress>
-			<span role="status"><?php echo esc_html( $this->status_text() ); ?></span>
+			<span role="status"><?php echo esc_html( $this->status_text( $status, $counts ) ); ?></span>
+			<?php if ( $show_flagged ) : ?>
+				<a href="<?php echo esc_url( $flagged_url ); ?>"><?php esc_html_e( 'Show them', 'legacy-redirector' ); ?></a>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
 
 	/**
-	 * Describe where the background check stands.
+	 * Describe where validation stands, and what the last full pass found.
 	 *
+	 * @param array{in_progress: bool, checked: int, total: int, checked_at: int|null, estimate: int|null} $status The sweep status.
+	 * @param array{problem: int, warning: int}                                                            $counts The flagged-row counts.
 	 * @return string The status line.
 	 */
-	private function status_text(): string {
-		$status = $this->sweep->status();
-
+	private function status_text( array $status, array $counts ): string {
 		if ( $status['in_progress'] ) {
 			$text = sprintf(
 				/* translators: 1: redirects checked so far, 2: total redirects */
-				__( 'Background check in progress: %1$s of %2$s redirects checked.', 'legacy-redirector' ),
+				__( 'Validation in progress: %1$s of %2$s redirects checked. It carries on in the background if you leave this page.', 'legacy-redirector' ),
 				number_format_i18n( $status['checked'] ),
 				number_format_i18n( $status['total'] )
 			);
 		} elseif ( null !== $status['checked_at'] ) {
 			$text = sprintf(
-				/* translators: %s: time since the last full check, e.g. "3 hours" */
-				__( 'Every redirect was last checked %s ago.', 'legacy-redirector' ),
-				human_time_diff( $status['checked_at'] )
+				/* translators: 1: time since the last full check, e.g. "3 hours", 2: redirects with problems, 3: redirects with warnings */
+				__( 'Every redirect was last checked %1$s ago: %2$s with problems, %3$s with warnings.', 'legacy-redirector' ),
+				human_time_diff( $status['checked_at'] ),
+				number_format_i18n( $counts['problem'] ),
+				number_format_i18n( $counts['warning'] )
 			);
 		} else {
 			$text = __( 'Not every redirect has been checked yet.', 'legacy-redirector' );
@@ -157,7 +193,7 @@ final class ValidateAllButton {
 		$config = array(
 			'path'     => '/legacy-redirector/v1/validate',
 			/* translators: 1: redirects validated so far, 2: total redirects */
-			'progress' => __( 'Validated %1$s of %2$s redirects…', 'legacy-redirector' ),
+			'progress' => __( 'Validated %1$s of %2$s redirects… You can leave this page: validation carries on in the background.', 'legacy-redirector' ),
 			'failed'   => __( 'Validation stopped; the redirects validated so far are flagged. Reload and try again.', 'legacy-redirector' ),
 		);
 		?>
@@ -190,7 +226,8 @@ final class ValidateAllButton {
 			button.addEventListener('click', async function () {
 				button.disabled = true;
 				bar.hidden = false;
-				var restart = true;
+				// A pass already under way is continued, not restarted.
+				var restart = '1' === button.dataset.restart;
 
 				try {
 					for (;;) {

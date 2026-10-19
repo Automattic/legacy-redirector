@@ -152,9 +152,22 @@ final class AuditFlags {
 	 * @return int The problem count; zero before any pass has completed.
 	 */
 	public function problem_count(): int {
-		$counts = get_option( self::COUNTS_OPTION );
+		return $this->stored_counts()['problem'];
+	}
 
-		return is_array( $counts ) ? (int) ( $counts['problem'] ?? 0 ) : 0;
+	/**
+	 * The flagged-row counts as last stored, by severity, without counting.
+	 *
+	 * @return array{problem: int, warning: int} The counts; zero before any pass has completed.
+	 */
+	public function stored_counts(): array {
+		$counts = get_option( self::COUNTS_OPTION );
+		$counts = is_array( $counts ) ? $counts : array();
+
+		return array(
+			'problem' => (int) ( $counts['problem'] ?? 0 ),
+			'warning' => (int) ( $counts['warning'] ?? 0 ),
+		);
 	}
 
 	/**

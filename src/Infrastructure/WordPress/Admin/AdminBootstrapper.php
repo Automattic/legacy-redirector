@@ -142,7 +142,7 @@ final class AdminBootstrapper {
 		$list_screen_setup = new ListScreenSetup();
 		$list_screen_setup->register();
 
-		$validate_all_button = new ValidateAllButton( $this->audit_sweep );
+		$validate_all_button = new ValidateAllButton( $this->audit_sweep, $this->audit_flags );
 		$validate_all_button->register();
 	}
 
