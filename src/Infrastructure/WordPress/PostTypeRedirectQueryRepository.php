@@ -49,15 +49,27 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * @return string SQL fragment starting with ' AND ', or '' for an unknown kind.
 	 */
 	public static function destination_type_where( string $type ): string {
+		$condition = self::destination_type_condition( $type );
+
+		return '' === $condition ? '' : " AND $condition";
+	}
+
+	/**
+	 * Build the bare SQL condition matching one destination kind.
+	 *
+	 * @param string $type Destination kind: 'post_id', 'path', or 'external'.
+	 * @return string Prepared SQL condition, or '' for an unknown kind.
+	 */
+	private static function destination_type_condition( string $type ): string {
 		global $wpdb;
 
 		switch ( $type ) {
 			case 'post_id':
-				return " AND {$wpdb->posts}.post_parent > 0";
+				return "{$wpdb->posts}.post_parent > 0";
 			case 'path':
-				return $wpdb->prepare( " AND {$wpdb->posts}.post_excerpt LIKE %s", self::PATH_LIKE );
+				return $wpdb->prepare( "{$wpdb->posts}.post_excerpt LIKE %s", self::PATH_LIKE );
 			case 'external':
-				return $wpdb->prepare( " AND {$wpdb->posts}.post_excerpt LIKE %s", self::EXTERNAL_LIKE );
+				return $wpdb->prepare( "{$wpdb->posts}.post_excerpt LIKE %s", self::EXTERNAL_LIKE );
 			default:
 				return '';
 		}
@@ -151,32 +163,32 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	/**
 	 * Count active redirects grouped by destination kind.
 	 *
+	 * One scan of the table for all three counts, since the list screen asks
+	 * on every load. A row can match more than one kind (a post ID with a
+	 * path left in post_excerpt) and counts in each, as its list filters show it.
+	 *
 	 * @return array{post_id: int, path: int, external: int} Counts by kind.
 	 */
 	#[\Override]
 	public function count_by_destination_type(): array {
-		return array(
-			'post_id'  => $this->count_destination_type( 'post_id' ),
-			'path'     => $this->count_destination_type( 'path' ),
-			'external' => $this->count_destination_type( 'external' ),
-		);
-	}
-
-	/**
-	 * Count active (publish or draft) redirects of one destination kind.
-	 *
-	 * @param string $type Destination kind: 'post_id', 'path', or 'external'.
-	 * @return int The count.
-	 */
-	private function count_destination_type( string $type ): int {
 		global $wpdb;
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- Custom count query; the appended fragment is prepared in destination_type_where().
-		return (int) $wpdb->get_var(
-			$wpdb->prepare(
-				"SELECT COUNT(*) FROM {$wpdb->posts} WHERE post_type = %s AND post_status IN ('publish', 'draft')",
-				PostType::POST_TYPE
-			) . self::destination_type_where( $type )
+		$post_id  = self::destination_type_condition( 'post_id' );
+		$path     = self::destination_type_condition( 'path' );
+		$external = self::destination_type_condition( 'external' );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- Custom count query; the conditions are prepared in destination_type_condition().
+		$row = $wpdb->get_row(
+			"SELECT COUNT( CASE WHEN $post_id THEN 1 END ) AS post_id, COUNT( CASE WHEN $path THEN 1 END ) AS path, COUNT( CASE WHEN $external THEN 1 END ) AS external FROM {$wpdb->posts} "
+			. $wpdb->prepare( "WHERE post_type = %s AND post_status IN ('publish', 'draft')", PostType::POST_TYPE ),
+			ARRAY_A
+		);
+		// phpcs:enable
+
+		return array(
+			'post_id'  => (int) ( $row['post_id'] ?? 0 ),
+			'path'     => (int) ( $row['path'] ?? 0 ),
+			'external' => (int) ( $row['external'] ?? 0 ),
 		);
 	}
 
