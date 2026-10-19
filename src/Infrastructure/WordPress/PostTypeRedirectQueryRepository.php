@@ -292,6 +292,20 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 			$args['search_columns'] = array( 'post_title' );
 		}
 
+		// The background check's per-row flag, as the admin "Has issues" view
+		// reads it. Only flagged rows carry the key, so the join stays
+		// proportional to the flagged rows, not the table.
+		$issues = $criteria->issues();
+		if ( null !== $issues ) {
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Only flagged rows carry the key.
+			$args['meta_key'] = AuditFlags::META_KEY;
+
+			if ( 'any' !== $issues ) {
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- See above.
+				$args['meta_value'] = $issues;
+			}
+		}
+
 		// Add destination type filter.
 		$dest_type = $criteria->destination_type();
 		if ( 'post' === $dest_type ) {

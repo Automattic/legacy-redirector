@@ -252,9 +252,9 @@ final class ColumnsManager {
 	 * Render the "health" column: every finding the auditor can report
 	 * without HTTP requests, or a tick when there are none.
 	 *
-	 * The same auditor backs the `validate` CLI command, the admin scan,
-	 * and the per-row Validate action - whose fresh, HTTP-inclusive result
-	 * replaces this cell's content - so no surface can disagree.
+	 * The same auditor backs `validate`, the background check and the Test
+	 * row action - whose fresh, HTTP-inclusive result replaces this cell's
+	 * content - so no surface can disagree.
 	 *
 	 * @param Redirect $redirect The redirect.
 	 * @return void
@@ -291,12 +291,16 @@ final class ColumnsManager {
 
 			$is_warning = $finding->is_warning();
 
+			// What is wrong and what to do about it: on hover, and as text for
+			// screen readers, which do not reliably announce a title.
+			$detail = $finding->description() . '. ' . $finding->remedy() . '.';
+
 			printf(
-				'<span class="dashicons %1$s" style="color: %2$s;" aria-hidden="true"></span><span class="screen-reader-text">%3$s </span><span title="%4$s">%5$s</span>',
+				'<span class="dashicons %1$s" style="color: %2$s;" aria-hidden="true"></span><span class="screen-reader-text">%3$s </span><span title="%4$s">%5$s</span><span class="screen-reader-text"> %4$s</span>',
 				$is_warning ? 'dashicons-flag' : 'dashicons-warning',
 				$is_warning ? '#dba617' : '#d63638',
 				$is_warning ? esc_html__( 'Warning:', 'legacy-redirector' ) : esc_html__( 'Problem:', 'legacy-redirector' ),
-				esc_attr( $finding->description() . '.' ),
+				esc_attr( $detail ),
 				esc_html( $finding->label() )
 			);
 		}

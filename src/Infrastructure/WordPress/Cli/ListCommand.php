@@ -146,6 +146,12 @@ final class ListCommand extends WP_CLI_Command {
 	 *   - DESC
 	 * ---
 	 *
+	 * [--has-issues[=<severity>]]
+	 * : List only the redirects the background check flagged, as the admin
+	 * "Has issues" view does: `problem`, `warning`, or both when no severity is
+	 * given. `wp legacy-redirector validate <redirect>` says what is wrong with
+	 * each, and what to do about it.
+	 *
 	 * [--duplicates]
 	 * : List only the redirects the 2.0 migration disabled because, once
 	 * normalized, they have the same source as another redirect with a
@@ -194,6 +200,9 @@ final class ListCommand extends WP_CLI_Command {
 	 *
 	 *     # Export all redirects to a CSV file.
 	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
+	 *
+	 *     # List the redirects the background check found problems with.
+	 *     $ wp legacy-redirector list --has-issues=problem
 	 *
 	 *     # Export the duplicate sources the migration disabled.
 	 *     $ wp legacy-redirector list --duplicates --format=csv > duplicates.csv
@@ -317,7 +326,8 @@ final class ListCommand extends WP_CLI_Command {
 					$criteria->order_by(),
 					$criteria->order(),
 					$size,
-					$criteria->offset() + $fetched
+					$criteria->offset() + $fetched,
+					$criteria->issues()
 				)
 			);
 
@@ -401,6 +411,14 @@ final class ListCommand extends WP_CLI_Command {
 	private static function criteria_from_args( array $assoc_args ): RedirectCriteria {
 		$status = $assoc_args['status'] ?? null;
 		$type   = $assoc_args['destination-type'] ?? null;
+		$issues = $assoc_args['has-issues'] ?? null;
+
+		// A bare --has-issues arrives as true.
+		if ( true === $issues ) {
+			$issues = 'any';
+		} elseif ( null !== $issues && ! in_array( $issues, array( 'problem', 'warning' ), true ) ) {
+			WP_CLI::error( sprintf( 'Invalid --has-issues severity: %s. Use problem or warning, or leave it out for both.', (string) $issues ) );
+		}
 
 		return new RedirectCriteria(
 			'any' === $status ? null : $status,
@@ -409,7 +427,8 @@ final class ListCommand extends WP_CLI_Command {
 			$assoc_args['orderby'] ?? 'date',
 			$assoc_args['order'] ?? 'DESC',
 			(int) ( $assoc_args['limit'] ?? 100 ),
-			(int) ( $assoc_args['offset'] ?? 0 )
+			(int) ( $assoc_args['offset'] ?? 0 ),
+			$issues
 		);
 	}
 }

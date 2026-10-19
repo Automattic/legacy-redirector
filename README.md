@@ -151,11 +151,11 @@ The plugin intercepts 404 requests early (priority 0 on `template_redirect`) and
 
 ## Hooks and Filters
 
-Seven filters cover query-parameter preservation, the status code, the `Cache-Control`
-lifetime, the request path, the resolved destination, creation from code, and the admin
-form's reachability check. Two WordPress core filters matter too: `allowed_redirect_hosts`
-for external destinations, and `http_request_host_is_external` for validating internal
-ones.
+Eight filters cover query-parameter preservation, the status code, the `Cache-Control`
+lifetime, the request path, the resolved destination, creation from code, the admin
+form's reachability check, and the background check's time budget. Two WordPress core
+filters matter too: `allowed_redirect_hosts` for external destinations, and
+`http_request_host_is_external` for testing internal ones.
 
 All of them, with examples, are in **[docs/configuration.md](docs/configuration.md)**.
 

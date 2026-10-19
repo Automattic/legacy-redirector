@@ -507,9 +507,10 @@ class RedirectAuditor {
 	 *         'confirmed'   the source redirects to the stored destination;
 	 *         'diverted'    the source redirects somewhere else ('location');
 	 *         'dormant'     the source serves content, so the redirect never fires;
-	 *         'not-firing'  the source 404s without redirecting;
-	 *         'unreachable' the check could not tell: the request failed, or the
-	 *                     site answered with a server error, a 429 or no status.
+	 *         'not-firing'  the source 404s (or 410s) without redirecting;
+	 *         'unreachable' the check could not tell: the request failed, the site
+	 *                     answered with a server error, a 401, 403 or 429, or no
+	 *                     status, or redirected with no Location.
 	 */
 	public function probe_source( Redirect $redirect ): array {
 		$source_url = home_url( $redirect->source()->path() );
@@ -524,12 +525,24 @@ class RedirectAuditor {
 
 		// A server error, or a 429 from a site rate-limiting a run of requests
 		// to itself, is the site failing to answer, not the source serving
-		// content. A missing status only comes from a misbehaving filter.
-		if ( $code <= 0 || 429 === $code || $code >= 500 ) {
+		// content. A 401 or 403 is basic auth or a firewall turning the probe
+		// away before WordPress sees it. A missing status only comes from a
+		// misbehaving filter. None of them says whether the redirect fires.
+		if ( $code <= 0 || 401 === $code || 403 === $code || 429 === $code || $code >= 500 ) {
 			return array( 'status' => 'unreachable' );
 		}
 
 		if ( $code >= 300 && $code < 400 ) {
+			// A redirect with nowhere to go is malformed, not a verdict.
+			if ( '' === $location ) {
+				return array( 'status' => 'unreachable' );
+			}
+
+			// A relative Location (nginx with absolute_redirect off, a proxy
+			// rewriting the header) is resolved against the source, so it is
+			// compared like for like with the absolute URLs below.
+			$location = $this->absolute_location( $location, $source_url );
+
 			// A hop back to the source itself (a trailing-slash canonical, a
 			// directory redirect) means the path is served, not diverted: the
 			// 404 our redirect would answer never happens.
@@ -552,11 +565,86 @@ class RedirectAuditor {
 			);
 		}
 
-		if ( 404 === $code ) {
+		// Redirects only answer a 404, so a 410 from a server or another
+		// plugin also means this one never got the chance.
+		if ( 404 === $code || 410 === $code ) {
 			return array( 'status' => 'not-firing' );
 		}
 
 		return array( 'status' => 'dormant' );
+	}
+
+	/**
+	 * Test a redirect live: its stored details, its destination, and its source.
+	 *
+	 * Behind `wp legacy-redirector test` and the test ability. Nothing is
+	 * recorded: a timeout or a throttled request is not a fact about the
+	 * redirect, so it must never reach the stored flags or the badge.
+	 *
+	 * @param Redirect $redirect          The redirect to test.
+	 * @param bool     $check_destination Whether to run the stored-details checks and request the destination.
+	 * @param bool     $check_source      Whether to request the source.
+	 * @return array{findings: AuditFinding[], source: array{status: string, location?: string}|null, source_finding: AuditFinding|null} Every finding (the source's included), the source probe's outcome when it ran (it is skipped for a disabled or corrupt redirect, which is not meant to fire), and the source's finding on its own.
+	 */
+	public function test( Redirect $redirect, bool $check_destination = true, bool $check_source = true ): array {
+		// A corrupt row is reported whichever check was asked for: it is not
+		// a redirect either check could judge.
+		$findings       = $check_destination || $redirect->is_corrupt() ? $this->audit( $redirect, true ) : array();
+		$probe          = null;
+		$source_finding = null;
+
+		if ( $check_source && $redirect->is_active() && ! $redirect->is_corrupt() ) {
+			$probe          = $this->probe_source( $redirect );
+			$source_finding = $this->finding_for_probe( $redirect, $probe );
+
+			if ( null !== $source_finding ) {
+				$findings[] = $source_finding;
+			}
+		}
+
+		return array(
+			'findings'       => $findings,
+			'source'         => $probe,
+			'source_finding' => $source_finding,
+		);
+	}
+
+	/**
+	 * Request a redirect's source and report what went wrong, if anything.
+	 *
+	 * @param Redirect $redirect The redirect whose source to request.
+	 * @return AuditFinding|null The finding, or null when the redirect fired as stored or is disabled.
+	 */
+	public function audit_source( Redirect $redirect ): ?AuditFinding {
+		return $this->finding_for_probe( $redirect, $this->probe_source( $redirect ) );
+	}
+
+	/**
+	 * Turn a source probe's outcome into a finding.
+	 *
+	 * Separate from audit_source() so a caller that has already probed, and
+	 * wants the raw outcome too, does not request the source twice. A
+	 * disabled redirect is not expected to fire, so its outcome says nothing
+	 * about it.
+	 *
+	 * @param Redirect                                 $redirect The redirect that was probed.
+	 * @param array{status: string, location?: string} $probe    The outcome from probe_source().
+	 * @return AuditFinding|null The finding, or null when the redirect fired as stored or is disabled.
+	 */
+	public function finding_for_probe( Redirect $redirect, array $probe ): ?AuditFinding {
+		if ( ! $redirect->is_active() ) {
+			return null;
+		}
+
+		$location = isset( $probe['location'] ) && '' !== $probe['location'] ? 'to: ' . $probe['location'] : null;
+
+		return match ( $probe['status'] ) {
+			'diverted'    => new AuditFinding( $redirect, AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE, $location ),
+			'not-firing'  => new AuditFinding( $redirect, AuditFindingType::SOURCE_NOT_FIRING ),
+			'dormant'     => new AuditFinding( $redirect, AuditFindingType::SOURCE_SERVES_CONTENT ),
+			'unreachable' => new AuditFinding( $redirect, AuditFindingType::SOURCE_REQUEST_FAILED ),
+			default       => null,
+		};
 	}
 
 	/**
@@ -590,6 +678,25 @@ class RedirectAuditor {
 	 */
 	private function urls_equivalent( string $a, string $b ): bool {
 		return untrailingslashit( $a ) === untrailingslashit( $b );
+	}
+
+	/**
+	 * Resolve a root-relative or scheme-relative Location against the URL requested.
+	 *
+	 * @param string $location The Location header.
+	 * @param string $base     The URL that was requested.
+	 * @return string The absolute URL, or the header unchanged when it already is one.
+	 */
+	private function absolute_location( string $location, string $base ): string {
+		if ( str_starts_with( $location, '//' ) ) {
+			return ( preg_match( '#^(https?):#i', $base, $scheme ) ? $scheme[1] : 'https' ) . ':' . $location;
+		}
+
+		if ( str_starts_with( $location, '/' ) && preg_match( '#^https?://[^/]+#i', $base, $origin ) ) {
+			return $origin[0] . $location;
+		}
+
+		return $location;
 	}
 
 	/**
@@ -666,46 +773,5 @@ class RedirectAuditor {
 	 */
 	private function is_relative_path( string $url ): bool {
 		return ! preg_match( '#^https?://#i', $url );
-	}
-
-	/**
-	 * Audit a batch of redirects.
-	 *
-	 * @param Redirect[] $redirects         The redirects to audit.
-	 * @param bool       $check_destination        Whether to check URL destinations.
-	 * @param callable   $progress_callback Optional callback called after each redirect (receives count).
-	 * @return AuditFinding[] The findings across the batch.
-	 */
-	public function audit_batch( array $redirects, bool $check_destination = false, ?callable $progress_callback = null ): array {
-		$findings = array();
-		$checked  = 0;
-
-		foreach ( $redirects as $redirect ) {
-			++$checked;
-
-			array_push( $findings, ...$this->audit( $redirect, $check_destination ) );
-
-			if ( null !== $progress_callback ) {
-				$progress_callback( $checked );
-			}
-
-			// Memory cleanup every 100 items.
-			if ( 0 === $checked % 100 ) {
-				$this->cleanup_memory();
-			}
-		}
-
-		return $findings;
-	}
-
-	/**
-	 * Clean up memory during batch operations.
-	 *
-	 * @return void
-	 */
-	private function cleanup_memory(): void {
-		if ( function_exists( 'stop_the_insanity' ) ) {
-			stop_the_insanity();
-		}
 	}
 }

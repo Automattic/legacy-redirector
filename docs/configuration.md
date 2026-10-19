@@ -124,7 +124,7 @@ current name wins. [UPGRADING.md](../UPGRADING.md) has the full mapping.
 
 Every redirect is checked in the background for the problems its stored details can show (a
 destination post gone or unpublished, a host not allowed, a loop), so the "Has issues" view
-and the menu badge stay current without anyone pressing **Scan for issues**. Nothing is
+and the menu badge stay current without anyone pressing **Validate all redirects**. Nothing is
 requested over HTTP. Every five minutes, the check spends up to 20 seconds working through
 the table from where it last stopped. It starts a new pass at most once a day: a pass that
 finishes within a day waits until a day after it began, and one that takes longer is followed
@@ -135,7 +135,7 @@ A redirect that points at a post by ID does not wait for the pass: it is flagged
 that post is unpublished, trashed or deleted, and cleared when the post is published again.
 
 Change the seconds per five minutes, or return `0` to turn the check off, for example on a
-very large site that runs `wp legacy-redirector scan` off-peak instead:
+very large site that runs `wp legacy-redirector validate` off-peak instead:
 
 ```php
 add_filter( 'legacy_redirector_background_audit_seconds', function( $seconds ) {
@@ -265,11 +265,11 @@ sending visitors anywhere unexpected.
 `wp legacy-redirector find-domains` lists every domain your existing destinations point
 at, which is the quickest way to audit the list you need.
 
-## Validating destinations on internal hosts
+## Testing destinations on internal hosts
 
-Destination validation — the admin "Validate" action and `wp legacy-redirector validate
---check-destination` — uses WordPress's safe HTTP functions, which refuse to request loopback,
-private, and reserved IP addresses. The site's own host is always allowed.
+Live destination checks — the admin Test action and `wp legacy-redirector test` — use
+WordPress's safe HTTP functions, which refuse to request loopback, private, and reserved IP
+addresses. The site's own host is always allowed.
 
 If your redirects legitimately point at other internal hosts, such as an intranet or a
 staging network, allow them with core's filter:

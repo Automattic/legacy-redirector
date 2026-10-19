@@ -14,8 +14,8 @@ cannot tell you: which command to reach for, and how to string them together.
 | `update` | Change the destination and/or status of one or more redirects |
 | `delete` | Delete one or more redirects |
 | `enable` / `disable` | Start or stop serving one or more redirects |
-| `validate` | Find (and optionally disable) broken redirects |
-| `scan` | Check every redirect's stored details now, as the background check does |
+| `validate` | Check redirects' stored details for problems, and record what is found |
+| `test` | Check redirects live: whether the destination responds and the source redirects |
 | `import` | Bulk import from a CSV file or STDIN |
 | `import-from-meta` | Create redirects from a post meta field |
 | `find-domains` | List the domains destinations point at |
@@ -31,8 +31,8 @@ wp legacy-redirector get /old-page
 wp legacy-redirector get 123
 ```
 
-`update`, `delete`, `enable`, `disable`, and `validate` take any number of them in one
-call, mixing the two forms freely:
+`update`, `delete`, `enable`, `disable`, `validate`, and `test` take any number of them
+in one call, mixing the two forms freely:
 
 ```bash
 wp legacy-redirector disable /old-page 456 /another-old-page
@@ -202,73 +202,66 @@ not allow is an error naming the domain. See [configuration.md](configuration.md
 ### Find and clean up broken redirects
 
 For everything the plugin checks, and when and where, see
-[redirect-health.md](redirect-health.md). This section covers the command line.
+[redirect-health.md](redirect-health.md). This section covers the command line, where two
+commands do the checking: `validate` reads each redirect's stored details, and `test` tries
+redirects live.
 
-`validate` inspects the destinations of redirects you already have, and reports the ones
-that no longer go anywhere: a post that has since been deleted, trashed, or unpublished; a
-relative path that does not resolve to published content; an external destination whose
-host is no longer in `allowed_redirect_hosts`; a row whose stored data is corrupt.
+`validate` reports the redirects that no longer go anywhere: a destination post that has
+since been deleted, trashed, or unpublished; a relative path whose post has gone the same
+way; an external destination whose host is no longer in `allowed_redirect_hosts`; a row
+whose stored data is corrupt. It also warns about possible loops (a destination that is
+itself another redirect's source, with the hops leading back to where they started) and
+about sources on a path WordPress itself serves, such as `/wp-admin`. `create` and `import`
+give the same warnings as they write.
 
-It also reports possible loops: a destination that is itself another redirect's source,
-with the hops leading back to where they started. A loop only runs while every source in
-it returns a 404 — any member serving real content keeps it dormant — so it is reported
-as a warning for a person to judge, and `--fix` never disables loop members. Break a
-cycle by re-pointing or disabling one member. `create` and `import` give the same warning
-at the moment a new redirect closes a cycle.
-
-It also flags any redirect whose source is a path WordPress itself serves: `/wp-admin` and
-everything beneath it, `/wp-login.php` and the other root `wp-*.php` files, `/xmlrpc.php`,
-and anything under `/wp-json`, `/wp-content` or `/wp-includes`. Such a redirect does nothing
-while the path works, because redirects only answer 404s, but it takes over the moment the path
-breaks. For `/wp-admin` or `/wp-login.php`, that locks you out of the dashboard. They are
-allowed, since a site migrated from another platform can have real legacy URLs there, and
-`create` and `import` warn when you add one.
+With no redirects named, `validate` checks every redirect, enabled and disabled: the same
+check the site runs in the background, run now. It requests nothing, so it is safe at any
+size, and on a very large site it is the way to run a full check off-peak. It records what
+it finds, so the admin "Has issues" view and the menu badge update, and `list --has-issues`
+lists the redirects it flagged:
 
 ```bash
 wp legacy-redirector validate
+wp legacy-redirector list --has-issues
 ```
 
-Destinations that only a request can judge (URLs, and paths that resolve to no post) are
-left alone unless you ask, because checking one means an HTTP request. `--check-destination`
-adds that, and reports the destinations that answer with an error. It is slow, so it suits a
-scheduled audit rather than an interactive check:
+Name redirects to see what is wrong with each, and what to do about it. This also updates
+their flags, so re-checking one after a fix that WordPress does not announce, such as a
+host allowed in code, takes it off the list:
 
 ```bash
-wp legacy-redirector validate --check-destination --format=csv > broken.csv
+wp legacy-redirector validate /old-page 123
+wp legacy-redirector list --has-issues=problem --format=ids | xargs wp legacy-redirector validate
 ```
 
-A URL check that cannot get an answer (a timeout, a refused connection) or gets a server
-error is reported, but it says nothing definite about the destination: the host may simply
-be slow or briefly down. On WordPress VIP the request helper also stops calling a host for
-a short while after a few slow responses, so one slow host can fail every check to it in a
-run. Re-run before treating one of these as broken.
-
-`--fix` disables the redirects found broken. It leaves alone the warnings (reserved sources
-and possible loops) and the URL checks that could not get a clear answer, and says how many
-it left enabled. Disabling stops visitors being sent somewhere broken while leaving the
-redirects in place to repair. If any redirect cannot be disabled, the command names it and
-exits with an error:
+`test` checks named redirects live: it requests the destination where only a request can
+judge it (a URL, or a path that resolves to no post), and requests the source to see
+whether visiting it redirects there. It records nothing. `--only=destination` or
+`--only=source` runs one of the two. To check whether every external destination still
+responds:
 
 ```bash
-wp legacy-redirector validate --fix
+wp legacy-redirector test /old-page
+wp legacy-redirector list --destination-type=url --limit=100000 --format=ids | xargs wp legacy-redirector test --only=destination
 ```
 
-`validate` reports what it finds without recording it. The "Has issues" view and the menu
-badge come from the background check, which goes through every redirect a few seconds at a
-time; see [configuration.md](configuration.md#tune-or-turn-off-the-background-check). To
-check every redirect now and update both, run `scan`. It requests nothing, so it is safe at
-any size, and on a very large site it is the way to run a full check off-peak:
+A request that cannot get an answer (a timeout, a refused connection), or gets a server
+error, is reported as inconclusive: the host may simply be slow or briefly down. On
+WordPress VIP the request helper also stops calling a host for a short while after a few
+slow responses, so one slow host can fail every check to it in a run. Test again before
+treating one of these as broken.
+
+Neither command changes a redirect. Almost no problem has a fix the plugin can safely apply
+(restoring a post, repointing a redirect, and allowing a host are decisions for a person),
+so each finding says what to do instead. To switch off the redirects with problems, do it
+explicitly:
 
 ```bash
-wp legacy-redirector scan
+wp legacy-redirector list --has-issues=problem --format=ids | xargs wp legacy-redirector disable
 ```
 
-Note that `validate` only inspects enabled redirects and stops at 1,000 by default. Widen
-it explicitly for a full audit:
-
-```bash
-wp legacy-redirector validate --status=any --limit=100000 --format=count
-```
+A disabled redirect is still checked, so it stays on the list until it is repaired or
+deleted.
 
 ### Export and back up
 
@@ -356,7 +349,7 @@ second per 100 redirects: a 50,000-row file takes at least eight minutes.
 **Destinations are validated by default.** `create` and `import` check the destination
 before storing it. `--skip-validation` turns that off, which is occasionally needed when
 importing redirects to content that has not been published yet, but it means a broken
-destination is stored without complaint. Follow up with `validate`.
+destination is stored without complaint. Follow up with `validate`, which names what to do.
 
 **Creating a redirect for a URL that currently works does nothing visible.** Redirects
 only fire on requests that would otherwise 404, so a redirect whose source is still a

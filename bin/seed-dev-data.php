@@ -16,10 +16,11 @@
  *     composer seed -- 0         # edge cases only
  *     composer seed -- 500       # pagination-scale bulk rows
  *
- * Note: `wp legacy-redirector validate --check-destination` cannot reach the
- * site from inside the `cli` container, because home_url() points at the
- * host's published port. Every URL destination will report "Request failed".
- * Run validate without `--check-destination` to exercise the post-ID and path checks.
+ * Note: `wp legacy-redirector test` cannot reach the site from inside the
+ * `cli` container, because home_url() points at the host's published port and
+ * the container runs no web server. Its source checks, and its checks of
+ * internal path destinations, report that they could not tell. `validate`
+ * makes no requests, and the admin Test action works.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -194,8 +195,10 @@ PHP
 /*
  * In wp-env the site cannot request its own published home URL from inside
  * the container, which breaks anything probing the site over HTTP (the Test
- * action's live source probe, --check-destination against internal paths). This
- * mu-plugin rewrites loopback requests to the container's own web server.
+ * action's live source probe and its checks of internal paths). This
+ * mu-plugin rewrites loopback requests to the web server in the same container,
+ * which serves the admin; the `cli` container has none, so `test` still cannot
+ * request the site from there.
  */
 
 $loopback_file = WPMU_PLUGIN_DIR . '/legacy-redirector-seed-loopback.php';

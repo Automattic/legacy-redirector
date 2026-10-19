@@ -247,18 +247,18 @@ If you have been running the plugin from the `develop` branch rather than the 1.
 
 | `develop` command | 2.0 replacement |
 |-------------------|-----------------|
-| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>`, or `validate --format=csv > <file>` to export only broken redirects |
+| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>`, or `list --has-issues --format=csv > <file>` to export only the redirects with problems or warnings |
 
 `find-domains` keeps its name and gains a `--format` flag, including a `count` format.
 
 Other behavior changes to be aware of:
 
-- `delete`, `enable`, `disable`, `update`, and `validate` accept multiple redirects in one call, e.g. `wp legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
+- `delete`, `enable`, `disable`, `update`, `validate`, and `test` accept multiple redirects in one call, e.g. `wp legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
 - External destinations still require the host to be allowed via the `allowed_redirect_hosts` filter, as in 1.x, but you now find out at creation time instead of discovering it in production. 1.x accepted any destination and then handed it to `wp_safe_redirect()`, which sent visitors to its fallback of `admin_url()` when the host was not allowed. Creating or updating a redirect to a host the site does not allow is now an error naming the domain, and a stored redirect whose host is not allowed leaves the original 404 in place rather than bouncing visitors to the admin. Run `wp legacy-redirector find-domains` to list the domains your existing redirects point at, and allow the ones you intend to keep.
 
 ### Destination Validation Uses Safe HTTP Requests
 
-Destination validation (the admin "Validate" action and `wp legacy-redirector validate --check-destination`) now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
+Live destination checks (the admin Test action and `wp legacy-redirector test`) now use `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
 
 **What this means for you:**
 

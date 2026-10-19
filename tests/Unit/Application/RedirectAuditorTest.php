@@ -557,9 +557,10 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	/**
 	 * Test a source answering with an error is unreachable, not dormant.
 	 *
-	 * A server error, a 429 from a site rate-limiting requests to itself, or
-	 * no status at all is the site failing to answer. None of them means
-	 * content is winning over the redirect.
+	 * A server error, a 429 from a site rate-limiting requests to itself, a
+	 * 401 or 403 from basic auth or a firewall, or no status at all is the
+	 * probe being turned away. None of them means content is winning over the
+	 * redirect.
 	 *
 	 * @dataProvider unreachable_status_provider
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
@@ -584,24 +585,149 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			'server error'        => array( 500 ),
 			'service unavailable' => array( 503 ),
 			'too many requests'   => array( 429 ),
+			'unauthorized'        => array( 401 ),
+			'forbidden'           => array( 403 ),
 			'no status'           => array( 0 ),
 		);
 	}
 
 	/**
-	 * Test a forbidden source is still dormant.
+	 * Test each probe outcome maps to its finding, and a confirmed redirect to none.
 	 *
-	 * The site answered with its own response, so the 404 the redirect
-	 * needs never happened.
+	 * @dataProvider probe_finding_provider
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 *
+	 * @param array{status: string, location?: string} $probe    The probe outcome.
+	 * @param AuditFindingType|null                    $expected The finding type, or null for none.
+	 */
+	public function test_finding_for_probe( array $probe, ?AuditFindingType $expected ): void {
+		$finding = $this->auditor->finding_for_probe( $this->create_redirect( '/old', '/target' ), $probe );
+
+		$this->assertSame( $expected, $finding?->type() );
+	}
+
+	/**
+	 * Probe outcomes and the findings they become.
+	 *
+	 * @return array<string, array{array{status: string, location?: string}, AuditFindingType|null}>
+	 */
+	public function probe_finding_provider(): array {
+		return array(
+			'confirmed'   => array(
+				array(
+					'status'   => 'confirmed',
+					'location' => 'https://example.com/target',
+				),
+				null,
+			),
+			'diverted'    => array(
+				array(
+					'status'   => 'diverted',
+					'location' => 'https://example.com/elsewhere',
+				),
+				AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE,
+			),
+			'not firing'  => array( array( 'status' => 'not-firing' ), AuditFindingType::SOURCE_NOT_FIRING ),
+			'dormant'     => array( array( 'status' => 'dormant' ), AuditFindingType::SOURCE_SERVES_CONTENT ),
+			'unreachable' => array( array( 'status' => 'unreachable' ), AuditFindingType::SOURCE_REQUEST_FAILED ),
+		);
+	}
+
+	/**
+	 * Test a diverted source names where it went.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 */
+	public function test_finding_for_probe_names_the_diverted_location(): void {
+		$finding = $this->auditor->finding_for_probe(
+			$this->create_redirect( '/old', '/target' ),
+			array(
+				'status'   => 'diverted',
+				'location' => 'https://example.com/elsewhere',
+			)
+		);
+
+		$this->assertSame( 'to: https://example.com/elsewhere', $finding?->extra_info() );
+	}
+
+	/**
+	 * Test a disabled redirect's probe says nothing about it: it is not meant to fire.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 */
+	public function test_finding_for_probe_ignores_a_disabled_redirect(): void {
+		$disabled = $this->create_redirect( '/old', '/target' )->with_status( 'draft' );
+
+		$this->assertNull( $this->auditor->finding_for_probe( $disabled, array( 'status' => 'not-firing' ) ) );
+	}
+
+	/**
+	 * Test audit_source probes the source and reports the outcome as a finding.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_source_that_does_not_fire(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+
+		$this->assertSame( AuditFindingType::SOURCE_NOT_FIRING, $auditor->audit_source( $this->create_redirect( '/old', '/target' ) )?->type() );
+	}
+
+	/**
+	 * Test a 410 means the redirect did not fire, like a 404.
+	 *
+	 * Redirects only answer a 404, so a server or plugin answering "gone"
+	 * first means this one never got the chance.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
 	 */
-	public function test_probe_source_treats_a_forbidden_source_as_dormant(): void {
+	public function test_probe_source_treats_a_gone_source_as_not_firing(): void {
 		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 
-		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 403 ) ) );
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 410 ) ) );
 
-		$this->assertSame( array( 'status' => 'dormant' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+		$this->assertSame( array( 'status' => 'not-firing' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test a root-relative Location is resolved against the source before comparing.
+	 *
+	 * With nginx's absolute_redirect off, or a proxy rewriting the header,
+	 * the response says "/target": the same place as the absolute destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_resolves_a_relative_location(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => '/target' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status'   => 'confirmed',
+				'location' => 'https://example.com/target',
+			),
+			$auditor->probe_source( $this->create_redirect( '/old', '/target' ) )
+		);
+	}
+
+	/**
+	 * Test a redirect with no Location is inconclusive, not diverted.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_a_redirect_without_a_location_as_unreachable(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 302 ) ) );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
 	}
 
 	/**
@@ -870,70 +996,6 @@ final class RedirectAuditorTest extends MonkeyStubs {
 		$this->assertCount( 1, $findings );
 		$this->assertSame( AuditFindingType::CORRUPT_DATA, $findings[0]->type() );
 		$this->assertSame( 'Stored source is not a valid path', $findings[0]->extra_info() );
-	}
-
-	/**
-	 * Test audit_batch collects findings across redirects and reports progress.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_batch
-	 */
-	public function test_audit_batch_collects_findings_and_reports_progress(): void {
-		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
-
-		Functions\expect( 'get_page_by_path' )
-			->twice()
-			->andReturn( $this->create_mock_post( 'draft' ), $this->create_mock_post( 'publish' ) );
-
-		$progress = array();
-
-		$findings = $this->auditor->audit_batch(
-			array(
-				$this->create_redirect( '/one', '/draft-page' ),
-				$this->create_redirect( '/two', '/live-page' ),
-			),
-			false,
-			function ( int $count ) use ( &$progress ): void {
-				$progress[] = $count;
-			}
-		);
-
-		$this->assertCount( 1, $findings );
-		$this->assertContainsOnlyInstancesOf( AuditFinding::class, $findings );
-		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $findings[0]->type() );
-		$this->assertSame( array( 1, 2 ), $progress );
-	}
-
-	/**
-	 * Test audit_batch returns every row's findings, in row order.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_batch
-	 */
-	public function test_audit_batch_returns_each_rows_findings_in_order(): void {
-		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
-		Functions\when( 'get_page_by_path' )->alias(
-			fn ( string $path ) => $this->create_mock_post( 'draft-page' === $path ? 'draft' : 'publish' )
-		);
-
-		$redirects = array(
-			$this->create_redirect( '/wp-admin', '/draft-page' ),
-			$this->create_redirect( '/two', '/live-page' ),
-			$this->create_redirect( '/wp-login.php', '/live-page' ),
-		);
-
-		$expected = array();
-		foreach ( $redirects as $redirect ) {
-			foreach ( $this->auditor->audit( $redirect ) as $finding ) {
-				$expected[] = array( $redirect->source()->path(), $finding->type() );
-			}
-		}
-
-		$actual = array_map(
-			static fn ( AuditFinding $finding ): array => array( $finding->redirect()->source()->path(), $finding->type() ),
-			$this->auditor->audit_batch( $redirects )
-		);
-
-		$this->assertCount( 3, $expected );
-		$this->assertSame( $expected, $actual );
 	}
 }
 

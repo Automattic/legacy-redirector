@@ -12,7 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 
 /**
- * The per-row outcome of the last scan, stored as post meta.
+ * The per-row outcome of the last check, stored as post meta.
  *
  * A flag is a snapshot, not a live judgement: whether a row has a problem
  * depends on other data (a destination post being unpublished, another
@@ -152,9 +152,22 @@ final class AuditFlags {
 	 * @return int The problem count; zero before any pass has completed.
 	 */
 	public function problem_count(): int {
-		$counts = get_option( self::COUNTS_OPTION );
+		return $this->stored_counts()['problem'];
+	}
 
-		return is_array( $counts ) ? (int) ( $counts['problem'] ?? 0 ) : 0;
+	/**
+	 * The flagged-row counts as last stored, by severity, without counting.
+	 *
+	 * @return array{problem: int, warning: int} The counts; zero before any pass has completed.
+	 */
+	public function stored_counts(): array {
+		$counts = get_option( self::COUNTS_OPTION );
+		$counts = is_array( $counts ) ? $counts : array();
+
+		return array(
+			'problem' => (int) ( $counts['problem'] ?? 0 ),
+			'warning' => (int) ( $counts['warning'] ?? 0 ),
+		);
 	}
 
 	/**

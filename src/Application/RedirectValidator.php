@@ -187,7 +187,7 @@ class RedirectValidator {
 			// The finding's description, so the error names the refused host.
 			AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED => ValidationResult::invalid(
 				'external-url-not-allowed',
-				$finding->description() . '.'
+				$finding->description() . '. ' . $finding->remedy() . '.'
 			),
 			default => ValidationResult::valid(),
 		};

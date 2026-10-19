@@ -101,6 +101,28 @@ final class AuditFinding {
 	}
 
 	/**
+	 * What a person can do about this finding.
+	 *
+	 * @return string
+	 */
+	public function remedy(): string {
+		return $this->type->remedy();
+	}
+
+	/**
+	 * How seriously to take this finding.
+	 *
+	 * @return string 'problem', 'warning', or 'inconclusive' when the check could not tell.
+	 */
+	public function severity(): string {
+		if ( $this->is_warning() ) {
+			return 'warning';
+		}
+
+		return $this->is_conclusive() ? 'problem' : 'inconclusive';
+	}
+
+	/**
 	 * Get the human-readable finding label.
 	 *
 	 * @return string

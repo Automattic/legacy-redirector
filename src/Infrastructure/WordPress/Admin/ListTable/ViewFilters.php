@@ -95,7 +95,7 @@ final class ViewFilters {
 		// Add destination type filters.
 		$views = $this->add_destination_type_views( $views );
 
-		// Add the "Has issues" view once a scan has completed.
+		// Add the "Has issues" view once a full check has completed.
 		$views = $this->add_audit_flag_view( $views );
 
 		// Add the "Duplicate sources" view while the upgrade has left any.
@@ -177,7 +177,7 @@ final class ViewFilters {
 	/**
 	 * Add the "Has issues" view reading the stored per-row flags.
 	 *
-	 * Only shown once a scan has completed - before that there are
+	 * Only shown once a full check has completed - before that there are
 	 * no flags to read. Shown even at zero, because "checked and clean" is an
 	 * answer, not an absence. The label carries the run's check time: the
 	 * flags are a snapshot, and the time is what makes that honest.
@@ -252,7 +252,7 @@ final class ViewFilters {
 	 *
 	 * Each is a redirect the upgrade disabled because another redirect has the
 	 * same source and a different destination. Hidden at zero: unlike the
-	 * scan, there is nothing to check, only something to settle.
+	 * background check, there is nothing to check, only something to settle.
 	 *
 	 * @param array<string, string> $views Existing views.
 	 * @return array<string, string> Modified views.

@@ -180,7 +180,7 @@ final class ValidationNotices {
 		}
 
 		wp_admin_notice(
-			esc_html__( 'Redirect is not valid', 'legacy-redirector' ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $finding_type->description() . '.' ),
+			esc_html__( 'Redirect is not valid', 'legacy-redirector' ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $finding_type->description() . '. ' . $finding_type->remedy() . '.' ),
 			self::ERROR_NOTICE_ARGS
 		);
 		$this->display_warning_notices( $redirect_context );
@@ -213,7 +213,7 @@ final class ValidationNotices {
 			}
 
 			wp_admin_notice(
-				esc_html( $type->label() ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $type->description() . '.' ),
+				esc_html( $type->label() ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $type->description() . '. ' . $type->remedy() . '.' ),
 				self::WARNING_NOTICE_ARGS
 			);
 		}

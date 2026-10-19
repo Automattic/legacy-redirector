@@ -10,22 +10,27 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
 use Automattic\LegacyRedirector\Application\RedirectBatch;
-use Automattic\LegacyRedirector\Application\RedirectManager;
-use Automattic\LegacyRedirector\Application\RedirectAuditor;
-use Automattic\LegacyRedirector\Domain\Redirect;
-use Automattic\LegacyRedirector\Domain\RedirectCriteria;
-use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use WP_CLI;
 use WP_CLI_Command;
 
 /**
- * Validate redirects for broken destinations.
+ * Check redirects' stored details for problems.
  */
 final class ValidateCommand extends WP_CLI_Command {
 
+	use CountsInWords;
 	use FormatsRedirectRows;
 	use ReportsBatchFailures;
+
+	/**
+	 * Seconds to wait for a background tick to finish its batch.
+	 *
+	 * @var int
+	 */
+	private const int LOCK_WAIT = 30;
 
 	/**
 	 * The batch resolver.
@@ -35,94 +40,60 @@ final class ValidateCommand extends WP_CLI_Command {
 	private RedirectBatch $batch;
 
 	/**
-	 * The query repository.
+	 * The audit sweep, which validates and records.
 	 *
-	 * @var RedirectQueryRepositoryInterface
+	 * @var AuditSweep
 	 */
-	private RedirectQueryRepositoryInterface $query_repository;
+	private AuditSweep $sweep;
 
 	/**
-	 * The redirect auditor.
+	 * The per-row audit flags.
 	 *
-	 * @var RedirectAuditor
+	 * @var AuditFlags
 	 */
-	private RedirectAuditor $auditor;
-
-	/**
-	 * The redirect manager.
-	 *
-	 * @var RedirectManager
-	 */
-	private RedirectManager $manager;
+	private AuditFlags $flags;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param RedirectBatch                    $batch            The batch resolver.
-	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
-	 * @param RedirectAuditor                  $auditor          The redirect auditor.
-	 * @param RedirectManager                  $manager          The redirect manager.
+	 * @param RedirectBatch $batch The batch resolver.
+	 * @param AuditSweep    $sweep The audit sweep.
+	 * @param AuditFlags    $flags The per-row audit flags.
 	 */
-	public function __construct(
-		RedirectBatch $batch,
-		RedirectQueryRepositoryInterface $query_repository,
-		RedirectAuditor $auditor,
-		RedirectManager $manager
-	) {
-		$this->batch            = $batch;
-		$this->query_repository = $query_repository;
-		$this->auditor          = $auditor;
-		$this->manager          = $manager;
+	public function __construct( RedirectBatch $batch, AuditSweep $sweep, AuditFlags $flags ) {
+		$this->batch = $batch;
+		$this->sweep = $sweep;
+		$this->flags = $flags;
 	}
 
 	/**
-	 * Validate redirects and find broken destinations.
+	 * Check redirects' stored details for problems, and record what is found.
 	 *
-	 * Checks for:
-	 * - Destinations pointing to deleted or trashed posts
-	 * - Destinations pointing to unpublished posts
-	 * - External destinations whose host is not in allowed_redirect_hosts
-	 * - Sources on a path WordPress itself serves, such as /wp-admin or
-	 *   /wp-login.php (reported, never disabled by --fix)
-	 * - Redirects whose destinations lead back to themselves through other
-	 *   redirects (reported, never disabled by --fix)
-	 * - Optionally requests destinations to find those answering with an error
+	 * Checks what the stored details can show, without requesting any URL:
+	 * - Destination posts deleted, trashed or not published
+	 * - Destination hosts missing from the allowed_redirect_hosts filter
+	 * - Rows whose stored data cannot be read
+	 * - Sources on a path WordPress itself serves, such as /wp-admin (a warning)
+	 * - Possible loops through other redirects (a warning)
 	 *
-	 * With no arguments, validates redirects matching --status/--limit.
-	 * Pass one or more redirect IDs or source paths to validate just those.
+	 * With no redirects given, checks every redirect, enabled and disabled:
+	 * the same check the site runs in the background, run now. With
+	 * redirects given, checks just those and says what is wrong with each,
+	 * and what to do about it. Either way, each redirect's flag is updated,
+	 * so the admin "Has issues" view, the menu badge and `list --has-issues`
+	 * reflect the result. To check whether a redirect works live, use `test`.
+	 *
+	 * Nothing is changed beyond the flags: almost no problem has a fix the
+	 * plugin can safely apply, so each finding says what to do instead.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [<redirect>...]
-	 * : Optional redirect IDs or source paths to validate.
-	 *
-	 * [--check-destination]
-	 * : Also request destinations that only an HTTP request can judge (URLs, and
-	 * paths that resolve to no post), and report those answering with an error.
-	 * Slow: one request per such redirect.
-	 *
-	 * [--status=<status>]
-	 * : Only check redirects with this status (ignored when redirects are given).
-	 * ---
-	 * default: enabled
-	 * options:
-	 *   - any
-	 *   - enabled
-	 *   - disabled
-	 * ---
-	 *
-	 * [--limit=<number>]
-	 * : Maximum number of redirects to check (ignored when redirects are given).
-	 * ---
-	 * default: 1000
-	 * ---
-	 *
-	 * [--fix]
-	 * : Disable the redirects found broken. Warnings, and URL checks that
-	 * failed or met a server error, are reported but left enabled.
+	 * : Redirect IDs or source paths to check. Omit to check every redirect.
 	 *
 	 * [--format=<format>]
-	 * : Render output in a particular format.
+	 * : Render the findings for the redirects given. With no redirects,
+	 * `count` prints how many redirects have problems or warnings.
 	 * ---
 	 * default: table
 	 * options:
@@ -135,26 +106,14 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     # Find broken redirects.
+	 *     # Check every redirect now, rather than waiting for the background check.
 	 *     $ wp legacy-redirector validate
 	 *
-	 *     # Validate a single redirect by source path, including URL checks.
-	 *     $ wp legacy-redirector validate /old-page --check-destination
+	 *     # Say what is wrong with one redirect, and what to do about it.
+	 *     $ wp legacy-redirector validate /old-page
 	 *
-	 *     # Validate a single redirect by ID.
-	 *     $ wp legacy-redirector validate 123
-	 *
-	 *     # Find and disable broken redirects.
-	 *     $ wp legacy-redirector validate --fix
-	 *
-	 *     # Check all redirects (enabled and disabled).
-	 *     $ wp legacy-redirector validate --status=any
-	 *
-	 *     # Get count of broken redirects.
-	 *     $ wp legacy-redirector validate --format=count
-	 *
-	 *     # Export broken redirects to a CSV file.
-	 *     $ wp legacy-redirector validate --format=csv > broken.csv
+	 *     # Re-check every redirect the background check flagged as a problem.
+	 *     $ wp legacy-redirector list --has-issues=problem --format=ids | xargs wp legacy-redirector validate
 	 *
 	 * @when after_wp_load
 	 *
@@ -162,198 +121,104 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		$check_destination = (bool) ( $assoc_args['check-destination'] ?? false );
-		$fix               = isset( $assoc_args['fix'] );
-		$format            = $assoc_args['format'] ?? 'table';
-		$is_table          = 'table' === $format;
+		$format = $assoc_args['format'] ?? 'table';
 
-		$redirects = empty( $args )
-			? $this->fetch_by_criteria( $assoc_args )
-			: $this->fetch_by_identifiers( $args );
-
-		if ( null === $redirects ) {
+		if ( array() === $args ) {
+			$this->validate_all( $format );
 			return;
 		}
 
-		if ( $is_table && $check_destination ) {
-			WP_CLI::warning( 'Checking destinations over HTTP - this may be slow.' );
-		}
-
-		$total    = count( $redirects );
-		$progress = $is_table ? \WP_CLI\Utils\make_progress_bar( 'Validating redirects', $total ) : null;
-
-		$issues = $this->auditor->audit_batch(
-			$redirects,
-			$check_destination,
-			function () use ( $progress ): void {
-				if ( null !== $progress ) {
-					$progress->tick();
-				}
-			}
-		);
-
-		if ( null !== $progress ) {
-			$progress->finish();
-		}
-
-		// Handle count format.
-		if ( 'count' === $format ) {
-			WP_CLI::line( (string) count( $issues ) );
-			return;
-		}
-
-		if ( $is_table ) {
-			WP_CLI::line( sprintf( 'Checked %d redirect(s).', $total ) );
-		}
-
-		if ( empty( $issues ) ) {
-			if ( $is_table ) {
-				WP_CLI::success( 'No issues found.' );
-			}
-			return;
-		}
-
-		if ( $is_table ) {
-			WP_CLI::warning( sprintf( 'Found %d issue(s).', count( $issues ) ) );
-			WP_CLI::line( '' );
-		}
-
-		// Convert issues to array format for display.
-		$items = array_map(
-			fn( AuditFinding $issue ) => $this->redirect_row( $issue->redirect() ) + array( 'issue' => $issue->label() ),
-			$issues
-		);
-
-		\WP_CLI\Utils\format_items( $format, $items, array( 'ID', 'from', 'to', 'type', 'issue', 'status' ) );
-
-		// Fix if requested.
-		if ( $fix ) {
-			$this->fix_issues( $issues );
-		}
-	}
-
-	/**
-	 * Fetch redirects matching the batch criteria.
-	 *
-	 * @param array $assoc_args Key-value associative arguments.
-	 * @return Redirect[] The redirects to validate.
-	 */
-	private function fetch_by_criteria( array $assoc_args ): array {
-		$status = $assoc_args['status'] ?? 'enabled';
-		$limit  = (int) ( $assoc_args['limit'] ?? 1000 );
-
-		$criteria = new RedirectCriteria(
-			'any' === $status ? null : $status,
-			null, // destination_type.
-			null, // search.
-			'date',
-			'DESC',
-			$limit,
-			0
-		);
-
-		return $this->query_repository->find_matching( $criteria );
-	}
-
-	/**
-	 * Fetch redirects by identifier, warning about any that cannot be resolved.
-	 *
-	 * @param string[] $identifiers Redirect IDs or source paths.
-	 * @return Redirect[]|null The redirects, or null if none could be resolved.
-	 */
-	private function fetch_by_identifiers( array $identifiers ): ?array {
-		$items = $this->batch->resolve( $identifiers );
+		$items = $this->batch->resolve( $args );
 		$this->report_batch_failures( $items, 'validate' );
 
 		$redirects = RedirectBatch::redirects( $items );
 
-		if ( empty( $redirects ) ) {
+		if ( array() === $redirects ) {
 			WP_CLI::error( 'No matching redirects found.' );
-			return null;
-		}
-
-		return $redirects;
-	}
-
-	/**
-	 * Disable the redirects behind the given issues.
-	 *
-	 * Only a conclusive problem disables a redirect. A warning may be a
-	 * legitimate legacy URL, and an inconclusive finding (a failed request, a
-	 * server error) says nothing about the redirect, so both are left for a
-	 * person to judge. A redirect with several findings is counted once.
-	 *
-	 * @param AuditFinding[] $issues The issues to fix.
-	 */
-	private function fix_issues( array $issues ): void {
-		WP_CLI::line( '' );
-		$to_disable   = array();
-		$inconclusive = array();
-		$corrupt      = array();
-
-		foreach ( $issues as $issue ) {
-			if ( $issue->is_warning() ) {
-				continue;
-			}
-
-			$id = (int) $issue->redirect_id();
-
-			// A corrupt row cannot be re-saved, so it cannot be auto-disabled.
-			if ( $issue->redirect()->is_corrupt() ) {
-				$corrupt[ $id ] = true;
-				continue;
-			}
-
-			if ( ! $issue->redirect()->is_active() ) {
-				continue;
-			}
-
-			if ( $issue->is_conclusive() ) {
-				$to_disable[ $id ] = true;
-			} else {
-				$inconclusive[ $id ] = true;
-			}
-		}
-
-		// One conclusive problem is enough, whatever else could not be checked.
-		$inconclusive = array_diff_key( $inconclusive, $to_disable );
-
-		$fixed = 0;
-		foreach ( array_keys( $to_disable ) as $id ) {
-			$result = $this->manager->change_status( $id, 'draft' );
-
-			if ( $result->is_success() ) {
-				++$fixed;
-				continue;
-			}
-
-			$error = $result->error_message();
-			WP_CLI::warning( sprintf( 'Could not disable redirect: %d%s', $id, null === $error ? '' : sprintf( ' (%s)', $error ) ) );
-		}
-
-		if ( count( $corrupt ) > 0 ) {
-			WP_CLI::warning(
-				sprintf(
-					'%d redirect(s) hold corrupt stored data and cannot be auto-disabled. Delete them, or update them with a new source and destination.',
-					count( $corrupt )
-				)
-			);
-		}
-
-		if ( count( $inconclusive ) > 0 ) {
-			WP_CLI::warning(
-				sprintf(
-					'%d redirect(s) could not be checked conclusively and were left enabled. Re-run to check them again.',
-					count( $inconclusive )
-				)
-			);
-		}
-
-		if ( $fixed < count( $to_disable ) ) {
-			WP_CLI::error( sprintf( 'Only disabled %d of %d broken redirect(s).', $fixed, count( $to_disable ) ) );
 			return;
 		}
 
-		WP_CLI::success( sprintf( 'Disabled %d broken redirect(s).', $fixed ) );
+		$findings = $this->sweep->validate_redirects( $redirects );
+
+		if ( 'count' === $format ) {
+			WP_CLI::line( (string) count( $findings ) );
+			return;
+		}
+
+		if ( array() === $findings ) {
+			WP_CLI::success( 'No issues found.' );
+			return;
+		}
+
+		if ( 'table' === $format ) {
+			WP_CLI::warning( 'Found ' . self::count_of( count( $findings ), 'issue', 'issues' ) . '.' );
+		}
+
+		\WP_CLI\Utils\format_items(
+			$format,
+			array_map( fn( AuditFinding $finding ) => $this->finding_row( $finding ), $findings ),
+			array( 'ID', 'from', 'to', 'severity', 'issue', 'detail', 'remedy' )
+		);
+	}
+
+	/**
+	 * Run a full pass over every redirect, as the background check does.
+	 *
+	 * Locked a batch at a time, as the background takes it, so a long run
+	 * never holds the lock past the age at which it counts as abandoned.
+	 *
+	 * @param string $format The output format.
+	 * @return void
+	 */
+	private function validate_all( string $format ): void {
+		$total    = $this->sweep->total();
+		$progress = 'table' === $format ? \WP_CLI\Utils\make_progress_bar( 'Validating redirects', $total ) : null;
+		$restart  = true;
+
+		do {
+			if ( ! $this->sweep->lock( self::LOCK_WAIT ) ) {
+				WP_CLI::error( 'Another check held the lock throughout. Try again in a minute.' );
+				return;
+			}
+
+			try {
+				if ( $restart ) {
+					$this->sweep->start_pass();
+					$restart = false;
+				}
+
+				$batch = $this->sweep->run_batch();
+			} finally {
+				$this->sweep->unlock();
+			}
+
+			// A pass over millions of rows would otherwise fill the in-memory
+			// object cache with every destination post and lookup it touched.
+			\WP_CLI\Utils\wp_clear_object_cache();
+
+			$progress?->tick( $batch['audited'] );
+		} while ( ! $batch['done'] );
+
+		$progress?->finish();
+
+		$counts = $this->flags->counts();
+
+		if ( 'count' === $format ) {
+			WP_CLI::line( (string) ( $counts['problem'] + $counts['warning'] ) );
+			return;
+		}
+
+		WP_CLI::success(
+			sprintf(
+				'Validated %s: %s, %s.',
+				self::count_of( $total, 'redirect', 'redirects' ),
+				self::count_of( $counts['problem'], 'with a problem', 'with problems' ),
+				self::count_of( $counts['warning'], 'with a warning', 'with warnings' )
+			)
+		);
+
+		if ( $counts['problem'] + $counts['warning'] > 0 ) {
+			WP_CLI::line( 'List them with `wp legacy-redirector list --has-issues`, and see what to do about one with `wp legacy-redirector validate <redirect>`.' );
+		}
 	}
 }

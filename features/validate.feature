@@ -1,13 +1,13 @@
 Feature: Validate redirects
   As a site administrator
   I want to validate redirects
-  So that I can find and fix broken redirect destinations
+  So that I can find broken redirects and learn what to do about them
 
   Background:
     Given a WP installation with the Legacy Redirector plugin
 
-  # Contract test: verifies batch processing works with real WordPress.
-  Scenario: Validate batch mode with no issues
+  # Contract test: verifies a full pass runs with real WordPress.
+  Scenario: Validate every redirect when none are named
     Given there is a published post with a slug of "batch-destination"
     And there is a redirect from "/batch-test-1" to "/batch-destination"
     And there is a redirect from "/batch-test-2" to "/batch-destination"
@@ -15,7 +15,7 @@ Feature: Validate redirects
     When I run `wp legacy-redirector validate`
     Then STDOUT should contain:
       """
-      No issues found.
+      Validated 2 redirects: 0 with problems, 0 with warnings.
       """
 
   # Contract test: verifies WordPress post state integration.
@@ -28,4 +28,19 @@ Feature: Validate redirects
     Then STDOUT should contain:
       """
       Found 1 issue
+      """
+    And STDOUT should contain:
+      """
+      Restore the post from the trash, or point this redirect elsewhere
+      """
+
+  # Contract test: the live check runs; a destination that is a post needs no request.
+  Scenario: Test a redirect's destination
+    Given there is a published post with a slug of "tested-destination"
+    And there is a redirect from "/test-destination-only" to "/tested-destination"
+
+    When I run `wp legacy-redirector test /test-destination-only --only=destination`
+    Then STDOUT should contain:
+      """
+      Destination is valid
       """

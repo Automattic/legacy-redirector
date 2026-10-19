@@ -10,17 +10,19 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 
 /**
  * Walks the whole redirect table, flagging each row, a time-budgeted slice at a time.
  *
- * The one runner behind the background check, the admin Scan button and
- * `wp legacy-redirector scan`. They share a keyset cursor (the last audited
- * ID), so a pass costs the same at row 100 as at row 5,000,000, and a row
- * deleted mid-pass cannot shift the next batch; and they share a lock, so
- * two runners never audit the same batch.
+ * The one runner behind the background check, the admin "Validate all
+ * redirects" button and `wp legacy-redirector validate`. They share a
+ * keyset cursor (the last audited ID), so a pass costs the same at row 100
+ * as at row 5,000,000, and a row deleted mid-pass cannot shift the next
+ * batch; and they share a lock, so two runners never audit the same batch.
  *
  * In the background, a cron event every five minutes spends a fixed slice
  * of server time (the legacy_redirector_background_audit_seconds filter)
@@ -218,7 +220,7 @@ final class AuditSweep {
 		 * The background check runs every five minutes and audits redirects
 		 * until this budget is spent, so the time a full pass takes grows with
 		 * the number of redirects. Return 0 to turn it off, for example on a
-		 * very large site that runs `wp legacy-redirector scan` off-peak instead.
+		 * very large site that runs `wp legacy-redirector validate` off-peak instead.
 		 *
 		 * @param int|float $seconds Seconds per tick. Default 20.
 		 */
@@ -340,6 +342,34 @@ final class AuditSweep {
 			'audited' => $audited,
 			'done'    => $done,
 		);
+	}
+
+	/**
+	 * Validate the given redirects now, flag each, and recount the badge.
+	 *
+	 * The targeted counterpart of a full pass: `validate <redirect>` and the
+	 * validate ability with named redirects. It needs no lock, because it
+	 * does not move the cursor; it only rewrites these rows' flags, so
+	 * re-checking one redirect after fixing something no event announces
+	 * (a host allowed in code, a page published at a path) clears its flag.
+	 *
+	 * @param Redirect[] $redirects The redirects to validate.
+	 * @return AuditFinding[] Every finding, in the order the redirects were given.
+	 */
+	public function validate_redirects( array $redirects ): array {
+		$findings = array();
+
+		foreach ( $redirects as $redirect ) {
+			$found = $this->auditor->audit( $redirect );
+			$this->flags->record_row( (int) $redirect->id(), $found );
+			array_push( $findings, ...$found );
+		}
+
+		if ( array() !== $redirects ) {
+			$this->flags->store_counts();
+		}
+
+		return $findings;
 	}
 
 	/**

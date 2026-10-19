@@ -18,6 +18,8 @@ use WP_CLI_Command;
  */
 final class FindDomainsCommand extends WP_CLI_Command {
 
+	use CountsInWords;
+
 	/**
 	 * Number of URLs fetched per page.
 	 *
@@ -115,7 +117,7 @@ final class FindDomainsCommand extends WP_CLI_Command {
 		}
 
 		if ( $is_table ) {
-			WP_CLI::line( sprintf( 'Found %s unique outbound domain(s).', number_format_i18n( count( $domains ) ) ) );
+			WP_CLI::line( 'Found ' . self::count_of( count( $domains ), 'unique outbound domain', 'unique outbound domains' ) . '.' );
 		}
 
 		$items = array_map(

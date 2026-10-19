@@ -73,9 +73,9 @@ final class ListScreenSetup {
 
 		$screen->add_help_tab(
 			array(
-				'id'      => 'scan-and-test',
-				'title'   => __( 'Scan and Test', 'legacy-redirector' ),
-				'content' => $this->get_scan_and_test_help(),
+				'id'      => 'validate-and-test',
+				'title'   => __( 'Validate and Test', 'legacy-redirector' ),
+				'content' => $this->get_validate_and_test_help(),
 			)
 		);
 
@@ -176,28 +176,28 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'To Paths', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'To External URLs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'Once every redirect has been checked, by the background check or <strong>Scan for issues</strong>, a <strong>Has issues</strong> filter shows only the redirects the check flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with when the last full check finished: editing a redirect clears its flag until it is next checked. See the Scan and Test help tab for what a scan can and cannot see.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'Once every redirect has been checked, by the background check or <strong>Validate all redirects</strong>, a <strong>Has issues</strong> filter shows only the redirects the check flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with when the last full check finished: editing a redirect clears its flag until it is next checked. See the Validate and Test help tab for what validation can and cannot see.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
-	 * Get the Scan and Test help content.
+	 * Get the Validate and Test help content.
 	 *
 	 * The one place the two kinds of check are set side by side, so nobody
-	 * reads a clean scan as a guarantee the redirects work live.
+	 * reads a clean validation as a guarantee the redirects work live.
 	 *
 	 * @return string Help content HTML.
 	 */
-	private function get_scan_and_test_help(): string {
+	private function get_validate_and_test_help(): string {
 		return '<p>' . __( 'There are two ways to check redirects, and they look at different evidence:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
-			'<li>' . __( '<strong>Scan for issues</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. A scan never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals. The same check runs in the background, a few seconds every five minutes, so every redirect is checked regularly without anyone pressing the button; the line beside the button says when the last full check finished and how long one takes.', 'legacy-redirector' ) . '</li>' .
-			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Validate all redirects</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. Validation never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals. The same check runs in the background, a few seconds every five minutes, so every redirect is checked regularly without anyone pressing the button; the line beside the button says when the last full check finished and how long one takes.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored, because a timeout says nothing definite about a redirect.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'So a clean scan does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector validate --check-destination</code>) can see that. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look, and nothing automated will ever disable it. A row whose stored data cannot be read as a redirect at all is reported as corrupt: delete it, or edit it with a full new source and destination.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'So a clean validation does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector test</code>) can see that. On the command line, <code>wp legacy-redirector validate</code> and <code>test</code> do the same two jobs. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look. Every finding says what to do about it: hover over it in the Health column. Nothing disables a redirect automatically, because almost no problem has a fix the plugin can safely apply.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
-	 * Get the help content describing every check a scan runs.
+	 * Get the help content describing every check validation runs.
 	 *
 	 * @return string Help content HTML.
 	 */
@@ -213,7 +213,7 @@ final class ListScreenSetup {
 			'<li>' . __( '<strong>External URL destinations</strong>: the host must be in the <code>allowed_redirect_hosts</code> filter, or WordPress will refuse the redirect at request time and the visitor gets a 404.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Possible loops</strong> (warning): a destination that is itself another redirect\'s source, with the hops leading back to where they started. A loop only runs while every source in it returns a 404 - any member serving real content keeps it dormant - so a person should judge it; break a cycle by re-pointing or disabling one member.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'Whether a destination actually responds, and whether the redirect fires for a visitor, are live questions. The Test action answers both for one redirect; <code>wp legacy-redirector validate --check-destination</code> answers the first in bulk from the command line.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'Whether a destination actually responds, and whether the redirect fires for a visitor, are live questions. The Test action answers both for the redirects you pick, as <code>wp legacy-redirector test</code> does from the command line.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
