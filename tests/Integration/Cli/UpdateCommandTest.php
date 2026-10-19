@@ -18,6 +18,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * Integration tests for UpdateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CountsInWords
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
@@ -218,7 +219,7 @@ final class UpdateCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /nonexistent' );
 	}
 
 	/**
@@ -250,5 +251,21 @@ final class UpdateCommandTest extends CliTestCase {
 		);
 
 		$this->assert_error_contains( 'Invalid destination' );
+	}
+
+	/**
+	 * Test a mixed batch names the shortfall with the right plural.
+	 */
+	public function test_update_partial_failure_counts_in_words(): void {
+		$this->create_redirect( '/update-partial', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-partial', '/update-partial-missing' ),
+			array( 'status' => 'disabled' )
+		);
+
+		$this->assert_warning_contains( 'Redirect not found: /update-partial-missing' );
+		$this->assert_error_contains( 'Only updated 1 of 2 redirects.' );
 	}
 }

@@ -19,6 +19,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * Integration tests for DeleteCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CountsInWords
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
@@ -129,7 +130,43 @@ final class DeleteCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /nonexistent' );
+		$this->assertCount( 1, \WP_CLI::get_calls( 'error' ), 'One error is enough for one redirect.' );
+		$this->assertFalse( $this->output->had_warning() );
+	}
+
+	/**
+	 * Test nothing is asked about when none of the redirects exist.
+	 */
+	public function test_delete_does_not_prompt_when_nothing_is_found(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/missing-one', '/missing-two' ),
+			array()
+		);
+
+		$this->assertFalse( \WP_CLI::was_called( 'confirm' ) );
+		$this->assert_warning_contains( 'Redirect not found: /missing-one' );
+		$this->assert_error_contains( 'Could not delete any of the 2 redirects.' );
+	}
+
+	/**
+	 * Test the prompt counts the redirects found, not the identifiers given.
+	 */
+	public function test_delete_prompt_counts_what_was_found(): void {
+		$first  = $this->create_redirect( '/found-one', 'https://example.com/dest' );
+		$second = $this->create_redirect( '/found-two', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/found-one', '/found-two', '/found-missing' ),
+			array()
+		);
+
+		$this->assertSame( 'Are you sure you want to delete 2 redirects?', \WP_CLI::get_call( 'confirm' )[1] );
+		$this->assert_error_contains( 'Only deleted 2 of 3 redirects.' );
+		$this->assertNull( get_post( $first ) );
+		$this->assertNull( get_post( $second ) );
 	}
 
 	/**
@@ -143,7 +180,7 @@ final class DeleteCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Invalid source path' );
+		$this->assert_error_contains( 'Invalid source path' );
 	}
 
 	/**
@@ -195,7 +232,7 @@ final class DeleteCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( sprintf( '2 redirects share this source, IDs %d, %d; use an ID', $live_id, $duplicate_id ) );
+		$this->assert_error_contains( sprintf( '2 redirects share this source, IDs %d, %d; use an ID', $live_id, $duplicate_id ) );
 		$this->assertNotNull( get_post( $live_id ) );
 		$this->assertNotNull( get_post( $duplicate_id ) );
 	}

@@ -17,6 +17,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * Integration tests for EnableCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\EnableCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CountsInWords
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\AbstractStatusCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
@@ -164,7 +165,7 @@ final class EnableCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /nonexistent' );
 	}
 
 	/**
@@ -178,7 +179,7 @@ final class EnableCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Invalid source path' );
+		$this->assert_error_contains( 'Invalid source path' );
 	}
 
 	/**
@@ -196,6 +197,6 @@ final class EnableCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Could not enable redirect: ' . $redirect_id );
+		$this->assert_error_contains( 'Could not enable redirect: ' . $redirect_id );
 	}
 }

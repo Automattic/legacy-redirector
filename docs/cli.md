@@ -38,6 +38,12 @@ in one call, mixing the two forms freely:
 wp legacy-redirector disable /old-page 456 /another-old-page
 ```
 
+Any redirect named that is not found, or cannot be acted on, gets a warning naming it, and
+the command exits with status 1 once the rest are done; `validate` and `test` still print
+what they found for the others. A single redirect that fails gets one error instead.
+`delete` looks the redirects up before asking for confirmation, and names the redirect it
+is about to delete when there is one.
+
 ## The deprecated namespace
 
 The pre-2.0 `wp wpcom-legacy-redirector` namespace is still registered for the commands
@@ -231,7 +237,7 @@ host allowed in code, takes it off the list:
 
 ```bash
 wp legacy-redirector validate /old-page 123
-wp legacy-redirector list --has-issues=problem --format=ids | xargs wp legacy-redirector validate
+wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs wp legacy-redirector validate
 ```
 
 `test` checks named redirects live: it requests the destination where only a request can
@@ -257,7 +263,7 @@ so each finding says what to do instead. To switch off the redirects with proble
 explicitly:
 
 ```bash
-wp legacy-redirector list --has-issues=problem --format=ids | xargs wp legacy-redirector disable
+wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs wp legacy-redirector disable
 ```
 
 A disabled redirect is still checked, so it stays on the list until it is repaired or
@@ -284,15 +290,16 @@ wp legacy-redirector import redirects.csv --mode=upsert
 
 ### Act on a filtered set
 
-`--format=ids` pipes into any of the commands that take multiple redirects:
+`--format=ids` pipes into any of the commands that take multiple redirects. As with an
+export, pass a `--limit` larger than the set, or only the first hundred are acted on:
 
 ```bash
 # Delete every disabled redirect.
-wp legacy-redirector list --status=disabled --format=ids \
+wp legacy-redirector list --status=disabled --limit=100000 --format=ids \
   | xargs wp legacy-redirector delete --yes
 
 # Disable everything pointing at a post rather than a URL.
-wp legacy-redirector list --destination-type=post --format=ids \
+wp legacy-redirector list --destination-type=post --limit=100000 --format=ids \
   | xargs wp legacy-redirector disable
 ```
 
@@ -307,7 +314,8 @@ wp legacy-redirector import-from-meta --meta-key=legacy-url
 ```
 
 Work through a large set in slices with `--start` and `--end`, and preview with
-`--dry-run`:
+`--dry-run`. A dry run checks each row as the import would, so a source that already has
+a redirect, or a destination post that is not published, is reported rather than promised:
 
 ```bash
 wp legacy-redirector import-from-meta --meta-key=legacy-url --start=0 --end=1000 --dry-run
@@ -341,6 +349,11 @@ Note that a source path is read relative to *that site's* home URL. On a subsite
 installed below the domain root. See the README section on site-relative source paths.
 
 ## Things worth knowing
+
+**Machine-readable formats print only the data.** With `--format=json`, `csv`, `yaml`,
+`ids`, or `count`, STDOUT carries the structured value and nothing else: an empty JSON
+result is `[]`, and an empty count is `0`. Headings, summaries, and "nothing found"
+sentences are for the table format; warnings and errors go to STDERR whatever the format.
 
 **Imports are deliberately paced.** `import` pauses for a second every 100 rows and
 flushes caches, to keep a large import from overwhelming the database. Budget roughly a

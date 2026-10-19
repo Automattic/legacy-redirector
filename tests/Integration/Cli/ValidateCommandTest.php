@@ -222,7 +222,36 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array( '/nonexistent' ), array() );
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /nonexistent' );
+	}
+
+	/**
+	 * Test a redirect named but not found fails the run, after the others are checked.
+	 */
+	public function test_validate_partly_not_found_is_an_error(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/partly-found', $post_id );
+
+		$this->invoke_command( $this->command, array( '/partly-found', '/partly-missing' ), array() );
+
+		$this->assert_warning_contains( 'Redirect not found: /partly-missing' );
+		$this->assert_stdout_contains( 'Success: No issues found.' );
+		$this->assert_error_contains( 'Only validated 1 of 2 redirects.' );
+	}
+
+	/**
+	 * Test a structured format with no findings prints an empty list, not a sentence.
+	 */
+	public function test_validate_json_without_findings_is_an_empty_list(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/json-clean', $post_id );
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command( $this->command, array( '/json-clean' ), array( 'format' => 'json' ) );
+
+		$this->assertSame( '', $this->get_stdout() );
+		$this->assertSame( 'json', $GLOBALS['wp_cli_format_items_calls'][0][0] );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'][0][1] );
 	}
 
 	/**
@@ -464,6 +493,30 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->assert_success_contains( 'Validated 2 redirects: 0 with problems, 0 with warnings.' );
 		$this->assert_stdout_not_contains( 'list --has-issues' );
+	}
+
+	/**
+	 * Test a full pass in a structured format prints the totals as data, not a sentence.
+	 */
+	public function test_validate_all_json_prints_the_totals(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/totals-one', $post_id );
+		$this->create_redirect( '/wp-admin/totals', '/fine' );
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command( $this->command, array(), array( 'format' => 'json' ) );
+
+		$this->assertFalse( $this->output->had_success() );
+		$this->assertSame(
+			array(
+				array(
+					'validated' => 2,
+					'problems'  => 0,
+					'warnings'  => 1,
+				),
+			),
+			$GLOBALS['wp_cli_format_items_calls'][0][1]
+		);
 	}
 
 	/**

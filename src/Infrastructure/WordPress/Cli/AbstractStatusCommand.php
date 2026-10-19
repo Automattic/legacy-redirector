@@ -60,11 +60,10 @@ abstract class AbstractStatusCommand extends WP_CLI_Command {
 			fn( Redirect $redirect ) => $this->manager->change_status( $redirect->id(), $post_status )
 		);
 
-		$changed = $this->report_batch_failures( $items, 'publish' === $post_status ? 'enable' : 'disable' );
-		$failed  = count( $items ) - $changed;
+		$verb    = 'publish' === $post_status ? 'enable' : 'disable';
+		$changed = $this->report_batch_failures( $items, $verb );
 
-		if ( $failed > 0 ) {
-			WP_CLI::error( sprintf( 'Only %s %d of %d redirects.', strtolower( $past_tense ), $changed, count( $identifiers ) ) );
+		if ( $this->fail_incomplete_batch( $items, $verb, strtolower( $past_tense ) ) ) {
 			return;
 		}
 

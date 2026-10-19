@@ -119,10 +119,8 @@ final class UpdateCommand extends WP_CLI_Command {
 		);
 
 		$updated = $this->report_batch_failures( $items, 'update' );
-		$failed  = count( $items ) - $updated;
 
-		if ( $failed > 0 ) {
-			WP_CLI::error( sprintf( 'Only updated %d of %d redirects.', $updated, count( $args ) ) );
+		if ( $this->fail_incomplete_batch( $items, 'update', 'updated' ) ) {
 			return;
 		}
 

@@ -23,6 +23,8 @@ use WP_CLI_Command;
  */
 final class ImportCommand extends WP_CLI_Command {
 
+	use CountsInWords;
+
 	/**
 	 * The redirect manager.
 	 *
@@ -338,13 +340,24 @@ final class ImportCommand extends WP_CLI_Command {
 	 * @param bool   $verbose Whether to report every row.
 	 */
 	private function display_results( array $results, string $format, bool $dry_run, bool $verbose ): void {
+		$is_table = 'table' === $format;
+		$errors   = array_filter( $results, fn( $r ) => 'error' === $r['action'] );
+
+		// Every row when asked (or when previewing), otherwise just the errors.
+		$every_row = $verbose || $dry_run;
+		$shown     = $every_row ? $results : $errors;
+		$fields    = $every_row ? array( 'source', 'dest', 'action', 'message' ) : array( 'source', 'dest', 'message' );
+
+		// Only a table gets the summary, headings and closing sentence; the
+		// other formats print the rows alone, so an empty JSON result is `[]`.
+		if ( ! $is_table ) {
+			\WP_CLI\Utils\format_items( $format, $shown, $fields );
+		}
+
 		if ( empty( $results ) ) {
 			WP_CLI::warning( 'No rows processed.' );
 			return;
 		}
-
-		$is_table = 'table' === $format;
-		$errors   = array_filter( $results, fn( $r ) => 'error' === $r['action'] );
 
 		// Summarize by action for table output.
 		if ( $is_table ) {
@@ -357,21 +370,18 @@ final class ImportCommand extends WP_CLI_Command {
 			WP_CLI::line( '' );
 		}
 
-		// Show every row when asked (or when previewing), otherwise just the errors.
-		if ( $verbose || $dry_run ) {
-			\WP_CLI\Utils\format_items( $format, $results, array( 'source', 'dest', 'action', 'message' ) );
-		} elseif ( ! empty( $errors ) ) {
-			if ( $is_table ) {
+		if ( $is_table && ! empty( $shown ) ) {
+			if ( ! $every_row ) {
 				WP_CLI::warning( 'Errors:' );
 			}
-			\WP_CLI\Utils\format_items( $format, $errors, array( 'source', 'dest', 'message' ) );
+			\WP_CLI\Utils\format_items( $format, $shown, $fields );
 		}
 
 		$total  = count( $results );
 		$failed = count( $errors );
 
 		if ( $failed === $total ) {
-			WP_CLI::error( sprintf( 'All %d rows failed.', $total ) );
+			WP_CLI::error( 1 === $total ? 'The only row failed.' : sprintf( 'All %s failed.', self::count_of( $total, 'row', 'rows' ) ) );
 			return;
 		}
 
@@ -386,8 +396,12 @@ final class ImportCommand extends WP_CLI_Command {
 			return;
 		}
 
+		if ( ! $is_table ) {
+			return;
+		}
+
 		$skipped = count( array_filter( $results, fn( $r ) => 'skipped' === $r['action'] ) );
-		$message = sprintf( 'Processed %d redirects', $total - $skipped );
+		$message = 'Processed ' . self::count_of( $total - $skipped, 'redirect', 'redirects' );
 		if ( $skipped > 0 ) {
 			$message .= sprintf( ', skipped %d unchanged', $skipped );
 		}

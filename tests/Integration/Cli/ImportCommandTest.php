@@ -165,7 +165,7 @@ final class ImportCommandTest extends CliTestCase {
 			array( 'skip-validation' => true )
 		);
 
-		$this->assert_success_contains( 'Processed 1 redirects.' );
+		$this->assert_success_contains( 'Processed 1 redirect.' );
 		$this->assertTrue( $this->redirect_exists( '/import-header' ) );
 	}
 
@@ -317,7 +317,7 @@ final class ImportCommandTest extends CliTestCase {
 			array( 'mode' => 'upsert' )
 		);
 
-		$this->assert_success_contains( 'Processed 1 redirects.' );
+		$this->assert_success_contains( 'Processed 1 redirect.' );
 
 		$repository = $this->repository();
 		$redirect   = $repository->find_by_id(
@@ -639,7 +639,7 @@ final class ImportCommandTest extends CliTestCase {
 			array( 'skip-validation' => true )
 		);
 
-		$this->assert_success_contains( 'Processed 1 redirects.' );
+		$this->assert_success_contains( 'Processed 1 redirect.' );
 
 		$repository = $this->repository();
 		$redirect   = $repository->find_by_id(
@@ -659,5 +659,40 @@ final class ImportCommandTest extends CliTestCase {
 		);
 
 		$this->assert_error_contains( 'File not found' );
+	}
+
+	/**
+	 * Test a structured format prints the rows alone: no summary, no closing success.
+	 */
+	public function test_import_json_prints_only_the_rows(): void {
+		$file = $this->create_csv( "/import-json,https://example.com/a\n" );
+
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command(
+			$this->command,
+			array( $file ),
+			array(
+				'skip-validation' => true,
+				'format'          => 'json',
+			)
+		);
+
+		$this->assertTrue( $this->redirect_exists( '/import-json' ) );
+		$this->assertSame( '', $this->get_stdout() );
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'] );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'][0][1], 'With no errors to show, JSON is an empty list.' );
+	}
+
+	/**
+	 * Test a file whose one row fails says so in the singular.
+	 */
+	public function test_import_single_failed_row(): void {
+		$file = $this->create_csv( "/import-lonely\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array() );
+
+		$this->assert_error_contains( 'The only row failed.' );
 	}
 }

@@ -71,7 +71,7 @@ final class DeleteCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector delete /old-page /other-page --yes
 	 *
 	 *     # Delete all disabled redirects.
-	 *     $ wp legacy-redirector list --status=disabled --format=ids | xargs wp legacy-redirector delete --yes
+	 *     $ wp legacy-redirector list --status=disabled --limit=100000 --format=ids | xargs wp legacy-redirector delete --yes
 	 *
 	 * @when after_wp_load
 	 *
@@ -79,16 +79,22 @@ final class DeleteCommand extends WP_CLI_Command {
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		// Name the row a single identifier resolves to, so a path that resolves
-		// to a different row than the one meant shows before it goes for good.
-		$single = 1 === count( $args ) ? $this->batch->resolve( $args )[0]['redirect'] : null;
+		// Resolve before asking, so nothing is asked about when nothing would
+		// go, and a single row is named: a path that resolves to a different
+		// row than the one meant shows before it goes for good.
+		$resolved = $this->batch->resolve( $args );
+		$found    = RedirectBatch::redirects( $resolved );
+
+		if ( array() === $found ) {
+			$this->report_batch_failures( $resolved, 'delete' );
+			$this->fail_incomplete_batch( $resolved, 'delete', 'deleted' );
+			return;
+		}
 
 		WP_CLI::confirm(
-			match ( true ) {
-				null !== $single     => sprintf( 'Are you sure you want to delete the redirect %s?', $this->describe( $single ) ),
-				1 === count( $args ) => sprintf( 'Are you sure you want to delete the redirect "%s"?', $args[0] ),
-				default              => sprintf( 'Are you sure you want to delete %d redirects?', count( $args ) ),
-			},
+			1 === count( $found )
+				? sprintf( 'Are you sure you want to delete the redirect %s?', $this->describe( $found[0] ) )
+				: sprintf( 'Are you sure you want to delete %s?', self::count_of( count( $found ), 'redirect', 'redirects' ) ),
 			$assoc_args
 		);
 
@@ -98,10 +104,8 @@ final class DeleteCommand extends WP_CLI_Command {
 		);
 
 		$deleted = $this->report_batch_failures( $items, 'delete' );
-		$failed  = count( $items ) - $deleted;
 
-		if ( $failed > 0 ) {
-			WP_CLI::error( sprintf( 'Only deleted %d of %d redirects.', $deleted, count( $args ) ) );
+		if ( $this->fail_incomplete_batch( $items, 'delete', 'deleted' ) ) {
 			return;
 		}
 

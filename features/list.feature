@@ -32,3 +32,13 @@ Feature: List redirects
       """
       /csv-test-1
       """
+
+  # Contract test: machine-readable formats print the data alone, so an empty
+  # listing parses as an empty list rather than as a sentence.
+  Scenario: An empty JSON listing is an empty list
+    When I try `wp legacy-redirector list --format=json`
+    Then the return code should be 0
+    And STDOUT should be:
+      """
+      []
+      """

@@ -348,7 +348,7 @@ final class PluginBootstrapper {
 		$removed = array(
 			'insert-redirect' => 'create <from> <to>',
 			'import-from-csv' => 'import <file>',
-			'export-to-csv'   => 'list --format=csv',
+			'export-to-csv'   => 'list --limit=100000 --fields=from,to,status --format=csv',
 		);
 
 		foreach ( $removed as $subcommand => $replacement ) {
