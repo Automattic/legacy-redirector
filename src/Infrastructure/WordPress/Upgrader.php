@@ -405,7 +405,14 @@ final class Upgrader {
 
 		if ( is_numeric( $found ) && (int) $found > 0 ) {
 			$this->started_at();
-			$this->ceiling();
+
+			try {
+				$this->ceiling();
+			} catch ( RuntimeException $e ) {
+				// This runs on init, so it must not throw. The first batch
+				// reads and records the ceiling instead.
+				return;
+			}
 		}
 	}
 
@@ -2381,6 +2388,8 @@ final class Upgrader {
 	 *
 	 * @param bool $persist Whether to record the ceiling when none is stored yet.
 	 * @return int The post ID.
+	 *
+	 * @throws RuntimeException When the database refuses the read.
 	 */
 	private function ceiling( bool $persist = true ): int {
 		$ceiling = get_option( self::CEILING_OPTION );
@@ -2391,8 +2400,17 @@ final class Upgrader {
 
 		global $wpdb;
 
+		// A refused read is not an empty table: a stored ceiling of 0 would
+		// end the walk at its first batch, with every row unvisited. get_var()
+		// cannot tell them apart, so the query's own result decides.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Read once per upgrade, then stored.
-		$ceiling = (int) $wpdb->get_var( $wpdb->prepare( "SELECT MAX(ID) FROM {$wpdb->posts} WHERE post_type = %s", PostType::POST_TYPE ) );
+		if ( false === $wpdb->query( $wpdb->prepare( "SELECT MAX(ID) AS ceiling FROM {$wpdb->posts} WHERE post_type = %s", PostType::POST_TYPE ) ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not read the redirects: ' . self::write_error() );
+		}
+
+		// An empty table still answers, with a NULL maximum.
+		$ceiling = (int) ( $wpdb->last_result[0]->ceiling ?? 0 );
 
 		if ( $persist ) {
 			update_option( self::CEILING_OPTION, $ceiling, false );
