@@ -193,7 +193,7 @@ final class ListScreenSetup {
 			'<li>' . __( '<strong>Scan for issues</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. A scan never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'So a clean scan does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector validate --check-urls</code>) can see that. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look, and nothing automated will ever disable it. A row whose stored data cannot be read as a redirect at all is reported as corrupt: delete it, or edit it with a full new source and destination.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'So a clean scan does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector validate --check-destination</code>) can see that. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look, and nothing automated will ever disable it. A row whose stored data cannot be read as a redirect at all is reported as corrupt: delete it, or edit it with a full new source and destination.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
@@ -213,7 +213,7 @@ final class ListScreenSetup {
 			'<li>' . __( '<strong>External URL destinations</strong>: the host must be in the <code>allowed_redirect_hosts</code> filter, or WordPress will refuse the redirect at request time and the visitor gets a 404.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Possible loops</strong> (warning): a destination that is itself another redirect\'s source, with the hops leading back to where they started. A loop only runs while every source in it returns a 404 - any member serving real content keeps it dormant - so a person should judge it; break a cycle by re-pointing or disabling one member.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'Whether a URL destination actually responds, and whether the redirect fires for a visitor, are live questions: the Test action answers them for one redirect, and <code>wp legacy-redirector validate --check-urls</code> answers them in bulk from the command line.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'Whether a destination actually responds, and whether the redirect fires for a visitor, are live questions. The Test action answers both for one redirect; <code>wp legacy-redirector validate --check-destination</code> answers the first in bulk from the command line.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**

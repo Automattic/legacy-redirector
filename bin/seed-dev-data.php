@@ -16,10 +16,10 @@
  *     composer seed -- 0         # edge cases only
  *     composer seed -- 500       # pagination-scale bulk rows
  *
- * Note: `wp legacy-redirector validate --check-urls` cannot reach the
+ * Note: `wp legacy-redirector validate --check-destination` cannot reach the
  * site from inside the `cli` container, because home_url() points at the
  * host's published port. Every URL destination will report "Request failed".
- * Run validate without `--check-urls` to exercise the post-ID and path checks.
+ * Run validate without `--check-destination` to exercise the post-ID and path checks.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -194,7 +194,7 @@ PHP
 /*
  * In wp-env the site cannot request its own published home URL from inside
  * the container, which breaks anything probing the site over HTTP (the Test
- * action's live source probe, --check-urls against internal paths). This
+ * action's live source probe, --check-destination against internal paths). This
  * mu-plugin rewrites loopback requests to the container's own web server.
  */
 

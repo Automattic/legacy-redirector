@@ -224,12 +224,13 @@ allowed, since a site migrated from another platform can have real legacy URLs t
 wp legacy-redirector validate
 ```
 
-Destinations on other domains are left alone unless you ask for them, because checking one
-means an HTTP request. `--check-urls` adds that, and reports the destinations that answer
-with an error. It is slow, so it suits a scheduled audit rather than an interactive check:
+Destinations that only a request can judge (URLs, and paths that resolve to no post) are
+left alone unless you ask, because checking one means an HTTP request. `--check-destination`
+adds that, and reports the destinations that answer with an error. It is slow, so it suits a
+scheduled audit rather than an interactive check:
 
 ```bash
-wp legacy-redirector validate --check-urls --format=csv > broken.csv
+wp legacy-redirector validate --check-destination --format=csv > broken.csv
 ```
 
 A URL check that cannot get an answer (a timeout, a refused connection) or gets a server
