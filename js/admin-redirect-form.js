@@ -35,6 +35,7 @@ jQuery( document ).ready( function ( $ ) {
 	var entityDecoder = document.createElement( 'textarea' );
 	var $display = $( '#redirect_to_display' );
 	var $suggestions = $( '#redirect_to_suggestions' );
+	var announcements = [];
 
 	// Core's search endpoint returns titles with texturized HTML entities
 	// (e.g. &#8217; for an apostrophe), which .text() would show literally.
@@ -60,7 +61,19 @@ jQuery( document ).ready( function ( $ ) {
 		if ( $field ) {
 			$field.attr( 'aria-invalid', 'true' );
 		}
-		wp.a11y.speak( text );
+		announce( text );
+	}
+
+	// Announce messages shown together, such as a duplicate source that is
+	// also a reserved path, as one: each speak() replaces the last.
+	function announce( text ) {
+		if ( ! announcements.length ) {
+			setTimeout( function () {
+				wp.a11y.speak( announcements.join( ' ' ) );
+				announcements = [];
+			} );
+		}
+		announcements.push( text );
 	}
 
 	function showSuggestions() {
