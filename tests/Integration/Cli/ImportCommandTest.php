@@ -43,6 +43,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectReposit
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class ImportCommandTest extends CliTestCase {
 

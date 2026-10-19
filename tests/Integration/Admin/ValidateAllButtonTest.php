@@ -47,6 +47,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class ValidateAllButtonTest extends TestCase {
 

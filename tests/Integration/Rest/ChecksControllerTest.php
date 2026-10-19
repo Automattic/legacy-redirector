@@ -49,6 +49,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ValidateAllController
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class ChecksControllerTest extends TestCase {
 
@@ -164,6 +166,7 @@ final class ChecksControllerTest extends TestCase {
 			array(
 				'exists'   => true,
 				'reserved' => false,
+				'occupied' => false,
 			),
 			$response->get_data()
 		);
@@ -196,6 +199,7 @@ final class ChecksControllerTest extends TestCase {
 			array(
 				'exists'   => false,
 				'reserved' => false,
+				'occupied' => false,
 			),
 			$response->get_data()
 		);
@@ -224,6 +228,7 @@ final class ChecksControllerTest extends TestCase {
 			array(
 				'exists'   => false,
 				'reserved' => false,
+				'occupied' => false,
 			),
 			$response->get_data()
 		);
@@ -241,6 +246,34 @@ final class ChecksControllerTest extends TestCase {
 			array(
 				'exists'   => false,
 				'reserved' => false,
+				'occupied' => false,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test a source that published content already answers is flagged.
+	 *
+	 * A warning too: the redirect would stay dormant, but the form can save it.
+	 */
+	public function test_source_answered_by_published_content_is_flagged(): void {
+		$this->login_as_redirect_manager();
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'already-a-page',
+			)
+		);
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/already-a-page' ) );
+
+		$this->assertSame(
+			array(
+				'exists'   => false,
+				'reserved' => false,
+				'occupied' => true,
 			),
 			$response->get_data()
 		);
@@ -260,6 +293,7 @@ final class ChecksControllerTest extends TestCase {
 			array(
 				'exists'   => false,
 				'reserved' => true,
+				'occupied' => false,
 			),
 			$response->get_data()
 		);

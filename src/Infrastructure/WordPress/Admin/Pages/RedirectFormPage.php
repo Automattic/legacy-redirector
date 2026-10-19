@@ -116,6 +116,7 @@ final class RedirectFormPage {
 				'postId'                => $redirect_id,
 				'duplicateMessage'      => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
 				'reservedMessage'       => self::reserved_source_message(),
+				'occupiedMessage'       => self::occupied_source_message(),
 				'hostNotAllowedMessage' => self::host_not_allowed_message(),
 			)
 		);
@@ -288,10 +289,16 @@ final class RedirectFormPage {
 		$post_id       = $is_edit ? (int) $redirect->id() : 0;
 		$error_message = '' !== $error ? $this->get_error_message( $error ) : '';
 
-		// Accepted, but flagged every time the redirect is opened: see
-		// SourceUrl::is_reserved() for why this can lock the admin out.
-		$reserved_source  = $is_edit && in_array( AuditFindingType::RESERVED_SOURCE, $this->auditor->source_warnings( $redirect->source() ), true );
-		$reserved_message = self::reserved_source_message();
+		// Accepted, but flagged every time the redirect is opened: a reserved
+		// path can lock the admin out (see SourceUrl::is_reserved()), and
+		// content at the source leaves the redirect dormant.
+		$source_warnings = $is_edit ? $this->auditor->source_warnings( $redirect->source() ) : array();
+		$source_warning  = '';
+		if ( in_array( AuditFindingType::RESERVED_SOURCE, $source_warnings, true ) ) {
+			$source_warning = self::reserved_source_message();
+		} elseif ( in_array( AuditFindingType::SOURCE_SERVES_CONTENT, $source_warnings, true ) ) {
+			$source_warning = self::occupied_source_message();
+		}
 
 		// Sources are stored relative to this site's home URL, which on a
 		// subdirectory subsite is not the domain root. Showing the home URL
@@ -472,6 +479,18 @@ final class RedirectFormPage {
 	 */
 	private static function reserved_source_message(): string {
 		return __( 'This is a path WordPress itself serves. The redirect stays dormant while that path works, but takes over if the path ever returns a 404. For wp-admin or wp-login.php, that locks you out of the dashboard. Keep it only if this is a genuine legacy URL.', 'legacy-redirector' );
+	}
+
+	/**
+	 * The warning for a source that published content already answers.
+	 *
+	 * Shown when the source field loses focus, and every time such a
+	 * redirect is opened.
+	 *
+	 * @return string The translated warning.
+	 */
+	private static function occupied_source_message(): string {
+		return __( 'Published content already lives at this path. Redirects only answer 404s, so this one stays dormant while that content is there. Unpublish the content if the redirect should fire; otherwise it is a fallback for when the content goes.', 'legacy-redirector' );
 	}
 
 	/**

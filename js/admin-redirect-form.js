@@ -12,6 +12,9 @@
  * - duplicateMessage  Message shown when the source already redirects.
  * - reservedMessage   Warning shown when the source is a path WordPress
  *                     itself serves. The form still saves.
+ * - occupiedMessage   Warning shown when published content already lives at
+ *                     the source, so the redirect would stay dormant. The
+ *                     form still saves.
  * - hostNotAllowedMessage  Error shown when the destination host is missing
  *                          from allowed_redirect_hosts. Saving would be
  *                          refused with the same message.
@@ -84,9 +87,9 @@ jQuery( document ).ready( function ( $ ) {
 				$( '#redirect_from_error' ).hide();
 			}
 
-			if ( result.reserved ) {
+			if ( result.reserved || result.occupied ) {
 				$( '#redirect_from_warning' )
-					.text( settings.reservedMessage )
+					.text( result.reserved ? settings.reservedMessage : settings.occupiedMessage )
 					.show();
 			} else {
 				$( '#redirect_from_warning' ).hide();

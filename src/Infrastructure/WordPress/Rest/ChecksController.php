@@ -140,7 +140,7 @@ final class ChecksController {
 	 * itself serves.
 	 *
 	 * @param \WP_REST_Request $request The request.
-	 * @return array{exists: bool, reserved: bool} Whether the source is taken, and whether it is reserved.
+	 * @return array{exists: bool, reserved: bool, occupied: bool} Whether the source is taken, whether it is reserved, and whether published content already answers it.
 	 */
 	public function check_source( \WP_REST_Request $request ): array {
 		$raw        = (string) $request->get_param( 'source' );
@@ -149,6 +149,7 @@ final class ChecksController {
 		$none = array(
 			'exists'   => false,
 			'reserved' => false,
+			'occupied' => false,
 		);
 
 		if ( '' === $raw ) {
@@ -162,11 +163,13 @@ final class ChecksController {
 		}
 
 		$existing = $this->repository->get_id_by_source( $source );
+		$warnings = $this->auditor->source_warnings( $source );
 
-		// Reserved is a warning, not a refusal: the form still saves.
+		// Both are warnings, not refusals: the form still saves.
 		return array(
 			'exists'   => $existing > 0 && $existing !== $exclude_id,
-			'reserved' => in_array( AuditFindingType::RESERVED_SOURCE, $this->auditor->source_warnings( $source ), true ),
+			'reserved' => in_array( AuditFindingType::RESERVED_SOURCE, $warnings, true ),
+			'occupied' => in_array( AuditFindingType::SOURCE_SERVES_CONTENT, $warnings, true ),
 		);
 	}
 

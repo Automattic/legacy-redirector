@@ -42,6 +42,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class DestinationPostWatcherTest extends TestCase {
 

@@ -56,6 +56,7 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  */
 final class CorruptRedirectRowsTest extends TestCase {
 

@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\DI;
 
 use Automattic\LegacyRedirector\Application\LoopDetector;
+use Automattic\LegacyRedirector\Application\SourceOccupancy;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
@@ -165,7 +166,7 @@ final class Container {
 	 */
 	public function auditor(): RedirectAuditor {
 		if ( ! isset( $this->services['auditor'] ) ) {
-			$this->services['auditor'] = new RedirectAuditor( new LoopDetector( $this->repository() ) );
+			$this->services['auditor'] = new RedirectAuditor( new LoopDetector( $this->repository() ), new SourceOccupancy() );
 		}
 		return $this->services['auditor'];
 	}

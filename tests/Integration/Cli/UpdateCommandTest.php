@@ -45,6 +45,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  */
 final class UpdateCommandTest extends CliTestCase {
 

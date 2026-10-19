@@ -23,10 +23,11 @@ could never work:
 Others let the save go ahead and warn, because the redirect works but deserves a look:
 
 - the source is a path WordPress itself serves, such as `/wp-admin`;
+- a published post or page already lives at the source, so the redirect lies dormant until it goes;
 - the new redirect closes a loop with others.
 
 The Add/Edit form checks earlier still. When the source field loses focus it says whether
-the source is already taken (which blocks the save) or reserved (a warning), and when the
+the source is already taken (which blocks the save), reserved, or already answered by a published post or page (both warnings), and when the
 destination field does, whether its host is allowed. On save, a relative destination that
 resolves to no post is requested once, and a 404 refuses the save. That request fails open:
 only a definite 404 blocks, never a timeout. The
@@ -104,7 +105,7 @@ reported, but test again before treating one as broken.
 | Request to the destination failed | Problem, inconclusive | A request |
 | Source redirects somewhere else | Problem | A request to the source |
 | Source returns a 404 (or 410) without the redirect firing | Problem | A request to the source |
-| Source serves its own content, so the redirect lies dormant | Warning | A request to the source |
+| Source serves its own content, so the redirect lies dormant | Warning | Stored details (a published post or page at the source), or a request to the source (anything else) |
 | Request to the source failed, or the site turned it away (a 401, 403 or 429) | Problem, inconclusive | A request to the source |
 
 Post destinations are judged by the post's own status, so a media attachment counts as
@@ -165,12 +166,13 @@ would mostly report timeouts rather than broken redirects.
 
 ## What is not caught automatically
 
-- **Path destinations, loops, and host-list changes** are caught by the background check,
-  not at the moment they happen.
+- **Path destinations, loops, host-list changes, and posts published at a source** are
+  caught by the background check, not at the moment they happen.
 - **A redirect to a media item whose parent post is unpublished** is caught by the
   background check, because nothing changes on the media item itself.
-- **A post published at a redirect's source** makes the redirect dormant, because redirects
-  only answer 404s. Test shows this; nothing else does yet.
+- **Other content at a redirect's source**, such as an archive, a feed, a paged URL, or a
+  permalink that does not end in the post's slug (`/%post_id%/`), also makes the redirect
+  dormant. Only Test or `test` sees it.
 - **A destination page that has gone** on another site is only found by Test or `test`.
 
 ## Adding a check

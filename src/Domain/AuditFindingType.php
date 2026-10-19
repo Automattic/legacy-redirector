@@ -87,9 +87,10 @@ enum AuditFindingType: string {
 	case SOURCE_NOT_FIRING = 'source_not_firing';
 
 	/**
-	 * Requesting the source got the site's own content, so the redirect lies dormant.
+	 * The site serves its own content at the source, so the redirect lies dormant.
 	 *
-	 * Found only by a live test.
+	 * Found from stored details when a published post or page lives at the
+	 * source path, and by a live test for anything else the site serves there.
 	 */
 	case SOURCE_SERVES_CONTENT = 'source_serves_content';
 
@@ -179,7 +180,7 @@ enum AuditFindingType: string {
 			self::POSSIBLE_LOOP    => 'Following the destination through the stored redirects leads back to this one. The loop only runs while every source in it returns a 404',
 			self::SOURCE_REDIRECTS_ELSEWHERE => 'Visiting the source redirects somewhere other than this redirect\'s destination, so something else is answering it first: another plugin, a server rule, or WordPress\'s own canonical redirect',
 			self::SOURCE_NOT_FIRING => 'Visiting the source returns a 404 without redirecting, so the redirect is not matching the URL visitors request',
-			self::SOURCE_SERVES_CONTENT => 'Visiting the source shows the site\'s own content. Redirects only answer 404s, so this one lies dormant while that content is there',
+			self::SOURCE_SERVES_CONTENT => 'The site serves its own content at the source, such as a published post or page. Redirects only answer 404s, so this one lies dormant while that content is there',
 			self::SOURCE_REQUEST_FAILED => 'The request to the source failed or the site answered with an error, so whether the redirect fires is unknown',
 		};
 
