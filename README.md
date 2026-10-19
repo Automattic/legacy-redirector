@@ -168,7 +168,7 @@ another role or user, and why read-only access is not separable.
 
 ## Abilities and MCP Clients
 
-On WordPress 6.9 and later the plugin registers eight abilities, so MCP clients and other
+On WordPress 6.9 and later the plugin registers nine abilities, so MCP clients and other
 agents can manage redirects through the same services, validation, and capability checks
 as the admin screens and WP-CLI. Nothing is registered on earlier versions.
 

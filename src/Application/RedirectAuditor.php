@@ -240,10 +240,12 @@ class RedirectAuditor {
 	 * Whether only an HTTP request can judge this redirect's destination.
 	 *
 	 * True for absolute URLs (an allowed host says nothing about whether the
-	 * page responds), the home page, and relative paths that resolve to no
-	 * post - all cases audit_destination() treats as indeterminate without
-	 * check_destination. Lets a display distinguish "checked and fine" from "nothing
-	 * conclusive without a request", so a clean result does not overclaim.
+	 * page responds) and relative paths that resolve to no post and do not
+	 * chain on to content - all cases audit_destination() treats as
+	 * indeterminate without check_destination. The home path is conclusive,
+	 * because WordPress always serves it. Lets a display distinguish "checked
+	 * and fine" from "nothing conclusive without a request", so a clean result
+	 * does not overclaim.
 	 *
 	 * @param Redirect $redirect The redirect to check.
 	 * @return bool True when the destination is only judgeable over HTTP.

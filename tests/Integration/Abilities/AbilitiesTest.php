@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Abilities;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper;
@@ -448,6 +449,38 @@ final class AbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'ability_invalid_input', $result->get_error_code() );
+	}
+
+	/**
+	 * Test a list of redirects longer than the cap is rejected before any lookup.
+	 *
+	 * @dataProvider data_abilities_taking_a_redirect_list
+	 *
+	 * @param string               $name  The ability name, without the plugin namespace.
+	 * @param array<string, mixed> $input The rest of the input.
+	 * @return void
+	 */
+	public function test_over_long_redirect_list_is_rejected_by_the_schema( string $name, array $input ): void {
+		$too_many = range( 1, RedirectSchema::MAX_IDENTIFIERS + 1 );
+
+		$result = $this->ability( $name )->execute( array( 'redirects' => $too_many ) + $input );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'ability_invalid_input', $result->get_error_code() );
+	}
+
+	/**
+	 * Every ability that takes a list of redirects, with the rest of a valid input.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>}> The cases.
+	 */
+	public static function data_abilities_taking_a_redirect_list(): array {
+		return array(
+			'validate-redirects'  => array( 'validate-redirects', array() ),
+			'update-redirect'     => array( 'update-redirect', array( 'to' => '/new' ) ),
+			'set-redirect-status' => array( 'set-redirect-status', array( 'status' => 'disabled' ) ),
+			'delete-redirect'     => array( 'delete-redirect', array() ),
+		);
 	}
 
 	/**
