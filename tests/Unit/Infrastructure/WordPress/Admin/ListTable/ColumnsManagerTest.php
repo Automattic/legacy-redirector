@@ -158,6 +158,25 @@ final class ColumnsManagerTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test a trashed redirect's source is plain text, not an edit link.
+	 *
+	 * A trashed redirect cannot be edited until it is restored, as core does
+	 * for row titles in the Trash.
+	 *
+	 * @return void
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_from_column_has_no_edit_link_in_the_trash(): void {
+		$this->prime_site( 'https://example.com/', false );
+
+		$output = $this->render_from_column( 'trash' );
+
+		$this->assertStringNotContainsString( '<a ', $output );
+		$this->assertStringContainsString( '<strong>/old-page</strong>', $output );
+	}
+
+	/**
 	 * Stub the site shape under test.
 	 *
 	 * @param string $home_url  The site's home URL.
@@ -172,14 +191,15 @@ final class ColumnsManagerTest extends MonkeyStubs {
 	/**
 	 * Render the "from" column for a stub redirect.
 	 *
+	 * @param string $status The redirect's post status.
 	 * @return string The rendered markup.
 	 */
-	private function render_from_column(): string {
+	private function render_from_column( string $status = 'publish' ): string {
 		$redirect = Redirect::reconstitute(
 			123,
 			SourceUrl::from_string( '/old-page' ),
 			Destination::from_url( DestinationUrl::from_string( '/new-page' ) ),
-			'publish'
+			$status
 		);
 
 		$this->repository->shouldReceive( 'find_by_id' )->with( 123 )->andReturn( $redirect );
