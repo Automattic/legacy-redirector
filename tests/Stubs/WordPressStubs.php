@@ -109,6 +109,18 @@ if ( ! class_exists( 'WP_CLI_Command' ) ) {
 	}
 }
 
+// Thrown by the WP_CLI stub where real WP-CLI would exit.
+if ( ! class_exists( 'WP_CLI_Stub_Exit' ) ) {
+	/**
+	 * Stands in for the exit after WP_CLI::error(), so no command code runs past it.
+	 *
+	 * Extends Exception directly so command code catching RuntimeException or
+	 * InvalidArgumentException does not swallow it.
+	 */
+	class WP_CLI_Stub_Exit extends Exception {
+	}
+}
+
 // WP_CLI stub for unit tests.
 if ( ! class_exists( 'WP_CLI' ) ) {
 	/**
@@ -147,11 +159,17 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		 * Record an error message.
 		 *
 		 * @param string $message The message.
-		 * @param bool   $exit    Whether to exit (ignored in stub).
+		 * @param bool   $exit    Whether to exit; the stub throws instead.
 		 * @return void
+		 *
+		 * @throws WP_CLI_Stub_Exit When $exit is true, as real WP-CLI would exit.
 		 */
 		public static function error( string $message, bool $exit = true ): void {
 			self::$calls[] = array( 'error', $message );
+
+			if ( $exit ) {
+				throw new WP_CLI_Stub_Exit();
+			}
 		}
 
 		/**

@@ -110,7 +110,7 @@ final class ListCommandTest extends CliTestCase {
 		);
 
 		$this->assertTrue( $this->output->had_warning() );
-		$this->assert_stdout_contains( 'No redirects found' );
+		$this->assert_warning_contains( 'No redirects found' );
 	}
 
 	/**
@@ -342,7 +342,6 @@ final class ListCommandTest extends CliTestCase {
 		$this->assertSame( implode( ' ', $ids ), trim( $this->get_stdout() ) );
 		$this->assertSame( array( 5000, 5000 ), $page_sizes, 'Each query loads at most one page.' );
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 		$this->invoke_command(
 			$this->command,
 			array(),
@@ -434,7 +433,6 @@ final class ListCommandTest extends CliTestCase {
 
 		( new Upgrader() )->run_batch( 100 );
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 		$this->invoke_command(
 			$this->command,
 			array(),
@@ -493,8 +491,6 @@ final class ListCommandTest extends CliTestCase {
 	 * @param array<string, mixed> $assoc_args The command's flags.
 	 */
 	public function test_empty_structured_list_is_data_not_prose( array $assoc_args ): void {
-		$GLOBALS['wp_cli_format_items_calls'] = array();
-
 		$this->invoke_command( $this->command, array(), $assoc_args );
 
 		$this->assertSame( '', $this->get_stdout() );

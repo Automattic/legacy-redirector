@@ -88,9 +88,7 @@ abstract class CliTestCase extends TestCase {
 
 		try {
 			$command->__invoke( $args, $assoc_args );
-		} catch ( \Exception $e ) {
-			// Some commands throw exceptions instead of calling WP_CLI::error().
-			$this->output->record_error( $e->getMessage() );
+		} catch ( \WP_CLI_Stub_Exit ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- WP_CLI::error() recorded the message; real WP-CLI would have exited here.
 		} finally {
 			$this->output->stop_capture();
 		}
@@ -238,6 +236,6 @@ abstract class CliTestCase extends TestCase {
 			$this->output->had_warning(),
 			'' !== $message ? $message : 'Expected a warning. Output: ' . $this->get_output()
 		);
-		$this->assert_stdout_contains( $expected, $message );
+		$this->assert_stderr_contains( $expected, $message );
 	}
 }

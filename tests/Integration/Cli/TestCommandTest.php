@@ -131,7 +131,6 @@ final class TestCommandTest extends CliTestCase {
 	 * @return array<int, array<string, mixed>> The rows.
 	 */
 	private function rows( array $args, array $assoc_args = array() ): array {
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 		$this->invoke_command( $this->command, $args, $assoc_args + array( 'format' => 'json' ) );
 
 		return $GLOBALS['wp_cli_format_items_calls'][0][1] ?? array();

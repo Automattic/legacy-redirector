@@ -245,7 +245,6 @@ final class ValidateCommandTest extends CliTestCase {
 	public function test_validate_json_without_findings_is_an_empty_list(): void {
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		$this->create_redirect( '/json-clean', $post_id );
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 
 		$this->invoke_command( $this->command, array( '/json-clean' ), array( 'format' => 'json' ) );
 
@@ -395,7 +394,6 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->create_redirect( '/deleted-dest', $post_id );
 		wp_delete_post( $post_id, true );
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 		$this->invoke_command( $this->command, array( '/deleted-dest' ), array( 'format' => 'json' ) );
 
 		$rows = $GLOBALS['wp_cli_format_items_calls'][0][1];
@@ -502,7 +500,6 @@ final class ValidateCommandTest extends CliTestCase {
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		$this->create_redirect( '/totals-one', $post_id );
 		$this->create_redirect( '/wp-admin/totals', '/fine' );
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 
 		$this->invoke_command( $this->command, array(), array( 'format' => 'json' ) );
 
@@ -574,7 +571,6 @@ final class ValidateCommandTest extends CliTestCase {
 		);
 		$redirect_id = $this->create_redirect( '/occupied-source', '/somewhere-else' );
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 		$this->invoke_command( $this->command, array( '/occupied-source' ), array() );
 
 		$rows = $GLOBALS['wp_cli_format_items_calls'][0][1];

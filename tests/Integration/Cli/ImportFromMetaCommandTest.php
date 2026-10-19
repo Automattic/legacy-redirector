@@ -513,7 +513,6 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	 */
 	public function test_structured_format_prints_only_the_notices(): void {
 		$this->create_post_with_legacy_url( '/json-clean' );
-		$GLOBALS['wp_cli_format_items_calls'] = array();
 
 		$this->invoke_command(
 			$this->command,

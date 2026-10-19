@@ -99,9 +99,10 @@ final class GetCommandTest extends CliTestCase {
 		);
 
 		$this->assertFalse( $this->output->had_error() );
-		$this->assert_stdout_contains( '/post-redirect' );
-		$this->assert_stdout_contains( (string) $post_id );
-		$this->assert_stdout_contains( 'post' );
+		$fields = array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'Value', 'Field' );
+		$this->assertSame( '/post-redirect', $fields['from'] );
+		$this->assertSame( $post_id, $fields['to'] );
+		$this->assertSame( 'post', $fields['type'] );
 	}
 
 	/**
