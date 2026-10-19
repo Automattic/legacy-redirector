@@ -244,7 +244,7 @@ at, which is the quickest way to audit the list you need.
 ## Validating destinations on internal hosts
 
 Destination validation — the admin "Validate" action and `wp legacy-redirector validate
---check-urls` — uses WordPress's safe HTTP functions, which refuse to request loopback,
+--check-destination` — uses WordPress's safe HTTP functions, which refuse to request loopback,
 private, and reserved IP addresses. The site's own host is always allowed.
 
 If your redirects legitimately point at other internal hosts, such as an intranet or a

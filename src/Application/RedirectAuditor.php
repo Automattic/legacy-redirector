@@ -66,17 +66,17 @@ class RedirectAuditor {
 	 * nonsense; the corruption itself is the only finding.
 	 *
 	 * @param Redirect $redirect   The redirect to audit.
-	 * @param bool     $check_urls Whether to make HTTP requests to check URL destinations.
+	 * @param bool     $check_destination Whether to make HTTP requests to check URL destinations.
 	 * @return AuditFinding[] The findings, empty if none.
 	 */
-	public function audit( Redirect $redirect, bool $check_urls = false ): array {
+	public function audit( Redirect $redirect, bool $check_destination = false ): array {
 		if ( $redirect->is_corrupt() ) {
 			return array( new AuditFinding( $redirect, AuditFindingType::CORRUPT_DATA, $redirect->corruption() ) );
 		}
 
 		$findings = array();
 
-		$destination_finding = $this->audit_destination( $redirect, $check_urls );
+		$destination_finding = $this->audit_destination( $redirect, $check_destination );
 		if ( null !== $destination_finding ) {
 			$findings[] = $destination_finding;
 		}
@@ -158,10 +158,10 @@ class RedirectAuditor {
 	 *   the URL responds
 	 *
 	 * @param Redirect $redirect   The redirect to audit.
-	 * @param bool     $check_urls Whether to make HTTP requests to check URL destinations.
+	 * @param bool     $check_destination Whether to make HTTP requests to check URL destinations.
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
-	public function audit_destination( Redirect $redirect, bool $check_urls = false ): ?AuditFinding {
+	public function audit_destination( Redirect $redirect, bool $check_destination = false ): ?AuditFinding {
 		// A corrupt row carries placeholder values; checking them would report
 		// nonsense. Report the corruption itself.
 		if ( $redirect->is_corrupt() ) {
@@ -182,10 +182,10 @@ class RedirectAuditor {
 
 		// Relative paths.
 		if ( $this->is_relative_path( $url ) ) {
-			return $this->check_relative_path_destination( $redirect, $url, $check_urls );
+			return $this->check_relative_path_destination( $redirect, $url, $check_destination );
 		}
 
-		return $this->check_absolute_url_destination( $redirect, $url, $check_urls );
+		return $this->check_absolute_url_destination( $redirect, $url, $check_destination );
 	}
 
 	/**
@@ -242,7 +242,7 @@ class RedirectAuditor {
 	 * True for absolute URLs (an allowed host says nothing about whether the
 	 * page responds), the home page, and relative paths that resolve to no
 	 * post - all cases audit_destination() treats as indeterminate without
-	 * check_urls. Lets a display distinguish "checked and fine" from "nothing
+	 * check_destination. Lets a display distinguish "checked and fine" from "nothing
 	 * conclusive without a request", so a clean result does not overclaim.
 	 *
 	 * @param Redirect $redirect The redirect to check.
@@ -349,10 +349,10 @@ class RedirectAuditor {
 	 *
 	 * @param Redirect $redirect   The redirect.
 	 * @param string   $path       The relative path.
-	 * @param bool     $check_urls Whether to check via HTTP if path lookup fails.
+	 * @param bool     $check_destination Whether to check via HTTP if path lookup fails.
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
-	private function check_relative_path_destination( Redirect $redirect, string $path, bool $check_urls ): ?AuditFinding {
+	private function check_relative_path_destination( Redirect $redirect, string $path, bool $check_destination ): ?AuditFinding {
 		$slug = $this->lookup_slug( $path );
 
 		// The home page has no slug to look up. get_page_by_path( '' ) matches
@@ -361,7 +361,7 @@ class RedirectAuditor {
 		// status as this redirect's problem. Only an HTTP check can say
 		// anything about '/'.
 		if ( '' === $slug ) {
-			return $check_urls ? $this->check_url_destination( $redirect, home_url( $path ) ) : null;
+			return $check_destination ? $this->check_url_destination( $redirect, home_url( $path ) ) : null;
 		}
 
 		$post = $this->resolve_path_to_post( $slug );
@@ -379,8 +379,8 @@ class RedirectAuditor {
 			return $this->check_post_status( $redirect, $post );
 		}
 
-		// If URL checking is enabled, verify via HTTP.
-		if ( $check_urls ) {
+		// If destination checking is enabled, verify via HTTP.
+		if ( $check_destination ) {
 			return $this->check_url_destination( $redirect, home_url( $path ) );
 		}
 
@@ -431,10 +431,10 @@ class RedirectAuditor {
 	 *
 	 * @param Redirect $redirect   The redirect.
 	 * @param string   $url        The destination URL.
-	 * @param bool     $check_urls Whether to make an HTTP request to check the URL responds.
+	 * @param bool     $check_destination Whether to make an HTTP request to check the URL responds.
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
-	private function check_absolute_url_destination( Redirect $redirect, string $url, bool $check_urls ): ?AuditFinding {
+	private function check_absolute_url_destination( Redirect $redirect, string $url, bool $check_destination ): ?AuditFinding {
 		if ( array() !== $this->destination_checks( $redirect->destination() ) ) {
 			$host = wp_parse_url( $url, PHP_URL_HOST );
 			return new AuditFinding(
@@ -444,7 +444,7 @@ class RedirectAuditor {
 			);
 		}
 
-		return $check_urls ? $this->check_url_destination( $redirect, $url ) : null;
+		return $check_destination ? $this->check_url_destination( $redirect, $url ) : null;
 	}
 
 	/**
@@ -672,18 +672,18 @@ class RedirectAuditor {
 	 * Audit a batch of redirects.
 	 *
 	 * @param Redirect[] $redirects         The redirects to audit.
-	 * @param bool       $check_urls        Whether to check URL destinations.
+	 * @param bool       $check_destination        Whether to check URL destinations.
 	 * @param callable   $progress_callback Optional callback called after each redirect (receives count).
 	 * @return AuditFinding[] The findings across the batch.
 	 */
-	public function audit_batch( array $redirects, bool $check_urls = false, ?callable $progress_callback = null ): array {
+	public function audit_batch( array $redirects, bool $check_destination = false, ?callable $progress_callback = null ): array {
 		$findings = array();
 		$checked  = 0;
 
 		foreach ( $redirects as $redirect ) {
 			++$checked;
 
-			array_push( $findings, ...$this->audit( $redirect, $check_urls ) );
+			array_push( $findings, ...$this->audit( $redirect, $check_destination ) );
 
 			if ( null !== $progress_callback ) {
 				$progress_callback( $checked );

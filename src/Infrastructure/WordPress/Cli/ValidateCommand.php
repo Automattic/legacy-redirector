@@ -97,7 +97,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *   /wp-login.php (reported, never disabled by --fix)
 	 * - Redirects whose destinations lead back to themselves through other
 	 *   redirects (reported, never disabled by --fix)
-	 * - Optionally checks if destination URLs return 404
+	 * - Optionally requests destinations to find those answering with an error
 	 *
 	 * With no arguments, validates redirects matching --status/--limit.
 	 * Pass one or more redirect IDs or source paths to validate just those.
@@ -107,8 +107,10 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * [<redirect>...]
 	 * : Optional redirect IDs or source paths to validate.
 	 *
-	 * [--check-urls]
-	 * : Also check if URL destinations return 404 (slow, makes HTTP requests).
+	 * [--check-destination]
+	 * : Also request destinations that only an HTTP request can judge (URLs, and
+	 * paths that resolve to no post), and report those answering with an error.
+	 * Slow: one request per such redirect.
 	 *
 	 * [--status=<status>]
 	 * : Only check redirects with this status (ignored when redirects are given).
@@ -148,7 +150,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector validate
 	 *
 	 *     # Validate a single redirect by source path, including URL checks.
-	 *     $ wp legacy-redirector validate /old-page --check-urls
+	 *     $ wp legacy-redirector validate /old-page --check-destination
 	 *
 	 *     # Validate a single redirect by ID.
 	 *     $ wp legacy-redirector validate 123
@@ -171,10 +173,10 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * @param array $assoc_args Key-value associative arguments.
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
-		$check_urls = (bool) ( $assoc_args['check-urls'] ?? false );
-		$fix        = isset( $assoc_args['fix'] );
-		$format     = $assoc_args['format'] ?? 'table';
-		$is_table   = 'table' === $format;
+		$check_destination = (bool) ( $assoc_args['check-destination'] ?? false );
+		$fix               = isset( $assoc_args['fix'] );
+		$format            = $assoc_args['format'] ?? 'table';
+		$is_table          = 'table' === $format;
 
 		$redirects = empty( $args )
 			? $this->fetch_by_criteria( $assoc_args )
@@ -184,8 +186,8 @@ final class ValidateCommand extends WP_CLI_Command {
 			return;
 		}
 
-		if ( $is_table && $check_urls ) {
-			WP_CLI::warning( 'URL checking enabled - this may be slow.' );
+		if ( $is_table && $check_destination ) {
+			WP_CLI::warning( 'Checking destinations over HTTP - this may be slow.' );
 		}
 
 		$total    = count( $redirects );
@@ -193,7 +195,7 @@ final class ValidateCommand extends WP_CLI_Command {
 
 		$issues = $this->auditor->audit_batch(
 			$redirects,
-			$check_urls,
+			$check_destination,
 			function () use ( $progress ): void {
 				if ( null !== $progress ) {
 					$progress->tick();
@@ -208,7 +210,7 @@ final class ValidateCommand extends WP_CLI_Command {
 		// A batch run becomes the recorded summary behind the admin menu
 		// badge; a run over explicitly named redirects stays a spot check.
 		if ( empty( $args ) ) {
-			$this->results->record( $issues, $total, $check_urls );
+			$this->results->record( $issues, $total, $check_destination );
 		}
 
 		// Handle count format.

@@ -284,7 +284,7 @@ final class ValidateCommandTest extends CliTestCase {
 
 	/**
 	 * Test a relative-path destination whose post is trashed is reported
-	 * without needing --check-urls.
+	 * without needing --check-destination.
 	 *
 	 * Trashing renames the post's slug with a __trashed suffix, so a plain
 	 * path lookup misses it; the validator must check the renamed slug.
@@ -594,7 +594,7 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Run validate --check-urls --fix with every HTTP request answered by a canned response.
+	 * Run validate --check-destination --fix with every HTTP request answered by a canned response.
 	 *
 	 * @param array|\WP_Error $response The response to return.
 	 * @return void
@@ -608,8 +608,8 @@ final class ValidateCommandTest extends CliTestCase {
 				$this->command,
 				array(),
 				array(
-					'check-urls' => true,
-					'fix'        => true,
+					'check-destination' => true,
+					'fix'               => true,
 				)
 			);
 		} finally {

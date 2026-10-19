@@ -151,8 +151,8 @@ final class ValidateRedirectsAbilityTest extends MonkeyStubs {
 
 		$result = $this->ability->execute(
 			array(
-				'redirects'  => array( 1, 8 ),
-				'check_urls' => true,
+				'redirects'         => array( 1, 8 ),
+				'check_destination' => true,
 			)
 		);
 

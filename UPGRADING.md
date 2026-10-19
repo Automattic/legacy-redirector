@@ -258,7 +258,7 @@ Other behavior changes to be aware of:
 
 ### Destination Validation Uses Safe HTTP Requests
 
-Destination validation (the admin "Validate" action and `wp legacy-redirector validate --check-urls`) now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
+Destination validation (the admin "Validate" action and `wp legacy-redirector validate --check-destination`) now uses `wp_safe_remote_get()`/`wp_safe_remote_head()` to prevent SSRF. Requests to loopback, private, and reserved IP addresses are refused, and only ports 80, 443, and 8080 are used (plus the site's own host and port, which are always allowed).
 
 **What this means for you:**
 

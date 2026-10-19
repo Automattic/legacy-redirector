@@ -90,30 +90,30 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
-					'redirects'  => array(
+					'redirects'         => array(
 						'type'        => 'array',
 						'items'       => array(
 							'type' => array( 'string', 'integer' ),
 						),
 						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, a batch is selected using the status and limit.', 'legacy-redirector' ),
 					),
-					'status'     => array(
+					'status'            => array(
 						'type'        => 'string',
 						'enum'        => array( 'any', 'enabled', 'disabled' ),
 						'default'     => 'enabled',
 						'description' => __( 'Which redirects to select when none are given. Defaults to enabled, the ones visitors can reach.', 'legacy-redirector' ),
 					),
-					'limit'      => array(
+					'limit'             => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'maximum'     => self::MAX_LIMIT,
 						'default'     => 100,
 						'description' => __( 'How many redirects to check when none are given.', 'legacy-redirector' ),
 					),
-					'check_urls' => array(
+					'check_destination' => array(
 						'type'        => 'boolean',
 						'default'     => false,
-						'description' => __( 'Also request absolute URL destinations to see whether they respond. Slow, because it makes an HTTP request per redirect.', 'legacy-redirector' ),
+						'description' => __( 'Also request the destinations only an HTTP request can judge (URLs, and paths that resolve to no post) to see whether they respond. Slow, because it makes an HTTP request per such redirect.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -195,7 +195,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			);
 		}
 
-		$issues = $this->auditor->audit_batch( $redirects, (bool) ( $input['check_urls'] ?? false ) );
+		$issues = $this->auditor->audit_batch( $redirects, (bool) ( $input['check_destination'] ?? false ) );
 
 		return array(
 			'checked' => count( $redirects ),
