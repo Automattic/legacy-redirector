@@ -489,6 +489,56 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test the HTTP check caps the response body it downloads.
+	 *
+	 * Only the status code is read, so a destination serving a large file
+	 * must not be pulled into memory in full.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_limits_the_response_size(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+		Functions\expect( 'wp_safe_remote_get' )
+			->once()
+			->with(
+				'https://allowed.com/large.pdf',
+				\Mockery::on(
+					static fn( array $args ): bool => 5 === $args['timeout']
+						&& ! isset( $args['redirection'] )
+						&& ( $args['limit_response_size'] ?? 0 ) > 0
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/large.pdf' ), true ) );
+	}
+
+	/**
+	 * Test the probe caps the response body it downloads.
+	 *
+	 * Only the status and Location header are read, so a source serving a
+	 * large file must not be pulled into memory in full.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_limits_the_response_size(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\expect( 'wp_safe_remote_get' )
+			->once()
+			->with(
+				'https://example.com/old',
+				\Mockery::on(
+					static fn( array $args ): bool => 5 === $args['timeout']
+						&& 0 === $args['redirection']
+						&& ( $args['limit_response_size'] ?? 0 ) > 0
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertSame( array( 'status' => 'dormant' ), $this->auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
 	 * Test source_warnings flags a reserved source.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings

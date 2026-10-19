@@ -29,6 +29,16 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
 class RedirectAuditor {
 
 	/**
+	 * The most response body, in bytes, a URL check downloads.
+	 *
+	 * Checks read only the status code and headers, so a destination serving
+	 * a large file must not be pulled into memory in full.
+	 *
+	 * @var int
+	 */
+	private const MAX_RESPONSE_SIZE = 65536;
+
+	/**
 	 * The loop detector, the one audit rule needing the repository.
 	 *
 	 * Optional so the write gate, which never asks about loops, can build an
@@ -584,8 +594,9 @@ class RedirectAuditor {
 				1,
 				20,
 				array(
-					'redirection'        => 0,
-					'reject_unsafe_urls' => true,
+					'redirection'         => 0,
+					'reject_unsafe_urls'  => true,
+					'limit_response_size' => self::MAX_RESPONSE_SIZE,
 				)
 			);
 		}
@@ -593,8 +604,9 @@ class RedirectAuditor {
 		return wp_safe_remote_get(
 			$url,
 			array(
-				'timeout'     => 5,
-				'redirection' => 0,
+				'timeout'             => 5,
+				'redirection'         => 0,
+				'limit_response_size' => self::MAX_RESPONSE_SIZE,
 			)
 		);
 	}
@@ -609,10 +621,26 @@ class RedirectAuditor {
 	 */
 	protected function remote_get( string $url ) {
 		if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
-			return vip_safe_wp_remote_get( $url, '', 3, 1, 20, array( 'reject_unsafe_urls' => true ) );
+			return vip_safe_wp_remote_get(
+				$url,
+				'',
+				3,
+				1,
+				20,
+				array(
+					'reject_unsafe_urls'  => true,
+					'limit_response_size' => self::MAX_RESPONSE_SIZE,
+				)
+			);
 		}
 
-		return wp_safe_remote_get( $url, array( 'timeout' => 5 ) );
+		return wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'             => 5,
+				'limit_response_size' => self::MAX_RESPONSE_SIZE,
+			)
+		);
 	}
 
 	/**
