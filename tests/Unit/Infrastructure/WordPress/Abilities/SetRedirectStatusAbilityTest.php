@@ -82,19 +82,21 @@ final class SetRedirectStatusAbilityTest extends MonkeyStubs {
 	 * Stub a redirect lookup by ID.
 	 *
 	 * @param int $redirect_id The redirect ID to resolve.
-	 * @return void
+	 * @return Redirect The stubbed redirect.
 	 */
-	private function given_redirect( int $redirect_id ): void {
+	private function given_redirect( int $redirect_id ): Redirect {
+		$redirect = Redirect::reconstitute(
+			$redirect_id,
+			SourceUrl::from_string( '/old' ),
+			Destination::from_mixed( '/new' ),
+			'publish'
+		);
+
 		$this->repository->shouldReceive( 'find_by_id' )
 			->with( $redirect_id )
-			->andReturn(
-				Redirect::reconstitute(
-					$redirect_id,
-					SourceUrl::from_string( '/old' ),
-					Destination::from_mixed( '/new' ),
-					'publish'
-				)
-			);
+			->andReturn( $redirect );
+
+		return $redirect;
 	}
 
 	/**
@@ -103,9 +105,9 @@ final class SetRedirectStatusAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility::execute
 	 */
 	public function test_execute_disables_a_redirect(): void {
-		$this->given_redirect( 3 );
+		$redirect = $this->given_redirect( 3 );
 
-		$this->manager->shouldReceive( 'change_status' )->once()->with( 3, 'draft' )->andReturn( RedirectCreationResult::success( 1 ) );
+		$this->manager->shouldReceive( 'change_status' )->once()->with( 3, 'draft' )->andReturn( RedirectCreationResult::success( $redirect ) );
 
 		$result = $this->ability->execute(
 			array(
@@ -124,11 +126,11 @@ final class SetRedirectStatusAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility::execute
 	 */
 	public function test_execute_enables_several_redirects(): void {
-		$this->given_redirect( 3 );
-		$this->given_redirect( 4 );
+		$third  = $this->given_redirect( 3 );
+		$fourth = $this->given_redirect( 4 );
 
-		$this->manager->shouldReceive( 'change_status' )->once()->with( 3, 'publish' )->andReturn( RedirectCreationResult::success( 1 ) );
-		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'publish' )->andReturn( RedirectCreationResult::success( 1 ) );
+		$this->manager->shouldReceive( 'change_status' )->once()->with( 3, 'publish' )->andReturn( RedirectCreationResult::success( $third ) );
+		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'publish' )->andReturn( RedirectCreationResult::success( $fourth ) );
 
 		$result = $this->ability->execute(
 			array(
@@ -146,9 +148,9 @@ final class SetRedirectStatusAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility::execute
 	 */
 	public function test_execute_leaves_the_destination_alone(): void {
-		$this->given_redirect( 3 );
+		$redirect = $this->given_redirect( 3 );
 
-		$this->manager->shouldReceive( 'change_status' )->andReturn( RedirectCreationResult::success( 1 ) );
+		$this->manager->shouldReceive( 'change_status' )->andReturn( RedirectCreationResult::success( $redirect ) );
 		$this->manager->shouldNotReceive( 'update_destination' );
 
 		$this->ability->execute(

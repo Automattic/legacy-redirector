@@ -95,7 +95,7 @@ class RedirectManager {
 
 		try {
 			$saved = $this->repository->save( $redirect );
-			return RedirectCreationResult::success( $saved->id() );
+			return RedirectCreationResult::success( $saved );
 		} catch ( \Exception $e ) {
 			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
 		}
@@ -468,7 +468,7 @@ class RedirectManager {
 	private function persist( Redirect $updated ): RedirectCreationResult {
 		try {
 			$saved = $this->repository->save( $updated );
-			return RedirectCreationResult::success( (int) $saved->id() );
+			return RedirectCreationResult::success( $saved );
 		} catch ( \Exception $e ) {
 			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
 		}

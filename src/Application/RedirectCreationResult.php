@@ -9,20 +9,22 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Application;
 
+use Automattic\LegacyRedirector\Domain\Redirect;
+
 /**
  * Result object for redirect creation and update operations.
  *
- * Encapsulates either a successful write (with redirect ID) or
+ * Encapsulates either a successful write (with the redirect as saved) or
  * a validation/error failure with details.
  */
 final class RedirectCreationResult {
 
 	/**
-	 * The redirect ID if successful.
+	 * The redirect as saved, if successful.
 	 *
-	 * @var int|null
+	 * @var Redirect|null
 	 */
-	private ?int $redirect_id;
+	private ?Redirect $redirect;
 
 	/**
 	 * The error code if failed.
@@ -41,12 +43,12 @@ final class RedirectCreationResult {
 	/**
 	 * Private constructor - use static factory methods.
 	 *
-	 * @param int|null    $redirect_id   The redirect ID if successful.
-	 * @param string|null $error_code    The error code if failed.
-	 * @param string|null $error_message The error message if failed.
+	 * @param Redirect|null $redirect      The redirect as saved, if successful.
+	 * @param string|null   $error_code    The error code if failed.
+	 * @param string|null   $error_message The error message if failed.
 	 */
-	private function __construct( ?int $redirect_id, ?string $error_code, ?string $error_message ) {
-		$this->redirect_id   = $redirect_id;
+	private function __construct( ?Redirect $redirect, ?string $error_code, ?string $error_message ) {
+		$this->redirect      = $redirect;
 		$this->error_code    = $error_code;
 		$this->error_message = $error_message;
 	}
@@ -54,11 +56,14 @@ final class RedirectCreationResult {
 	/**
 	 * Create a successful result.
 	 *
-	 * @param int $redirect_id The created redirect ID.
+	 * Carries the redirect as saved, which can differ from what was asked
+	 * for: an internal absolute URL destination is stored as its path.
+	 *
+	 * @param Redirect $redirect The saved redirect.
 	 * @return self
 	 */
-	public static function success( int $redirect_id ): self {
-		return new self( $redirect_id, null, null );
+	public static function success( Redirect $redirect ): self {
+		return new self( $redirect, null, null );
 	}
 
 	/**
@@ -94,7 +99,7 @@ final class RedirectCreationResult {
 	 * @return bool
 	 */
 	public function is_success(): bool {
-		return null !== $this->redirect_id;
+		return null !== $this->redirect;
 	}
 
 	/**
@@ -103,7 +108,7 @@ final class RedirectCreationResult {
 	 * @return bool
 	 */
 	public function is_error(): bool {
-		return null === $this->redirect_id;
+		return null === $this->redirect;
 	}
 
 	/**
@@ -112,7 +117,16 @@ final class RedirectCreationResult {
 	 * @return int|null The redirect ID, or null if failed.
 	 */
 	public function redirect_id(): ?int {
-		return $this->redirect_id;
+		return $this->redirect?->id();
+	}
+
+	/**
+	 * Get the redirect as saved.
+	 *
+	 * @return Redirect|null The saved redirect, or null if failed.
+	 */
+	public function redirect(): ?Redirect {
+		return $this->redirect;
 	}
 
 	/**
