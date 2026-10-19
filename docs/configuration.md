@@ -126,9 +126,10 @@ Every redirect is checked in the background for the problems its stored details 
 destination post gone or unpublished, a host not allowed, a loop), so the "Has issues" view
 and the menu badge stay current without anyone pressing **Scan for issues**. Nothing is
 requested over HTTP. Every five minutes, the check spends up to 20 seconds working through
-the table from where it last stopped, and once it reaches the end it waits until a day after
-that pass began before starting another. A site with a few thousand redirects is checked
-daily; one with millions takes longer per pass, and the list screen shows how long.
+the table from where it last stopped. It starts a new pass at most once a day: a pass that
+finishes within a day waits until a day after it began, and one that takes longer is followed
+straight away by the next, never overlapping it. A site with a few thousand redirects is
+checked daily; one with millions takes longer per pass, and the list screen shows how long.
 
 Change the seconds per five minutes, or return `0` to turn the check off, for example on a
 very large site that runs `wp legacy-redirector scan` off-peak instead:

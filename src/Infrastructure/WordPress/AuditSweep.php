@@ -24,8 +24,9 @@ use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
  *
  * In the background, a cron event every five minutes spends a fixed slice
  * of server time (the legacy_redirector_background_audit_seconds filter)
- * and exits. A new pass starts at most once a day, so a small site is
- * checked daily and a large one as often as its budget allows. It runs the
+ * and exits. A new pass starts at most once a day, or straight after the
+ * last one when a pass takes longer than that, so a small site is checked
+ * daily and a large one as often as its budget allows. It runs the
  * auditor's stored-data checks only: requesting URLs in the background
  * would mostly report timeouts and throttling, not broken redirects.
  */
