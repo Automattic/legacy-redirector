@@ -40,6 +40,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  */
 final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 
@@ -196,5 +198,28 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 		$this->assertSame( array( $first, $second ), $ids( $this->query_repository()->find_after_id( 0, 2 ) ) );
 		$this->assertSame( array( $disabled, $last ), $ids( $this->query_repository()->find_after_id( $second, 10 ) ) );
 		$this->assertSame( array(), $this->query_repository()->find_after_id( $last, 10 ) );
+	}
+
+	/**
+	 * Test the destination lookup finds enabled and disabled redirects to a post, and nothing else.
+	 */
+	public function test_find_by_destination_post(): void {
+		$post_id  = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$other    = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$enabled  = $this->create_redirect( '/to-post-a', $post_id );
+		$disabled = $this->create_redirect( '/to-post-b', $post_id );
+		$this->create_redirect( '/to-other', $other );
+		$this->create_redirect( '/to-path', '/somewhere' );
+		wp_update_post(
+			array(
+				'ID'          => $disabled,
+				'post_status' => 'draft',
+			)
+		);
+
+		$found = $this->query_repository()->find_by_destination_post( $post_id, 10 );
+
+		$this->assertSame( array( $enabled, $disabled ), array_map( static fn( $redirect ) => $redirect->id(), $found ) );
+		$this->assertCount( 1, $this->query_repository()->find_by_destination_post( $post_id, 1 ) );
 	}
 }

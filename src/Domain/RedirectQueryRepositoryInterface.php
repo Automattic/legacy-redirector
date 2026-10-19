@@ -58,6 +58,15 @@ interface RedirectQueryRepositoryInterface {
 	public function find_after_id( int $after_id, int $limit ): array;
 
 	/**
+	 * Find enabled and disabled redirects whose destination is a given post.
+	 *
+	 * @param int $post_id The destination post ID.
+	 * @param int $limit   Maximum rows to return.
+	 * @return Redirect[] The redirects, lowest ID first.
+	 */
+	public function find_by_destination_post( int $post_id, int $limit ): array;
+
+	/**
 	 * Get destination URLs for redirects pointing at external (absolute) URLs.
 	 *
 	 * Disabled redirects count, since re-enabling one needs its host allowed;

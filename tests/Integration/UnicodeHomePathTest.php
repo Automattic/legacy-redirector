@@ -55,6 +55,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class UnicodeHomePathTest extends TestCase {
 

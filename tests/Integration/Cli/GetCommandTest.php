@@ -42,6 +42,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class GetCommandTest extends CliTestCase {
 

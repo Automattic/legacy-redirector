@@ -57,6 +57,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::duplicate_count
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class DuplicateSourcesAdminTest extends TestCase {
 

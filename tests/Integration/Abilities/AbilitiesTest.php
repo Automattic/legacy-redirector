@@ -66,6 +66,7 @@ use WP_Ability;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class AbilitiesTest extends TestCase {
 

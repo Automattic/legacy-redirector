@@ -44,6 +44,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class AmpersandEscapingTest extends TestCase {
 

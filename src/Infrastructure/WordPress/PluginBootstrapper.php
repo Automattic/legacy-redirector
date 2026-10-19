@@ -133,6 +133,15 @@ final class PluginBootstrapper {
 		// loads.
 		$this->container->audit_sweep()->register();
 
+		// Flag redirects the moment their destination post is unpublished,
+		// trashed or deleted, rather than when the sweep next reaches them.
+		$destination_watcher = new DestinationPostWatcher(
+			$this->container->query_repository(),
+			$this->container->auditor(),
+			$this->container->audit_flags()
+		);
+		$destination_watcher->register();
+
 		// Register WP-CLI commands.
 		$this->register_cli_commands();
 
