@@ -153,6 +153,18 @@ final class Upgrader {
 	private const string CLI_LOCK = 'wpcom_legacy_redirector_upgrade_cli';
 
 	/**
+	 * Transient set for a minute when a web request's batch could not run.
+	 *
+	 * Web requests hold off their batches while it exists. Without it, every
+	 * page view while another batch holds the lock sends two writes to the
+	 * primary to find that out, and a batch that keeps failing is planned
+	 * and refused again on every request. A minute bounds both to one try a
+	 * minute. A batch that succeeds clears it, so a request that lost the
+	 * lock to it does not hold the next one back.
+	 */
+	private const string WEB_BACKOFF = 'wpcom_legacy_redirector_upgrade_backoff';
+
+	/**
 	 * Option row held while a batch runs, web or CLI; see lock().
 	 *
 	 * Two batches at once would plan the same rows, which is not always safe;
@@ -425,17 +437,20 @@ final class Upgrader {
 	 * @return void
 	 */
 	public function maybe_upgrade(): void {
-		if ( ! $this->needs_upgrade() || false !== get_transient( self::CLI_LOCK ) ) {
+		if ( ! $this->needs_upgrade() || false !== get_transient( self::CLI_LOCK ) || false !== get_transient( self::WEB_BACKOFF ) ) {
 			return;
 		}
 
 		try {
 			$this->run_batch( self::BATCH_SIZE );
 		} catch ( RuntimeException $e ) {
-			// The batch stopped without advancing the cursor, so the next
-			// request picks it up again. Nothing to tell a visitor.
+			// The batch stopped without advancing the cursor, so a request
+			// after the backoff picks it up again. Nothing to tell a visitor.
+			set_transient( self::WEB_BACKOFF, 1, MINUTE_IN_SECONDS );
 			return;
 		}
+
+		delete_transient( self::WEB_BACKOFF );
 	}
 
 	/**

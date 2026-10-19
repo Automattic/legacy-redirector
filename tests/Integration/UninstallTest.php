@@ -42,11 +42,11 @@ final class UninstallTest extends TestCase {
 	);
 
 	/**
-	 * The upgrader's WP-CLI lock transient.
+	 * The upgrader's transients that stand web batches down: the WP-CLI lock and the web backoff.
 	 *
-	 * @var string
+	 * @var string[]
 	 */
-	private const string CLI_LOCK_TRANSIENT = 'wpcom_legacy_redirector_upgrade_cli';
+	private const array UPGRADER_TRANSIENTS = array( 'wpcom_legacy_redirector_upgrade_cli', 'wpcom_legacy_redirector_upgrade_backoff' );
 
 	/**
 	 * The option recording that the capability has been granted.
@@ -97,7 +97,9 @@ final class UninstallTest extends TestCase {
 			$this->assertFalse( get_option( $option ), "{$option} should be deleted." );
 		}
 		$this->assertFalse( wp_next_scheduled( AuditSweep::HOOK ) );
-		$this->assertFalse( get_transient( self::CLI_LOCK_TRANSIENT ) );
+		foreach ( self::UPGRADER_TRANSIENTS as $transient ) {
+			$this->assertFalse( get_transient( $transient ), "{$transient} should be deleted." );
+		}
 
 		$this->assertSame( PostType::POST_TYPE, get_post_type( $redirect_id ) );
 		$this->assertSame( 'problem', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
@@ -141,7 +143,9 @@ final class UninstallTest extends TestCase {
 			update_option( $option, 1, false );
 		}
 		wp_schedule_single_event( time() + HOUR_IN_SECONDS, AuditSweep::HOOK );
-		set_transient( self::CLI_LOCK_TRANSIENT, 1, MINUTE_IN_SECONDS );
+		foreach ( self::UPGRADER_TRANSIENTS as $transient ) {
+			set_transient( $transient, 1, MINUTE_IN_SECONDS );
+		}
 	}
 
 	/**

@@ -290,8 +290,9 @@ Deleting the plugin from the Plugins screen runs its `uninstall.php`, which remo
 the plugin can rebuild: the background check's progress, counts, and lock
 (`legacy_redirector_audit_sweep`, `legacy_redirector_audit_flag_counts`,
 `legacy_redirector_audit_flags_checked_at`, `legacy_redirector_audit_lock`), its scheduled
-event (`legacy_redirector_scheduled_audit`), and the migration's WP-CLI lock transient. On a
-multisite network it does this on every site.
+event (`legacy_redirector_scheduled_audit`), and the two transients that hold the migration's
+web batches back (`wpcom_legacy_redirector_upgrade_cli`, `wpcom_legacy_redirector_upgrade_backoff`).
+On a multisite network it does this on every site.
 
 Sites that load the plugin in code, as on WordPress VIP, never run `uninstall.php`. Removing
 the code leaves everything in place.

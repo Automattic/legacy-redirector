@@ -30,6 +30,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		delete_option( 'legacy_redirector_audit_sweep' );
 		delete_option( 'legacy_redirector_audit_lock' );
 		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
+		delete_transient( 'wpcom_legacy_redirector_upgrade_backoff' );
 
 		// Deactivation unschedules this too, but only on the site it runs on;
 		// a network deactivation leaves the other sites' events behind.
