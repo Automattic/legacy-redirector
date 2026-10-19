@@ -136,6 +136,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		$this->assertTrue( $result->is_invalid() );
 		$this->assertSame( 'duplicate-redirect-uri', $result->error_code() );
+		$this->assertSame( 'Redirect #456 already has the source "/existing-page". Update redirect #456 instead.', $result->error_message() );
 	}
 
 	/**
@@ -215,6 +216,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 
 		$this->assertTrue( $result->is_invalid() );
 		$this->assertSame( 'invalid-values', $result->error_code() );
+		$this->assertSame( 'The source and destination are the same, so the redirect would loop.', $result->error_message() );
 	}
 
 	/**

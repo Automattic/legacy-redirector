@@ -223,6 +223,10 @@ final class CorruptRedirectRowsTest extends TestCase {
 		$this->assertTrue( $result->is_error() );
 		$this->assertSame( 'corrupt-redirect', $result->error_code() );
 
+		// The error names the routes that can repair it, which this one cannot.
+		$this->assertStringContainsString( 'edit screen', (string) $result->error_message() );
+		$this->assertStringContainsString( 'import --mode=upsert', (string) $result->error_message() );
+
 		// The stored row is untouched.
 		$post = get_post( $post_id );
 		$this->assertSame( 'publish', $post->post_status );
