@@ -863,6 +863,111 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A batch running past five minutes renews its lock and its hold on web batches, so neither is taken over.
+	 *
+	 * @return void
+	 */
+	public function test_long_batch_keeps_its_lock() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$this->upgrader->hold_web_batches();
+
+		$aged    = false;
+		$checked = false;
+		$age     = $this->ager();
+		$check   = function ( string $query ) use ( &$aged, &$checked, $wpdb, $age ): string {
+			if ( ! $aged && str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ) {
+				$aged = true;
+				$age( 6 * MINUTE_IN_SECONDS );
+				delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
+			}
+
+			if ( ! $checked && str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ) {
+				$checked = true;
+				$this->assertNotFalse( get_transient( 'wpcom_legacy_redirector_upgrade_cli' ), 'The hold on web batches should be renewed.' );
+				try {
+					( new Upgrader() )->run_batch( 100 );
+					$this->fail( 'A second batch should not take the lock over.' );
+				} catch ( \RuntimeException $e ) {
+					$this->assertStringContainsString( 'holds its lock', $e->getMessage() );
+				}
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $check );
+		try {
+			$result = $this->upgrader->run_batch( 100 );
+		} finally {
+			remove_filter( 'query', $check );
+		}
+
+		$this->assertTrue( $checked, 'The second batch should have been tried.' );
+		$this->assertTrue( $result['complete'] );
+		$this->assertNull( $this->lock_value() );
+	}
+
+	/**
+	 * A batch whose lock was taken over stops before writing anything more.
+	 *
+	 * The new holder plans the same rows, against a re-key record it read
+	 * before this batch's writes.
+	 *
+	 * @return void
+	 */
+	public function test_batch_stops_once_its_lock_is_taken_over() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page/' );
+		$age     = $this->ager();
+		$taken   = false;
+		$take    = static function ( string $query ) use ( &$taken, $wpdb, $age ): string {
+			if ( ! $taken && str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ) {
+				$taken = true;
+				$age( 6 * MINUTE_IN_SECONDS );
+				$wpdb->update( $wpdb->options, array( 'option_value' => 'another runner' ), array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $take );
+		try {
+			$this->upgrader->run_batch( 100 );
+			$this->fail( 'The batch should have stopped.' );
+		} catch ( \RuntimeException $e ) {
+			$this->assertStringContainsString( 'took over the lock', $e->getMessage() );
+		} finally {
+			remove_filter( 'query', $take );
+		}
+
+		$this->assertSame( '/old-page/', get_post( $post_id )->post_title );
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+		$this->assertSame( 'another runner', $this->lock_value() );
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+	}
+
+	/**
+	 * A callback that makes the upgrader's batch lock look a number of seconds older, as if its batch had run that long.
+	 *
+	 * @return \Closure(int): void
+	 */
+	private function ager(): \Closure {
+		global $wpdb;
+
+		return \Closure::bind(
+			function ( int $seconds ) use ( $wpdb ): void {
+				$this->locked_at -= $seconds;
+				$this->lock_value = (string) ( (int) $this->lock_value - $seconds );
+				$wpdb->update( $wpdb->options, array( 'option_value' => $this->lock_value ), array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+			},
+			$this->upgrader,
+			Upgrader::class
+		);
+	}
+
+	/**
 	 * A batch that finds, once it holds the lock, that another has finished the upgrade does nothing.
 	 *
 	 * Otherwise it would start a new walk from the first redirect, stripping
