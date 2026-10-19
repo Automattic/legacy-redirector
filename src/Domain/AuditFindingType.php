@@ -17,11 +17,8 @@ namespace Automattic\LegacyRedirector\Domain;
  * is_warning(). Independently, a finding is conclusive unless the check could
  * not tell (a failed request, a server error); see is_conclusive().
  *
- * Adding a case? The user-facing explanations live outside this enum and
- * must be updated with it: the list screen's contextual help
- * (ListScreenSetup::get_checks_help()), the Add/Edit form's contextual help
- * (FormScreenSetup), the validate ability description, the ValidateCommand
- * docblock, and docs/cli.md.
+ * Adding a case? docs/redirect-health.md is the full list of checks for
+ * users, and says what else to update with it.
  */
 enum AuditFindingType: string {
 
