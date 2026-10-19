@@ -11,6 +11,8 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Infrastructure\WordPress
 
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 
 /**
@@ -67,6 +69,85 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 		$found = $this->query_repository()->find_matching( new RedirectCriteria( null, null, null, 'ID', 'ASC' ) );
 
 		$this->assertSame( $ids, array_map( static fn ( Redirect $redirect ): ?int => $redirect->id(), $found ) );
+	}
+
+	/**
+	 * Destination type counts are exact, cover disabled redirects but not the
+	 * Trash, count a row in every type it matches, and take one query.
+	 */
+	public function test_count_by_destination_type_counts_every_type_in_one_query(): void {
+		global $wpdb;
+
+		$post_id = self::factory()->post->create();
+
+		$this->insert_redirect_post(
+			array(
+				'post_parent'  => $post_id,
+				'post_excerpt' => '',
+			)
+		);
+		$this->insert_redirect_post( array( 'post_excerpt' => '/path' ) );
+		$this->insert_redirect_post( array( 'post_excerpt' => 'https://example.com/external' ) );
+		$this->insert_redirect_post(
+			array(
+				'post_status'  => 'draft',
+				'post_excerpt' => '/disabled-path',
+			)
+		);
+		$this->insert_redirect_post(
+			array(
+				'post_status'  => 'trash',
+				'post_excerpt' => 'https://example.com/trashed',
+			)
+		);
+		$this->insert_redirect_post(
+			array(
+				'post_parent'  => $post_id,
+				'post_excerpt' => '/overlap',
+			)
+		);
+
+		$queries = $wpdb->num_queries;
+		$counts  = $this->query_repository()->count_by_destination_type();
+		$queries = $wpdb->num_queries - $queries;
+
+		$this->assertSame(
+			array(
+				'post_id'  => 2,
+				'path'     => 3,
+				'external' => 1,
+			),
+			$counts
+		);
+
+		foreach ( $counts as $type => $count ) {
+			$this->assertSame( $count, $this->count_rows_filtered_to( $type ), "The $type count must match its list filter." );
+		}
+
+		$this->assertSame( 1, $queries, 'The counts must take one query.' );
+	}
+
+	/**
+	 * Count the live rows the list screen's filter for a destination type shows.
+	 *
+	 * @param string $type Destination kind: 'post_id', 'path', or 'external'.
+	 * @return int The row count.
+	 */
+	private function count_rows_filtered_to( string $type ): int {
+		$where = static fn ( string $sql ): string => $sql . PostTypeRedirectQueryRepository::destination_type_where( $type );
+
+		add_filter( 'posts_where', $where );
+		$query = new \WP_Query(
+			array(
+				'post_type'      => PostType::POST_TYPE,
+				'post_status'    => array( 'publish', 'draft' ),
+				'fields'         => 'ids',
+				'posts_per_page' => -1,
+			)
+		);
+		remove_filter( 'posts_where', $where );
+
+		return count( $query->posts );
 	}
 
 	/**
