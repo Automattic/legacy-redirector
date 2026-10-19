@@ -69,15 +69,16 @@ checks](#stored-details-and-live-checks) for why.
 
 | Check | Where | Covers | Requests URLs |
 |-------|-------|--------|---------------|
-| **Scan for issues** | Redirects list toolbar | Every redirect, now, instead of waiting for the background | No |
-| `wp legacy-redirector scan` | WP-CLI | The same, from the command line, for example off-peak on a large site | No |
-| **Test** | Row action and bulk action | The redirects you pick, live | Yes: the destination, and the source to confirm the redirect fires |
-| `wp legacy-redirector validate` | WP-CLI | Enabled redirects, or the ones you name, reported but not recorded | Only with `--check-destination` |
-| `validate-redirects` ability | MCP clients | As `validate` | Only with `check_destination` |
+| **Validate all redirects** | Redirects list toolbar | Every redirect, now, instead of waiting for the background | No |
+| `wp legacy-redirector validate` | WP-CLI | Every redirect, or the ones you name | No |
+| `validate-redirects` ability | MCP clients | The redirects you name, or the ones already flagged | No |
+| **Test** | Row action and bulk action | The redirects you pick, live | Yes: the destination, and the source |
+| `wp legacy-redirector test` | WP-CLI | The redirects you name, live | Yes: the destination, and the source |
+| `test-redirects` ability | MCP clients | Up to 20 named redirects, live | Yes: the destination, and the source |
 
-Scan and `scan` record what they find, the same way the background check does; they are
-the background check, run on demand. Test, `validate` and the ability report without
-recording anything, so a check of a few redirects never changes the site-wide count.
+The validate checks read stored details, and record what they find, as the background check
+does: they are the background check, run on demand. The test checks make requests, and
+record nothing, because a timeout or a throttled request is not a fact about a redirect.
 
 ## What is checked
 
@@ -87,8 +88,7 @@ automatic ever disables a redirect for a warning.
 
 A check that needs a request can also come back **inconclusive**: the request timed out, or
 the server answered with an error that is as likely to be passing as permanent. It is still
-reported, but `validate --fix` leaves the redirect enabled and says how many it left. Re-run
-before treating one as broken.
+reported, but test again before treating one as broken.
 
 | Finding | Severity | Found by |
 |---------|----------|----------|
@@ -102,6 +102,10 @@ before treating one as broken.
 | Destination returns 404 | Problem | A request |
 | Destination returns a server error | Problem, inconclusive | A request |
 | Request to the destination failed | Problem, inconclusive | A request |
+| Source redirects somewhere else | Problem | A request to the source |
+| Source returns a 404 without the redirect firing | Problem | A request to the source |
+| Source serves its own content, so the redirect lies dormant | Warning | A request to the source |
+| Request to the source failed | Problem, inconclusive | A request to the source |
 
 Post destinations are judged by the post's own status, so a media attachment counts as
 published. A relative path is resolved to a post of any registered type, including dated
@@ -109,10 +113,13 @@ permalinks, and judged the same way; a path that resolves to no post at all, suc
 archive or a page served outside WordPress, is not reported, because only a request can say
 whether it responds.
 
-Test also requests the source and reports what happened: the redirect fired and went to the
-stored destination, it went somewhere else, the source served its own content (so the
-redirect lies dormant), the source returned a 404 without the redirect firing, or the site
-could not be checked.
+The source is only requested for an enabled redirect: a disabled one is not meant to fire.
+
+Every finding says what to do about it, alongside what is wrong. Almost nothing can be fixed
+automatically: restoring a post, repointing a redirect, and allowing a host are decisions for
+a person. So nothing disables or changes a redirect on its own. To switch off the redirects
+with problems, use the bulk Disable action on the "Has issues" view, or `list --has-issues`
+piped into `disable` (see [cli.md](cli.md#find-and-clean-up-broken-redirects)).
 
 Redirects that the 2.0 upgrade disabled because they shared a source with a live redirect
 are handled separately: the list screen has a **Duplicate sources** view and a notice until
@@ -124,19 +131,22 @@ duplicate](../UPGRADING.md#settling-a-disabled-duplicate).
 In the admin, on the Redirects list:
 
 - **The Health column** shows every stored-details finding for each row, worked out live
-  each time the page loads, so it is always current. "Not fully checked" means only a request
+  each time the page loads, so it is always current. Hovering over a finding says what is
+  wrong and what to do; screen readers announce both. "Not fully checked" means only a request
   can judge the destination; use Test. After a Test, the cell shows the live result.
 - **The "Has issues" view** lists the redirects the last check flagged, so bulk actions can
   be applied straight to them. It is a snapshot: saving a redirect clears its flag until it
   is next checked, and the view is labeled with when the last full check finished.
 - **The Redirects menu badge** counts the redirects flagged as problems, matching the "Has
   issues" view.
-- **The line beside Scan for issues** says when every redirect was last checked, how far a
+- **The line beside Validate all redirects** says when every redirect was last checked, how far a
   check in progress has got, and how long a full check takes in the background.
 
-After a save, a notice shows any warnings for that redirect.
-From the command line, `validate` prints its findings as a table, CSV, JSON or YAML, and
-`create` and `import` print warnings as they write.
+After a save, a notice shows any warnings for that redirect, and what to do about them.
+
+From the command line, `list --has-issues` lists the flagged redirects, `validate` and `test`
+print their findings (with what to do) as a table, CSV, JSON or YAML, and `create` and
+`import` print warnings as they write.
 
 ## Stored details and live checks
 
@@ -161,8 +171,7 @@ would mostly report timeouts rather than broken redirects.
   background check, because nothing changes on the media item itself.
 - **A post published at a redirect's source** makes the redirect dormant, because redirects
   only answer 404s. Test shows this; nothing else does yet.
-- **A destination page that has gone** on another site is only found by Test or
-  `validate --check-destination`.
+- **A destination page that has gone** on another site is only found by Test or `test`.
 
 ## Adding a check
 
@@ -173,4 +182,5 @@ save is decided separately, in `RedirectValidator::refusal_for()`.
 When adding a case, update the table on this page, and the places that describe checks to
 people where they work: the list screen's "What is checked" help
 (`ListScreenSetup::get_checks_help()`), the Add/Edit form's help (`FormScreenSetup`), the
-`validate` command's docblock, and the `validate-redirects` ability's description.
+`validate` command's docblock, and the `validate-redirects` ability's description (for a live
+check, the `test` command's docblock and the `test-redirects` ability's description instead).

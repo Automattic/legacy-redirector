@@ -27,7 +27,8 @@ calling once.
 | `legacy-redirector/update-redirect` | Change the destination, and optionally the status, of one or more redirects | No | No | Yes |
 | `legacy-redirector/set-redirect-status` | Enable or disable one or more redirects | No | No | Yes |
 | `legacy-redirector/delete-redirect` | Delete one or more redirects | No | **Yes** | Yes |
-| `legacy-redirector/validate-redirects` | Report redirects whose destinations no longer resolve | Yes | No | Yes |
+| `legacy-redirector/validate-redirects` | Check redirects' stored details for problems, say what to do about each, and record the result; given none, re-check the flagged ones | No | No | Yes |
+| `legacy-redirector/test-redirects` | Check up to 20 named redirects live: whether the destination responds and the source redirects | Yes | No | Yes |
 | `legacy-redirector/find-redirect-domains` | List the domains destinations point at | Yes | No | Yes |
 
 `create-redirect` is not idempotent because a second call with the same source is a
@@ -37,12 +38,16 @@ new one".
 Disabling a redirect is not destructive: the redirect and its destination are kept, it
 just stops being served to visitors. Only `delete-redirect` loses data.
 
+`validate-redirects` is not read-only because it records the per-row flags behind the admin
+"Has issues" view and the menu badge, though it never changes a redirect. `test-redirects`
+records nothing.
+
 ## Connecting a client
 
 The plugin registers abilities. It does not itself speak MCP — bridging the Abilities API
 to an MCP client is the job of a separate MCP server layer, which is not part of this
 plugin. What this plugin guarantees is that the abilities are registered, described, and
-exposed over the REST API (`show_in_rest` is set on all eight), so anything that reads the
+exposed over the REST API (`show_in_rest` is set on all nine), so anything that reads the
 ability registry will find them.
 
 Two things to get right on the WordPress side:
@@ -52,7 +57,7 @@ every one of these abilities checks the capability. A client authenticating as a
 without it gets a permission error rather than an empty result. See
 [configuration.md](configuration.md) for how to grant it.
 
-**Read-only is still gated.** `get-redirect`, `list-redirects`, `validate-redirects`, and
+**Read-only is still gated.** `get-redirect`, `list-redirects`, `test-redirects`, and
 `find-redirect-domains` all require `manage_redirects` too. There is no anonymous or
 subscriber-level read access to the redirect map.
 
@@ -62,7 +67,7 @@ subscriber-level read access to the redirect map.
 
 ```bash
 wp eval '
-foreach ( array( "create-redirect", "get-redirect", "list-redirects", "update-redirect", "set-redirect-status", "delete-redirect", "validate-redirects", "find-redirect-domains" ) as $name ) {
+foreach ( array( "create-redirect", "get-redirect", "list-redirects", "update-redirect", "set-redirect-status", "delete-redirect", "validate-redirects", "test-redirects", "find-redirect-domains" ) as $name ) {
 	$ability = wp_get_ability( "legacy-redirector/$name" );
 	echo $name, ": ", ( null === $ability ? "missing" : "ok" ), PHP_EOL;
 }'
