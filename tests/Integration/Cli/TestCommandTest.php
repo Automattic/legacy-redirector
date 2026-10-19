@@ -264,4 +264,23 @@ final class TestCommandTest extends CliTestCase {
 		$this->assert_command_error();
 		$this->assert_stdout_contains( 'Redirect not found: /test-nonexistent' );
 	}
+
+	/**
+	 * Test a corrupt row is a problem whichever check is asked for.
+	 *
+	 * Neither check can judge a row whose stored data cannot be read, so
+	 * --only=source must not pass it off as fine.
+	 */
+	public function test_a_corrupt_row_is_a_problem_even_for_the_source_only(): void {
+		// No source at all: the row can only be named by its ID.
+		$corrupt_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+		$this->respond( self::redirects_to_destination(), array( 'response' => array( 'code' => 200 ) ) );
+
+		$rows = $this->rows( array( (string) $corrupt_id ), array( 'only' => 'source' ) );
+
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'problem', $rows[0]['severity'] );
+		$this->assertSame( 'Corrupt stored data', $rows[0]['issue'] );
+		$this->assertSame( array(), $this->source_requests );
+	}
 }

@@ -507,9 +507,10 @@ class RedirectAuditor {
 	 *         'confirmed'   the source redirects to the stored destination;
 	 *         'diverted'    the source redirects somewhere else ('location');
 	 *         'dormant'     the source serves content, so the redirect never fires;
-	 *         'not-firing'  the source 404s without redirecting;
-	 *         'unreachable' the check could not tell: the request failed, or the
-	 *                     site answered with a server error, a 429 or no status.
+	 *         'not-firing'  the source 404s (or 410s) without redirecting;
+	 *         'unreachable' the check could not tell: the request failed, the site
+	 *                     answered with a server error, a 401, 403 or 429, or no
+	 *                     status, or redirected with no Location.
 	 */
 	public function probe_source( Redirect $redirect ): array {
 		$source_url = home_url( $redirect->source()->path() );
@@ -524,12 +525,24 @@ class RedirectAuditor {
 
 		// A server error, or a 429 from a site rate-limiting a run of requests
 		// to itself, is the site failing to answer, not the source serving
-		// content. A missing status only comes from a misbehaving filter.
-		if ( $code <= 0 || 429 === $code || $code >= 500 ) {
+		// content. A 401 or 403 is basic auth or a firewall turning the probe
+		// away before WordPress sees it. A missing status only comes from a
+		// misbehaving filter. None of them says whether the redirect fires.
+		if ( $code <= 0 || 401 === $code || 403 === $code || 429 === $code || $code >= 500 ) {
 			return array( 'status' => 'unreachable' );
 		}
 
 		if ( $code >= 300 && $code < 400 ) {
+			// A redirect with nowhere to go is malformed, not a verdict.
+			if ( '' === $location ) {
+				return array( 'status' => 'unreachable' );
+			}
+
+			// A relative Location (nginx with absolute_redirect off, a proxy
+			// rewriting the header) is resolved against the source, so it is
+			// compared like for like with the absolute URLs below.
+			$location = $this->absolute_location( $location, $source_url );
+
 			// A hop back to the source itself (a trailing-slash canonical, a
 			// directory redirect) means the path is served, not diverted: the
 			// 404 our redirect would answer never happens.
@@ -552,7 +565,9 @@ class RedirectAuditor {
 			);
 		}
 
-		if ( 404 === $code ) {
+		// Redirects only answer a 404, so a 410 from a server or another
+		// plugin also means this one never got the chance.
+		if ( 404 === $code || 410 === $code ) {
 			return array( 'status' => 'not-firing' );
 		}
 
@@ -572,7 +587,9 @@ class RedirectAuditor {
 	 * @return array{findings: AuditFinding[], source: array{status: string, location?: string}|null, source_finding: AuditFinding|null} Every finding (the source's included), the source probe's outcome when it ran (it is skipped for a disabled or corrupt redirect, which is not meant to fire), and the source's finding on its own.
 	 */
 	public function test( Redirect $redirect, bool $check_destination = true, bool $check_source = true ): array {
-		$findings       = $check_destination ? $this->audit( $redirect, true ) : array();
+		// A corrupt row is reported whichever check was asked for: it is not
+		// a redirect either check could judge.
+		$findings       = $check_destination || $redirect->is_corrupt() ? $this->audit( $redirect, true ) : array();
 		$probe          = null;
 		$source_finding = null;
 
@@ -661,6 +678,25 @@ class RedirectAuditor {
 	 */
 	private function urls_equivalent( string $a, string $b ): bool {
 		return untrailingslashit( $a ) === untrailingslashit( $b );
+	}
+
+	/**
+	 * Resolve a root-relative or scheme-relative Location against the URL requested.
+	 *
+	 * @param string $location The Location header.
+	 * @param string $base     The URL that was requested.
+	 * @return string The absolute URL, or the header unchanged when it already is one.
+	 */
+	private function absolute_location( string $location, string $base ): string {
+		if ( str_starts_with( $location, '//' ) ) {
+			return ( preg_match( '#^(https?):#i', $base, $scheme ) ? $scheme[1] : 'https' ) . ':' . $location;
+		}
+
+		if ( str_starts_with( $location, '/' ) && preg_match( '#^https?://[^/]+#i', $base, $origin ) ) {
+			return $origin[0] . $location;
+		}
+
+		return $location;
 	}
 
 	/**

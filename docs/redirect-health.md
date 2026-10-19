@@ -103,9 +103,9 @@ reported, but test again before treating one as broken.
 | Destination returns a server error | Problem, inconclusive | A request |
 | Request to the destination failed | Problem, inconclusive | A request |
 | Source redirects somewhere else | Problem | A request to the source |
-| Source returns a 404 without the redirect firing | Problem | A request to the source |
+| Source returns a 404 (or 410) without the redirect firing | Problem | A request to the source |
 | Source serves its own content, so the redirect lies dormant | Warning | A request to the source |
-| Request to the source failed | Problem, inconclusive | A request to the source |
+| Request to the source failed, or the site turned it away (a 401, 403 or 429) | Problem, inconclusive | A request to the source |
 
 Post destinations are judged by the post's own status, so a media attachment counts as
 published. A relative path is resolved to a post of any registered type, including dated

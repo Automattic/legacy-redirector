@@ -557,9 +557,10 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	/**
 	 * Test a source answering with an error is unreachable, not dormant.
 	 *
-	 * A server error, a 429 from a site rate-limiting requests to itself, or
-	 * no status at all is the site failing to answer. None of them means
-	 * content is winning over the redirect.
+	 * A server error, a 429 from a site rate-limiting requests to itself, a
+	 * 401 or 403 from basic auth or a firewall, or no status at all is the
+	 * probe being turned away. None of them means content is winning over the
+	 * redirect.
 	 *
 	 * @dataProvider unreachable_status_provider
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
@@ -584,6 +585,8 @@ final class RedirectAuditorTest extends MonkeyStubs {
 			'server error'        => array( 500 ),
 			'service unavailable' => array( 503 ),
 			'too many requests'   => array( 429 ),
+			'unauthorized'        => array( 401 ),
+			'forbidden'           => array( 403 ),
 			'no status'           => array( 0 ),
 		);
 	}
@@ -672,19 +675,59 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test a forbidden source is still dormant.
+	 * Test a 410 means the redirect did not fire, like a 404.
 	 *
-	 * The site answered with its own response, so the 404 the redirect
-	 * needs never happened.
+	 * Redirects only answer a 404, so a server or plugin answering "gone"
+	 * first means this one never got the chance.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
 	 */
-	public function test_probe_source_treats_a_forbidden_source_as_dormant(): void {
+	public function test_probe_source_treats_a_gone_source_as_not_firing(): void {
 		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
 
-		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 403 ) ) );
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 410 ) ) );
 
-		$this->assertSame( array( 'status' => 'dormant' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+		$this->assertSame( array( 'status' => 'not-firing' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test a root-relative Location is resolved against the source before comparing.
+	 *
+	 * With nginx's absolute_redirect off, or a proxy rewriting the header,
+	 * the response says "/target": the same place as the absolute destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_resolves_a_relative_location(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => '/target' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status'   => 'confirmed',
+				'location' => 'https://example.com/target',
+			),
+			$auditor->probe_source( $this->create_redirect( '/old', '/target' ) )
+		);
+	}
+
+	/**
+	 * Test a redirect with no Location is inconclusive, not diverted.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_a_redirect_without_a_location_as_unreachable(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 302 ) ) );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
 	}
 
 	/**

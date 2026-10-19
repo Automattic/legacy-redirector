@@ -165,6 +165,11 @@ final class TestCommand extends WP_CLI_Command {
 			$rows[] = $this->finding_row( $finding );
 		}
 
+		// A corrupt row's finding is the whole story: neither check could run.
+		if ( $redirect->is_corrupt() ) {
+			return $rows;
+		}
+
 		// Warnings do not stop the destination counting as fine.
 		$destination_problems = array_filter(
 			$result['findings'],
@@ -179,7 +184,7 @@ final class TestCommand extends WP_CLI_Command {
 		}
 
 		if ( $check_source && null === $result['source_finding'] ) {
-			$rows[] = $this->ok_row( $redirect, $this->source_note( $redirect, $result['source'] ) );
+			$rows[] = $this->ok_row( $redirect, $this->source_note( $result['source'] ) );
 		}
 
 		return $rows;
@@ -188,17 +193,12 @@ final class TestCommand extends WP_CLI_Command {
 	/**
 	 * What the source check found, when it found nothing wrong.
 	 *
-	 * @param Redirect                                      $redirect The redirect.
-	 * @param array{status: string, location?: string}|null $probe    The probe outcome, or null when the source was not requested.
+	 * @param array{status: string, location?: string}|null $probe The probe outcome, or null when the source was not requested.
 	 * @return string The note.
 	 */
-	private function source_note( Redirect $redirect, ?array $probe ): string {
-		if ( null !== $probe ) {
-			return 'Source redirects to the destination';
-		}
-
-		return $redirect->is_corrupt()
-			? 'Source not requested: the stored data cannot be read'
+	private function source_note( ?array $probe ): string {
+		return null !== $probe
+			? 'Source redirects to the destination'
 			: 'Source not requested: the redirect is disabled';
 	}
 
