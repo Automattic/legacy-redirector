@@ -132,12 +132,8 @@ final class CreateRedirectAbility implements AbilityInterface {
 			);
 		}
 
-		return array(
-			'id'     => (int) $result->redirect_id(),
-			'from'   => $source->path(),
-			'to'     => $destination->raw_value(),
-			'type'   => $destination->is_post_id() ? 'post' : 'url',
-			'status' => 'draft' === $status ? 'disabled' : 'enabled',
-		);
+		// The saved redirect, not the input: an internal absolute URL is stored
+		// as its path, and get-redirect reports it that way.
+		return RedirectSchema::to_array( $result->redirect() );
 	}
 }

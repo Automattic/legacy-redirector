@@ -11,6 +11,9 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilit
 
 use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
@@ -26,8 +29,10 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  */
 final class CreateRedirectAbilityTest extends MonkeyStubs {
 
@@ -69,7 +74,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->with( Mockery::any(), Mockery::any(), true, 'publish' )
-			->andReturn( RedirectCreationResult::success( 42 ) );
+			->andReturnUsing( $this->saved_as( 42 ) );
 
 		$result = $this->ability->execute(
 			array(
@@ -100,7 +105,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		$this->manager->shouldReceive( 'create_redirect' )
 			->once()
 			->with( Mockery::any(), Mockery::any(), true, 'draft' )
-			->andReturn( RedirectCreationResult::success( 7 ) );
+			->andReturnUsing( $this->saved_as( 7 ) );
 
 		$result = $this->ability->execute(
 			array(
@@ -155,5 +160,17 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'legacy_redirector_invalid_redirect', $result->get_error_code() );
+	}
+
+	/**
+	 * A manager response that saves what it was given under an ID.
+	 *
+	 * @param int $id The ID the redirect is saved under.
+	 * @return callable The response, taking the create_redirect() arguments.
+	 */
+	private function saved_as( int $id ): callable {
+		return static fn ( SourceUrl $source, Destination $destination, bool $validate, string $status ): RedirectCreationResult => RedirectCreationResult::success(
+			Redirect::reconstitute( $id, $source, $destination, $status )
+		);
 	}
 }

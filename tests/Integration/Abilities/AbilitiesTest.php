@@ -204,6 +204,32 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * Test creation reports the redirect as stored, not as typed.
+	 *
+	 * An internal absolute URL is stored as its relative path, so the created
+	 * redirect must read the same as fetching it afterwards.
+	 *
+	 * @return void
+	 */
+	public function test_create_reports_the_stored_redirect(): void {
+		$path = $this->path_to_new_post( 'stored-target' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/stored-source',
+				'to'   => home_url( $path ),
+			)
+		);
+
+		$this->assertIsArray( $created, 'Creation should succeed.' );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( $path, $created['to'] );
+		$this->assertSame( $fetched, $created );
+	}
+
+	/**
 	 * Test a redirect created through an ability is visible to the admin list.
 	 *
 	 * @return void

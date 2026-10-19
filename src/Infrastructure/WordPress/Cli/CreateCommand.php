@@ -13,7 +13,6 @@ use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
-use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use WP_CLI;
 use WP_CLI_Command;
@@ -118,7 +117,11 @@ final class CreateCommand extends WP_CLI_Command {
 			return;
 		}
 
-		foreach ( $this->auditor->warnings( Redirect::create( $source, $destination ) ) as $warning ) {
+		// The saved redirect, not the input: an internal absolute URL is stored
+		// as its path, and only that form lets the loop check follow it.
+		$redirect = $result->redirect();
+
+		foreach ( $this->auditor->warnings( $redirect ) as $warning ) {
 			WP_CLI::warning( $warning->description() . '.' );
 		}
 
@@ -128,6 +131,6 @@ final class CreateCommand extends WP_CLI_Command {
 		}
 
 		$status_msg = 'disabled' === $status_flag ? ' (disabled)' : '';
-		WP_CLI::success( sprintf( 'Created redirect %d: %s -> %s%s', $result->redirect_id(), $from_url, $to_value, $status_msg ) );
+		WP_CLI::success( sprintf( 'Created redirect %d: %s -> %s%s', $redirect->id(), $from_url, $redirect->destination()->raw_value(), $status_msg ) );
 	}
 }

@@ -83,19 +83,21 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 	 * Stub a redirect lookup by ID.
 	 *
 	 * @param int $redirect_id The redirect ID to resolve.
-	 * @return void
+	 * @return Redirect The stubbed redirect.
 	 */
-	private function given_redirect( int $redirect_id ): void {
+	private function given_redirect( int $redirect_id ): Redirect {
+		$redirect = Redirect::reconstitute(
+			$redirect_id,
+			SourceUrl::from_string( '/old' ),
+			Destination::from_mixed( '/new' ),
+			'publish'
+		);
+
 		$this->repository->shouldReceive( 'find_by_id' )
 			->with( $redirect_id )
-			->andReturn(
-				Redirect::reconstitute(
-					$redirect_id,
-					SourceUrl::from_string( '/old' ),
-					Destination::from_mixed( '/new' ),
-					'publish'
-				)
-			);
+			->andReturn( $redirect );
+
+		return $redirect;
 	}
 
 	/**
@@ -116,9 +118,9 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility::execute
 	 */
 	public function test_execute_changes_status_without_a_destination(): void {
-		$this->given_redirect( 4 );
+		$redirect = $this->given_redirect( 4 );
 
-		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'draft' )->andReturn( RedirectCreationResult::success( 1 ) );
+		$this->manager->shouldReceive( 'change_status' )->once()->with( 4, 'draft' )->andReturn( RedirectCreationResult::success( $redirect ) );
 		$this->manager->shouldNotReceive( 'update_destination' );
 
 		$result = $this->ability->execute(
@@ -138,12 +140,12 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility::execute
 	 */
 	public function test_execute_updates_destination_and_status_together(): void {
-		$this->given_redirect( 4 );
+		$redirect = $this->given_redirect( 4 );
 
 		$this->manager->shouldReceive( 'update_destination' )
 			->once()
 			->with( 4, Mockery::type( Destination::class ), 'publish' )
-			->andReturn( RedirectCreationResult::success( 1 ) );
+			->andReturn( RedirectCreationResult::success( $redirect ) );
 
 		$result = $this->ability->execute(
 			array(

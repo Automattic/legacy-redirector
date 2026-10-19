@@ -211,23 +211,23 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 	 */
 	private function expect_status_changes( array $ids, string $new_status ): void {
 		foreach ( $ids as $id ) {
+			$redirect = Redirect::reconstitute(
+				$id,
+				SourceUrl::from_string( '/old-' . $id ),
+				Destination::from_url( DestinationUrl::from_string( '/new' ) ),
+				'publish' === $new_status ? 'draft' : 'publish'
+			);
+
 			$this->repository
 				->shouldReceive( 'find_by_id' )
 				->with( $id )
-				->andReturn(
-					Redirect::reconstitute(
-						$id,
-						SourceUrl::from_string( '/old-' . $id ),
-						Destination::from_url( DestinationUrl::from_string( '/new' ) ),
-						'publish' === $new_status ? 'draft' : 'publish'
-					)
-				);
+				->andReturn( $redirect );
 
 			$this->manager
 				->shouldReceive( 'change_status' )
 				->once()
 				->with( $id, $new_status )
-				->andReturn( RedirectCreationResult::success( $id ) );
+				->andReturn( RedirectCreationResult::success( $redirect->with_status( $new_status ) ) );
 		}
 	}
 }

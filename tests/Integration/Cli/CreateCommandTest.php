@@ -115,6 +115,26 @@ final class CreateCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a loop closed through an internal absolute URL still warns.
+	 *
+	 * The URL is stored as its relative path, so the warning and the success
+	 * line must describe that stored redirect, not the URL as typed: an
+	 * absolute destination ends the loop walk before it finds the cycle.
+	 */
+	public function test_create_reports_the_stored_destination_and_its_loop(): void {
+		$this->create_redirect( '/stored-second', '/stored-first' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/stored-first', home_url( '/stored-second' ) ),
+			array()
+		);
+
+		$this->assert_warning_contains( 'leads back to this one' );
+		$this->assert_success_contains( '/stored-first -> /stored-second' );
+	}
+
+	/**
 	 * Test creating a redirect to a post ID.
 	 */
 	public function test_create_redirect_to_post_id(): void {
