@@ -83,9 +83,8 @@ final class ChecksController {
 				'permission_callback' => array( $this, 'permission_check' ),
 				'args'                => array(
 					'source'     => array(
-						'type'              => 'string',
-						'default'           => '',
-						'sanitize_callback' => 'sanitize_text_field',
+						'type'    => 'string',
+						'default' => '',
 					),
 					'exclude_id' => array(
 						'type'    => 'integer',
@@ -104,9 +103,8 @@ final class ChecksController {
 				'permission_callback' => array( $this, 'permission_check' ),
 				'args'                => array(
 					'destination' => array(
-						'type'              => 'string',
-						'default'           => '',
-						'sanitize_callback' => 'sanitize_text_field',
+						'type'    => 'string',
+						'default' => '',
 					),
 				),
 			)

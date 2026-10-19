@@ -184,8 +184,8 @@ final class PostType {
 	 */
 	public function bulk_post_updated_messages( array $bulk_messages, array $bulk_counts ): array {
 		// Get the trashed redirect source for single item messages.
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for message display.
-		$redirect_source = isset( $_GET['redirect_source'] ) ? sanitize_text_field( rawurldecode( wp_unslash( $_GET['redirect_source'] ) ) ) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading URL param for message display; escaped on output, where sanitize_text_field() would delete %xx sequences.
+		$redirect_source = isset( $_GET['redirect_source'] ) ? wp_unslash( $_GET['redirect_source'] ) : '';
 
 		// Build the trashed message - use specific source for single items if available.
 		if ( 1 === $bulk_counts['trashed'] && $redirect_source ) {
