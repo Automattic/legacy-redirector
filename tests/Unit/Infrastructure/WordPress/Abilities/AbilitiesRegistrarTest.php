@@ -16,6 +16,8 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
 use Mockery;
@@ -35,8 +37,10 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\TestRedirectsAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep
  */
 final class AbilitiesRegistrarTest extends MonkeyStubs {
 
@@ -59,12 +63,17 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 
 		$fetcher = new RedirectFetcher( Mockery::mock( RedirectRepositoryInterface::class ) );
 
+		$query_repository = Mockery::mock( RedirectQueryRepositoryInterface::class );
+		$auditor          = Mockery::mock( RedirectAuditor::class );
+
 		$this->registrar = new AbilitiesRegistrar(
 			Mockery::mock( RedirectManager::class ),
 			$fetcher,
 			new RedirectBatch( $fetcher ),
-			Mockery::mock( RedirectQueryRepositoryInterface::class ),
-			Mockery::mock( RedirectAuditor::class )
+			$query_repository,
+			$auditor,
+			new AuditSweep( $query_repository, $auditor, new AuditFlags() ),
+			new AuditFlags()
 		);
 	}
 
@@ -115,7 +124,7 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 			$this->assertArrayHasKey( 'readonly', $args['meta']['annotations'], $name . ' needs a readonly annotation.' );
 		}
 
-		$this->assertCount( 8, $names );
+		$this->assertCount( 9, $names );
 	}
 
 	/**
@@ -155,9 +164,13 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 			$annotations['legacy-redirector/set-redirect-status']['destructive'],
 			'Disabling a redirect keeps it, so it is not destructive.'
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			$annotations['legacy-redirector/validate-redirects']['readonly'],
-			'Validating only reports.'
+			'Validating records the per-row flags.'
+		);
+		$this->assertTrue(
+			$annotations['legacy-redirector/test-redirects']['readonly'],
+			'Testing only reports.'
 		);
 	}
 

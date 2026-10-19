@@ -67,6 +67,16 @@ final class RedirectCriteria {
 	private int $offset;
 
 	/**
+	 * Filter by the background check's per-row flag.
+	 *
+	 * Null for no filter, 'any' for every flagged row, or 'problem' or
+	 * 'warning' for one severity.
+	 *
+	 * @var string|null
+	 */
+	private ?string $issues;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string|null $status           Filter by status ('enabled', 'disabled', or null).
@@ -76,6 +86,7 @@ final class RedirectCriteria {
 	 * @param string      $order            Sort direction (default: 'DESC').
 	 * @param int         $limit            Maximum results (default: 100).
 	 * @param int         $offset           Results to skip (default: 0).
+	 * @param string|null $issues           Filter by flagged severity ('any', 'problem', 'warning', or null).
 	 */
 	public function __construct(
 		?string $status = null,
@@ -84,7 +95,8 @@ final class RedirectCriteria {
 		string $order_by = 'date',
 		string $order = 'DESC',
 		int $limit = 100,
-		int $offset = 0
+		int $offset = 0,
+		?string $issues = null
 	) {
 		$this->status           = $status;
 		$this->destination_type = $destination_type;
@@ -93,6 +105,7 @@ final class RedirectCriteria {
 		$this->order            = strtoupper( $order );
 		$this->limit            = max( 1, $limit );
 		$this->offset           = max( 0, $offset );
+		$this->issues           = $issues;
 	}
 
 	/**
@@ -138,6 +151,15 @@ final class RedirectCriteria {
 	 */
 	public function order(): string {
 		return $this->order;
+	}
+
+	/**
+	 * Get the flagged-severity filter.
+	 *
+	 * @return string|null
+	 */
+	public function issues(): ?string {
+		return $this->issues;
 	}
 
 	/**

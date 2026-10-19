@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema;
 
@@ -17,7 +18,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchem
  *
  * The one owner of the `ID`/`from`/`to`/`type`/`status` shape every command
  * that prints redirects shares. Commands that print more (`get` adds the
- * source hash, `validate` adds the issue) add their own keys to this row.
+ * source hash) add their own keys to this row; `validate` and `test` print a
+ * finding row, which is this row plus what was found and what to do.
  */
 trait FormatsRedirectRows {
 
@@ -40,5 +42,34 @@ trait FormatsRedirectRows {
 			'type'   => $redirect->is_corrupt() ? 'corrupt' : ( $is_post_id ? 'post' : 'url' ),
 			'status' => RedirectSchema::status_label( $redirect ),
 		);
+	}
+
+	/**
+	 * Format a finding as a CLI output row: the redirect, what is wrong, and what to do.
+	 *
+	 * @param AuditFinding $finding The finding.
+	 * @return array{ID: int|null, from: string, to: string|int, type: string, status: string, severity: string, issue: string, detail: string, remedy: string}
+	 */
+	private function finding_row( AuditFinding $finding ): array {
+		return $this->redirect_row( $finding->redirect() ) + array(
+			'severity' => self::severity( $finding ),
+			'issue'    => $finding->label(),
+			'detail'   => $finding->description(),
+			'remedy'   => $finding->remedy(),
+		);
+	}
+
+	/**
+	 * How seriously to take a finding: a problem, a warning, or a check that could not tell.
+	 *
+	 * @param AuditFinding $finding The finding.
+	 * @return string 'problem', 'warning' or 'inconclusive'.
+	 */
+	private static function severity( AuditFinding $finding ): string {
+		if ( $finding->is_warning() ) {
+			return 'warning';
+		}
+
+		return $finding->is_conclusive() ? 'problem' : 'inconclusive';
 	}
 }

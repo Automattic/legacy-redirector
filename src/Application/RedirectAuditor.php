@@ -560,6 +560,39 @@ class RedirectAuditor {
 	}
 
 	/**
+	 * Test a redirect live: its stored details, its destination, and its source.
+	 *
+	 * Behind `wp legacy-redirector test` and the test ability. Nothing is
+	 * recorded: a timeout or a throttled request is not a fact about the
+	 * redirect, so it must never reach the stored flags or the badge.
+	 *
+	 * @param Redirect $redirect          The redirect to test.
+	 * @param bool     $check_destination Whether to run the stored-details checks and request the destination.
+	 * @param bool     $check_source      Whether to request the source.
+	 * @return array{findings: AuditFinding[], source: array{status: string, location?: string}|null, source_finding: AuditFinding|null} Every finding (the source's included), the source probe's outcome when it ran (it is skipped for a disabled or corrupt redirect, which is not meant to fire), and the source's finding on its own.
+	 */
+	public function test( Redirect $redirect, bool $check_destination = true, bool $check_source = true ): array {
+		$findings       = $check_destination ? $this->audit( $redirect, true ) : array();
+		$probe          = null;
+		$source_finding = null;
+
+		if ( $check_source && $redirect->is_active() && ! $redirect->is_corrupt() ) {
+			$probe          = $this->probe_source( $redirect );
+			$source_finding = $this->finding_for_probe( $redirect, $probe );
+
+			if ( null !== $source_finding ) {
+				$findings[] = $source_finding;
+			}
+		}
+
+		return array(
+			'findings'       => $findings,
+			'source'         => $probe,
+			'source_finding' => $source_finding,
+		);
+	}
+
+	/**
 	 * Request a redirect's source and report what went wrong, if anything.
 	 *
 	 * @param Redirect $redirect The redirect whose source to request.
@@ -704,46 +737,5 @@ class RedirectAuditor {
 	 */
 	private function is_relative_path( string $url ): bool {
 		return ! preg_match( '#^https?://#i', $url );
-	}
-
-	/**
-	 * Audit a batch of redirects.
-	 *
-	 * @param Redirect[] $redirects         The redirects to audit.
-	 * @param bool       $check_destination        Whether to check URL destinations.
-	 * @param callable   $progress_callback Optional callback called after each redirect (receives count).
-	 * @return AuditFinding[] The findings across the batch.
-	 */
-	public function audit_batch( array $redirects, bool $check_destination = false, ?callable $progress_callback = null ): array {
-		$findings = array();
-		$checked  = 0;
-
-		foreach ( $redirects as $redirect ) {
-			++$checked;
-
-			array_push( $findings, ...$this->audit( $redirect, $check_destination ) );
-
-			if ( null !== $progress_callback ) {
-				$progress_callback( $checked );
-			}
-
-			// Memory cleanup every 100 items.
-			if ( 0 === $checked % 100 ) {
-				$this->cleanup_memory();
-			}
-		}
-
-		return $findings;
-	}
-
-	/**
-	 * Clean up memory during batch operations.
-	 *
-	 * @return void
-	 */
-	private function cleanup_memory(): void {
-		if ( function_exists( 'stop_the_insanity' ) ) {
-			stop_the_insanity();
-		}
 	}
 }

@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
@@ -517,5 +518,58 @@ final class ListCommandTest extends CliTestCase {
 				'post_status'  => 'draft',
 			)
 		);
+	}
+
+	/**
+	 * Test --has-issues lists the flagged redirects, as the admin "Has issues" view does.
+	 */
+	public function test_list_has_issues_reads_the_flags(): void {
+		$problem = $this->create_redirect( '/flagged-problem', 'https://example.com/a' );
+		$warning = $this->create_redirect( '/flagged-warning', 'https://example.com/b' );
+		$this->create_redirect( '/not-flagged', 'https://example.com/c' );
+		update_post_meta( $problem, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $warning, AuditFlags::META_KEY, 'warning' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'has-issues' => true,
+				'format'     => 'ids',
+				'orderby'    => 'title',
+				'order'      => 'ASC',
+			)
+		);
+		$this->assertSame( "{$problem} {$warning}", trim( $this->get_stdout() ) );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'has-issues' => 'problem',
+				'format'     => 'ids',
+			)
+		);
+		$this->assertSame( (string) $problem, trim( $this->get_stdout() ) );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'has-issues' => 'warning',
+				'format'     => 'count',
+			)
+		);
+		$this->assertSame( '1', trim( $this->get_stdout() ) );
+	}
+
+	/**
+	 * Test --has-issues refuses a severity it does not know.
+	 */
+	public function test_list_has_issues_refuses_an_unknown_severity(): void {
+		$this->invoke_command( $this->command, array(), array( 'has-issues' => 'broken' ) );
+
+		$this->assert_command_error();
+		$this->assert_error_contains( 'Invalid --has-issues severity: broken' );
 	}
 }

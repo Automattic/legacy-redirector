@@ -9,20 +9,26 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
-use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
-use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 
 /**
- * Reports redirects whose destination is broken.
+ * Checks redirects' stored details for problems, and records what it finds.
+ *
+ * Mirrors `wp legacy-redirector validate`, with one deliberate difference:
+ * given no redirects, it re-checks the ones the background check flagged
+ * rather than every redirect, because a full pass over a large site does
+ * not fit in one request. The background check and the CLI cover that.
  */
 final class ValidateRedirectsAbility implements AbilityInterface {
 
 	/**
-	 * Largest number of redirects a single call will check.
+	 * Largest number of flagged redirects a single call will re-check.
 	 *
 	 * @var int
 	 */
@@ -36,13 +42,6 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	private RedirectQueryRepositoryInterface $query_repository;
 
 	/**
-	 * The redirect auditor.
-	 *
-	 * @var RedirectAuditor
-	 */
-	private RedirectAuditor $auditor;
-
-	/**
 	 * The batch resolver.
 	 *
 	 * @var RedirectBatch
@@ -50,20 +49,37 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	private RedirectBatch $batch;
 
 	/**
+	 * The audit sweep, which validates and records.
+	 *
+	 * @var AuditSweep
+	 */
+	private AuditSweep $sweep;
+
+	/**
+	 * The per-row audit flags.
+	 *
+	 * @var AuditFlags
+	 */
+	private AuditFlags $flags;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
-	 * @param RedirectAuditor                  $auditor          The redirect auditor.
 	 * @param RedirectBatch                    $batch            The batch resolver.
+	 * @param AuditSweep                       $sweep            The audit sweep.
+	 * @param AuditFlags                       $flags            The per-row audit flags.
 	 */
 	public function __construct(
 		RedirectQueryRepositoryInterface $query_repository,
-		RedirectAuditor $auditor,
-		RedirectBatch $batch
+		RedirectBatch $batch,
+		AuditSweep $sweep,
+		AuditFlags $flags
 	) {
 		$this->query_repository = $query_repository;
-		$this->auditor          = $auditor;
 		$this->batch            = $batch;
+		$this->sweep            = $sweep;
+		$this->flags            = $flags;
 	}
 
 	/**
@@ -85,35 +101,24 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
-			'description'         => __( 'Checks redirects for broken destinations: posts that have been deleted, trashed, or unpublished, internal paths that no longer resolve, and external hosts missing from the allowed_redirect_hosts filter. Also flags sources on paths WordPress itself serves, such as /wp-admin or /wp-login.php, which take over that path if it ever returns a 404, and possible loops, where following the destination through other redirects leads back to the start. Reports what it finds without changing anything; disable or repoint a broken redirect by updating it. Given no redirects, it checks a batch of the most recent ones matching the status filter.', 'legacy-redirector' ),
+			'description'         => __( 'Checks redirects\' stored details for problems, without requesting any URL: destination posts that have been deleted, trashed, or unpublished, external hosts missing from the allowed_redirect_hosts filter, and rows whose data cannot be read. Also warns about sources on paths WordPress itself serves, such as /wp-admin, and possible loops through other redirects. Each finding says what is wrong and what to do about it. Records the result, so the admin "Has issues" view and menu badge stay in step. Given no redirects, it re-checks the ones the background check flagged. To check whether a redirect works live, use test-redirects.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
 				'properties'           => array(
-					'redirects'         => array(
+					'redirects' => array(
 						'type'        => 'array',
 						'items'       => array(
 							'type' => array( 'string', 'integer' ),
 						),
-						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, a batch is selected using the status and limit.', 'legacy-redirector' ),
+						'description' => __( 'Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, the redirects the background check flagged are re-checked.', 'legacy-redirector' ),
 					),
-					'status'            => array(
-						'type'        => 'string',
-						'enum'        => array( 'any', 'enabled', 'disabled' ),
-						'default'     => 'enabled',
-						'description' => __( 'Which redirects to select when none are given. Defaults to enabled, the ones visitors can reach.', 'legacy-redirector' ),
-					),
-					'limit'             => array(
+					'limit'     => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
 						'maximum'     => self::MAX_LIMIT,
 						'default'     => 100,
-						'description' => __( 'How many redirects to check when none are given.', 'legacy-redirector' ),
-					),
-					'check_destination' => array(
-						'type'        => 'boolean',
-						'default'     => false,
-						'description' => __( 'Also request the destinations only an HTTP request can judge (URLs, and paths that resolve to no post) to see whether they respond. Slow, because it makes an HTTP request per such redirect.', 'legacy-redirector' ),
+						'description' => __( 'How many flagged redirects to re-check when none are given.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
@@ -121,35 +126,22 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			),
 			'output_schema'       => array(
 				'type'                 => 'object',
-				'required'             => array( 'checked', 'issues', 'failed' ),
+				'required'             => array( 'checked', 'issues', 'last_full_check', 'failed' ),
 				'properties'           => array(
-					'checked' => array(
+					'checked'         => array(
 						'type'        => 'integer',
 						'description' => __( 'How many redirects were checked.', 'legacy-redirector' ),
 					),
-					'issues'  => array(
+					'issues'          => array(
 						'type'        => 'array',
-						'description' => __( 'The redirects found to be broken.', 'legacy-redirector' ),
-						'items'       => array(
-							'type'                 => 'object',
-							'required'             => array( 'id', 'from', 'to', 'type', 'status', 'issue', 'description' ),
-							'properties'           => array_merge(
-								RedirectSchema::properties(),
-								array(
-									'issue'       => array(
-										'type'        => 'string',
-										'description' => __( 'A short label for what is wrong.', 'legacy-redirector' ),
-									),
-									'description' => array(
-										'type'        => 'string',
-										'description' => __( 'A fuller explanation of what is wrong.', 'legacy-redirector' ),
-									),
-								)
-							),
-							'additionalProperties' => false,
-						),
+						'description' => __( 'What was found, one entry per finding.', 'legacy-redirector' ),
+						'items'       => self::finding_schema(),
 					),
-					'failed'  => RedirectSchema::failures_schema(),
+					'last_full_check' => array(
+						'type'        => array( 'string', 'null' ),
+						'description' => __( 'When every redirect was last checked, as an ISO 8601 date, or null if never.', 'legacy-redirector' ),
+					),
+					'failed'          => RedirectSchema::failures_schema(),
 				),
 				'additionalProperties' => false,
 			),
@@ -157,7 +149,8 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			'permission_callback' => array( Capability::class, 'current_user_can_manage' ),
 			'meta'                => array(
 				'annotations'  => array(
-					'readonly'    => true,
+					// It writes the per-row flags, though nothing about the redirects themselves.
+					'readonly'    => false,
 					'destructive' => false,
 					'idempotent'  => true,
 				),
@@ -170,7 +163,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	 * Validate the redirects.
 	 *
 	 * @param mixed $input The validated ability input.
-	 * @return array{checked: int, issues: array<int, array<string, mixed>>, failed: array<int, array{redirect: string, reason: string}>} The outcome.
+	 * @return array{checked: int, issues: array<int, array<string, mixed>>, last_full_check: string|null, failed: array<int, array{redirect: string, reason: string}>} The outcome.
 	 */
 	public function execute( $input = array() ): array {
 		$input    = is_array( $input ) ? $input : array();
@@ -181,41 +174,77 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			$failures  = BatchFailures::format( $items );
 			$redirects = RedirectBatch::redirects( $items );
 		} else {
-			$status    = (string) ( $input['status'] ?? 'enabled' );
 			$redirects = $this->query_repository->find_matching(
-				new RedirectCriteria(
-					'any' === $status ? null : $status,
-					null,
-					null,
-					'date',
-					'DESC',
-					(int) ( $input['limit'] ?? 100 ),
-					0
-				)
+				new RedirectCriteria( null, null, null, 'ID', 'ASC', (int) ( $input['limit'] ?? 100 ), 0, 'any' )
 			);
 		}
 
-		$issues = $this->auditor->audit_batch( $redirects, (bool) ( $input['check_destination'] ?? false ) );
+		$checked_at = $this->flags->checked_at();
 
 		return array(
-			'checked' => count( $redirects ),
-			'issues'  => array_map( array( $this, 'issue_to_array' ), $issues ),
-			'failed'  => $failures,
+			'checked'         => count( $redirects ),
+			'issues'          => array_map( array( self::class, 'finding_to_array' ), $this->sweep->validate_redirects( $redirects ) ),
+			'last_full_check' => null === $checked_at ? null : gmdate( 'c', $checked_at ),
+			'failed'          => $failures,
 		);
 	}
 
 	/**
-	 * Format a validation issue for ability output.
+	 * The output schema for one finding, shared with the test ability.
 	 *
-	 * @param AuditFinding $issue The finding.
-	 * @return array<string, mixed> The formatted issue.
+	 * @return array<string, mixed> The schema.
 	 */
-	private function issue_to_array( AuditFinding $issue ): array {
+	public static function finding_schema(): array {
+		return array(
+			'type'                 => 'object',
+			'required'             => array( 'id', 'from', 'to', 'type', 'status', 'severity', 'issue', 'description', 'remedy' ),
+			'properties'           => array_merge(
+				RedirectSchema::properties(),
+				array(
+					'severity'    => array(
+						'type'        => 'string',
+						'enum'        => array( 'problem', 'warning', 'inconclusive' ),
+						'description' => __( 'A problem means the redirect is broken; a warning that it works but deserves a look; inconclusive that the check could not tell.', 'legacy-redirector' ),
+					),
+					'issue'       => array(
+						'type'        => 'string',
+						'description' => __( 'A short label for what is wrong.', 'legacy-redirector' ),
+					),
+					'description' => array(
+						'type'        => 'string',
+						'description' => __( 'A fuller explanation of what is wrong.', 'legacy-redirector' ),
+					),
+					'remedy'      => array(
+						'type'        => 'string',
+						'description' => __( 'What can be done about it.', 'legacy-redirector' ),
+					),
+				)
+			),
+			'additionalProperties' => false,
+		);
+	}
+
+	/**
+	 * Format a finding for ability output.
+	 *
+	 * @param AuditFinding $finding The finding.
+	 * @return array<string, mixed> The formatted finding.
+	 */
+	public static function finding_to_array( AuditFinding $finding ): array {
+		$severity = 'problem';
+		if ( $finding->is_warning() ) {
+			$severity = 'warning';
+		} elseif ( ! $finding->is_conclusive() ) {
+			$severity = 'inconclusive';
+		}
+
 		return array_merge(
-			RedirectSchema::to_array( $issue->redirect() ),
+			RedirectSchema::to_array( $finding->redirect() ),
 			array(
-				'issue'       => $issue->label(),
-				'description' => $issue->description(),
+				'severity'    => $severity,
+				'issue'       => $finding->label(),
+				'description' => $finding->description(),
+				'remedy'      => $finding->remedy(),
 			)
 		);
 	}

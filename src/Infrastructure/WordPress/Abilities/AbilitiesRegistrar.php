@@ -14,6 +14,8 @@ use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 
 /**
  * Registers this plugin's abilities with the WordPress Abilities API.
@@ -69,6 +71,20 @@ final class AbilitiesRegistrar {
 	private RedirectAuditor $auditor;
 
 	/**
+	 * The audit sweep, which validates and records.
+	 *
+	 * @var AuditSweep
+	 */
+	private AuditSweep $sweep;
+
+	/**
+	 * The per-row audit flags.
+	 *
+	 * @var AuditFlags
+	 */
+	private AuditFlags $flags;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager                  $manager          The redirect manager.
@@ -76,19 +92,25 @@ final class AbilitiesRegistrar {
 	 * @param RedirectBatch                    $batch            The batch resolver.
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
 	 * @param RedirectAuditor                  $auditor          The redirect auditor.
+	 * @param AuditSweep                       $sweep            The audit sweep.
+	 * @param AuditFlags                       $flags            The per-row audit flags.
 	 */
 	public function __construct(
 		RedirectManager $manager,
 		RedirectFetcher $fetcher,
 		RedirectBatch $batch,
 		RedirectQueryRepositoryInterface $query_repository,
-		RedirectAuditor $auditor
+		RedirectAuditor $auditor,
+		AuditSweep $sweep,
+		AuditFlags $flags
 	) {
 		$this->manager          = $manager;
 		$this->fetcher          = $fetcher;
 		$this->batch            = $batch;
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
+		$this->sweep            = $sweep;
+		$this->flags            = $flags;
 	}
 
 	/**
@@ -144,7 +166,8 @@ final class AbilitiesRegistrar {
 			new UpdateRedirectAbility( $this->manager, $this->batch ),
 			new SetRedirectStatusAbility( $this->manager, $this->batch ),
 			new DeleteRedirectAbility( $this->manager, $this->batch ),
-			new ValidateRedirectsAbility( $this->query_repository, $this->auditor, $this->batch ),
+			new ValidateRedirectsAbility( $this->query_repository, $this->batch, $this->sweep, $this->flags ),
+			new TestRedirectsAbility( $this->auditor, $this->batch ),
 			new FindRedirectDomainsAbility( $this->query_repository ),
 		);
 	}

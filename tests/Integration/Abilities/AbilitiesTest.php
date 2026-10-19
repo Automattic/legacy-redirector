@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Abilities;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
@@ -31,6 +32,7 @@ use WP_Ability;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\TestRedirectsAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility
  * @uses \Automattic\LegacyRedirector\Application\HomePath
@@ -57,6 +59,7 @@ use WP_Ability;
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
@@ -139,6 +142,7 @@ final class AbilitiesTest extends TestCase {
 			'set-redirect-status',
 			'delete-redirect',
 			'validate-redirects',
+			'test-redirects',
 			'find-redirect-domains',
 		);
 
@@ -149,6 +153,21 @@ final class AbilitiesTest extends TestCase {
 				$name . ' should be in the plugin category.'
 			);
 		}
+	}
+
+	/**
+	 * Test validate with named redirects records their flags, so a fixed one drops out of "Has issues".
+	 *
+	 * @return void
+	 */
+	public function test_validate_records_a_named_redirects_flag(): void {
+		$redirect_id = $this->create_redirect( '/to-a-disallowed-host', 'https://not-allowed.example.net/x' );
+
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/to-a-disallowed-host' ) ) );
+
+		$this->assertSame( 1, $result['checked'] );
+		$this->assertSame( 'Destination host not allowed', $result['issues'][0]['issue'] );
+		$this->assertSame( 'problem', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
 
 	/**
@@ -321,6 +340,9 @@ final class AbilitiesTest extends TestCase {
 		$this->assertCount( 1, $result['issues'] );
 		$this->assertSame( '/points-at-a-post', $result['issues'][0]['from'] );
 		$this->assertNotEmpty( $result['issues'][0]['description'] );
+		$this->assertSame( 'problem', $result['issues'][0]['severity'] );
+		$this->assertSame( 'Point this redirect at another destination, or delete it', $result['issues'][0]['remedy'] );
+		$this->assertNull( $result['last_full_check'] );
 	}
 
 	/**
@@ -445,5 +467,39 @@ final class AbilitiesTest extends TestCase {
 
 		$this->assertInstanceOf( 'WP_Error', $write );
 		$this->assertSame( 'ability_invalid_permissions', $write->get_error_code() );
+	}
+
+	/**
+	 * Test the test ability requests a redirect live and records nothing.
+	 *
+	 * @return void
+	 */
+	public function test_test_redirects_checks_a_redirect_live(): void {
+		$redirect_id = $this->create_redirect( '/tested-live', 'https://example.com/live-target' );
+
+		$respond = static function ( $preempt, $args ) {
+			// The source probe does not follow redirects; the destination check does.
+			if ( 0 === ( $args['redirection'] ?? 5 ) ) {
+				return array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/live-target' ),
+				);
+			}
+
+			return array( 'response' => array( 'code' => 404 ) );
+		};
+		add_filter( 'pre_http_request', $respond, 10, 2 );
+
+		try {
+			$result = $this->ability( 'test-redirects' )->execute( array( 'redirects' => array( '/tested-live' ) ) );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 10 );
+		}
+
+		$this->assertSame( 1, $result['tested'] );
+		$this->assertSame( 'confirmed', $result['results'][0]['source'] );
+		$this->assertCount( 1, $result['results'][0]['issues'] );
+		$this->assertSame( 'Destination returns 404', $result['results'][0]['issues'][0]['issue'] );
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
 }

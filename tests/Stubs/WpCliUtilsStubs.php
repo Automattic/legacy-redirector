@@ -119,3 +119,14 @@ if ( ! function_exists( 'WP_CLI\\Utils\\make_progress_bar' ) ) {
 		};
 	}
 }
+
+if ( ! function_exists( 'WP_CLI\\Utils\\wp_clear_object_cache' ) ) {
+	/**
+	 * Stub for wp_clear_object_cache: drops the in-memory object cache between batches.
+	 *
+	 * @return void
+	 */
+	function wp_clear_object_cache(): void {
+		wp_cache_flush_runtime();
+	}
+}

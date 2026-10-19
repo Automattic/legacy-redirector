@@ -9,10 +9,10 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
-use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 
 /**
@@ -33,12 +33,12 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
- * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
@@ -69,23 +69,22 @@ final class ValidateCommandTest extends CliTestCase {
 
 		$this->command = new ValidateCommand(
 			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
-			$this->query_repository(),
-			$this->auditor(),
-			$this->manager()
+			new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() ),
+			new AuditFlags()
 		);
 	}
 
 	/**
-	 * Test batch validation with no issues.
+	 * Clean up the sweep's state and the badge.
+	 *
+	 * @return void
 	 */
-	public function test_validate_batch_no_issues(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/valid-one', $post_id );
-		$this->create_redirect( '/valid-two', $post_id );
+	public function tear_down(): void {
+		foreach ( array( AuditSweep::STATE_OPTION, AuditSweep::LOCK_OPTION, AuditFlags::CHECKED_AT_OPTION, AuditFlags::COUNTS_OPTION ) as $option ) {
+			delete_option( $option );
+		}
 
-		$this->invoke_command( $this->command, array(), array() );
-
-		$this->assert_success_contains( 'No issues found.' );
+		parent::tear_down();
 	}
 
 	/**
@@ -110,119 +109,6 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array( '/attachment-dest' ), array() );
 
 		$this->assert_success_contains( 'No issues found.' );
-	}
-
-	/**
-	 * Test batch validation finds a trashed post destination.
-	 */
-	public function test_validate_batch_finds_trashed_destination(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/broken-redirect', $post_id );
-		wp_trash_post( $post_id );
-
-		$this->invoke_command( $this->command, array(), array() );
-
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
-		$this->assert_stdout_contains( '/broken-redirect' );
-		$this->assert_stdout_contains( 'Post trashed' );
-	}
-
-	/**
-	 * Test batch validation finds a deleted post destination.
-	 */
-	public function test_validate_batch_finds_deleted_destination(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/deleted-dest', $post_id );
-		wp_delete_post( $post_id, true );
-
-		$this->invoke_command( $this->command, array(), array() );
-
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
-		$this->assert_stdout_contains( 'Post deleted' );
-	}
-
-	/**
-	 * Test count format outputs only the number of issues.
-	 */
-	public function test_validate_count_format(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/count-broken', $post_id );
-		wp_delete_post( $post_id, true );
-
-		$this->invoke_command( $this->command, array(), array( 'format' => 'count' ) );
-
-		$this->assertFalse( $this->output->had_error() );
-		$this->assertSame( '1', trim( $this->get_stdout() ) );
-	}
-
-	/**
-	 * Test --fix disables broken redirects via the manager.
-	 */
-	public function test_validate_fix_disables_broken_redirects(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/fix-me', $post_id );
-		wp_delete_post( $post_id, true );
-
-		$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
-
-		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
-		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
-	}
-
-	/**
-	 * Test a reserved source is reported, but --fix leaves it enabled.
-	 *
-	 * It may be a genuine legacy URL, so it is a warning for a person to
-	 * judge, not a breakage to switch off.
-	 */
-	public function test_validate_reports_reserved_source_without_fixing_it(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/wp-admin/', $post_id );
-
-		$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
-
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
-		$this->assert_stdout_contains( 'Reserved WordPress path' );
-		$this->assert_stdout_contains( 'Disabled 0 broken redirect(s).' );
-		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
-	}
-
-	/**
-	 * Test disabled redirects are skipped by default (status defaults to enabled).
-	 */
-	public function test_validate_defaults_to_enabled_only(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/disabled-broken', $post_id );
-		wp_update_post(
-			array(
-				'ID'          => $redirect_id,
-				'post_status' => 'draft',
-			)
-		);
-		wp_delete_post( $post_id, true );
-
-		$this->invoke_command( $this->command, array(), array() );
-
-		$this->assert_success_contains( 'No issues found.' );
-	}
-
-	/**
-	 * Test --status=any includes disabled redirects.
-	 */
-	public function test_validate_status_any_includes_disabled(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/any-status-broken', $post_id );
-		wp_update_post(
-			array(
-				'ID'          => $redirect_id,
-				'post_status' => 'draft',
-			)
-		);
-		wp_delete_post( $post_id, true );
-
-		$this->invoke_command( $this->command, array(), array( 'status' => 'any' ) );
-
-		$this->assert_warning_contains( 'Found 1 issue(s).' );
 	}
 
 	/**
@@ -432,35 +318,13 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test validate leaves the menu badge and the flags alone.
-	 *
-	 * The badge counts flagged rows, which the background check writes, so a
-	 * validate run over a subset cannot make it disagree with the "Has
-	 * issues" view.
-	 */
-	public function test_validate_does_not_touch_the_badge_or_flags(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/summary-broken', $post_id );
-		wp_delete_post( $post_id, true );
-
-		// Deleting the destination flags the redirect at once; start clean.
-		delete_post_meta( $redirect_id, AuditFlags::META_KEY );
-		delete_option( AuditFlags::COUNTS_OPTION );
-
-		$this->invoke_command( $this->command, array(), array( 'limit' => 5 ) );
-
-		$this->assertFalse( get_option( AuditFlags::COUNTS_OPTION ) );
-		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
-	}
-
-	/**
 	 * Test a loop across two redirects is reported on both members.
 	 */
 	public function test_validate_reports_a_possible_loop(): void {
 		$this->create_redirect( '/loop-a', '/loop-b' );
 		$this->create_redirect( '/loop-b', '/loop-a' );
 
-		$this->invoke_command( $this->command, array(), array() );
+		$this->invoke_command( $this->command, array( '/loop-a', '/loop-b' ), array() );
 
 		$this->assert_warning_contains( 'Found 2 issue(s).' );
 		$this->assert_stdout_contains( 'Possible redirect loop' );
@@ -494,122 +358,149 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test --fix leaves loop members enabled.
-	 *
-	 * A loop is a warning: it may be dormant behind live pages, and disabling
-	 * every member would be the wrong fix even when it is live.
+	 * Test a named redirect's finding says what is wrong and what to do about it.
 	 */
-	public function test_validate_fix_leaves_loop_members_enabled(): void {
-		$a = $this->create_redirect( '/loop-fix-a', '/loop-fix-b' );
-		$b = $this->create_redirect( '/loop-fix-b', '/loop-fix-a' );
-
-		$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
-
-		$this->assert_stdout_contains( 'Disabled 0 broken redirect(s).' );
-		$this->assertSame( 'publish', get_post_status( $a ) );
-		$this->assertSame( 'publish', get_post_status( $b ) );
-	}
-
-	/**
-	 * Test --fix on a targeted broken redirect.
-	 */
-	public function test_validate_single_fix(): void {
-		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/single-fix', $post_id );
+	public function test_validate_says_what_to_do_about_a_finding(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/deleted-dest', $post_id );
 		wp_delete_post( $post_id, true );
 
-		$this->invoke_command( $this->command, array( '/single-fix' ), array( 'fix' => true ) );
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+		$this->invoke_command( $this->command, array( '/deleted-dest' ), array( 'format' => 'json' ) );
 
-		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
-		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
+		$rows = $GLOBALS['wp_cli_format_items_calls'][0][1];
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'problem', $rows[0]['severity'] );
+		$this->assertSame( 'Post deleted', $rows[0]['issue'] );
+		$this->assertSame( 'The destination post no longer exists', $rows[0]['detail'] );
+		$this->assertSame( 'Point this redirect at another destination, or delete it', $rows[0]['remedy'] );
 	}
+
 	/**
-	 * Test --fix leaves a redirect enabled when its URL check could not connect.
+	 * Test a reserved source is reported as a warning, and nothing is changed.
 	 *
-	 * A failed request says nothing about the destination, so switching the
-	 * redirect off would turn a slow host into a 404 for every visitor.
+	 * It may be a genuine legacy URL, so it is for a person to judge.
 	 */
-	public function test_validate_fix_leaves_a_failed_url_check_enabled(): void {
-		$redirect_id = $this->create_redirect( '/fix-unreachable', 'https://example.com/slow' );
-
-		$this->fix_with_url_response( new \WP_Error( 'http_request_failed', 'Operation timed out' ) );
-
-		$this->assert_stdout_contains( 'Request failed' );
-		$this->assert_warning_contains( '1 redirect(s) could not be checked conclusively and were left enabled.' );
-		$this->assert_success_contains( 'Disabled 0 broken redirect(s).' );
-		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
-	}
-
-	/**
-	 * Test --fix leaves a redirect enabled when its destination answers with a server error.
-	 */
-	public function test_validate_fix_leaves_a_server_error_enabled(): void {
-		$redirect_id = $this->create_redirect( '/fix-erroring', 'https://example.com/down' );
-
-		$this->fix_with_url_response( array( 'response' => array( 'code' => 503 ) ) );
-
-		$this->assert_stdout_contains( 'Destination returns server error' );
-		$this->assert_warning_contains( '1 redirect(s) could not be checked conclusively and were left enabled.' );
-		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
-	}
-
-	/**
-	 * Test --fix still disables a redirect whose destination returns a 404.
-	 */
-	public function test_validate_fix_disables_a_url_returning_404(): void {
-		$redirect_id = $this->create_redirect( '/fix-gone', 'https://example.com/gone' );
-
-		$this->fix_with_url_response( array( 'response' => array( 'code' => 404 ) ) );
-
-		$this->assert_success_contains( 'Disabled 1 broken redirect(s).' );
-		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
-	}
-
-	/**
-	 * Test --fix reports a redirect it could not disable, and fails the run.
-	 *
-	 * Ending with a success line would tell a scheduled job everything broken
-	 * had been switched off when it had not.
-	 */
-	public function test_validate_fix_reports_a_redirect_it_could_not_disable(): void {
+	public function test_validate_reports_a_reserved_source_as_a_warning(): void {
 		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$redirect_id = $this->create_redirect( '/fix-refused', $post_id );
+		$redirect_id = $this->create_redirect( '/wp-admin/', $post_id );
+
+		$this->invoke_command( $this->command, array( (string) $redirect_id ), array() );
+
+		$this->assert_warning_contains( 'Found 1 issue(s).' );
+		$this->assert_stdout_contains( 'Reserved WordPress path' );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+		$this->assertSame( 'warning', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test validating named redirects records their flags and recounts the badge, and clears them once fixed.
+	 *
+	 * A fix that no event announces - here, a host allowed in code - is
+	 * picked up by checking that one redirect again.
+	 */
+	public function test_validate_records_and_clears_a_named_redirects_flag(): void {
+		$redirect_id = $this->create_redirect( '/host-later-allowed', 'https://later-allowed.example.net/page' );
+
+		$this->invoke_command( $this->command, array( '/host-later-allowed' ), array() );
+
+		$this->assertSame( 'problem', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+		$this->assertSame( 1, ( new AuditFlags() )->problem_count() );
+
+		$allow = static fn( array $hosts ): array => array_merge( $hosts, array( 'later-allowed.example.net' ) );
+		add_filter( 'allowed_redirect_hosts', $allow );
+
+		try {
+			$this->invoke_command( $this->command, array( '/host-later-allowed' ), array() );
+		} finally {
+			remove_filter( 'allowed_redirect_hosts', $allow );
+		}
+
+		$this->assert_success_contains( 'No issues found.' );
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+		$this->assertSame( 0, ( new AuditFlags() )->problem_count() );
+	}
+
+	/**
+	 * Test validate with no redirects checks every redirect, records the flags, and points at the list.
+	 */
+	public function test_validate_all_checks_every_redirect_and_records_flags(): void {
+		$post_id  = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$broken   = $this->create_redirect( '/all-broken', $post_id );
+		$disabled = $this->create_redirect( '/all-disabled', 'https://not-allowed.example.net/x', false );
+		$this->create_redirect( '/all-fine', '/somewhere' );
+		wp_update_post(
+			array(
+				'ID'          => $disabled,
+				'post_status' => 'draft',
+			)
+		);
+		wp_trash_post( $post_id );
+
+		// Trashing the destination flags the redirect at once; start clean so
+		// the flag below is validate's own.
+		delete_post_meta( $broken, AuditFlags::META_KEY );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_success_contains( 'Validated 3 redirect(s): 2 with problems, 0 with warnings.' );
+		$this->assert_stdout_contains( 'wp legacy-redirector list --has-issues' );
+		$this->assertSame( 'problem', get_post_meta( $broken, AuditFlags::META_KEY, true ) );
+		$this->assertSame( 'problem', get_post_meta( $disabled, AuditFlags::META_KEY, true ) );
+		$this->assertSame( 2, ( new AuditFlags() )->problem_count() );
+		$this->assertNotNull( ( new AuditFlags() )->checked_at() );
+	}
+
+	/**
+	 * Test validate with no redirects and no problems says so, without pointing anywhere.
+	 */
+	public function test_validate_all_with_no_issues(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/valid-one', $post_id );
+		$this->create_redirect( '/valid-two', $post_id );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_success_contains( 'Validated 2 redirect(s): 0 with problems, 0 with warnings.' );
+		$this->assert_stdout_not_contains( 'list --has-issues' );
+	}
+
+	/**
+	 * Test the count format: flagged redirects for a full pass, findings for named ones.
+	 */
+	public function test_validate_count_format(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/count-broken', $post_id );
+		$this->create_redirect( '/wp-admin/count', '/fine' );
 		wp_delete_post( $post_id, true );
 
-		add_filter( 'wp_insert_post_empty_content', '__return_true' );
+		$this->invoke_command( $this->command, array(), array( 'format' => 'count' ) );
+		$this->assertSame( '2', trim( $this->get_stdout() ) );
 
-		try {
-			$this->invoke_command( $this->command, array(), array( 'fix' => true ) );
-		} finally {
-			remove_filter( 'wp_insert_post_empty_content', '__return_true' );
-		}
-
-		$this->assert_warning_contains( sprintf( 'Could not disable redirect: %d', $redirect_id ) );
-		$this->assert_error_contains( 'Only disabled 0 of 1 broken redirect(s).' );
-		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+		$this->invoke_command( $this->command, array( '/count-broken' ), array( 'format' => 'count' ) );
+		$this->assertSame( '1', trim( $this->get_stdout() ) );
 	}
 
 	/**
-	 * Run validate --check-destination --fix with every HTTP request answered by a canned response.
-	 *
-	 * @param array|\WP_Error $response The response to return.
-	 * @return void
+	 * Test validate never requests a URL: that is `test`'s job.
 	 */
-	private function fix_with_url_response( $response ): void {
-		$respond = static fn() => $response;
-		add_filter( 'pre_http_request', $respond );
+	public function test_validate_makes_no_http_requests(): void {
+		$this->create_redirect( '/external-unrequested', 'https://example.com/page' );
+
+		$requests = 0;
+		$count    = static function ( $preempt ) use ( &$requests ) {
+			++$requests;
+			return $preempt;
+		};
+		add_filter( 'pre_http_request', $count );
 
 		try {
-			$this->invoke_command(
-				$this->command,
-				array(),
-				array(
-					'check-destination' => true,
-					'fix'               => true,
-				)
-			);
+			$this->invoke_command( $this->command, array(), array() );
+			$this->invoke_command( $this->command, array( '/external-unrequested' ), array() );
 		} finally {
-			remove_filter( 'pre_http_request', $respond );
+			remove_filter( 'pre_http_request', $count );
 		}
+
+		$this->assertSame( 0, $requests );
 	}
 }
