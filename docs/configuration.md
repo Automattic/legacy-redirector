@@ -118,6 +118,26 @@ current name wins. [UPGRADING.md](../UPGRADING.md) has the full mapping.
 | `legacy_redirector_preserve_query_params` | Keep named query parameters during lookup |
 | `legacy_redirector_allow_insert` | Allow creation from a context with no capable user |
 | `legacy_redirector_check_destination_reachability` | Skip the admin form's HTTP check |
+| `legacy_redirector_background_audit_seconds` | Tune or turn off the background check |
+
+### Tune or turn off the background check
+
+Every redirect is checked in the background for the problems its stored details can show (a
+destination post gone or unpublished, a host not allowed, a loop), so the "Has issues" view
+and the menu badge stay current without anyone pressing **Scan for issues**. Nothing is
+requested over HTTP. Every five minutes, the check spends up to 20 seconds working through
+the table from where it last stopped, and once it reaches the end it waits until a day after
+that pass began before starting another. A site with a few thousand redirects is checked
+daily; one with millions takes longer per pass, and the list screen shows how long.
+
+Change the seconds per five minutes, or return `0` to turn the check off, for example on a
+very large site that runs `wp legacy-redirector scan` off-peak instead:
+
+```php
+add_filter( 'legacy_redirector_background_audit_seconds', function( $seconds ) {
+	return 5;
+} );
+```
 
 ### Preserve query parameters
 

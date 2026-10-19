@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 
 /**
@@ -43,7 +44,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -70,8 +70,7 @@ final class ValidateCommandTest extends CliTestCase {
 			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
 			$this->query_repository(),
 			$this->auditor(),
-			$this->manager(),
-			$this->audit_results()
+			$this->manager()
 		);
 	}
 
@@ -432,29 +431,21 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test a batch run records the summary, and a spot check does not.
+	 * Test validate leaves the menu badge and the flags alone.
 	 *
-	 * The recorded summary feeds the admin menu badge, so a check of one
-	 * named redirect must not overwrite the site-wide count.
+	 * The badge counts flagged rows, which only a full pass writes, so a
+	 * validate run over a subset cannot make it disagree with the "Has
+	 * issues" view.
 	 */
-	public function test_batch_run_records_summary_but_spot_check_does_not(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/summary-broken', $post_id );
-		$this->create_redirect( '/summary-fine', '/target-somewhere' );
+	public function test_validate_does_not_touch_the_badge_or_flags(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/summary-broken', $post_id );
 		wp_delete_post( $post_id, true );
 
-		$this->invoke_command( $this->command, array(), array() );
+		$this->invoke_command( $this->command, array(), array( 'limit' => 5 ) );
 
-		$summary = $this->audit_results()->summary();
-		$this->assertNotNull( $summary );
-		$this->assertSame( 1, $summary['problems'] );
-		$this->assertSame( 2, $summary['checked'] );
-
-		delete_option( \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults::OPTION );
-
-		$this->invoke_command( $this->command, array( '/summary-broken' ), array() );
-
-		$this->assertNull( $this->audit_results()->summary() );
+		$this->assertFalse( get_option( AuditFlags::COUNTS_OPTION ) );
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
 
 	/**

@@ -19,7 +19,7 @@ use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
@@ -171,18 +171,6 @@ final class Container {
 	}
 
 	/**
-	 * Get the stored audit results.
-	 *
-	 * @return AuditResults
-	 */
-	public function audit_results(): AuditResults {
-		if ( ! isset( $this->services['audit_results'] ) ) {
-			$this->services['audit_results'] = new AuditResults();
-		}
-		return $this->services['audit_results'];
-	}
-
-	/**
 	 * Get the per-row audit flags.
 	 *
 	 * @return AuditFlags
@@ -192,6 +180,18 @@ final class Container {
 			$this->services['audit_flags'] = new AuditFlags();
 		}
 		return $this->services['audit_flags'];
+	}
+
+	/**
+	 * Get the audit sweep, the one runner behind the background check, Scan and `scan`.
+	 *
+	 * @return AuditSweep
+	 */
+	public function audit_sweep(): AuditSweep {
+		if ( ! isset( $this->services['audit_sweep'] ) ) {
+			$this->services['audit_sweep'] = new AuditSweep( $this->query_repository(), $this->auditor(), $this->audit_flags() );
+		}
+		return $this->services['audit_sweep'];
 	}
 
 	/**

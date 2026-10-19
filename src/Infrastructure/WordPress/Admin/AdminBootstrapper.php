@@ -14,6 +14,7 @@ use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Application\RedirectValidator;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ScanButton;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
@@ -72,6 +73,13 @@ final class AdminBootstrapper {
 	private AuditFlags $audit_flags;
 
 	/**
+	 * The audit sweep behind the background check and the Scan button.
+	 *
+	 * @var AuditSweep
+	 */
+	private AuditSweep $audit_sweep;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectRepositoryInterface      $repository       Redirect repository.
@@ -80,6 +88,7 @@ final class AdminBootstrapper {
 	 * @param RedirectQueryRepositoryInterface $query_repository Redirect query repository.
 	 * @param RedirectAuditor                  $auditor          Redirect auditor.
 	 * @param AuditFlags                       $audit_flags      Per-row audit flags.
+	 * @param AuditSweep                       $audit_sweep      The audit sweep.
 	 */
 	public function __construct(
 		RedirectRepositoryInterface $repository,
@@ -87,7 +96,8 @@ final class AdminBootstrapper {
 		RedirectValidator $validator,
 		RedirectQueryRepositoryInterface $query_repository,
 		RedirectAuditor $auditor,
-		AuditFlags $audit_flags
+		AuditFlags $audit_flags,
+		AuditSweep $audit_sweep
 	) {
 		$this->repository       = $repository;
 		$this->manager          = $manager;
@@ -95,6 +105,7 @@ final class AdminBootstrapper {
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
 		$this->audit_flags      = $audit_flags;
+		$this->audit_sweep      = $audit_sweep;
 	}
 
 	/**
@@ -131,7 +142,7 @@ final class AdminBootstrapper {
 		$list_screen_setup = new ListScreenSetup();
 		$list_screen_setup->register();
 
-		$scan_button = new ScanButton();
+		$scan_button = new ScanButton( $this->audit_sweep );
 		$scan_button->register();
 	}
 

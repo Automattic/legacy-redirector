@@ -16,7 +16,6 @@ use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditResults;
 use WP_CLI;
 use WP_CLI_Command;
 
@@ -57,33 +56,23 @@ final class ValidateCommand extends WP_CLI_Command {
 	private RedirectManager $manager;
 
 	/**
-	 * The stored audit results.
-	 *
-	 * @var AuditResults
-	 */
-	private AuditResults $results;
-
-	/**
 	 * Constructor.
 	 *
 	 * @param RedirectBatch                    $batch            The batch resolver.
 	 * @param RedirectQueryRepositoryInterface $query_repository The query repository.
 	 * @param RedirectAuditor                  $auditor          The redirect auditor.
 	 * @param RedirectManager                  $manager          The redirect manager.
-	 * @param AuditResults                     $results          The stored audit results.
 	 */
 	public function __construct(
 		RedirectBatch $batch,
 		RedirectQueryRepositoryInterface $query_repository,
 		RedirectAuditor $auditor,
-		RedirectManager $manager,
-		AuditResults $results
+		RedirectManager $manager
 	) {
 		$this->batch            = $batch;
 		$this->query_repository = $query_repository;
 		$this->auditor          = $auditor;
 		$this->manager          = $manager;
-		$this->results          = $results;
 	}
 
 	/**
@@ -205,12 +194,6 @@ final class ValidateCommand extends WP_CLI_Command {
 
 		if ( null !== $progress ) {
 			$progress->finish();
-		}
-
-		// A batch run becomes the recorded summary behind the admin menu
-		// badge; a run over explicitly named redirects stays a spot check.
-		if ( empty( $args ) ) {
-			$this->results->record( $issues, $total, $check_destination );
 		}
 
 		// Handle count format.

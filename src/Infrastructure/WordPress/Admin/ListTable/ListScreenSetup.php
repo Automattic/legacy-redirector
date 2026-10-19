@@ -176,7 +176,7 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'To Paths', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'To External URLs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'After <strong>Scan for issues</strong> has run, a <strong>Has issues</strong> filter shows only the redirects the scan flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with its scan time: editing a redirect clears its flag until the next scan. See the Scan and Test help tab for what a scan can and cannot see.', 'legacy-redirector' ) . '</p>';
+			'<p>' . __( 'Once every redirect has been checked, by the background check or <strong>Scan for issues</strong>, a <strong>Has issues</strong> filter shows only the redirects the check flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with when the last full check finished: editing a redirect clears its flag until it is next checked. See the Scan and Test help tab for what a scan can and cannot see.', 'legacy-redirector' ) . '</p>';
 	}
 
 	/**
@@ -190,7 +190,7 @@ final class ListScreenSetup {
 	private function get_scan_and_test_help(): string {
 		return '<p>' . __( 'There are two ways to check redirects, and they look at different evidence:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
-			'<li>' . __( '<strong>Scan for issues</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. A scan never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Scan for issues</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. A scan never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals. The same check runs in the background, a few seconds every five minutes, so every redirect is checked regularly without anyone pressing the button; the line beside the button says when the last full check finished and how long one takes.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
 			'<p>' . __( 'So a clean scan does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector validate --check-destination</code>) can see that. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look, and nothing automated will ever disable it. A row whose stored data cannot be read as a redirect at all is reported as corrupt: delete it, or edit it with a full new source and destination.', 'legacy-redirector' ) . '</p>';

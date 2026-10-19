@@ -15,6 +15,7 @@ cannot tell you: which command to reach for, and how to string them together.
 | `delete` | Delete one or more redirects |
 | `enable` / `disable` | Start or stop serving one or more redirects |
 | `validate` | Find (and optionally disable) broken redirects |
+| `scan` | Check every redirect's stored details now, as the background check does |
 | `import` | Bulk import from a CSV file or STDIN |
 | `import-from-meta` | Create redirects from a post meta field |
 | `find-domains` | List the domains destinations point at |
@@ -247,6 +248,16 @@ exits with an error:
 
 ```bash
 wp legacy-redirector validate --fix
+```
+
+`validate` reports what it finds without recording it. The "Has issues" view and the menu
+badge come from the background check, which goes through every redirect a few seconds at a
+time; see [configuration.md](configuration.md#tune-or-turn-off-the-background-check). To
+check every redirect now and update both, run `scan`. It requests nothing, so it is safe at
+any size, and on a very large site it is the way to run a full check off-peak:
+
+```bash
+wp legacy-redirector scan
 ```
 
 Note that `validate` only inspects enabled redirects and stops at 1,000 by default. Widen

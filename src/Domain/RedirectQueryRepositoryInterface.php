@@ -45,6 +45,19 @@ interface RedirectQueryRepositoryInterface {
 	public function count_matching( RedirectCriteria $criteria ): int;
 
 	/**
+	 * Find enabled and disabled redirects with an ID above a cursor, in ID order.
+	 *
+	 * A keyset page: it costs the same at any depth in the table, and rows
+	 * deleted between pages cannot shift the next page the way an offset
+	 * would. Unreadable rows are included as corrupt Redirects.
+	 *
+	 * @param int $after_id Only rows with an ID above this.
+	 * @param int $limit    Maximum rows to return.
+	 * @return Redirect[] The redirects, lowest ID first.
+	 */
+	public function find_after_id( int $after_id, int $limit ): array;
+
+	/**
 	 * Get destination URLs for redirects pointing at external (absolute) URLs.
 	 *
 	 * Disabled redirects count, since re-enabling one needs its host allowed;

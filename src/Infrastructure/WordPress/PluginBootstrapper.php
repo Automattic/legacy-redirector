@@ -31,6 +31,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\RedirectorCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ScanCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ScanController;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ChecksController;
@@ -115,12 +116,7 @@ final class PluginBootstrapper {
 
 		// The batched scan behind the list screen's button; a REST
 		// route for the same reason as above.
-		$scan = new ScanController(
-			$this->container->query_repository(),
-			$this->container->auditor(),
-			$this->container->audit_flags(),
-			$this->container->audit_results()
-		);
+		$scan = new ScanController( $this->container->audit_sweep() );
 		$scan->register();
 
 		// Clear a row's audit flag on every save of that row. Registered in
@@ -132,14 +128,10 @@ final class PluginBootstrapper {
 		// how a person settles it, in any context.
 		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 
-		// Keep the recorded audit summary fresh with a daily scheduled run.
-		// Registered in every context: cron events fire wherever WP loads.
-		$scheduler = new AuditScheduler(
-			$this->container->query_repository(),
-			$this->container->auditor(),
-			$this->container->audit_results()
-		);
-		$scheduler->register();
+		// The background check: a budgeted slice of the sweep every five
+		// minutes. Registered in every context: cron events fire wherever WP
+		// loads.
+		$this->container->audit_sweep()->register();
 
 		// Register WP-CLI commands.
 		$this->register_cli_commands();
@@ -211,12 +203,13 @@ final class PluginBootstrapper {
 			$this->container->validator(),
 			$this->container->query_repository(),
 			$this->container->auditor(),
-			$this->container->audit_flags()
+			$this->container->audit_flags(),
+			$this->container->audit_sweep()
 		);
 		$admin->init();
 
 		// The problem-count bubble on the Redirects menu.
-		$menu_badge = new MenuBadge( $this->container->audit_results() );
+		$menu_badge = new MenuBadge( $this->container->audit_flags() );
 		$menu_badge->register();
 
 		// Register bulk actions handler.
@@ -289,8 +282,7 @@ final class PluginBootstrapper {
 				$batch,
 				$this->container->query_repository(),
 				$this->container->auditor(),
-				$manager,
-				$this->container->audit_results()
+				$manager
 			),
 			'import'           => new ImportCommand( $manager, $this->container->auditor() ),
 			'import-from-meta' => new ImportFromMetaCommand(
@@ -298,6 +290,7 @@ final class PluginBootstrapper {
 				$this->container->repository()
 			),
 			'find-domains'     => new FindDomainsCommand( $this->container->query_repository() ),
+			'scan'             => new ScanCommand( $this->container->audit_sweep(), $this->container->audit_flags() ),
 		);
 
 		foreach ( $commands as $subcommand => $command ) {
