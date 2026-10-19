@@ -48,6 +48,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ValidateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class ValidateCommandTest extends CliTestCase {
 
@@ -433,7 +434,7 @@ final class ValidateCommandTest extends CliTestCase {
 	/**
 	 * Test validate leaves the menu badge and the flags alone.
 	 *
-	 * The badge counts flagged rows, which only a full pass writes, so a
+	 * The badge counts flagged rows, which the background check writes, so a
 	 * validate run over a subset cannot make it disagree with the "Has
 	 * issues" view.
 	 */
@@ -441,6 +442,10 @@ final class ValidateCommandTest extends CliTestCase {
 		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		$redirect_id = $this->create_redirect( '/summary-broken', $post_id );
 		wp_delete_post( $post_id, true );
+
+		// Deleting the destination flags the redirect at once; start clean.
+		delete_post_meta( $redirect_id, AuditFlags::META_KEY );
+		delete_option( AuditFlags::COUNTS_OPTION );
 
 		$this->invoke_command( $this->command, array(), array( 'limit' => 5 ) );
 

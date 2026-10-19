@@ -131,6 +131,9 @@ finishes within a day waits until a day after it began, and one that takes longe
 straight away by the next, never overlapping it. A site with a few thousand redirects is
 checked daily; one with millions takes longer per pass, and the list screen shows how long.
 
+A redirect that points at a post by ID does not wait for the pass: it is flagged the moment
+that post is unpublished, trashed or deleted, and cleared when the post is published again.
+
 Change the seconds per five minutes, or return `0` to turn the check off, for example on a
 very large site that runs `wp legacy-redirector scan` off-peak instead:
 

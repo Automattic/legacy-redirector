@@ -148,6 +148,35 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	}
 
 	/**
+	 * Find enabled and disabled redirects whose destination is a given post.
+	 *
+	 * A post-ID destination is stored in post_parent, which is indexed, so
+	 * this costs one index lookup however large the table is.
+	 *
+	 * @param int $post_id The destination post ID.
+	 * @param int $limit   Maximum rows to return.
+	 * @return Redirect[] The redirects, lowest ID first.
+	 */
+	#[\Override]
+	public function find_by_destination_post( int $post_id, int $limit ): array {
+		$query = new WP_Query(
+			array(
+				'post_type'              => PostType::POST_TYPE,
+				'post_status'            => array( 'publish', 'draft' ),
+				'post_parent'            => $post_id,
+				'posts_per_page'         => $limit,
+				'orderby'                => 'ID',
+				'order'                  => 'ASC',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+
+		return array_map( array( $this, 'map_post_to_redirect' ), $query->posts );
+	}
+
+	/**
 	 * Get destination URLs for redirects pointing at external (absolute) URLs.
 	 *
 	 * Disabled redirects count, since re-enabling one needs its host allowed;
