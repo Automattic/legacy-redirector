@@ -396,6 +396,9 @@ final class AuditSweepTest extends TestCase {
 			)
 		);
 
+		// The save's recount runs at the end of the request; run it here.
+		( new AuditFlags() )->store_counts();
+
 		$this->assertSame( 2, ( new AuditFlags() )->problem_count() );
 	}
 

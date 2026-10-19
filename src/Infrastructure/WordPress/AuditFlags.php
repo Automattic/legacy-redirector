@@ -65,7 +65,7 @@ final class AuditFlags {
 	 * @return void
 	 */
 	public function register(): void {
-		add_action( 'save_post_' . PostType::POST_TYPE, array( $this, 'clear' ) );
+		add_action( 'save_post_' . PostType::POST_TYPE, array( $this, 'clear' ), 10, 3 );
 	}
 
 	/**
@@ -75,14 +75,19 @@ final class AuditFlags {
 	 * trash, untrash - they all run through wp_insert_post), so a saved row
 	 * never shows a verdict about its pre-save self.
 	 *
-	 * @param int $post_id The redirect post ID.
+	 * A new row has no flag to clear. Only a row that was flagged changes the
+	 * counts, and the recount runs once, at the end of the request: a bulk
+	 * action or import saving a thousand flagged rows would otherwise recount
+	 * every flagged row a thousand times.
+	 *
+	 * @param int           $post_id The redirect post ID.
+	 * @param \WP_Post|null $post    The redirect post.
+	 * @param bool          $update  Whether an existing row was saved.
 	 * @return void
 	 */
-	public function clear( int $post_id ): void {
-		// Only a row that was flagged changes the counts, so only it pays
-		// for a recount; the badge drops the moment a problem row is saved.
-		if ( delete_post_meta( $post_id, self::META_KEY ) ) {
-			$this->store_counts();
+	public function clear( int $post_id, ?\WP_Post $post = null, bool $update = true ): void {
+		if ( $update && delete_post_meta( $post_id, self::META_KEY ) ) {
+			add_action( 'shutdown', array( $this, 'store_counts' ) );
 		}
 	}
 

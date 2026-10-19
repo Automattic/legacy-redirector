@@ -126,7 +126,7 @@ final class PluginBootstrapper {
 
 		// Likewise the migration's duplicate-source marker: saving the row is
 		// how a person settles it, in any context.
-		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
+		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ), 10, 3 );
 
 		// The background check: a budgeted slice of the sweep every five
 		// minutes. Registered in every context: cron events fire wherever WP
