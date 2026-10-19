@@ -200,6 +200,66 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * A refused read of the ceiling stops the batch instead of ending the walk.
+	 *
+	 * Taken for an empty table, a ceiling of 0 would be stored, the first
+	 * batch would find no rows below it, and the upgrade would complete with
+	 * nothing migrated - for good.
+	 *
+	 * @return void
+	 */
+	public function test_refused_ceiling_read_does_not_complete_the_upgrade() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, 'SELECT MAX(ID)' ) ? '' : $query;
+
+		$error = null;
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->run_batch( 100 );
+		} catch ( \RuntimeException $e ) {
+			$error = $e;
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertInstanceOf( \RuntimeException::class, $error, 'A refused ceiling read must stop the batch.' );
+		$this->assertStringContainsString( 'could not read', $error->getMessage() );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
+
+		do {
+			$result = $this->upgrader->run_batch( 100 );
+		} while ( ! $result['complete'] );
+
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * A refused read of the ceiling while anchoring records no ceiling, and
+	 * does not throw: it runs on every request's init.
+	 *
+	 * @return void
+	 */
+	public function test_refused_ceiling_read_does_not_anchor() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$refuse = static fn( string $query ): string => str_starts_with( $query, 'SELECT MAX(ID)' ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->stamp_fresh_install();
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
+	}
+
+	/**
 	 * A batch clears the caches its writes left stale once, not once per row.
 	 *
 	 * On a persistent object cache each clear is a network round trip.
