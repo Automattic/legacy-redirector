@@ -151,4 +151,27 @@ final class ValidateAllButtonTest extends TestCase {
 		$this->assertStringContainsString( 'Not every redirect has been checked yet.', $html );
 		$this->assertStringNotContainsString( 'audit_flagged', $html );
 	}
+
+	/**
+	 * Test nothing promises background progress when the background check is off.
+	 */
+	public function test_no_background_promise_when_the_background_check_is_off(): void {
+		for ( $i = 1; $i <= AuditSweep::BATCH_SIZE + 1; $i++ ) {
+			$this->insert_redirect_post( array( 'post_title' => "/button-off-{$i}" ) );
+		}
+
+		$sweep = $this->sweep();
+		$this->assertTrue( $sweep->lock( 0 ) );
+		$sweep->start_pass();
+		$sweep->run_batch();
+		$sweep->unlock();
+
+		add_filter( AuditSweep::BUDGET_FILTER, '__return_zero' );
+		$html = $this->render();
+		remove_filter( AuditSweep::BUDGET_FILTER, '__return_zero' );
+
+		$this->assertStringContainsString( 'Continue validating', $html );
+		$this->assertStringNotContainsString( 'carries on in the background', $html );
+		$this->assertStringContainsString( 'The background check is turned off.', $html );
+	}
 }

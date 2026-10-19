@@ -111,12 +111,20 @@ final class ValidateAllButton {
 		// A pass already under way, in the background or from another visit,
 		// is continued rather than restarted, so pressing the button never
 		// throws away progress.
-		$label = $status['in_progress']
+		$label      = $status['in_progress']
 			? __( 'Continue validating', 'legacy-redirector' )
 			: __( 'Validate all redirects', 'legacy-redirector' );
-		$title = $status['in_progress']
-			? __( 'Validation is already under way in the background. Continue it here to finish sooner; you can leave this page at any time.', 'legacy-redirector' )
-			: __( 'Checks every redirect’s stored details for problems, without requesting any URLs. You can leave this page at any time: validation carries on in the background. Use the Test action on a row to check live behavior.', 'legacy-redirector' );
+		$background = $this->sweep->budget() > 0.0;
+
+		if ( $status['in_progress'] ) {
+			$title = $background
+				? __( 'Validation is already under way in the background. Continue it here to finish sooner; you can leave this page at any time.', 'legacy-redirector' )
+				: __( 'Validation is under way but the background check is turned off, so continue it here, or with wp legacy-redirector validate.', 'legacy-redirector' );
+		} else {
+			$title = $background
+				? __( 'Checks every redirect’s stored details for problems, without requesting any URLs. You can leave this page at any time: validation carries on in the background. Use the Test action on a row to check live behavior.', 'legacy-redirector' )
+				: __( 'Checks every redirect’s stored details for problems, without requesting any URLs. The background check is turned off, so stay on this page until it finishes. Use the Test action on a row to check live behavior.', 'legacy-redirector' );
+		}
 
 		$show_flagged = ! $status['in_progress'] && null !== $status['checked_at'] && $counts['problem'] + $counts['warning'] > 0;
 		$flagged_url  = add_query_arg(
@@ -147,7 +155,7 @@ final class ValidateAllButton {
 	 */
 	private function status_text( array $status, array $counts ): string {
 		if ( $status['in_progress'] ) {
-			$text = self::progress_text( $status['checked'], $status['total'] );
+			$text = self::progress_text( $status['checked'], $status['total'], $this->sweep->budget() > 0.0 );
 		} elseif ( null !== $status['checked_at'] ) {
 			$text = sprintf(
 				/* translators: 1: time since the last full check, e.g. "3 hours", 2: how many redirects have problems, e.g. "3 with problems", 3: how many have warnings, e.g. "1 with a warning" */
@@ -184,17 +192,28 @@ final class ValidateAllButton {
 	}
 
 	/**
-	 * Say how far a pass has got, and that leaving the page is fine.
+	 * Say how far a pass has got, and whether leaving the page is fine.
 	 *
 	 * Shared with the REST route behind the button, so the line reads the
 	 * same whether the page rendered it or a batch request returned it, and
-	 * follows the language's plural rules either way.
+	 * follows the language's plural rules either way. With the background
+	 * check turned off, nothing carries the pass on, so it doesn't say so.
 	 *
-	 * @param int $checked Redirects checked so far.
-	 * @param int $total   Redirects in the pass.
+	 * @param int  $checked    Redirects checked so far.
+	 * @param int  $total      Redirects in the pass.
+	 * @param bool $background Whether the background check will carry the pass on.
 	 * @return string The progress line.
 	 */
-	public static function progress_text( int $checked, int $total ): string {
+	public static function progress_text( int $checked, int $total, bool $background ): string {
+		if ( ! $background ) {
+			return sprintf(
+				/* translators: 1: redirects checked so far, 2: total redirects */
+				_n( 'Validation in progress: %1$s of %2$s redirect checked.', 'Validation in progress: %1$s of %2$s redirects checked.', $total, 'legacy-redirector' ),
+				number_format_i18n( $checked ),
+				number_format_i18n( $total )
+			);
+		}
+
 		return sprintf(
 			/* translators: 1: redirects checked so far, 2: total redirects */
 			_n(
@@ -260,7 +279,10 @@ final class ValidateAllButton {
 				try {
 					for (;;) {
 						var data = await runBatch(restart);
+						// From here on a retry continues this pass, even after
+						// a failed batch.
 						restart = false;
+						button.dataset.restart = '0';
 						report(data);
 						if (data.done) {
 							window.location.reload();
@@ -268,7 +290,9 @@ final class ValidateAllButton {
 						}
 					}
 				} catch (e) {
-					status.textContent = config.failed;
+					// The server's own message says why, such as another
+					// check holding the lock.
+					status.textContent = ( e && e.message ) || config.failed;
 					button.disabled = false;
 				}
 			});

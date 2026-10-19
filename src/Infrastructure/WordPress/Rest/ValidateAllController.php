@@ -151,7 +151,7 @@ final class ValidateAllController {
 			'checked' => $checked,
 			'total'   => $status['total'],
 			'done'    => $batch['done'],
-			'message' => ValidateAllButton::progress_text( $checked, $status['total'] ),
+			'message' => ValidateAllButton::progress_text( $checked, $status['total'], $this->sweep->budget() > 0.0 ),
 		);
 	}
 }
