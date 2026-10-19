@@ -204,7 +204,7 @@ final class ChecksController {
 	 * Audit a redirect and probe its source live.
 	 *
 	 * @param \WP_REST_Request $request The request.
-	 * @return array{valid: bool, status: string, message: string, warnings: array<int, array{label: string, description: string}>, probe: array{status: string, message: string}}|\WP_Error The test result, or a 404 error for an unknown redirect.
+	 * @return array{valid: bool, status: string, message: string, remedy?: string, warnings: array<int, array{label: string, description: string, remedy: string}>, probe: array{status: string, message: string, remedy: string}}|\WP_Error The test result, or a 404 error for an unknown redirect.
 	 */
 	public function test_redirect( \WP_REST_Request $request ): array|\WP_Error {
 		$redirect = $this->repository->find_by_id( (int) $request->get_param( 'id' ) );
@@ -226,6 +226,7 @@ final class ChecksController {
 				$warnings[] = array(
 					'label'       => $finding->label(),
 					'description' => $finding->description() . '.',
+					'remedy'      => $finding->remedy() . '.',
 				);
 			} else {
 				$problems[] = $finding;
@@ -246,6 +247,7 @@ final class ChecksController {
 				'valid'    => false,
 				'status'   => $finding->type()->value,
 				'message'  => $finding->description() . '.',
+				'remedy'   => $finding->remedy() . '.',
 				'warnings' => $warnings,
 				'probe'    => $probe,
 			);
@@ -264,7 +266,7 @@ final class ChecksController {
 	 * Probe the source and phrase the outcome for display.
 	 *
 	 * @param Redirect $redirect The redirect to probe.
-	 * @return array{status: string, message: string} The probe outcome and its message.
+	 * @return array{status: string, message: string, remedy: string} The probe outcome, its message, and what to do about it (empty when nothing is wrong).
 	 */
 	private function probe( Redirect $redirect ): array {
 		$probe    = $this->auditor->probe_source( $redirect );
@@ -280,9 +282,12 @@ final class ChecksController {
 			default      => __( 'Could not confirm live behavior: the request to the source failed, or the site answered with an error. Try again later.', 'legacy-redirector' ),
 		};
 
+		$finding = $this->auditor->finding_for_probe( $redirect, $probe );
+
 		return array(
 			'status'  => $probe['status'],
 			'message' => $message,
+			'remedy'  => null === $finding ? '' : $finding->remedy() . '.',
 		);
 	}
 }

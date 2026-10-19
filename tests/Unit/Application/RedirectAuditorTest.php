@@ -589,6 +589,89 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test each probe outcome maps to its finding, and a confirmed redirect to none.
+	 *
+	 * @dataProvider probe_finding_provider
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 *
+	 * @param array{status: string, location?: string} $probe    The probe outcome.
+	 * @param AuditFindingType|null                    $expected The finding type, or null for none.
+	 */
+	public function test_finding_for_probe( array $probe, ?AuditFindingType $expected ): void {
+		$finding = $this->auditor->finding_for_probe( $this->create_redirect( '/old', '/target' ), $probe );
+
+		$this->assertSame( $expected, $finding?->type() );
+	}
+
+	/**
+	 * Probe outcomes and the findings they become.
+	 *
+	 * @return array<string, array{array{status: string, location?: string}, AuditFindingType|null}>
+	 */
+	public function probe_finding_provider(): array {
+		return array(
+			'confirmed'   => array(
+				array(
+					'status'   => 'confirmed',
+					'location' => 'https://example.com/target',
+				),
+				null,
+			),
+			'diverted'    => array(
+				array(
+					'status'   => 'diverted',
+					'location' => 'https://example.com/elsewhere',
+				),
+				AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE,
+			),
+			'not firing'  => array( array( 'status' => 'not-firing' ), AuditFindingType::SOURCE_NOT_FIRING ),
+			'dormant'     => array( array( 'status' => 'dormant' ), AuditFindingType::SOURCE_SERVES_CONTENT ),
+			'unreachable' => array( array( 'status' => 'unreachable' ), AuditFindingType::SOURCE_REQUEST_FAILED ),
+		);
+	}
+
+	/**
+	 * Test a diverted source names where it went.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 */
+	public function test_finding_for_probe_names_the_diverted_location(): void {
+		$finding = $this->auditor->finding_for_probe(
+			$this->create_redirect( '/old', '/target' ),
+			array(
+				'status'   => 'diverted',
+				'location' => 'https://example.com/elsewhere',
+			)
+		);
+
+		$this->assertSame( 'to: https://example.com/elsewhere', $finding?->extra_info() );
+	}
+
+	/**
+	 * Test a disabled redirect's probe says nothing about it: it is not meant to fire.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 */
+	public function test_finding_for_probe_ignores_a_disabled_redirect(): void {
+		$disabled = $this->create_redirect( '/old', '/target' )->with_status( 'draft' );
+
+		$this->assertNull( $this->auditor->finding_for_probe( $disabled, array( 'status' => 'not-firing' ) ) );
+	}
+
+	/**
+	 * Test audit_source probes the source and reports the outcome as a finding.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_source_that_does_not_fire(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+
+		$this->assertSame( AuditFindingType::SOURCE_NOT_FIRING, $auditor->audit_source( $this->create_redirect( '/old', '/target' ) )?->type() );
+	}
+
+	/**
 	 * Test a forbidden source is still dormant.
 	 *
 	 * The site answered with its own response, so the 404 the redirect

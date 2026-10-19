@@ -209,11 +209,21 @@ final class RowActionsManager {
 					} ) );
 
 				var $text = $( '<span/>' ).text( text );
+				$line.append( $text );
+
+				// What to do about it: on hover, and as text for screen
+				// readers, which do not reliably announce a title.
 				if ( title ) {
 					$text.attr( 'title', title );
+					$line.append( $( '<span class="screen-reader-text"/>' ).text( ' ' + title ) );
 				}
 
-				return $line.append( $text );
+				return $line;
+			}
+
+			// The hover detail for a line: what is wrong, then what to do.
+			function detail( description, remedy ) {
+				return [ description, remedy ].filter( Boolean ).join( ' ' );
 			}
 
 			// Replace the row's Health cell with the fresh, HTTP-inclusive
@@ -239,7 +249,7 @@ final class RowActionsManager {
 				// problem or warning follows as the "but...".
 				if ( probe && probeStyles[ probe.status ] ) {
 					var style = probeStyles[ probe.status ];
-					$healthColumn.append( healthLine( style.icon, style.color, probe.message ) );
+					$healthColumn.append( healthLine( style.icon, style.color, probe.message, probe.remedy ) );
 				}
 
 				if ( result.valid ) {
@@ -249,11 +259,11 @@ final class RowActionsManager {
 						$healthColumn.append( healthLine( 'dashicons-yes-alt', '#46b450', i18n.noIssues ) );
 					}
 				} else {
-					$healthColumn.append( healthLine( 'dashicons-warning', '#d63638', result.message || i18n.requestFailed ) );
+					$healthColumn.append( healthLine( 'dashicons-warning', '#d63638', result.message || i18n.requestFailed, result.remedy ) );
 				}
 
 				$.each( warnings, function ( i, warning ) {
-					$healthColumn.append( healthLine( 'dashicons-flag', '#dba617', warning.label, warning.description ) );
+					$healthColumn.append( healthLine( 'dashicons-flag', '#dba617', warning.label, detail( warning.description, warning.remedy ) ) );
 				} );
 			}
 

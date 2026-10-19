@@ -560,6 +560,44 @@ class RedirectAuditor {
 	}
 
 	/**
+	 * Request a redirect's source and report what went wrong, if anything.
+	 *
+	 * @param Redirect $redirect The redirect whose source to request.
+	 * @return AuditFinding|null The finding, or null when the redirect fired as stored or is disabled.
+	 */
+	public function audit_source( Redirect $redirect ): ?AuditFinding {
+		return $this->finding_for_probe( $redirect, $this->probe_source( $redirect ) );
+	}
+
+	/**
+	 * Turn a source probe's outcome into a finding.
+	 *
+	 * Separate from audit_source() so a caller that has already probed, and
+	 * wants the raw outcome too, does not request the source twice. A
+	 * disabled redirect is not expected to fire, so its outcome says nothing
+	 * about it.
+	 *
+	 * @param Redirect                                 $redirect The redirect that was probed.
+	 * @param array{status: string, location?: string} $probe    The outcome from probe_source().
+	 * @return AuditFinding|null The finding, or null when the redirect fired as stored or is disabled.
+	 */
+	public function finding_for_probe( Redirect $redirect, array $probe ): ?AuditFinding {
+		if ( ! $redirect->is_active() ) {
+			return null;
+		}
+
+		$location = isset( $probe['location'] ) && '' !== $probe['location'] ? 'to: ' . $probe['location'] : null;
+
+		return match ( $probe['status'] ) {
+			'diverted'    => new AuditFinding( $redirect, AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE, $location ),
+			'not-firing'  => new AuditFinding( $redirect, AuditFindingType::SOURCE_NOT_FIRING ),
+			'dormant'     => new AuditFinding( $redirect, AuditFindingType::SOURCE_SERVES_CONTENT ),
+			'unreachable' => new AuditFinding( $redirect, AuditFindingType::SOURCE_REQUEST_FAILED ),
+			default       => null,
+		};
+	}
+
+	/**
 	 * The absolute URL the stored destination should send a visitor to.
 	 *
 	 * @param Redirect $redirect The redirect.

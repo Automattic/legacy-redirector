@@ -122,7 +122,7 @@ final class CreateCommand extends WP_CLI_Command {
 		$redirect = $result->redirect();
 
 		foreach ( $this->auditor->warnings( $redirect ) as $warning ) {
-			WP_CLI::warning( $warning->description() . '.' );
+			WP_CLI::warning( $warning->description() . '. ' . $warning->remedy() . '.' );
 		}
 
 		if ( $porcelain ) {

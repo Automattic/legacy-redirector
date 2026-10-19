@@ -305,7 +305,7 @@ final class ImportCommand extends WP_CLI_Command {
 	 */
 	private function accepted_row( SourceUrl $source_url, Destination $destination, string $source, string $dest, string $action, string $message ): array {
 		foreach ( $this->auditor->warnings( Redirect::create( $source_url, $destination ) ) as $warning ) {
-			WP_CLI::warning( $source . ': ' . $warning->description() . '.' );
+			WP_CLI::warning( $source . ': ' . $warning->description() . '. ' . $warning->remedy() . '.' );
 		}
 
 		return $this->result_row( $source, $dest, $action, $message );

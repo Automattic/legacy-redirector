@@ -101,6 +101,15 @@ final class AuditFinding {
 	}
 
 	/**
+	 * What a person can do about this finding.
+	 *
+	 * @return string
+	 */
+	public function remedy(): string {
+		return $this->type->remedy();
+	}
+
+	/**
 	 * Get the human-readable finding label.
 	 *
 	 * @return string

@@ -354,6 +354,7 @@ final class ChecksControllerTest extends TestCase {
 				'probe'    => array(
 					'status'  => 'dormant',
 					'message' => 'The source currently serves content, so the redirect lies dormant and did not fire.',
+					'remedy'  => 'Unpublish the content at the source if the redirect should fire; otherwise the redirect is a fallback for when it goes.',
 				),
 			),
 			$response->get_data()
@@ -422,6 +423,7 @@ final class ChecksControllerTest extends TestCase {
 		$data = $response->get_data();
 		$this->assertSame( 'not-firing', $data['probe']['status'] );
 		$this->assertStringContainsString( 'did not fire', $data['probe']['message'] );
+		$this->assertStringContainsString( 'Check the source matches the URL visitors request', $data['probe']['remedy'] );
 	}
 
 	/**
@@ -522,12 +524,14 @@ final class ChecksControllerTest extends TestCase {
 				'valid'    => false,
 				'status'   => 'url_not_found',
 				'message'  => 'The destination URL returns a 404 Not Found response.',
+				'remedy'   => 'Point this redirect at a page that exists, or delete it.',
 				'warnings' => array(),
 				// The blanket 404 mock means the probed source 404s
 				// without redirecting, too.
 				'probe'    => array(
 					'status'  => 'not-firing',
 					'message' => 'The source returns a 404 without redirecting: the redirect did not fire.',
+					'remedy'  => 'Check the source matches the URL visitors request, including its encoding and the site\'s path, then test again.',
 				),
 			),
 			$response->get_data()
