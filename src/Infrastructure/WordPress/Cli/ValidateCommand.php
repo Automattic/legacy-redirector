@@ -127,7 +127,8 @@ final class ValidateCommand extends WP_CLI_Command {
 	 * ---
 	 *
 	 * [--fix]
-	 * : Automatically disable broken redirects.
+	 * : Disable the redirects found broken. Warnings, and URL checks that
+	 * failed or met a server error, are reported but left enabled.
 	 *
 	 * [--format=<format>]
 	 * : Render output in a particular format.
@@ -292,40 +293,82 @@ final class ValidateCommand extends WP_CLI_Command {
 	/**
 	 * Disable the redirects behind the given issues.
 	 *
+	 * Only a conclusive problem disables a redirect. A warning may be a
+	 * legitimate legacy URL, and an inconclusive finding (a failed request, a
+	 * server error) says nothing about the redirect, so both are left for a
+	 * person to judge. A redirect with several findings is counted once.
+	 *
 	 * @param AuditFinding[] $issues The issues to fix.
 	 */
 	private function fix_issues( array $issues ): void {
 		WP_CLI::line( '' );
-		$fixed   = 0;
-		$corrupt = 0;
+		$to_disable   = array();
+		$inconclusive = array();
+		$corrupt      = array();
 
 		foreach ( $issues as $issue ) {
-			// A warning is not a breakage: the redirect may be a legitimate
-			// legacy URL, so it is left for a person to judge.
 			if ( $issue->is_warning() ) {
 				continue;
 			}
 
+			$id = (int) $issue->redirect_id();
+
 			// A corrupt row cannot be re-saved, so it cannot be auto-disabled.
 			if ( $issue->redirect()->is_corrupt() ) {
-				++$corrupt;
+				$corrupt[ $id ] = true;
 				continue;
 			}
 
-			if ( $issue->redirect()->is_active() && $this->manager->disable( $issue->redirect_id() ) ) {
-				++$fixed;
+			if ( ! $issue->redirect()->is_active() ) {
+				continue;
+			}
+
+			if ( $issue->is_conclusive() ) {
+				$to_disable[ $id ] = true;
+			} else {
+				$inconclusive[ $id ] = true;
 			}
 		}
 
-		WP_CLI::success( sprintf( 'Disabled %d broken redirect(s).', $fixed ) );
+		// One conclusive problem is enough, whatever else could not be checked.
+		$inconclusive = array_diff_key( $inconclusive, $to_disable );
 
-		if ( $corrupt > 0 ) {
+		$fixed = 0;
+		foreach ( array_keys( $to_disable ) as $id ) {
+			$result = $this->manager->change_status( $id, 'draft' );
+
+			if ( $result->is_success() ) {
+				++$fixed;
+				continue;
+			}
+
+			$error = $result->error_message();
+			WP_CLI::warning( sprintf( 'Could not disable redirect: %d%s', $id, null === $error ? '' : sprintf( ' (%s)', $error ) ) );
+		}
+
+		if ( count( $corrupt ) > 0 ) {
 			WP_CLI::warning(
 				sprintf(
 					'%d redirect(s) hold corrupt stored data and cannot be auto-disabled. Delete them, or update them with a new source and destination.',
-					$corrupt
+					count( $corrupt )
 				)
 			);
 		}
+
+		if ( count( $inconclusive ) > 0 ) {
+			WP_CLI::warning(
+				sprintf(
+					'%d redirect(s) could not be checked conclusively and were left enabled. Re-run to check them again.',
+					count( $inconclusive )
+				)
+			);
+		}
+
+		if ( $fixed < count( $to_disable ) ) {
+			WP_CLI::error( sprintf( 'Only disabled %d of %d broken redirect(s).', $fixed, count( $to_disable ) ) );
+			return;
+		}
+
+		WP_CLI::success( sprintf( 'Disabled %d broken redirect(s).', $fixed ) );
 	}
 }

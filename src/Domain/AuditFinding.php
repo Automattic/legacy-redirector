@@ -92,6 +92,15 @@ final class AuditFinding {
 	}
 
 	/**
+	 * Whether this finding says something definite about the redirect.
+	 *
+	 * @return bool
+	 */
+	public function is_conclusive(): bool {
+		return $this->type->is_conclusive();
+	}
+
+	/**
 	 * Get the human-readable finding label.
 	 *
 	 * @return string

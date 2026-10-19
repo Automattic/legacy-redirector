@@ -14,7 +14,8 @@ namespace Automattic\LegacyRedirector\Domain;
  *
  * A finding is either a problem (the redirect is broken and will not do its
  * job) or a warning (the redirect works but deserves a human look); see
- * is_warning().
+ * is_warning(). Independently, a finding is conclusive unless the check could
+ * not tell (a failed request, a server error); see is_conclusive().
  *
  * Adding a case? The user-facing explanations live outside this enum and
  * must be updated with it: the list screen's contextual help
@@ -88,6 +89,23 @@ enum AuditFindingType: string {
 	public function is_warning(): bool {
 		// phpcs:ignore PHPCompatibility.Variables.ForbiddenThisUseContexts.OutsideObjectContext -- Valid enum syntax.
 		return in_array( $this, array( self::RESERVED_SOURCE, self::POSSIBLE_LOOP ), true );
+	}
+
+	/**
+	 * Whether this finding says something definite about the redirect.
+	 *
+	 * An inconclusive finding means the check could not tell: the request
+	 * failed (a timeout, a refused connection, a host the VIP request helper
+	 * has stopped calling for a while), or the destination answered with a
+	 * server error that is as likely to be passing as permanent. It is still
+	 * reported, but automated fixes (like `validate --fix`) must leave the
+	 * redirect alone, or one slow host could switch off every redirect to it.
+	 *
+	 * @return bool
+	 */
+	public function is_conclusive(): bool {
+		// phpcs:ignore PHPCompatibility.Variables.ForbiddenThisUseContexts.OutsideObjectContext -- Valid enum syntax.
+		return ! in_array( $this, array( self::URL_REQUEST_FAILED, self::URL_SERVER_ERROR ), true );
 	}
 
 	/**

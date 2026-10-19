@@ -424,6 +424,39 @@ final class ChecksControllerTest extends TestCase {
 	}
 
 	/**
+	 * Test a server error at the source is reported as unknown, not as content.
+	 *
+	 * A 503 is the site failing to answer. Calling it dormant would tell the
+	 * editor a page is winning over the redirect when nothing is.
+	 */
+	public function test_probe_reports_a_server_error_as_unreachable(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/probe-erroring', 'https://example.com/destination' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( (string) $url, '/probe-erroring' ) ) {
+				return array( 'response' => array( 'code' => 503 ) );
+			}
+
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond, 20, 3 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 20 );
+		}
+
+		$data = $response->get_data();
+		$this->assertSame( 'unreachable', $data['probe']['status'] );
+		$this->assertStringContainsString( 'Could not confirm live behavior', $data['probe']['message'] );
+	}
+
+	/**
 	 * Test a valid redirect with a reserved source reports success with the
 	 * warning riding along, instead of hiding it behind a clean pass.
 	 */

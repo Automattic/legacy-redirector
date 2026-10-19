@@ -232,9 +232,17 @@ with an error. It is slow, so it suits a scheduled audit rather than an interact
 wp legacy-redirector validate --check-urls --format=csv > broken.csv
 ```
 
-`--fix` disables everything it reports except reserved sources, which it leaves for you to
-judge. Disabling stops visitors being sent somewhere broken while leaving the redirects in
-place to repair:
+A URL check that cannot get an answer (a timeout, a refused connection) or gets a server
+error is reported, but it says nothing definite about the destination: the host may simply
+be slow or briefly down. On WordPress VIP the request helper also stops calling a host for
+a short while after a few slow responses, so one slow host can fail every check to it in a
+run. Re-run before treating one of these as broken.
+
+`--fix` disables the redirects found broken. It leaves alone the warnings (reserved sources
+and possible loops) and the URL checks that could not get a clear answer, and says how many
+it left enabled. Disabling stops visitors being sent somewhere broken while leaving the
+redirects in place to repair. If any redirect cannot be disabled, the command names it and
+exits with an error:
 
 ```bash
 wp legacy-redirector validate --fix
