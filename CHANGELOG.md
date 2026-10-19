@@ -85,6 +85,7 @@ See [UPGRADING.md](UPGRADING.md) for the full migration guide.
 - CSV import no longer truncates rows longer than 2,000 bytes. 1.x cut the line at that limit, silently storing a shortened destination and reporting the leftover fragment as a separate row with a missing destination. Long destinations, typically ones carrying campaign parameters, now import exactly as written.
 - Ampersands in a redirect saved by a user without `unfiltered_html`, which on VIP is everyone, are stored as typed. 1.x let WordPress's HTML filter write each `&` as `&amp;`, so the redirect sent visitors to the escaped URL (`/new?a=1&amp;b=2`, whose query has a parameter named `amp;b`) and the admin showed the escaped source. The migration repairs existing redirects.
 - A redirect whose source has a query string keeps firing when the request also carries a parameter preserved by `legacy_redirector_preserve_query_params`. 1.x rebuilt the rest of the query while removing the preserved parameter, re-spelling dotted names (`a.b` as `a_b`), array syntax (`x[]` as `x[0]`) and repeated keys, so the lookup missed and the request fell through to a 404. Only the preserved parameter is now taken out; the rest of the query is left as it arrived.
+- Parameters preserved by `legacy_redirector_preserve_query_params` are percent-encoded when added to the destination. 1.x added them decoded, so a preserved value containing `&`, `=`, `#` or `+` was split or altered on the way, and could set other parameters on the destination.
 
 ### Removed
 
