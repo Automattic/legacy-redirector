@@ -17,7 +17,8 @@ could never work:
 
 - the source already belongs to another redirect;
 - the destination is the source itself;
-- the destination post does not exist, is in the trash, or is not published;
+- the destination post does not exist, is in the trash, is not published, or is of a type
+  visitors can't view (a template or another redirect, say);
 - the destination is on a host that is not in `allowed_redirect_hosts`.
 
 Others let the save go ahead and warn, because the redirect works but deserves a look:
@@ -95,7 +96,7 @@ reported, but test again before treating one as broken.
 |---------|----------|----------|
 | Destination post deleted | Problem | Stored details |
 | Destination post in the trash | Problem | Stored details |
-| Destination post not published | Problem | Stored details |
+| Destination post not published, or of a type visitors can't view | Problem | Stored details |
 | Destination host not in `allowed_redirect_hosts` | Problem | Stored details |
 | Corrupt stored data (a row that cannot be read as a redirect) | Problem | Stored details |
 | Reserved WordPress path as the source | Warning | Stored details |

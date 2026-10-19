@@ -60,6 +60,13 @@ if ( ! class_exists( 'WP_Post' ) ) {
 		public string $post_status = 'publish';
 
 		/**
+		 * The post type.
+		 *
+		 * @var string
+		 */
+		public string $post_type = 'post';
+
+		/**
 		 * Constructor.
 		 *
 		 * @param array|string $args Post data array, or post_status string for backward compatibility.
