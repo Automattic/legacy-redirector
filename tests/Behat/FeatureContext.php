@@ -52,6 +52,13 @@ final class FeatureContext extends WpEnvFeatureContext {
 	private static $plugin_activated = false;
 
 	/**
+	 * Whether the site has been reset before this run's first scenario.
+	 *
+	 * @var bool
+	 */
+	private static $reset_before_first = false;
+
+	/**
 	 * Hosts added to allowed_redirect_hosts for cleanup.
 	 *
 	 * @var string[]
@@ -336,28 +343,59 @@ RESET;
 	}
 
 	/**
-	 * Plugin-specific database cleanup.
+	 * Reset before the first scenario of a run, as well as after each one.
 	 *
-	 * Retained so that the parent's reset_database_state() remains correct if it
-	 * is ever called directly; the fast reset above folds this work into its
-	 * single call.
+	 * The parent resets only after a scenario, so the first one would start on
+	 * whatever the dev site holds, seed data included, and pass or fail
+	 * depending on it.
 	 *
+	 * @BeforeScenario
 	 * @return void
 	 */
-	protected function plugin_specific_cleanup(): void {
-		// Delete all redirect posts (custom post type).
-		$this->run_wp_cli_command( 'post list --post_type=vip-legacy-redirect --format=ids', false );
-		$redirect_ids = trim( $this->output );
-
-		if ( ! empty( $redirect_ids ) ) {
-			$this->run_wp_cli_command( "post delete {$redirect_ids} --force", false );
+	public function reset_before_the_first_scenario(): void {
+		if ( self::$reset_before_first ) {
+			return;
 		}
 
-		// Remove mu-plugins created for allowed_redirect_hosts.
-		foreach ( $this->added_hosts as $host ) {
-			$this->remove_mu_plugin( 'allowed_redirect_hosts-' . $host );
+		self::$reset_before_first = true;
+		$this->reset_database_state();
+	}
+
+	/**
+	 * Run a WP-CLI command that is expected to succeed, and fail the step if it does not.
+	 *
+	 * The parent's step does not check the exit code, so "I run" behaved
+	 * like "I try": a failing setup command passed silently and the scenario
+	 * went on to test something else. Use "I try" for a command that may fail.
+	 * Behat maps the parent's "I run" step definitions to this override.
+	 *
+	 * @param string $command The command to run.
+	 * @throws RuntimeException If the command exits non-zero.
+	 * @return void
+	 */
+	public function i_run( string $command ): void {
+		parent::i_run( $command );
+
+		if ( 0 !== $this->exit_code ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( sprintf( "`%s` exited %d.\nSTDOUT:\n%s\n\nSTDERR:\n%s", $command, $this->exit_code, $this->output, $this->error_output ) );
 		}
-		$this->added_hosts = array();
+	}
+
+	/**
+	 * Run a WP-CLI command for a step's own setup, and fail the step if it does not succeed.
+	 *
+	 * @param string $command The command to run (without 'wp').
+	 * @throws RuntimeException If the command exits non-zero.
+	 * @return void
+	 */
+	private function run_or_fail( string $command ): void {
+		$this->run_wp_cli_command( $command );
+
+		if ( 0 !== $this->exit_code ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( sprintf( '`wp %s` exited %d: %s %s', $command, $this->exit_code, $this->output, $this->error_output ) );
+		}
 	}
 
 	/**
@@ -558,7 +596,7 @@ PHP;
 	 */
 	public function there_is_a_redirect_from_to( string $from, string $to ): void {
 		$this->run_wp_cli_command(
-			sprintf( 'legacy-redirector create %s %s', $from, $to ),
+			sprintf( 'legacy-redirector create %s %s', escapeshellarg( $from ), escapeshellarg( $to ) ),
 			false
 		);
 
@@ -569,25 +607,12 @@ PHP;
 	}
 
 	/**
-	 * Save STDOUT value to a placeholder for later use.
-	 *
-	 * This allows capturing post IDs and other output for use in subsequent steps.
-	 *
-	 * @Given save STDOUT as {VARIABLE}
-	 * @throws RuntimeException If no output to save.
-	 * @return void
-	 */
-	public function save_stdout_as_variable(): void {
-		// This step is handled by the base class or WP-CLI Behat framework.
-		// Kept here for documentation purposes.
-	}
-
-	/**
 	 * Request a front-end path without following redirects.
 	 *
-	 * Issues a real HTTP request against the test site from inside the
-	 * cli container, so redirect behavior is asserted at the HTTP
-	 * level (status line and headers are captured into STDOUT).
+	 * Issues a real HTTP GET, as a visitor would, against the test site from
+	 * inside the cli container, so redirect behavior is asserted at the HTTP
+	 * level (status line and headers are captured into STDOUT; the body is
+	 * discarded).
 	 *
 	 * @When I request the front-end path :path
 	 * @param string $path URL path to request, e.g. "/old-page".
@@ -596,9 +621,10 @@ PHP;
 	public function i_request_the_front_end_path( string $path ): void {
 		// Resolve the site's Host header from home_url(), then curl the
 		// `wordpress` service directly (the site port is not reachable
-		// from inside the CLI container).
+		// from inside the CLI container). The timeout keeps a hung request
+		// from stalling the job until CI kills it.
 		$container_script = sprintf(
-			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -gsI -H "Host: ${HOST_HEADER}" %s 2>&1',
+			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -gs -m 30 -D - -o /dev/null -H "Host: ${HOST_HEADER}" %s 2>&1',
 			escapeshellarg( 'http://wordpress' . $path )
 		);
 
@@ -667,8 +693,8 @@ PHP;
 
 		$this->set_this_plugin_active( false );
 		$this->legacy_active = true;
-		$this->run_wp_cli_command( 'plugin activate legacy-redirector-1.3.0' );
-		$this->run_wp_cli_command( "eval 'foreach ( array( \"db_version\", \"upgrade_started_gmt\", \"upgrade_cursor\", \"upgrade_ceiling\", \"upgrade_retry\" ) as \$o ) { delete_option( \"wpcom_legacy_redirector_\" . \$o ); }'" );
+		$this->run_or_fail( 'plugin activate legacy-redirector-1.3.0' );
+		$this->run_or_fail( "eval 'foreach ( array( \"db_version\", \"upgrade_started_gmt\", \"upgrade_cursor\", \"upgrade_ceiling\", \"upgrade_retry\" ) as \$o ) { delete_option( \"wpcom_legacy_redirector_\" . \$o ); }'" );
 	}
 
 	/**
@@ -704,7 +730,7 @@ PHP;
 	 * @return void
 	 */
 	public function version_1_3_0_stores_these_redirects_as_an_author( \Behat\Gherkin\Node\TableNode $table ): void {
-		$this->run_wp_cli_command( 'user create behat-author behat-author@example.com --role=author' );
+		$this->run_or_fail( 'user create behat-author behat-author@example.com --role=author' );
 		$this->version_1_3_0_stores_these_redirects( $table, '--user=behat-author ' );
 	}
 
@@ -846,6 +872,37 @@ PHP;
 	private function request_status_and_location( string $path ): array {
 		$this->i_request_the_front_end_path( $path );
 
+		return $this->status_and_location();
+	}
+
+	/**
+	 * Check the last front-end response is this plugin redirecting to a path.
+	 *
+	 * Reads the status line and the Location header rather than looking for
+	 * the text anywhere in the headers, and requires X-Redirect-By, so neither
+	 * a redirect elsewhere nor a core canonical redirect can pass.
+	 *
+	 * @Then the response should be a :status redirect to :path
+	 * @param string $status The expected status code.
+	 * @param string $path   The expected Location, as a path and query.
+	 * @throws RuntimeException If the response is anything else.
+	 * @return void
+	 */
+	public function the_response_should_be_a_redirect_to( string $status, string $path ): void {
+		list( $actual_status, $location ) = $this->status_and_location();
+
+		if ( (int) $status !== $actual_status || $path !== $location || ! preg_match( '#^X-Redirect-By: Legacy Redirector\s*$#mi', $this->output ) ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( sprintf( "Expected a %s redirect to %s by Legacy Redirector, got:\n%s", $status, $path, $this->output ) );
+		}
+	}
+
+	/**
+	 * Read the status code and the redirect target's path from the last response.
+	 *
+	 * @return array{0: int, 1: string} The status code, and the Location path or ''.
+	 */
+	private function status_and_location(): array {
 		$status   = preg_match( '#^HTTP/\S+ (\d{3})#m', $this->output, $m ) ? (int) $m[1] : 0;
 		$location = preg_match( '#^Location: (\S+)#mi', $this->output, $l ) ? $l[1] : '';
 		$location = (string) preg_replace( '#^https?://[^/]+#', '', $location );
