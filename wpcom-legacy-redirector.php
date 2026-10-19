@@ -8,6 +8,7 @@
  * Requires PHP: 8.3
  * Author: Automattic / WordPress VIP
  * Author URI: https://wpvip.com
+ * Text Domain: legacy-redirector
  *
  * Redirects are stored as a custom post type and use the following fields:
  *

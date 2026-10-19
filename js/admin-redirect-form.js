@@ -28,6 +28,8 @@
  *                          refused with the same message.
  * - suggestionsMessage    Announced when destination suggestions appear.
  * - noSuggestionsMessage  Announced when a search finds nothing.
+ * - idFormat              Translated "%1$s (ID: %2$s)" pattern for a post and its ID.
+ * - postTypeLabels        Post type slug to translated singular name.
  */
 jQuery( document ).ready( function ( $ ) {
 	var settings = window.legacyRedirectorForm || {};
@@ -39,6 +41,14 @@ jQuery( document ).ready( function ( $ ) {
 	var $display = $( '#redirect_to_display' );
 	var $suggestions = $( '#redirect_to_suggestions' );
 	var announcements = [];
+	var postTypeLabels = settings.postTypeLabels || {};
+
+	// One pass, so a title that itself contains %2$s is left alone.
+	function withId( label, id ) {
+		return settings.idFormat.replace( /%([12])\$s/g, function ( match, n ) {
+			return '1' === n ? label : String( id );
+		} );
+	}
 
 	// Core's search endpoint returns titles with texturized HTML entities
 	// (e.g. &#8217; for an apostrophe), which .text() would show literally.
@@ -122,7 +132,7 @@ jQuery( document ).ready( function ( $ ) {
 				.append(
 					$( '<strong>' ).text( title ),
 					'<br>',
-					$( '<small>' ).css( 'color', '#646970' ).text( post.subtype + ' (ID: ' + post.id + ')' )
+					$( '<small>' ).css( 'color', '#646970' ).text( withId( postTypeLabels[ post.subtype ] || post.subtype, post.id ) )
 				)
 				.appendTo( $suggestions );
 		} );
@@ -207,7 +217,7 @@ jQuery( document ).ready( function ( $ ) {
 	function selectSuggestion( $option ) {
 		var id = $option.data( 'id' );
 		var title = $option.data( 'title' );
-		$display.val( title + ' (ID: ' + id + ')' );
+		$display.val( withId( title, id ) );
 		$( '#redirect_to' ).val( id );
 		hideSuggestions();
 	}

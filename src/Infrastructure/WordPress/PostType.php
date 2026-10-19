@@ -188,11 +188,13 @@ final class PostType {
 		$redirect_source = isset( $_GET['redirect_source'] ) ? wp_unslash( $_GET['redirect_source'] ) : '';
 
 		// Build the trashed message - use specific source for single items if available.
+		// Core runs sprintf() over the finished message to insert the count, so
+		// a % in the source (encoded query strings have them) must be doubled.
 		if ( 1 === $bulk_counts['trashed'] && $redirect_source ) {
 			$trashed_message = sprintf(
 				/* translators: %s: redirect source path */
 				__( 'Redirect from %s moved to the Trash.', 'legacy-redirector' ),
-				'<code>' . esc_html( $redirect_source ) . '</code>'
+				'<code>' . str_replace( '%', '%%', esc_html( $redirect_source ) ) . '</code>'
 			);
 		} else {
 			/* translators: %s: Number of redirects. */

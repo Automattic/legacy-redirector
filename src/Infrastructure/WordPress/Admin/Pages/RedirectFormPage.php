@@ -122,6 +122,12 @@ final class RedirectFormPage {
 				'hostNotAllowedMessage' => self::host_not_allowed_message(),
 				'suggestionsMessage'    => __( 'Suggestions available. Use the up and down arrow keys to choose one, and Enter to select it.', 'legacy-redirector' ),
 				'noSuggestionsMessage'  => __( 'No matching posts or pages.', 'legacy-redirector' ),
+				/* translators: 1: post title or post type name, 2: post ID */
+				'idFormat'              => __( '%1$s (ID: %2$s)', 'legacy-redirector' ),
+				'postTypeLabels'        => array_map(
+					static fn( \WP_Post_Type $type ): string => $type->labels->singular_name,
+					get_post_types( array( 'public' => true ), 'objects' )
+				),
 			)
 		);
 	}
@@ -453,7 +459,10 @@ final class RedirectFormPage {
 	private static function post_id_display( int $post_id ): string {
 		$post = get_post( $post_id );
 
-		return $post ? get_the_title( $post ) . ' (ID: ' . $post_id . ')' : (string) $post_id;
+		return $post
+			/* translators: 1: post title or post type name, 2: post ID */
+			? sprintf( __( '%1$s (ID: %2$s)', 'legacy-redirector' ), get_the_title( $post ), $post_id )
+			: (string) $post_id;
 	}
 
 	/**
