@@ -497,8 +497,8 @@ final class RedirectFormPageTest extends TestCase {
 	 */
 	public function test_duplicate_source_redirects_with_error(): void {
 		$this->login_as_redirect_manager();
-		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$this->create_redirect( '/form-duplicate', '/some-destination' );
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$existing_id = $this->create_redirect( '/form-duplicate', '/some-destination' );
 
 		$this->submit(
 			array(
@@ -510,6 +510,7 @@ final class RedirectFormPageTest extends TestCase {
 		$location = $this->capture_redirect();
 
 		$this->assertStringContainsString( 'error=duplicate', $location );
+		$this->assertStringContainsString( 'duplicate_of=' . $existing_id, $location );
 
 		// The original destination is untouched.
 		$redirect = $this->find_redirect( '/form-duplicate' );
@@ -689,6 +690,39 @@ final class RedirectFormPageTest extends TestCase {
 
 		$this->assertStringContainsString( 'value="caf%C3%A9"', $html );
 		$this->assertStringContainsString( 'value="https://example.com/search?q=a%26b"', $html );
+	}
+
+	/**
+	 * Test a rejected duplicate links to the redirect that has the source,
+	 * and a post picked as the destination still reads by its title.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_add_page
+	 */
+	public function test_add_page_after_a_duplicate_links_to_the_existing_redirect(): void {
+		$this->login_as_redirect_manager();
+		$post_id     = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => 'Landing Page',
+			)
+		);
+		$existing_id = $this->create_redirect( '/form-taken', '/elsewhere' );
+
+		$_GET = array(
+			'error'         => 'duplicate',
+			'duplicate_of'  => (string) $existing_id,
+			'redirect_from' => '/form-taken',
+			'redirect_to'   => (string) $post_id,
+			'form_nonce'    => wp_create_nonce( 'redirect_form_values' ),
+		);
+
+		ob_start();
+		$this->page->render_add_page();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'redirect_id=' . $existing_id . '">Edit the existing redirect</a>', $html );
+		$this->assertStringContainsString( 'value="Landing Page (ID: ' . $post_id . ')"', $html );
+		$this->assertStringContainsString( 'name="redirect_to" id="redirect_to" value="' . $post_id . '"', $html );
 	}
 
 	/**
@@ -1197,7 +1231,7 @@ final class RedirectFormPageTest extends TestCase {
 		preg_match( '/^var legacyRedirectorForm = (\{.*\});$/s', $data, $matches );
 
 		$settings = json_decode( $matches[1], true );
-		$this->assertSame( array( 'postId', 'duplicateMessage', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage', 'suggestionsMessage', 'noSuggestionsMessage' ), array_keys( $settings ) );
+		$this->assertSame( array( 'postId', 'duplicateMessage', 'editRedirectUrl', 'editExistingLabel', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage', 'suggestionsMessage', 'noSuggestionsMessage' ), array_keys( $settings ) );
 
 		// The inline messages and suggestions are announced through wp.a11y.
 		$this->assertContains( 'wp-a11y', wp_scripts()->registered['legacy-redirector-form']->deps );

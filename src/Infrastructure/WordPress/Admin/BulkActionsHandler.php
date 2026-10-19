@@ -85,6 +85,12 @@ final class BulkActionsHandler {
 	 * @return string Modified redirect URL.
 	 */
 	public function handle_bulk_actions( string $sendback, string $doaction, array $post_ids ): string {
+		// Test runs in the browser, one row at a time, so it only reaches here
+		// without JavaScript. Say so, rather than silently doing nothing.
+		if ( 'test_redirects' === $doaction ) {
+			return add_query_arg( 'bulk_test_needs_js', 1, $sendback );
+		}
+
 		if ( ! in_array( $doaction, array( 'enable_redirects', 'disable_redirects' ), true ) ) {
 			return $sendback;
 		}
@@ -110,7 +116,7 @@ final class BulkActionsHandler {
 
 		// Remove previous notification parameters.
 		$sendback = remove_query_arg(
-			array( 'redirect_enabled', 'redirect_disabled', 'redirect_source', 'bulk_redirects_enabled', 'bulk_redirects_disabled', 'bulk_redirects_failed', 'bulk_redirects_reason' ),
+			array( 'redirect_enabled', 'redirect_disabled', 'redirect_source', 'bulk_redirects_enabled', 'bulk_redirects_disabled', 'bulk_redirects_failed', 'bulk_redirects_reason', 'bulk_test_needs_js' ),
 			$sendback
 		);
 

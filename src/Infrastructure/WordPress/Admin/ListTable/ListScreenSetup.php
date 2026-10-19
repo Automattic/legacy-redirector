@@ -135,6 +135,7 @@ final class ListScreenSetup {
 			'<ul>' .
 			'<li><strong>' . __( 'Redirect From', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The source URL path that triggers the redirect. Trailing slashes are ignored, so <code>/old-page</code> and <code>/old-page/</code> are the same redirect and only one of them needs creating.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Redirect To', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The destination where visitors are sent. Can be a relative path, absolute URL, or post ID.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'Health', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'What the checks found wrong with the redirect, if anything. Select a finding to read what it means and what to do about it. A tick means nothing was found; "Not fully checked" means only a Test can tell.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Status', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Whether the redirect is Enabled (active) or Disabled (inactive).', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Date', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'When the redirect was created.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
@@ -172,10 +173,11 @@ final class ListScreenSetup {
 			'</ul>' .
 			'<p>' . __( 'Additionally, you can filter by destination type:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
-			'<li><strong>' . __( 'To Post IDs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects pointing to a specific post by ID.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'To Paths', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'To External URLs', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'To ID', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects pointing to a specific post by ID.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'To Path', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'To External', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
+			'<p>' . __( 'While the 2.0 upgrade has left redirects disabled because another redirect has the same source, a <strong>Duplicate sources</strong> filter lists them, and the Status column of each says how to settle it.', 'legacy-redirector' ) . '</p>' .
 			'<p>' . __( 'Once every redirect has been checked, by the background check or <strong>Validate all redirects</strong>, a <strong>Has issues</strong> filter shows only the redirects the check flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with when the last full check finished: editing a redirect clears its flag until it is next checked. See the Validate and Test help tab for what validation can and cannot see.', 'legacy-redirector' ) . '</p>';
 	}
 
@@ -261,10 +263,12 @@ final class ListScreenSetup {
 	}
 
 	/**
-	 * Add "Add New" button to the page title.
+	 * Add an "Add Redirect" button to the page title.
 	 *
-	 * WordPress doesn't show the "Add New" button for post types without 'create_posts' UI,
-	 * so we add it manually via JavaScript.
+	 * Core only prints its title button for users with create_posts, which
+	 * the post type denies so that core's own Add New screen stays hidden,
+	 * and edit.php has no hook beside the heading, so it is added by
+	 * JavaScript. Without JavaScript the Add Redirect menu item still works.
 	 *
 	 * @return void
 	 */
@@ -279,7 +283,7 @@ final class ListScreenSetup {
 		}
 
 		$add_new_url = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=add-redirect' );
-		$button_text = __( 'Add New', 'legacy-redirector' );
+		$button_text = __( 'Add Redirect', 'legacy-redirector' );
 		?>
 		<script>
 		document.addEventListener('DOMContentLoaded', function() {

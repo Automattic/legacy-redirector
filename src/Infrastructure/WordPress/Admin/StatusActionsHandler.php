@@ -126,7 +126,7 @@ final class StatusActionsHandler {
 		}
 
 		$sendback = remove_query_arg(
-			array( 'action', 'redirect_id', '_wpnonce', 'redirect_enabled', 'redirect_disabled', 'redirect_source', 'bulk_redirects_enabled', 'bulk_redirects_disabled', 'bulk_redirects_failed', 'bulk_redirects_reason' ),
+			array( 'action', 'redirect_id', '_wpnonce', 'redirect_enabled', 'redirect_disabled', 'redirect_source', 'bulk_redirects_enabled', 'bulk_redirects_disabled', 'bulk_redirects_failed', 'bulk_redirects_reason', 'bulk_test_needs_js' ),
 			$referer
 		);
 
