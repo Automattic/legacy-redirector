@@ -201,6 +201,9 @@ not allow is an error naming the domain. See [configuration.md](configuration.md
 
 ### Find and clean up broken redirects
 
+For everything the plugin checks, and when and where, see
+[redirect-health.md](redirect-health.md). This section covers the command line.
+
 `validate` inspects the destinations of redirects you already have, and reports the ones
 that no longer go anywhere: a post that has since been deleted, trashed, or unpublished; a
 relative path that does not resolve to published content; an external destination whose
