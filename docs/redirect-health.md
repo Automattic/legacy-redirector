@@ -54,10 +54,11 @@ background check.
 
 Every redirect, enabled and disabled, is checked in the background for everything its stored
 details can show. Every five minutes the check spends up to 20 seconds working through the
-table from where it last stopped, and once it reaches the end it waits until a day after
-that pass began before starting another. A site with a few thousand redirects is checked
-daily; one with millions takes longer per pass, and the list screen says how long. Change the
-budget, or turn the check off, with the
+table from where it last stopped. It starts a new pass at most once a day: a pass that
+finishes within a day waits until a day after it began, and one that takes longer is followed
+straight away by the next, never overlapping it. A site with a few thousand redirects is
+checked daily; one with millions takes longer per pass, and the list screen says how long.
+Change the budget, or turn the check off, with the
 [`legacy_redirector_background_audit_seconds`](configuration.md#tune-or-turn-off-the-background-check)
 filter.
 
