@@ -9,9 +9,13 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin;
 
+use Automattic\LegacyRedirector\Application\BatchOutcome;
+use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Handles bulk enable/disable actions from the redirects list table.
@@ -26,12 +30,21 @@ final class BulkActionsHandler {
 	private RedirectManager $manager;
 
 	/**
+	 * Redirect batch.
+	 *
+	 * @var RedirectBatch
+	 */
+	private RedirectBatch $batch;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager Redirect manager.
+	 * @param RedirectBatch   $batch   Redirect batch.
 	 */
-	public function __construct( RedirectManager $manager ) {
+	public function __construct( RedirectManager $manager, RedirectBatch $batch ) {
 		$this->manager = $manager;
+		$this->batch   = $batch;
 	}
 
 	/**
@@ -81,19 +94,39 @@ final class BulkActionsHandler {
 			return $sendback;
 		}
 
-		// Perform the bulk operation.
-		$updated = 'enable_redirects' === $doaction
-			? $this->manager->bulk_enable( $post_ids )
-			: $this->manager->bulk_disable( $post_ids );
+		$new_status = 'enable_redirects' === $doaction ? 'publish' : 'draft';
+
+		$items = $this->batch->apply(
+			$post_ids,
+			fn( Redirect $redirect ) => $this->manager->change_status( (int) $redirect->id(), $new_status )
+		);
+
+		$failed = array_values(
+			array_filter(
+				$items,
+				static fn( array $item ): bool => BatchOutcome::SUCCESS !== $item['outcome']
+			)
+		);
 
 		// Remove previous notification parameters.
 		$sendback = remove_query_arg(
-			array( 'redirect_enabled', 'redirect_disabled', 'redirect_source', 'bulk_redirects_enabled', 'bulk_redirects_disabled' ),
+			array( 'redirect_enabled', 'redirect_disabled', 'redirect_source', 'bulk_redirects_enabled', 'bulk_redirects_disabled', 'bulk_redirects_failed', 'bulk_redirects_reason' ),
 			$sendback
 		);
 
-		$status_label = 'enable_redirects' === $doaction ? 'enabled' : 'disabled';
+		$status_label = 'publish' === $new_status ? 'enabled' : 'disabled';
+		$args         = array( 'bulk_redirects_' . $status_label => RedirectBatch::count_succeeded( $items ) );
 
-		return add_query_arg( 'bulk_redirects_' . $status_label, $updated, $sendback );
+		// The reason travels as a code, so the notice words it and nothing
+		// from the URL is shown. The usual refusal is a duplicate the 2.0
+		// upgrade disabled, whose source another redirect already has.
+		if ( array() !== $failed ) {
+			$first = $failed[0]['redirect'];
+
+			$args['bulk_redirects_failed'] = count( $failed );
+			$args['bulk_redirects_reason'] = null !== $first && '' !== get_post_meta( (int) $first->id(), Upgrader::DUPLICATE_META_KEY, true ) ? 'duplicate' : 'failed';
+		}
+
+		return add_query_arg( $args, $sendback );
 	}
 }

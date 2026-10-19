@@ -220,7 +220,7 @@ final class PluginBootstrapper {
 		$menu_badge->register();
 
 		// Register bulk actions handler.
-		$bulk_actions = new BulkActionsHandler( $this->container->manager() );
+		$bulk_actions = new BulkActionsHandler( $this->container->manager(), $this->container->batch() );
 		$bulk_actions->register();
 
 		// Register status actions handler (single enable/disable).

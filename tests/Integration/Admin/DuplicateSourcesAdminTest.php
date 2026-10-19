@@ -9,6 +9,9 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration\Admin;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectFetcher;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
@@ -22,6 +25,7 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 /**
  * Integration tests for how the admin shows, and explains, disabled duplicate sources.
  *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
@@ -30,6 +34,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
@@ -188,5 +194,56 @@ final class DuplicateSourcesAdminTest extends TestCase {
 		$callback();
 
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Run a bulk action and return the query arguments it sends back.
+	 *
+	 * @param string $action   The bulk action.
+	 * @param int[]  $post_ids The selected redirects.
+	 * @return array<string, string> The sendback query arguments.
+	 */
+	private function bulk( string $action, array $post_ids ): array {
+		$handler  = new BulkActionsHandler( $this->manager(), new RedirectBatch( new RedirectFetcher( $this->repository() ) ) );
+		$sendback = $handler->handle_bulk_actions( admin_url( 'edit.php?post_type=' . PostType::POST_TYPE ), $action, $post_ids );
+
+		$query = array();
+		parse_str( (string) wp_parse_url( $sendback, PHP_URL_QUERY ), $query );
+
+		return $query;
+	}
+
+	/**
+	 * Test a bulk enable that skips the duplicate says so, and why.
+	 *
+	 * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
+	 */
+	public function test_bulk_enable_reports_refused_duplicate(): void {
+		$ordinary = $this->create_redirect( '/ordinary', 'https://example.com/three' );
+		wp_update_post(
+			array(
+				'ID'          => $ordinary,
+				'post_status' => 'draft',
+			)
+		);
+
+		$query = $this->bulk( 'enable_redirects', array( $this->duplicate_id, $ordinary ) );
+
+		$this->assertSame( '1', $query['bulk_redirects_enabled'] );
+		$this->assertSame( '1', $query['bulk_redirects_failed'] );
+		$this->assertSame( 'duplicate', $query['bulk_redirects_reason'] );
+		$this->assertSame( 'draft', get_post_status( $this->duplicate_id ) );
+		$this->assertSame( 'publish', get_post_status( $ordinary ) );
+	}
+
+	/**
+	 * Test a bulk enable where every row succeeds carries no failure.
+	 */
+	public function test_bulk_enable_without_refusals_reports_none(): void {
+		$query = $this->bulk( 'enable_redirects', array( $this->live_id ) );
+
+		$this->assertSame( '1', $query['bulk_redirects_enabled'] );
+		$this->assertArrayNotHasKey( 'bulk_redirects_failed', $query );
+		$this->assertArrayNotHasKey( 'bulk_redirects_reason', $query );
 	}
 }

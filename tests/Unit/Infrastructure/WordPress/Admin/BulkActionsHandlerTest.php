@@ -9,7 +9,15 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Admin;
 
+use Automattic\LegacyRedirector\Application\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectCreationResult;
+use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use Brain\Monkey\Functions;
@@ -19,6 +27,14 @@ use Mockery;
  * BulkActionsHandlerTest class.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class BulkActionsHandlerTest extends MonkeyStubs {
 
@@ -28,6 +44,13 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 	 * @var RedirectManager&Mockery\MockInterface
 	 */
 	private $manager;
+
+	/**
+	 * The mock repository the batch resolves IDs through.
+	 *
+	 * @var RedirectRepositoryInterface&Mockery\MockInterface
+	 */
+	private $repository;
 
 	/**
 	 * The handler under test.
@@ -44,8 +67,9 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 	protected function set_up(): void {
 		parent::set_up();
 
-		$this->manager = Mockery::mock( RedirectManager::class );
-		$this->handler = new BulkActionsHandler( $this->manager );
+		$this->manager    = Mockery::mock( RedirectManager::class );
+		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
+		$this->handler    = new BulkActionsHandler( $this->manager, new RedirectBatch( new RedirectFetcher( $this->repository ) ) );
 	}
 
 	/**
@@ -121,16 +145,12 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'remove_query_arg' )->returnArg( 2 );
 		Functions\when( 'add_query_arg' )->alias(
-			function ( $key, $value, $url ) {
-				return $url . '?' . $key . '=' . $value;
+			function ( array $args, $url ) {
+				return $url . '?' . http_build_query( $args );
 			}
 		);
 
-		$this->manager
-			->shouldReceive( 'bulk_enable' )
-			->once()
-			->with( array( 1, 2, 3 ) )
-			->andReturn( 3 );
+		$this->expect_status_changes( array( 1, 2, 3 ), 'publish' );
 
 		$result = $this->handler->handle_bulk_actions(
 			'http://example.com/wp-admin/edit.php',
@@ -139,6 +159,7 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 		);
 
 		$this->assertStringContainsString( 'bulk_redirects_enabled=3', $result );
+		$this->assertStringNotContainsString( 'bulk_redirects_failed', $result );
 	}
 
 	/**
@@ -150,16 +171,12 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 		Functions\when( 'current_user_can' )->justReturn( true );
 		Functions\when( 'remove_query_arg' )->returnArg( 2 );
 		Functions\when( 'add_query_arg' )->alias(
-			function ( $key, $value, $url ) {
-				return $url . '?' . $key . '=' . $value;
+			function ( array $args, $url ) {
+				return $url . '?' . http_build_query( $args );
 			}
 		);
 
-		$this->manager
-			->shouldReceive( 'bulk_disable' )
-			->once()
-			->with( array( 5, 6 ) )
-			->andReturn( 2 );
+		$this->expect_status_changes( array( 5, 6 ), 'draft' );
 
 		$result = $this->handler->handle_bulk_actions(
 			'http://example.com/wp-admin/edit.php',
@@ -183,5 +200,34 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 		$result = $this->handler->handle_bulk_actions( $sendback, 'enable_redirects', array( 1 ) );
 
 		$this->assertSame( $sendback, $result );
+	}
+
+	/**
+	 * Expect each redirect to be found and changed to the given status.
+	 *
+	 * @param int[]  $ids        The redirect IDs.
+	 * @param string $new_status The status each is changed to.
+	 * @return void
+	 */
+	private function expect_status_changes( array $ids, string $new_status ): void {
+		foreach ( $ids as $id ) {
+			$this->repository
+				->shouldReceive( 'find_by_id' )
+				->with( $id )
+				->andReturn(
+					Redirect::reconstitute(
+						$id,
+						SourceUrl::from_string( '/old-' . $id ),
+						Destination::from_url( DestinationUrl::from_string( '/new' ) ),
+						'publish' === $new_status ? 'draft' : 'publish'
+					)
+				);
+
+			$this->manager
+				->shouldReceive( 'change_status' )
+				->once()
+				->with( $id, $new_status )
+				->andReturn( RedirectCreationResult::success( $id ) );
+		}
 	}
 }
