@@ -230,6 +230,48 @@ final class TestCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a relative Location is resolved against the URL that sent it, as the HTTP API did.
+	 *
+	 * @dataProvider relative_location_provider
+	 *
+	 * @param string $source      The redirect's source.
+	 * @param string $destination The destination, which redirects.
+	 * @param string $location    The relative Location it redirects with.
+	 * @param string $resolved    The URL the hop should request.
+	 */
+	public function test_a_relative_destination_hop_is_resolved( string $source, string $destination, string $location, string $resolved ): void {
+		$this->create_redirect( $source, $destination );
+		$requested = $this->respond_by_url(
+			array(
+				$destination => array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => $location ),
+				),
+				$resolved    => array( 'response' => array( 'code' => 404 ) ),
+			)
+		);
+
+		$issues = array_column( $this->rows( array( $source ), array( 'only' => 'destination' ) ), 'issue' );
+
+		$this->assertSame( array( 'Destination returns 404' ), $issues );
+		$this->assertSame( array( $destination, $resolved ), $requested->getArrayCopy() );
+	}
+
+	/**
+	 * Relative Location forms and what each resolves to.
+	 *
+	 * @return array<string, string[]>
+	 */
+	public function relative_location_provider(): array {
+		return array(
+			'root-relative'   => array( '/test-hop-root', 'https://example.com/a/b', '/moved', 'https://example.com/moved' ),
+			'scheme-relative' => array( '/test-hop-scheme', 'https://example.com/a/b', '//example.com/moved', 'https://example.com/moved' ),
+			'path-relative'   => array( '/test-hop-path', 'https://example.com/a/b', 'page2', 'https://example.com/a/page2' ),
+			'parent-relative' => array( '/test-hop-parent', 'https://example.com/a/b/c', '../x', 'https://example.com/a/x' ),
+		);
+	}
+
+	/**
 	 * Test a destination request that times out is inconclusive, not broken.
 	 */
 	public function test_a_timed_out_destination_is_inconclusive(): void {

@@ -493,7 +493,8 @@ class RedirectAuditor {
 				break;
 			}
 
-			$url = wp_validate_redirect( $this->absolute_location( $location, $url ), '' );
+			// Resolved as the HTTP API resolved it, path-relative forms included.
+			$url = wp_validate_redirect( \WP_Http::make_absolute_url( $location, $url ), '' );
 
 			if ( '' === $url ) {
 				return null;

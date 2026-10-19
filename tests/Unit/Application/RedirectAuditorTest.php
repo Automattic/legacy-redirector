@@ -467,22 +467,6 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test a root-relative Location is resolved against the URL that sent it.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
-	 */
-	public function test_audit_destination_resolves_a_relative_hop(): void {
-		$this->allow_only_allowed_com();
-
-		$auditor = new TestableRedirectAuditor( 404, array( 'https://allowed.com/old' => self::redirect_to( '/new' ) ) );
-		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true );
-
-		$this->assertNotNull( $finding );
-		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
-		$this->assertSame( 'https://allowed.com/new', $auditor->requested[1] );
-	}
-
-	/**
 	 * Test a chain longer than five hops is a failed request, as the HTTP API reported it.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
