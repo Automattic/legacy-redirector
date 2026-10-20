@@ -47,12 +47,13 @@ legacy-redirector/
 │       └── CLI/            # WP-CLI commands (Create, List, Validate, Import, FindDomains, etc.)
 ├── tests/
 │   ├── Unit/               # Unit tests (Brain Monkey)
-│   └── Integration/        # Integration tests (wp-env, separate phpunit config)
+│   ├── Integration/        # Integration tests (wp-env, separate phpunit config)
+│   └── e2e/                # Playwright tests for the admin JavaScript (wp-env)
 ├── features/               # Behat feature files (.feature)
 ├── behat.yml               # Behat configuration
 ├── phpunit.xml.dist        # Unit test config
 ├── phpunit-integration.xml.dist  # Integration test config (separate)
-├── .github/workflows/      # CI: behat, cs-lint, integration, unit
+├── .github/workflows/      # CI: behat, cs-lint, e2e (JS lint + Playwright), integration, unit
 └── .phpcs.xml.dist         # PHPCS configuration
 ```
 
@@ -79,6 +80,8 @@ composer test              # Run unit + integration tests
 composer coverage          # Run tests with HTML coverage report
 composer test:behat        # Run Behat BDD scenarios (requires wp-env)
 composer test:behat-rerun  # Re-run failed Behat scenarios
+npm run lint:js            # Lint js/ and tests/e2e/ (wp-scripts)
+npm run test:e2e           # Run Playwright E2E tests (requires wp-env; WP_ENV_PORT for another port)
 ```
 
 **Note:** This plugin uses separate PHPUnit config files: `phpunit.xml.dist` for unit tests and `phpunit-integration.xml.dist` for integration tests.
@@ -90,10 +93,11 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Commits**: Use the `/commit` skill. Favor explaining "why" over "what".
 - **PRs**: Use the `/pr` skill. Squash and merge by default.
 - **Branch naming**: `feature/description`, `fix/description` from `develop`.
-- **Testing**: Three test types here:
+- **Testing**: Four test types here:
   - **Unit tests**: For isolated domain/application logic. Use `Yoast\WPTestUtils\BrainMonkey\YoastTestCase`.
   - **Integration tests**: For WordPress-dependent behavior. Use `Yoast\WPTestUtils\WPIntegration\TestCase`. Uses a separate config file (`phpunit-integration.xml.dist`).
   - **Behat tests**: For CLI contract verification and critical happy paths only. Keep Behat scenarios minimal (2-5 per command).
+  - **E2E tests**: Playwright, in `tests/e2e/`, for the admin JavaScript only (the form script and the list screen's inline scripts). Keep to critical flows, and query by accessible role and name.
 - **Code style**: WordPress coding standards via PHPCS. Tabs for indentation.
 - **i18n**: All user-facing strings must use the `legacy-redirector` text domain.
 - **DDD layering**: Domain classes must not depend on Infrastructure or Application.
