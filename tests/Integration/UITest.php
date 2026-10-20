@@ -346,6 +346,105 @@ final class UITest extends TestCase {
 	}
 
 	/**
+	 * Test the no-JS Test action sends back the first problem as the result, with warnings carried alongside.
+	 *
+	 * A warning does not fail the redirect, so it rides along in `warnings`
+	 * rather than turning the result red.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 * @dataProvider data_validation_action_results
+	 *
+	 * @param string      $source    The redirect's source.
+	 * @param int         $http_code What requesting the destination gets.
+	 * @param string      $validate  The expected result.
+	 * @param string|null $warnings  The expected carried warnings, or null for none.
+	 */
+	public function test_validation_action_reports_the_problem_and_carries_the_warnings( string $source, int $http_code, string $validate, ?string $warnings ): void {
+		$redirect_id = $this->create_redirect( $source, 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
+				'response' => array( 'code' => $http_code ),
+				'headers'  => array(),
+				'body'     => '',
+			)
+		);
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( $validate, $query['validate'] );
+		$this->assertSame( $warnings, $query['warnings'] ?? null );
+		$this->assertSame( (string) $redirect_id, $query['ids'] );
+	}
+
+	/**
+	 * Data provider for the Test action's results.
+	 *
+	 * @return array<string, array{0: string, 1: int, 2: string, 3: string|null}>
+	 */
+	public static function data_validation_action_results(): array {
+		return array(
+			'clean'               => array( '/validated-clean', 200, 'valid', null ),
+			'problem only'        => array( '/validated-broken', 404, 'url_not_found', null ),
+			'warning only'        => array( '/wp-admin/validated-warning', 200, 'valid', 'reserved_source' ),
+			'problem and warning' => array( '/wp-admin/validated-both', 404, 'url_not_found', 'reserved_source' ),
+		);
+	}
+
+	/**
+	 * Test the no-JS Test action on an ID that is not a redirect says so.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 */
+	public function test_validation_action_reports_a_missing_redirect(): void {
+		$post_id = self::factory()->post->create();
+
+		$query = $this->validation_action_result( $post_id );
+
+		$this->assertSame( 'not-found', $query['validate'] );
+		$this->assertSame( (string) $post_id, $query['ids'] );
+	}
+
+	/**
+	 * Run the no-JS Test action with a valid nonce and return the query args it sends back.
+	 *
+	 * @param int $post_id The post ID the action is run on.
+	 * @return array<string, string> The query args of the redirect back to the list.
+	 */
+	private function validation_action_result( int $post_id ): array {
+		$_GET                           = array(
+			'action' => 'validate',
+			'post'   => (string) $post_id,
+		);
+		$_REQUEST['_validate_redirect'] = wp_create_nonce( 'validate_vip_legacy_redirect' );
+
+		try {
+			$sent = $this->redirect_sent_by( array( $this->notices, 'handle_validation_action' ) );
+		} finally {
+			unset( $_REQUEST['_validate_redirect'] );
+		}
+
+		$this->assertNotNull( $sent, 'The action should redirect back to the list.' );
+		wp_parse_str( (string) wp_parse_url( $sent['location'], PHP_URL_QUERY ), $query );
+
+		return $query;
+	}
+
+	/**
 	 * Test customize_views adds destination type filters with counts.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
