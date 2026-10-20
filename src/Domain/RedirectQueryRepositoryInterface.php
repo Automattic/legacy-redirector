@@ -35,6 +35,14 @@ interface RedirectQueryRepositoryInterface {
 	public function find_matching( RedirectCriteria $criteria ): array;
 
 	/**
+	 * Find the IDs of the redirects find_matching() would return.
+	 *
+	 * @param RedirectCriteria $criteria The query criteria.
+	 * @return int[] The matching redirect IDs, in the same order.
+	 */
+	public function find_matching_ids( RedirectCriteria $criteria ): array;
+
+	/**
 	 * Count redirects matching the given criteria.
 	 *
 	 * Useful for pagination - returns total count regardless of limit/offset.
