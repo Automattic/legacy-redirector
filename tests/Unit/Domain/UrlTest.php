@@ -147,6 +147,12 @@ final class UrlTest extends YoastTestCase {
 			'encoded brace kept'   => array( '/a%7Bb', '/a%7Bb' ),
 			'control kept'         => array( '/a%00b', '/a%00b' ),
 			'invalid UTF-8 kept'   => array( '/%FF', '/%FF' ),
+			// Decoding any of these would store bytes that are not UTF-8.
+			'surrogate kept'       => array( '/%ED%A0%80', '/%ED%A0%80' ),
+			'above U+10FFFF kept'  => array( '/%F4%90%80%80', '/%F4%90%80%80' ),
+			'overlong kept'        => array( '/%E0%80%AF', '/%E0%80%AF' ),
+			'truncated kept'       => array( '/%F0%9F%8E', '/%F0%9F%8E' ),
+			'valid beside invalid' => array( '/%E6%97%A5%FF', '/日%FF' ),
 			'kept upper-cased'     => array( '/a%2fb', '/a%2Fb' ),
 			'stray percent'        => array( '/100%', '/100%25' ),
 		);

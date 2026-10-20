@@ -89,15 +89,55 @@ final class AuditFindingTypeTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test a page serving content at the source is a warning, not a problem.
+	 * Test which findings are warnings rather than problems.
 	 *
-	 * Redirects only answer 404s, so a redirect behind live content is a
-	 * fallback working as designed.
+	 * A warning means the redirect works but a person should look: a reserved
+	 * or content-serving source is a fallback working as designed. The split
+	 * decides the Health column, the issues filter and the menu badge, so
+	 * every case is listed and a new one has to decide which it is.
+	 *
+	 * @dataProvider warning_provider
+	 * @covers \Automattic\LegacyRedirector\Domain\AuditFindingType::is_warning
+	 *
+	 * @param AuditFindingType $type    The finding type.
+	 * @param bool             $warning Whether it should be a warning.
+	 */
+	public function test_is_warning( AuditFindingType $type, bool $warning ): void {
+		$this->assertSame( $warning, $type->is_warning() );
+	}
+
+	/**
+	 * Test the warning provider covers every case.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\AuditFindingType::is_warning
 	 */
-	public function test_a_source_serving_content_is_a_warning(): void {
-		$this->assertTrue( AuditFindingType::SOURCE_SERVES_CONTENT->is_warning() );
-		$this->assertFalse( AuditFindingType::SOURCE_NOT_FIRING->is_warning() );
+	public function test_warning_provider_lists_every_case(): void {
+		$listed = array_map( static fn( array $row ) => $row[0], $this->warning_provider() );
+
+		$this->assertEqualsCanonicalizing( AuditFindingType::cases(), array_values( $listed ) );
+	}
+
+	/**
+	 * Every finding type and whether it is a warning.
+	 *
+	 * @return array<string, array{AuditFindingType, bool}>
+	 */
+	public function warning_provider(): array {
+		return array(
+			'post trashed'               => array( AuditFindingType::POST_TRASHED, false ),
+			'post deleted'               => array( AuditFindingType::POST_DELETED, false ),
+			'post unpublished'           => array( AuditFindingType::POST_UNPUBLISHED, false ),
+			'external host not allowed'  => array( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED, false ),
+			'url not found'              => array( AuditFindingType::URL_NOT_FOUND, false ),
+			'url server error'           => array( AuditFindingType::URL_SERVER_ERROR, false ),
+			'url request failed'         => array( AuditFindingType::URL_REQUEST_FAILED, false ),
+			'corrupt data'               => array( AuditFindingType::CORRUPT_DATA, false ),
+			'reserved source'            => array( AuditFindingType::RESERVED_SOURCE, true ),
+			'possible loop'              => array( AuditFindingType::POSSIBLE_LOOP, true ),
+			'source redirects elsewhere' => array( AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE, false ),
+			'source not firing'          => array( AuditFindingType::SOURCE_NOT_FIRING, false ),
+			'source serves content'      => array( AuditFindingType::SOURCE_SERVES_CONTENT, true ),
+			'source request failed'      => array( AuditFindingType::SOURCE_REQUEST_FAILED, false ),
+		);
 	}
 }
