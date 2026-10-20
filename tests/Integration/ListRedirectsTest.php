@@ -510,6 +510,52 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test sorting by Redirect From pages deterministically over a shared source.
+	 *
+	 * A duplicate the 2.0 migration disabled keeps the live redirect's source
+	 * as its title, so several rows can share one. Without an ID tiebreaker
+	 * the database orders the ties arbitrarily per query.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::handle_sorting
+	 */
+	public function test_sorting_by_from_pages_through_rows_sharing_a_source(): void {
+		global $wpdb;
+
+		$ids = array();
+		for ( $i = 1; $i <= 5; $i++ ) {
+			$redirect_id = $this->create_redirect( "/shared-source-$i", '/target' );
+			// The migration writes the title directly, keeping each row's key.
+			$wpdb->update( $wpdb->posts, array( 'post_title' => '/shared-source' ), array( 'ID' => $redirect_id ) );
+			clean_post_cache( $redirect_id );
+			$ids[] = $redirect_id;
+		}
+
+		$this->columns_manager->register();
+
+		$seen = array();
+		for ( $page = 1; $page <= 5; $page++ ) {
+			$query = new \WP_Query();
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored by the test framework; main-query semantics need the real global.
+			$GLOBALS['wp_the_query'] = $query;
+
+			$query->query(
+				array(
+					'post_type'      => PostType::POST_TYPE,
+					'orderby'        => 'from',
+					'order'          => 'desc',
+					'posts_per_page' => 1,
+					'paged'          => $page,
+					'fields'         => 'ids',
+				)
+			);
+
+			$seen = array_merge( $seen, $query->posts );
+		}
+
+		$this->assertSame( array_reverse( $ids ), $seen, 'Each row should appear on exactly one page, ties in ID order.' );
+	}
+
+	/**
 	 * Test a page of rows loads no destination post one row at a time.
 	 *
 	 * The To and Health columns both need each row's destination post; the
