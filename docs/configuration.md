@@ -291,6 +291,36 @@ Even with this filter, safe requests only use ports 80, 443, and 8080, plus the 
 port. Destinations on other ports report as failed in validation; the redirects themselves
 still work.
 
+## Translations
+
+The plugin's text domain is `legacy-redirector`. It is not on WordPress.org, so there are no
+language packs and the plugin bundles no translations. To show the admin screens in another
+language, supply your own files, named for the text domain and locale, in the plugin
+translations folder:
+
+```
+wp-content/languages/plugins/legacy-redirector-de_DE.mo
+wp-content/languages/plugins/legacy-redirector-de_DE.l10n.php
+```
+
+WordPress loads them from there on its own; the plugin needs no setting. The `.l10n.php` file
+is optional but loads faster, and WordPress prefers it when both exist. On WordPress VIP,
+commit them to `languages/plugins/` in your site's repository.
+
+Start from the translation template, `languages/legacy-redirector.pot`, which each release
+includes. Translate it in a tool such as Poedit, then build the compiled files with WP-CLI:
+
+```bash
+wp i18n make-mo legacy-redirector-de_DE.po
+wp i18n make-php legacy-redirector-de_DE.po
+```
+
+Some text stays in English whatever the site's language:
+
+- WP-CLI output, on purpose, so scripts and logs read the same everywhere.
+- The redirect health findings, and some error messages that describe why a source or
+  destination was refused.
+
 ## Uninstalling
 
 Deleting the plugin from the Plugins screen runs its `uninstall.php`, which removes only what
