@@ -35,6 +35,10 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 		// Deactivation unschedules this too, but only on the site it runs on;
 		// a network deactivation leaves the other sites' events behind.
 		wp_clear_scheduled_hook( 'legacy_redirector_scheduled_audit' );
+
+		// A destination re-audit still pending; carries the post ID as an
+		// argument, which wp_clear_scheduled_hook() only matches exactly.
+		wp_unschedule_hook( 'legacy_redirector_reaudit_destination' );
 	};
 
 	if ( ! is_multisite() ) {

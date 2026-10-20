@@ -179,4 +179,51 @@ final class DestinationPostWatcherTest extends TestCase {
 
 		$this->assertSame( 0, $wpdb->num_queries - $before );
 	}
+
+	/**
+	 * Test deleting a revision costs nothing: a revision is never a destination.
+	 */
+	public function test_deleting_a_revision_is_ignored(): void {
+		global $wpdb;
+
+		$post_id  = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$revision = self::factory()->post->create_and_get(
+			array(
+				'post_type'   => 'revision',
+				'post_status' => 'inherit',
+				'post_parent' => $post_id,
+			)
+		);
+		$watcher  = new DestinationPostWatcher( $this->query_repository(), $this->auditor(), new AuditFlags() );
+		$before   = $wpdb->num_queries;
+
+		$watcher->on_delete( $revision->ID, $revision );
+
+		$this->assertSame( 0, $wpdb->num_queries - $before );
+	}
+
+	/**
+	 * Test a post with more redirects than one request should audit hands
+	 * them to a cron event, which flags them all.
+	 */
+	public function test_many_redirects_are_reaudited_by_cron(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$ids = array();
+		for ( $i = 1; $i <= 21; $i++ ) {
+			$ids[] = $this->create_redirect( "/watch-many-{$i}", $post_id );
+		}
+
+		$this->set_status( $post_id, 'draft' );
+
+		$this->assertSame( '', $this->flag( $ids[0] ), 'The save must not audit them.' );
+		$this->assertNotFalse( wp_next_scheduled( DestinationPostWatcher::HOOK, array( $post_id ) ) );
+
+		do_action( DestinationPostWatcher::HOOK, $post_id );
+
+		foreach ( $ids as $id ) {
+			$this->assertSame( 'problem', $this->flag( $id ) );
+		}
+		$this->assertSame( 21, ( new AuditFlags() )->problem_count() );
+	}
 }
