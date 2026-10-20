@@ -2143,13 +2143,15 @@ final class Upgrader {
 	/**
 	 * Whether a planned write can go in a bulk statement.
 	 *
-	 * $wpdb->update() refuses a value too long for its column, or not valid in
-	 * the column's character set, where one multi-row statement could store it
-	 * cut short or mangled instead. So a value goes in a bulk statement only
-	 * when it passes the same checks here: it fits, and it is valid UTF-8 for
-	 * a UTF-8 column, with no four-byte characters where the column cannot
-	 * hold them. Anything else, including a column in another character set,
-	 * is written alone, so it is refused and reported exactly as before.
+	 * $wpdb->update() refuses a value too long for its column, where one
+	 * multi-row statement could store it cut short instead, so a value goes
+	 * in a bulk statement only when it fits. The character-set checks guard
+	 * no stored value: wpdb::query() already refuses a whole statement with
+	 * text a UTF-8 column cannot hold (invalid UTF-8, or four-byte characters
+	 * in a utf8mb3 column). Checking here keeps such a value out of the bulk
+	 * statement, saving that refused statement and its read-back. Anything
+	 * that fails, including a column in another character set, is written
+	 * alone, so it is refused and reported exactly as before.
 	 *
 	 * @param array<string, string> $update The planned fields.
 	 * @return bool True when the bulk statement stores it exactly as write() would.
