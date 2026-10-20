@@ -9,6 +9,8 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\AmbiguousSourceException;
+use Automattic\LegacyRedirector\Application\ErrorText;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use WP_Error;
@@ -92,6 +94,8 @@ final class GetRedirectAbility implements AbilityInterface {
 
 		try {
 			$redirect = $this->fetcher->fetch( $identifier );
+		} catch ( AmbiguousSourceException $e ) {
+			return new WP_Error( 'legacy_redirector_ambiguous_source', $e->getMessage() );
 		} catch ( \InvalidArgumentException $e ) {
 			return new WP_Error(
 				'legacy_redirector_invalid_identifier',
@@ -99,7 +103,7 @@ final class GetRedirectAbility implements AbilityInterface {
 					/* translators: 1: identifier, 2: error message. */
 					__( 'Not a valid redirect ID or source path: %1$s (%2$s)', 'legacy-redirector' ),
 					$identifier,
-					$e->getMessage()
+					ErrorText::of( $e )
 				)
 			);
 		}

@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\ErrorText;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectCreationResult;
@@ -154,7 +155,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 						/* translators: 1: destination, 2: error message. */
 						__( 'Not a valid destination: %1$s (%2$s)', 'legacy-redirector' ),
 						(string) $to,
-						$e->getMessage()
+						ErrorText::of( $e )
 					)
 				);
 			}

@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\AmbiguousSourceException;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use WP_CLI;
 use WP_CLI_Command;
@@ -87,6 +88,9 @@ final class GetCommand extends WP_CLI_Command {
 
 		try {
 			$redirect = $this->fetcher->fetch( $identifier );
+		} catch ( AmbiguousSourceException $e ) {
+			WP_CLI::error( $e->getMessage() );
+			return;
 		} catch ( \InvalidArgumentException $e ) {
 			WP_CLI::error( sprintf( 'Invalid source path: %s', $e->getMessage() ) );
 			return;

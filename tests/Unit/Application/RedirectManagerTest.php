@@ -36,6 +36,8 @@ use Mockery;
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
  */
 final class RedirectManagerTest extends MonkeyStubs {
 

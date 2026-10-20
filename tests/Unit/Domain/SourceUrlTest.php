@@ -21,6 +21,7 @@ use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
  *
  * @covers \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
 final class SourceUrlTest extends YoastTestCase {
 

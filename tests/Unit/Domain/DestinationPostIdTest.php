@@ -17,6 +17,7 @@ use InvalidArgumentException;
  * DestinationPostIdTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
 final class DestinationPostIdTest extends MonkeyStubs {
 

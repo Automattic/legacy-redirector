@@ -55,6 +55,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
  * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  */
 final class RedirectsTest extends TestCase {
 

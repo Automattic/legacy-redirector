@@ -9,8 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Domain;
 
-use InvalidArgumentException;
-
 /**
  * Immutable value object representing a redirect source URL.
  *
@@ -61,7 +59,7 @@ final class SourceUrl {
 	 *                          HomePath::current().
 	 * @return self
 	 *
-	 * @throws InvalidArgumentException If the URL is empty, invalid, or cannot be parsed.
+	 * @throws InvalidRedirectValue If the URL is empty, invalid, or cannot be parsed.
 	 */
 	public static function from_string( string $url, string $home_path = '' ): self {
 		$normalized = self::normalize( $url, $home_path );
@@ -85,7 +83,7 @@ final class SourceUrl {
 	 * @param string $home_path The site's home path ('' when at the domain root).
 	 * @return string Normalized URL (path + query).
 	 *
-	 * @throws InvalidArgumentException If the URL is invalid or cannot be parsed.
+	 * @throws InvalidRedirectValue If the URL is invalid or cannot be parsed.
 	 */
 	private static function normalize( string $url, string $home_path ): string {
 		// Ensure path starts with / before sanitisation, so a bare 'path' is
@@ -100,14 +98,16 @@ final class SourceUrl {
 		// Sanitise the URL.
 		$url = self::sanitise_url( $url );
 		if ( empty( $url ) ) {
-			throw new InvalidArgumentException( 'The URL does not validate.' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw InvalidRedirectValue::because( InvalidRedirectValue::SOURCE_INVALID );
 		}
 
 		// Parse URL into components.
 		$components = self::mb_parse_url( $url );
 
 		if ( ! isset( $components['path'] ) && ! isset( $components['query'] ) ) {
-			throw new InvalidArgumentException( 'The URL contains neither a path nor query string.' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw InvalidRedirectValue::because( InvalidRedirectValue::SOURCE_EMPTY );
 		}
 
 		// Build normalized URL from path and optional query. A full URL with no
@@ -336,17 +336,15 @@ final class SourceUrl {
 	 * @param string $url The URL to parse.
 	 * @return array<string, string> The URL components.
 	 *
-	 * @throws InvalidArgumentException If the URL is malformed.
+	 * @throws InvalidRedirectValue If the URL is malformed.
 	 */
 	private static function mb_parse_url( string $url ): array {
 		$parts = Url::parse( $url );
 
 		if ( null === $parts ) {
-			throw new InvalidArgumentException(
-				Url::is_valid_utf8( $url )
-					? 'The URL could not be parsed.'
-					: 'The URL is not valid UTF-8.'
-			);
+			$reason = Url::is_valid_utf8( $url ) ? InvalidRedirectValue::SOURCE_UNPARSEABLE : InvalidRedirectValue::SOURCE_NOT_UTF8;
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw InvalidRedirectValue::because( $reason );
 		}
 
 		return $parts;

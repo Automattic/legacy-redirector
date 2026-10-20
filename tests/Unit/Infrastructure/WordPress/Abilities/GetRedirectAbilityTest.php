@@ -32,6 +32,9 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  */
 final class GetRedirectAbilityTest extends MonkeyStubs {
 
@@ -117,5 +120,23 @@ final class GetRedirectAbilityTest extends MonkeyStubs {
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'legacy_redirector_invalid_identifier', $result->get_error_code() );
+	}
+
+	/**
+	 * Test a path more than one redirect has is reported as ambiguous, not invalid.
+	 */
+	public function test_execute_reports_a_shared_source_as_ambiguous(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( '_n' )->returnArg( 2 );
+		Functions\when( 'number_format_i18n' )->returnArg( 1 );
+		Functions\when( 'wp_sprintf_l' )->alias( static fn( string $pattern, array $ids ): string => implode( ' and ', $ids ) );
+		$this->repository->shouldReceive( 'get_id_by_source' )->andReturn( 7 );
+		$this->repository->shouldReceive( 'duplicate_ids' )->with( 7 )->andReturn( array( 9 ) );
+
+		$result = $this->ability->execute( array( 'redirect' => '/clash' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'legacy_redirector_ambiguous_source', $result->get_error_code() );
+		$this->assertSame( '2 redirects share this source, IDs 7 and 9. Name one by its ID.', $result->get_error_message() );
 	}
 }

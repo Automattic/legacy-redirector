@@ -45,6 +45,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  */
 final class DeleteCommandTest extends CliTestCase {
 
@@ -232,7 +235,7 @@ final class DeleteCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_error_contains( sprintf( '2 redirects share this source, IDs %d, %d; use an ID', $live_id, $duplicate_id ) );
+		$this->assert_error_contains( sprintf( '2 redirects share this source, IDs %d and %d. Name one by its ID.', $live_id, $duplicate_id ) );
 		$this->assertNotNull( get_post( $live_id ) );
 		$this->assertNotNull( get_post( $duplicate_id ) );
 	}

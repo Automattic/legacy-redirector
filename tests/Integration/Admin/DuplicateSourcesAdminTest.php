@@ -58,6 +58,9 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  */
 final class DuplicateSourcesAdminTest extends TestCase {
 

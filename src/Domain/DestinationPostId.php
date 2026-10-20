@@ -9,8 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Domain;
 
-use InvalidArgumentException;
-
 /**
  * Immutable value object representing a redirect destination post ID.
  *
@@ -42,11 +40,12 @@ final class DestinationPostId {
 	 * @param int $post_id The post ID.
 	 * @return self
 	 *
-	 * @throws InvalidArgumentException If the post ID is not positive.
+	 * @throws InvalidRedirectValue If the post ID is not positive.
 	 */
 	public static function from_int( int $post_id ): self {
 		if ( $post_id <= 0 ) {
-			throw new InvalidArgumentException( 'Post ID must be a positive integer.' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw InvalidRedirectValue::because( InvalidRedirectValue::POST_ID_NOT_POSITIVE );
 		}
 
 		return new self( $post_id );
@@ -60,11 +59,12 @@ final class DestinationPostId {
 	 * @param int|string $value The post ID value.
 	 * @return self
 	 *
-	 * @throws InvalidArgumentException If the value is not numeric or not positive.
+	 * @throws InvalidRedirectValue If the value is not numeric or not positive.
 	 */
 	public static function from_mixed( int|string $value ): self {
 		if ( ! is_numeric( $value ) ) {
-			throw new InvalidArgumentException( 'Post ID must be numeric.' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw InvalidRedirectValue::because( InvalidRedirectValue::POST_ID_NOT_NUMERIC );
 		}
 
 		return self::from_int( (int) $value );

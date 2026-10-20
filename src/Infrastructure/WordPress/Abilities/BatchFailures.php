@@ -39,6 +39,7 @@ final class BatchFailures {
 					__( 'Not a valid redirect ID or source path (%s).', 'legacy-redirector' ),
 					(string) $item['error']
 				),
+				BatchOutcome::AMBIGUOUS => (string) $item['error'],
 				BatchOutcome::NOT_FOUND => __( 'No redirect found.', 'legacy-redirector' ),
 				BatchOutcome::FAILED    => $item['error'] ?? $failure_reason,
 			};

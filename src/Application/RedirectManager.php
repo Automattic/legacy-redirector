@@ -97,7 +97,7 @@ class RedirectManager {
 			$saved = $this->repository->save( $redirect );
 			return RedirectCreationResult::success( $saved );
 		} catch ( \Exception $e ) {
-			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
+			return RedirectCreationResult::error( 'save-failed', ErrorText::of( $e ) );
 		}
 	}
 
@@ -251,7 +251,7 @@ class RedirectManager {
 		try {
 			$source = SourceUrl::from_string( $new_source, HomePath::current() );
 		} catch ( \InvalidArgumentException $e ) {
-			return RedirectCreationResult::error( 'invalid-source', $e->getMessage() );
+			return RedirectCreationResult::error( 'invalid-source', ErrorText::of( $e ) );
 		}
 
 		// Build updated redirect.
@@ -470,7 +470,7 @@ class RedirectManager {
 			$saved = $this->repository->save( $updated );
 			return RedirectCreationResult::success( $saved );
 		} catch ( \Exception $e ) {
-			return RedirectCreationResult::error( 'save-failed', $e->getMessage() );
+			return RedirectCreationResult::error( 'save-failed', ErrorText::of( $e ) );
 		}
 	}
 

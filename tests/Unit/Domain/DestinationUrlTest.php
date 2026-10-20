@@ -18,6 +18,7 @@ use InvalidArgumentException;
  *
  * @covers \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
 final class DestinationUrlTest extends MonkeyStubs {
 
