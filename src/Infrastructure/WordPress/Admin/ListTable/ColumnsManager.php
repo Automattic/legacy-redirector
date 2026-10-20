@@ -109,12 +109,17 @@ final class ColumnsManager {
 	/**
 	 * Set sortable columns.
 	 *
+	 * Redirect To is not sortable. A post ID destination is stored as a post
+	 * ID, not the permalink the column shows, so no SQL ordering matches what
+	 * a person reads, and sorting by the unindexed stored value would cost a
+	 * full table sort per page for an order nobody can follow. WP_Query does
+	 * not accept post_excerpt as an orderby anyway, so it never sorted.
+	 *
 	 * @param array<string, string> $columns Existing sortable columns.
 	 * @return array<string, string> Modified sortable columns.
 	 */
 	public function set_sortable_columns( array $columns ): array {
 		$columns['from'] = 'from';
-		$columns['to']   = 'to';
 		return $columns;
 	}
 
@@ -147,10 +152,6 @@ final class ColumnsManager {
 
 		if ( 'from' === $orderby ) {
 			$query->set( 'orderby', 'title' );
-		}
-
-		if ( 'to' === $orderby ) {
-			$query->set( 'orderby', 'post_excerpt' );
 		}
 
 		// The default date ordering needs an ID tiebreaker: an import creates
