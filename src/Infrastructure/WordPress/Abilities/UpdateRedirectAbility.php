@@ -147,7 +147,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 			$to = $input['to'];
 
 			try {
-				$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
+				$destination = Destination::from_mixed( $to );
 			} catch ( \InvalidArgumentException $e ) {
 				return new WP_Error(
 					'legacy_redirector_invalid_destination',

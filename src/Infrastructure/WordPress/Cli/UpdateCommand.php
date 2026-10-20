@@ -110,7 +110,7 @@ final class UpdateCommand extends WP_CLI_Command {
 		$destination = null;
 		if ( null !== $to_value ) {
 			try {
-				$destination = Destination::from_mixed( ctype_digit( (string) $to_value ) ? (int) $to_value : $to_value );
+				$destination = Destination::from_mixed( (string) $to_value );
 			} catch ( \InvalidArgumentException $e ) {
 				WP_CLI::error( sprintf( 'Invalid destination: %s', $e->getMessage() ) );
 				return;

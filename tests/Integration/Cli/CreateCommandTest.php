@@ -158,6 +158,51 @@ final class CreateCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test a numeric destination that is not all digits is refused, not
+	 * stored as the post (int) would cast it to.
+	 *
+	 * @dataProvider data_numeric_but_not_digits
+	 *
+	 * @param string $format The destination, with %d for a published post's ID.
+	 */
+	public function test_create_refuses_a_numeric_destination_that_is_not_all_digits( string $format ): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/not-a-post-id', sprintf( $format, $post_id ) ),
+			array()
+		);
+
+		$this->assert_error_contains( 'Absolute destination URLs must use http or https scheme.' );
+		$this->assertSame(
+			array(),
+			get_posts(
+				array(
+					'post_type'      => 'vip-legacy-redirect',
+					'post_status'    => 'any',
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+				)
+			),
+			'No redirect was saved.'
+		);
+	}
+
+	/**
+	 * Destinations (int) would cast to the published post's ID.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_numeric_but_not_digits(): array {
+		return array(
+			'decimal'       => array( '%d.7' ),
+			'exponent'      => array( '%de0' ),
+			'leading space' => array( ' %d' ),
+		);
+	}
+
+	/**
 	 * Test creating a redirect to a full URL on an external host.
 	 *
 	 * With validation skipped, any host is stored. It only redirects once it is

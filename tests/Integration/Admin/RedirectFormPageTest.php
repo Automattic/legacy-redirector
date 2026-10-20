@@ -405,6 +405,27 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
+	 * Test a decimal destination is rejected, not saved as the post (int)
+	 * would truncate it to.
+	 */
+	public function test_decimal_destination_redirects_with_error(): void {
+		$this->login_as_redirect_manager();
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$this->submit(
+			array(
+				'redirect_from' => '/form-decimal-destination',
+				'redirect_to'   => $post_id . '.7',
+			)
+		);
+
+		$location = $this->capture_redirect();
+
+		$this->assertStringContainsString( 'error=invalid_destination', $location );
+		$this->assertSame( 0, $this->redirect_id_for( '/form-decimal-destination' ) );
+	}
+
+	/**
 	 * Test a destination on a disallowed host is refused with its own error.
 	 *
 	 * The generic "destination is not valid" message gives the admin nothing

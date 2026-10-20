@@ -96,7 +96,7 @@ final class CreateCommand extends WP_CLI_Command {
 	 */
 	public function __invoke( array $args, array $assoc_args ): void {
 		$from_url    = $args[0];
-		$to_value    = ctype_digit( $args[1] ) ? (int) $args[1] : $args[1];
+		$to_value    = $args[1];
 		$status_flag = $assoc_args['status'] ?? 'enabled';
 		$post_status = 'disabled' === $status_flag ? 'draft' : 'publish';
 		$validate    = ! isset( $assoc_args['skip-validation'] );

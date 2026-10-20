@@ -171,6 +171,63 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test a string of digits still names a post, as the CLI's positional
+	 * argument always arrives as a string.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_treats_a_digits_string_as_a_post_id(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )->once()->andReturnUsing( $this->saved_as( 7 ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => '123',
+			)
+		);
+
+		$this->assertSame( 'post', $result['type'] );
+		$this->assertSame( 123, $result['to'] );
+	}
+
+	/**
+	 * Test a numeric string that is not all digits is refused, not saved as
+	 * the post (int) would cast it to.
+	 *
+	 * @dataProvider data_numeric_but_not_digits
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 *
+	 * @param string $to The destination.
+	 */
+	public function test_execute_rejects_a_numeric_destination_that_is_not_all_digits( string $to ): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldNotReceive( 'create_redirect' );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => $to,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'legacy_redirector_invalid_redirect', $result->get_error_code() );
+	}
+
+	/**
+	 * Strings is_numeric() accepts that are not a post ID.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_numeric_but_not_digits(): array {
+		return array(
+			'decimal'  => array( '12.7' ),
+			'exponent' => array( '1e3' ),
+		);
+	}
+
+	/**
 	 * Test a creation failure becomes a namespaced error.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute

@@ -118,7 +118,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 
 		try {
 			$source      = SourceUrl::from_string( $from, HomePath::current() );
-			$destination = Destination::from_mixed( is_string( $to ) && ctype_digit( $to ) ? (int) $to : $to );
+			$destination = Destination::from_mixed( $to );
 		} catch ( \InvalidArgumentException $e ) {
 			return new WP_Error(
 				'legacy_redirector_invalid_redirect',
