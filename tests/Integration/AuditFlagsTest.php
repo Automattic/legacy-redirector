@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Integration tests for the stored per-row flags and the list-table view
@@ -131,6 +132,59 @@ final class AuditFlagsTest extends TestCase {
 		);
 
 		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test saving flagged rows recounts the flags once, at the end of the
+	 * request, rather than once per row.
+	 */
+	public function test_saved_flags_are_recounted_once_at_the_end_of_the_request(): void {
+		$flags = $this->flags();
+
+		$ids = array(
+			$this->create_redirect( '/flag-recount-one', 'https://example.com/one' ),
+			$this->create_redirect( '/flag-recount-two', 'https://example.com/two' ),
+		);
+
+		foreach ( $ids as $id ) {
+			update_post_meta( $id, AuditFlags::META_KEY, 'problem' );
+		}
+		$flags->store_counts();
+
+		// As each row's save would call it.
+		foreach ( $ids as $id ) {
+			$flags->clear( $id, get_post( $id ), true );
+		}
+
+		$this->assertSame( 2, $flags->problem_count(), 'The saves must not recount.' );
+		$this->assertSame( 10, has_action( 'shutdown', array( $flags, 'store_counts' ) ) );
+
+		$flags->store_counts();
+		$this->assertSame( 0, $flags->problem_count() );
+	}
+
+	/**
+	 * Test creating a redirect looks up neither a flag nor a duplicate
+	 * marker, since a new row has neither.
+	 */
+	public function test_creating_a_redirect_runs_no_flag_or_marker_lookups(): void {
+		$keys    = array( AuditFlags::META_KEY, Upgrader::DUPLICATE_META_KEY, Upgrader::NEVER_FIRED_META_KEY );
+		$queries = array();
+		$log     = static function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->create_redirect( '/flag-new-row', 'https://example.com/new' );
+		remove_filter( 'query', $log );
+
+		$this->assertNotEmpty( $queries );
+		foreach ( $queries as $query ) {
+			foreach ( $keys as $key ) {
+				$this->assertStringNotContainsString( $key, $query );
+			}
+		}
 	}
 
 	/**

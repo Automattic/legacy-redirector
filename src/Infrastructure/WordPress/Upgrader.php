@@ -698,12 +698,19 @@ final class Upgrader {
 	 *
 	 * Hooked to every save of a redirect: trashing the row, or giving it a
 	 * source of its own, settles it. Re-pointing or enabling it while the live
-	 * redirect holds its source is refused by the repository.
+	 * redirect holds its source is refused by the repository. A new row has
+	 * no marker to drop.
 	 *
-	 * @param int $post_id The redirect post ID.
+	 * @param int          $post_id The redirect post ID.
+	 * @param WP_Post|null $post    The redirect post.
+	 * @param bool         $update  Whether an existing row was saved.
 	 * @return void
 	 */
-	public static function forget_duplicate( int $post_id ): void {
+	public static function forget_duplicate( int $post_id, ?WP_Post $post = null, bool $update = true ): void {
+		if ( ! $update ) {
+			return;
+		}
+
 		delete_post_meta( $post_id, self::DUPLICATE_META_KEY );
 		delete_post_meta( $post_id, self::NEVER_FIRED_META_KEY );
 	}
