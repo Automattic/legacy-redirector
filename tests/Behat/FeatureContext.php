@@ -8,8 +8,6 @@
 namespace Automattic\LegacyRedirector\Tests\Behat;
 
 use Automattic\BehatWpEnv\WpEnvFeatureContext;
-use Behat\Testwork\Hook\Scope\BeforeSuiteScope;
-use Behat\Testwork\Hook\Scope\AfterSuiteScope;
 use RuntimeException;
 
 /**
@@ -448,52 +446,6 @@ RESET;
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 			throw new RuntimeException( sprintf( '`wp %s` exited %d: %s %s', $command, $this->exit_code, $this->output, $this->error_output ) );
 		}
-	}
-
-	/**
-	 * Create bypass 404 mu-plugin before test suite runs.
-	 *
-	 * This is created once for all scenarios, avoiding per-scenario overhead.
-	 *
-	 * @BeforeSuite
-	 * @param BeforeSuiteScope $scope Suite scope.
-	 * @return void
-	 */
-	public static function setup_bypass_mu_plugin( BeforeSuiteScope $scope ): void {
-		$bypass_validation = <<<'PHP'
-<?php
-/**
- * Bypass 404 validation for Behat tests.
- */
-add_filter( 'pre_http_request', function( $preempt, $args, $url ) {
-	if ( false !== strpos( $url, home_url() ) ) {
-		return array( 'response' => array( 'code' => 404 ) );
-	}
-	return $preempt;
-}, 10, 3 );
-PHP;
-
-		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encoding for shell safety.
-		$encoded = base64_encode( $bypass_validation );
-		self::run_in_container(
-			sprintf(
-				'wp eval \'if ( ! is_dir( WPMU_PLUGIN_DIR ) ) { mkdir( WPMU_PLUGIN_DIR, 0755, true ); } file_put_contents( WPMU_PLUGIN_DIR . "/behat-bypass-404-check.php", base64_decode( "%s" ) );\' 2>&1',
-				$encoded
-			)
-		);
-	}
-
-	/**
-	 * Remove bypass 404 mu-plugin after test suite completes.
-	 *
-	 * @AfterSuite
-	 * @param AfterSuiteScope $scope Suite scope.
-	 * @return void
-	 */
-	public static function teardown_bypass_mu_plugin( AfterSuiteScope $scope ): void {
-		self::run_in_container(
-			'wp eval \'if ( file_exists( WPMU_PLUGIN_DIR . "/behat-bypass-404-check.php" ) ) { unlink( WPMU_PLUGIN_DIR . "/behat-bypass-404-check.php" ); }\' 2>&1'
-		);
 	}
 
 	/**
