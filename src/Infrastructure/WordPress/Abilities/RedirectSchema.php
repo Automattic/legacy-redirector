@@ -52,11 +52,13 @@ final class RedirectSchema {
 			'type'   => array(
 				'type'        => 'string',
 				'enum'        => array( 'post', 'url', 'corrupt' ),
+				/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 				'description' => __( 'Whether the destination is a post ID or a URL. "corrupt" marks a row whose stored data is unreadable; its from/to values are placeholders.', 'legacy-redirector' ),
 			),
 			'status' => array(
 				'type'        => 'string',
 				'enum'        => array( 'enabled', 'disabled', 'trashed' ),
+				/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 				'description' => __( 'Whether the redirect is served to visitors. "trashed" marks a redirect in the Trash, which is not served; enabling it restores it from the Trash.', 'legacy-redirector' ),
 			),
 		);

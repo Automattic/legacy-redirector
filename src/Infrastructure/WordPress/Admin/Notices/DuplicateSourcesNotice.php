@@ -56,12 +56,12 @@ final class DuplicateSourcesNotice {
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.
 		$message = isset( $_GET['duplicate_sources'] )
-			? __( 'For each redirect listed here, decide which destination is right. To keep the live redirect\'s, trash the disabled one. To keep the disabled one\'s, edit the live redirect (linked in the Status column) to use it, then trash the disabled one. A disabled duplicate cannot be enabled while the live redirect has its source.', 'legacy-redirector' )
+			? __( 'For each redirect listed here, decide which destination is right. To keep the enabled redirect\'s, trash the disabled one. To keep the disabled one\'s, edit the enabled redirect (linked in the Status column) to use it, then trash the disabled one. A disabled duplicate cannot be enabled while the enabled redirect has its source.', 'legacy-redirector' )
 			: sprintf(
 				/* translators: 1: number of redirects, 2: link to the Duplicate sources view */
 				_n(
-					'The 2.0 upgrade disabled %1$s redirect because it has the same source as another redirect but a different destination, and only one redirect can answer a source. %2$s',
-					'The 2.0 upgrade disabled %1$s redirects because each has the same source as another redirect but a different destination, and only one redirect can answer a source. %2$s',
+					'The 2.0 migration disabled %1$s redirect because it has the same source as another redirect but a different destination, and only one redirect can answer a source. %2$s',
+					'The 2.0 migration disabled %1$s redirects because each has the same source as another redirect but a different destination, and only one redirect can answer a source. %2$s',
 					$count,
 					'legacy-redirector'
 				),

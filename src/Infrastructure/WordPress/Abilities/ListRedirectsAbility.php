@@ -60,6 +60,7 @@ final class ListRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'List Redirects', 'legacy-redirector' ),
+			/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 			'description'         => __( 'Returns a page of redirects, optionally filtered by whether they are enabled, by what kind of destination they point at, or by a search term matched against their source paths. The total count of matching redirects is returned alongside the page, so further pages can be requested with an offset.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
@@ -104,6 +105,7 @@ final class ListRedirectsAbility implements AbilityInterface {
 				'properties'           => array(
 					'total'     => array(
 						'type'        => 'integer',
+						/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 						'description' => __( 'How many redirects match the filters, ignoring limit and offset.', 'legacy-redirector' ),
 					),
 					'redirects' => array(

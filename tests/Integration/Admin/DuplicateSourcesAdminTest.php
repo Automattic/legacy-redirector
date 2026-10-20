@@ -119,7 +119,7 @@ final class DuplicateSourcesAdminTest extends TestCase {
 		$views = ( new ViewFilters( $this->query_repository(), new AuditFlags() ) )->customize_views( array() );
 
 		$this->assertArrayHasKey( 'duplicate_sources', $views );
-		$this->assertStringContainsString( 'Duplicate sources <span class="count">(1)</span>', $views['duplicate_sources'] );
+		$this->assertStringContainsString( 'Duplicate source <span class="count">(1)</span>', $views['duplicate_sources'] );
 
 		delete_post_meta( $this->duplicate_id, Upgrader::DUPLICATE_META_KEY );
 		$views = ( new ViewFilters( $this->query_repository(), new AuditFlags() ) )->customize_views( array() );
@@ -164,12 +164,12 @@ final class DuplicateSourcesAdminTest extends TestCase {
 		$notice = new DuplicateSourcesNotice();
 
 		$output = $this->capture( array( $notice, 'display' ) );
-		$this->assertStringContainsString( 'The 2.0 upgrade disabled 1 redirect because it has the same source as another redirect', $output );
+		$this->assertStringContainsString( 'The 2.0 migration disabled 1 redirect because it has the same source as another redirect', $output );
 		$this->assertStringContainsString( 'duplicate_sources=1', $output );
 
 		$_GET['duplicate_sources'] = '1';
 		$output                    = $this->capture( array( $notice, 'display' ) );
-		$this->assertStringContainsString( "To keep the live redirect's, trash the disabled one.", $output );
+		$this->assertStringContainsString( "To keep the enabled redirect's, trash the disabled one.", $output );
 	}
 
 	/**

@@ -150,11 +150,19 @@ final class StatusChangeNotices {
 		if ( $failed > 0 ) {
 			$this->display_bulk_refusal_notice(
 				sprintf(
-					/* translators: 1: number of redirects enabled, 2: number selected, 3: number that could not be enabled */
-					_n( 'Enabled %1$d of %2$d redirect. %3$d could not be enabled.', 'Enabled %1$d of %2$d redirects. %3$d could not be enabled.', $count + $failed, 'legacy-redirector' ),
-					$count,
-					$count + $failed,
-					$failed
+					/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+					_x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ),
+					sprintf(
+						/* translators: 1: number of redirects enabled, 2: number selected */
+						_n( 'Enabled %1$s of %2$s redirect.', 'Enabled %1$s of %2$s redirects.', $count + $failed, 'legacy-redirector' ),
+						number_format_i18n( $count ),
+						number_format_i18n( $count + $failed )
+					),
+					sprintf(
+						/* translators: %s: number of redirects that could not be enabled */
+						_n( '%s could not be enabled.', '%s could not be enabled.', $failed, 'legacy-redirector' ),
+						number_format_i18n( $failed )
+					)
 				),
 				$failed,
 				$reason
@@ -165,9 +173,9 @@ final class StatusChangeNotices {
 		wp_admin_notice(
 			esc_html(
 				sprintf(
-					/* translators: %d: number of redirects enabled */
-					_n( '%d redirect enabled.', '%d redirects enabled.', $count, 'legacy-redirector' ),
-					$count
+					/* translators: %s: number of redirects enabled */
+					_n( '%s redirect enabled.', '%s redirects enabled.', $count, 'legacy-redirector' ),
+					number_format_i18n( $count )
 				)
 			),
 			self::NOTICE_ARGS
@@ -186,11 +194,19 @@ final class StatusChangeNotices {
 		if ( $failed > 0 ) {
 			$this->display_bulk_refusal_notice(
 				sprintf(
-					/* translators: 1: number of redirects disabled, 2: number selected, 3: number that could not be disabled */
-					_n( 'Disabled %1$d of %2$d redirect. %3$d could not be disabled.', 'Disabled %1$d of %2$d redirects. %3$d could not be disabled.', $count + $failed, 'legacy-redirector' ),
-					$count,
-					$count + $failed,
-					$failed
+					/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+					_x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ),
+					sprintf(
+						/* translators: 1: number of redirects disabled, 2: number selected */
+						_n( 'Disabled %1$s of %2$s redirect.', 'Disabled %1$s of %2$s redirects.', $count + $failed, 'legacy-redirector' ),
+						number_format_i18n( $count ),
+						number_format_i18n( $count + $failed )
+					),
+					sprintf(
+						/* translators: %s: number of redirects that could not be disabled */
+						_n( '%s could not be disabled.', '%s could not be disabled.', $failed, 'legacy-redirector' ),
+						number_format_i18n( $failed )
+					)
 				),
 				$failed,
 				$reason
@@ -201,9 +217,9 @@ final class StatusChangeNotices {
 		wp_admin_notice(
 			esc_html(
 				sprintf(
-					/* translators: %d: number of redirects disabled */
-					_n( '%d redirect disabled.', '%d redirects disabled.', $count, 'legacy-redirector' ),
-					$count
+					/* translators: %s: number of redirects disabled */
+					_n( '%s redirect disabled.', '%s redirects disabled.', $count, 'legacy-redirector' ),
+					number_format_i18n( $count )
 				)
 			),
 			self::NOTICE_ARGS
@@ -223,9 +239,9 @@ final class StatusChangeNotices {
 			$why = sprintf(
 				1 === $failed
 					/* translators: %s: link to the Duplicate sources view */
-					? esc_html__( 'It shares its source with a live redirect, and a source can answer for only one: see %s.', 'legacy-redirector' )
+					? esc_html__( 'It shares its source with an enabled redirect, and a source can answer for only one: see %s.', 'legacy-redirector' )
 					/* translators: %s: link to the Duplicate sources view */
-					: esc_html__( 'The first shares its source with a live redirect, and a source can answer for only one: see %s.', 'legacy-redirector' ),
+					: esc_html__( 'The first shares its source with an enabled redirect, and a source can answer for only one: see %s.', 'legacy-redirector' ),
 				'<a href="' . esc_url( ViewFilters::duplicate_sources_url() ) . '">' . esc_html__( 'Duplicate sources', 'legacy-redirector' ) . '</a>'
 			);
 		} else {
@@ -235,7 +251,11 @@ final class StatusChangeNotices {
 		}
 
 		wp_admin_notice(
-			wp_kses( esc_html( $summary ) . ' ' . $why, array( 'a' => array( 'href' => array() ) ) ),
+			wp_kses(
+				/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+				sprintf( _x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ), esc_html( $summary ), $why ),
+				array( 'a' => array( 'href' => array() ) )
+			),
 			array( 'type' => 'warning' ) + self::NOTICE_ARGS
 		);
 	}

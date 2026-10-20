@@ -396,10 +396,10 @@ final class ColumnsManager {
 		if ( $redirect->is_active() ) {
 			// The icon repeats the text beside it, so it is hidden from screen readers.
 			echo '<span class="dashicons dashicons-yes-alt" style="color: #00a32a;" aria-hidden="true"></span> ';
-			echo esc_html__( 'Enabled', 'legacy-redirector' );
+			echo esc_html_x( 'Enabled', 'status of one redirect', 'legacy-redirector' );
 		} else {
 			echo '<span class="dashicons dashicons-no" style="color: #d63638;" aria-hidden="true"></span> ';
-			echo esc_html__( 'Disabled', 'legacy-redirector' );
+			echo esc_html_x( 'Disabled', 'status of one redirect', 'legacy-redirector' );
 			$this->render_duplicate_note( $redirect );
 		}
 	}
@@ -420,16 +420,17 @@ final class ColumnsManager {
 		}
 
 		$live_link = sprintf(
-			'<a href="%1$s">#%2$d</a>',
+			'<a href="%1$s">%2$s</a>',
 			esc_url( admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $live_id ) ),
-			$live_id
+			/* translators: %s: a redirect's ID, shown as the text of a link to it */
+			esc_html( sprintf( _x( '#%s', 'redirect ID', 'legacy-redirector' ), number_format_i18n( $live_id ) ) )
 		);
 
 		$message = (bool) get_post_meta( $redirect->id(), Upgrader::NEVER_FIRED_META_KEY, true )
-			/* translators: %1$s: link to the live redirect, e.g. "#12" */
-			? __( 'Duplicate source: %1$s has the same source and is live. This one never fired under 1.x, so disabling it changed nothing for visitors: trash it unless you want its destination.', 'legacy-redirector' )
-			/* translators: %1$s: link to the live redirect, e.g. "#12" */
-			: __( 'Duplicate source: %1$s has the same source and is live, so visitors who used this spelling now reach its destination. To keep that destination, trash this one. To keep this one\'s, edit %1$s to use it, then trash this one.', 'legacy-redirector' );
+			/* translators: %1$s: link to the enabled redirect, e.g. "#12" */
+			? __( 'Duplicate source: %1$s has the same source and is enabled. This one never fired under 1.x, so disabling it changed nothing for visitors: trash it unless you want its destination.', 'legacy-redirector' )
+			/* translators: %1$s: link to the enabled redirect, e.g. "#12" */
+			: __( 'Duplicate source: %1$s has the same source and is enabled, so visitors who used this spelling now reach its destination. To keep that destination, trash this one. To keep this one\'s, edit %1$s to use it, then trash this one.', 'legacy-redirector' );
 
 		printf(
 			'<p class="description">%s</p>',

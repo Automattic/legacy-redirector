@@ -107,7 +107,7 @@ final class StatusChangeNoticesTest extends MonkeyStubs {
 
 		$this->assertStringContainsString( 'notice-warning', $output );
 		$this->assertStringContainsString( 'Enabled 1 of 2 redirects. 1 could not be enabled.', $output );
-		$this->assertStringContainsString( 'shares its source with a live redirect', $output );
+		$this->assertStringContainsString( 'shares its source with an enabled redirect', $output );
 		$this->assertStringContainsString( 'duplicate_sources=1', $output );
 	}
 

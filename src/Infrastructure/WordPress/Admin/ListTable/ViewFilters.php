@@ -75,8 +75,8 @@ final class ViewFilters {
 		unset( $views['trash'] );
 
 		// Rename "Published" to "Enabled" and "Drafts" to "Disabled".
-		$views = self::relabel_view( $views, 'publish', __( 'Enabled', 'legacy-redirector' ) );
-		$views = self::relabel_view( $views, 'draft', __( 'Disabled', 'legacy-redirector' ) );
+		$views = self::relabel_view( $views, 'publish', _x( 'Enabled', 'view of the redirects that are enabled', 'legacy-redirector' ) );
+		$views = self::relabel_view( $views, 'draft', _x( 'Disabled', 'view of the redirects that are disabled', 'legacy-redirector' ) );
 
 		// Add destination type filters.
 		$views = $this->add_destination_type_views( $views );
@@ -110,8 +110,8 @@ final class ViewFilters {
 	private static function relabel_view( array $views, string $key, string $label ): array {
 		if ( isset( $views[ $key ] ) && is_string( $views[ $key ] ) ) {
 			$views[ $key ] = (string) preg_replace_callback(
-				'#^(<a\b[^>]*>)[^<]*(<span class="count">)#',
-				static fn( array $m ): string => $m[1] . esc_html( $label ) . ' ' . $m[2],
+				'#^(<a\b[^>]*>)[^<]*(<span class="count">.*?</span>)#',
+				static fn( array $m ): string => $m[1] . self::label_and_count( esc_html( $label ), $m[2] ),
 				$views[ $key ]
 			);
 		}
@@ -250,7 +250,7 @@ final class ViewFilters {
 
 		$views['duplicate_sources'] = self::view_link(
 			self::duplicate_sources_url(),
-			__( 'Duplicate sources', 'legacy-redirector' ),
+			_n( 'Duplicate source', 'Duplicate sources', $count, 'legacy-redirector' ),
 			$count,
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
 			isset( $_GET['duplicate_sources'] )
@@ -271,12 +271,23 @@ final class ViewFilters {
 	 */
 	private static function view_link( string $url, string $label, int $count, bool $is_current ): string {
 		return sprintf(
-			'<a href="%1$s"%2$s>%3$s <span class="count">(%4$s)</span></a>',
+			'<a href="%1$s"%2$s>%3$s</a>',
 			esc_url( $url ),
 			$is_current ? ' class="current" aria-current="page"' : '',
-			esc_html( $label ),
-			number_format_i18n( $count )
+			self::label_and_count( esc_html( $label ), '<span class="count">(' . number_format_i18n( $count ) . ')</span>' )
 		);
+	}
+
+	/**
+	 * Put a view's count after its label, as the language spaces them.
+	 *
+	 * @param string $label The label, escaped.
+	 * @param string $count The count's markup.
+	 * @return string The label and count.
+	 */
+	private static function label_and_count( string $label, string $count ): string {
+		/* translators: 1: a list view's name, such as Enabled; 2: how many redirects it holds, in brackets */
+		return sprintf( _x( '%1$s %2$s', 'view name, then its count', 'legacy-redirector' ), $label, $count );
 	}
 
 	/**

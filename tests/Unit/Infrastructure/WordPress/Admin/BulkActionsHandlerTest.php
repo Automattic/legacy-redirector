@@ -104,6 +104,7 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 	 */
 	public function test_modify_bulk_actions_adds_enable_disable(): void {
 		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( '_x' )->returnArg( 1 );
 
 		$input = array(
 			'edit'  => 'Edit',

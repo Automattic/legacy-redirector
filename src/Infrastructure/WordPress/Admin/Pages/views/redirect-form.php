@@ -32,14 +32,14 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 		<div id="message" class="updated notice is-dismissible">
 			<p>
 				<?php esc_html_e( 'Redirect created successfully.', 'legacy-redirector' ); ?>
-				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?><span class="screen-reader-text"> <?php esc_html_e( '(opens in a new tab)', 'legacy-redirector' ); ?></span></a>
+				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php echo esc_html_x( 'Follow', 'verb: open the source URL', 'legacy-redirector' ); ?><span class="screen-reader-text"> <?php esc_html_e( '(opens in a new tab)', 'legacy-redirector' ); ?></span></a>
 			</p>
 		</div>
 	<?php elseif ( 'updated' === $message && $is_edit ) : ?>
 		<div id="message" class="updated notice is-dismissible">
 			<p>
 				<?php esc_html_e( 'Redirect updated successfully.', 'legacy-redirector' ); ?>
-				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?><span class="screen-reader-text"> <?php esc_html_e( '(opens in a new tab)', 'legacy-redirector' ); ?></span></a>
+				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php echo esc_html_x( 'Follow', 'verb: open the source URL', 'legacy-redirector' ); ?><span class="screen-reader-text"> <?php esc_html_e( '(opens in a new tab)', 'legacy-redirector' ); ?></span></a>
 			</p>
 		</div>
 	<?php endif; ?>
@@ -75,7 +75,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 						<label for="redirect_from"><?php esc_html_e( 'Redirect From', 'legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td>
-						<div style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%;">
+						<div dir="ltr" style="display: inline-flex; align-items: center; gap: 4px; max-width: 100%;">
 							<span class="code" style="color: #646970; white-space: nowrap;"><?php echo esc_html( $home_prefix ); ?></span>
 							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( '/' === $redirect_from ? '/' : ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" aria-describedby="redirect_from_error redirect_from_warning redirect_from_description" />
 						</div>
@@ -84,18 +84,20 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 						<p class="description" id="redirect_from_description">
 							<?php
 							printf(
-								/* translators: %s: example of a full URL the entered path resolves to, e.g. https://example.com/blog/old-page. */
-								esc_html__( 'The source path that should redirect, always read relative to this site. Entering old-page matches %s.', 'legacy-redirector' ),
-								'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>'
-							);
-
-							echo ' ';
-
-							printf(
-								/* translators: 1: example path without a trailing slash, 2: the same path with one. */
-								esc_html__( 'Trailing slashes are ignored, so %1$s and %2$s are the same redirect.', 'legacy-redirector' ),
-								'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>',
-								'<code>' . esc_html( $home_prefix . 'old-page/' ) . '</code>'
+								/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+								esc_html_x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ),
+								sprintf(
+									/* translators: 1: an example path, old-page, as typed in the field; 2: the full URL it resolves to, e.g. https://example.com/blog/old-page. */
+									esc_html__( 'The source path that should redirect, always read relative to this site. Entering %1$s matches %2$s.', 'legacy-redirector' ),
+									'<code>old-page</code>',
+									'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>'
+								),
+								sprintf(
+									/* translators: 1: example path without a trailing slash, 2: the same path with one. */
+									esc_html__( 'Trailing slashes are ignored, so %1$s and %2$s are the same redirect.', 'legacy-redirector' ),
+									'<code>' . esc_html( $home_prefix . 'old-page' ) . '</code>',
+									'<code>' . esc_html( $home_prefix . 'old-page/' ) . '</code>'
+								)
 							);
 							?>
 						</p>
@@ -106,7 +108,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 						<label for="redirect_to_display"><?php esc_html_e( 'Redirect To', 'legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td style="position: relative;">
-						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" class="regular-text" autocomplete="off" required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="redirect_to_suggestions" aria-describedby="redirect_to_error redirect_to_description" />
+						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" dir="auto" class="regular-text" autocomplete="off" required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="redirect_to_suggestions" aria-describedby="redirect_to_error redirect_to_description" />
 						<input type="hidden" name="redirect_to" id="redirect_to" value="<?php echo esc_attr( (string) $destination_value ); ?>" />
 						<p id="redirect_to_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;"></p>
 						<p class="description" id="redirect_to_description"><?php esc_html_e( 'Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts.', 'legacy-redirector' ); ?></p>
@@ -128,14 +130,14 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 							<legend class="screen-reader-text"><?php esc_html_e( 'Status', 'legacy-redirector' ); ?></legend>
 							<label>
 								<input type="radio" name="redirect_status" value="publish" <?php checked( $redirect_status, 'publish' ); ?> />
-								<?php esc_html_e( 'Enabled', 'legacy-redirector' ); ?>
-								<span class="description"><?php esc_html_e( '(Redirect is active)', 'legacy-redirector' ); ?></span>
+								<?php echo esc_html_x( 'Enabled', 'status of one redirect', 'legacy-redirector' ); ?>
+								<span class="description"><?php esc_html_e( '(Visitors are redirected)', 'legacy-redirector' ); ?></span>
 							</label>
 							<br />
 							<label>
 								<input type="radio" name="redirect_status" value="draft" <?php checked( $redirect_status, 'draft' ); ?> />
-								<?php esc_html_e( 'Disabled', 'legacy-redirector' ); ?>
-								<span class="description"><?php esc_html_e( '(Redirect is paused)', 'legacy-redirector' ); ?></span>
+								<?php echo esc_html_x( 'Disabled', 'status of one redirect', 'legacy-redirector' ); ?>
+								<span class="description"><?php esc_html_e( '(Visitors are not redirected)', 'legacy-redirector' ); ?></span>
 							</label>
 						</fieldset>
 					</td>

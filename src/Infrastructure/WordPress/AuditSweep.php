@@ -169,9 +169,17 @@ final class AuditSweep {
 	 * @return array<string, array{interval: int, display: string}> The schedules with ours added.
 	 */
 	public function add_interval( array $schedules ): array {
+		// Anything may ask for the schedules, at any point, and translating
+		// before init makes WordPress warn that the text domain loaded too
+		// early. The label is only read on screens that list cron events.
+		$display = 'Every five minutes (Legacy Redirector background check)';
+		if ( did_action( 'init' ) ) {
+			$display = __( 'Every five minutes (Legacy Redirector background check)', 'legacy-redirector' );
+		}
+
 		$schedules[ self::INTERVAL ] = array(
 			'interval' => self::TICK_SECONDS,
-			'display'  => __( 'Every five minutes (Legacy Redirector background check)', 'legacy-redirector' ),
+			'display'  => $display,
 		);
 
 		return $schedules;

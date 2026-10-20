@@ -101,6 +101,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Validate Redirects', 'legacy-redirector' ),
+			/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 			'description'         => __( 'Checks redirects\' stored details for problems, without requesting any URL: destination posts that have been deleted, trashed, or unpublished, external hosts missing from the allowed_redirect_hosts filter, and rows whose data cannot be read. Also warns about sources on paths WordPress itself serves, such as /wp-admin, sources a published post or page already answers, and possible loops through other redirects. Each finding says what is wrong and what to do about it. Records the result, so the admin "Has issues" view and menu badge stay in step. Given no redirects, it re-checks the ones the background check flagged, a page at a time: pass next_offset back as offset to continue. To check whether a redirect works live, use test-redirects.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
@@ -125,6 +126,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 						'type'        => 'integer',
 						'minimum'     => 0,
 						'default'     => 0,
+						/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 						'description' => __( 'How many flagged redirects to skip when none are given. Use the next_offset from the previous call.', 'legacy-redirector' ),
 					),
 				),
@@ -150,6 +152,7 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 					),
 					'next_offset'     => array(
 						'type'        => array( 'integer', 'null' ),
+						/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 						'description' => __( 'The offset for the next page of flagged redirects, or null when there are no more (or redirects were named).', 'legacy-redirector' ),
 					),
 					'last_full_check' => array(
