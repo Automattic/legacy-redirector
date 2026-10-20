@@ -672,6 +672,40 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test the probe uses VIP's request helper where it exists, without following redirects.
+	 *
+	 * On VIP this is the branch that runs, and following a redirect would
+	 * report the destination's answer as the source's. Run in its own process:
+	 * once a test defines vip_safe_wp_remote_get(), it exists for every later
+	 * test, which would then take this branch too.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_uses_the_vip_request_helper_where_there_is_one(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\expect( 'wp_safe_remote_get' )->never();
+		Functions\expect( 'vip_safe_wp_remote_get' )
+			->once()
+			->with(
+				'https://example.com/old',
+				'',
+				\Mockery::type( 'int' ),
+				\Mockery::type( 'int' ),
+				\Mockery::type( 'int' ),
+				\Mockery::on(
+					static fn( array $args ): bool => 0 === $args['redirection']
+						&& true === $args['reject_unsafe_urls']
+						&& ( $args['limit_response_size'] ?? 0 ) > 0
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertSame( array( 'status' => 'dormant' ), $this->auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
 	 * Test a source answering with an error is unreachable, not dormant.
 	 *
 	 * A server error, a 429 from a site rate-limiting requests to itself, a
