@@ -67,12 +67,14 @@ final class PostTypeTest extends TestCase {
 	 *
 	 * The source arrives already decoded once by PHP. Decoding it again turned
 	 * a stored %2F into a slash, and sanitize_text_field() then deleted any
-	 * %xx sequence left, so the notice named a different redirect.
+	 * %xx sequence left, so the notice named a different redirect. Core then
+	 * runs sprintf() over the message to insert the count, which read %2F as
+	 * a float and threw on %C3, so the assertion goes through that step too.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::bulk_post_updated_messages
 	 */
 	public function test_trash_notice_shows_encoded_source_as_stored() {
-		$_GET['redirect_source'] = wp_slash( '/a%2Fb?q=a%26b' );
+		$_GET['redirect_source'] = wp_slash( '/a%2Fb?q=caf%C3%A9' );
 
 		$messages = ( new PostType() )->bulk_post_updated_messages(
 			array(),
@@ -87,6 +89,9 @@ final class PostTypeTest extends TestCase {
 
 		unset( $_GET['redirect_source'] );
 
-		$this->assertStringContainsString( '<code>/a%2Fb?q=a%26b</code>', $messages[ PostType::POST_TYPE ]['trashed'] );
+		// Mirror wp-admin/edit.php, which inserts the count with sprintf().
+		$notice = sprintf( $messages[ PostType::POST_TYPE ]['trashed'], number_format_i18n( 1 ) );
+
+		$this->assertStringContainsString( '<code>/a%2Fb?q=caf%C3%A9</code>', $notice );
 	}
 }

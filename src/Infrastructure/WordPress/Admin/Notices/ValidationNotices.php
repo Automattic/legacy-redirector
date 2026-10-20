@@ -145,27 +145,25 @@ final class ValidationNotices {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		$result = sanitize_text_field( wp_unslash( $_GET['validate'] ) );
 
-		// Get redirect details for context in the notice. The repository
-		// returns null for IDs of other post types, so no foreign title leaks.
-		$redirect_context = '';
+		// Name the redirect in the notice. The repository returns null for
+		// IDs of other post types, so no foreign title leaks.
+		$source = '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		if ( isset( $_GET['ids'] ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 			$redirect = $this->repository->find_by_id( absint( $_GET['ids'] ) );
 			if ( null !== $redirect ) {
-				$redirect_context = sprintf(
-					/* translators: %s: source URL path */
-					' ' . __( 'for %s', 'legacy-redirector' ),
-					'<code>' . esc_html( $redirect->source()->path() ) . '</code>'
-				);
+				$source = '<code>' . esc_html( $redirect->source()->path() ) . '</code>';
 			}
 		}
 
 		if ( self::RESULT_VALID === $result ) {
-			/* translators: %s: context showing which redirect (e.g. "for /old-page") */
-			$message = sprintf( __( 'Redirect is valid%s.', 'legacy-redirector' ), $redirect_context );
+			$message = '' === $source
+				? esc_html__( 'Redirect is valid.', 'legacy-redirector' )
+				/* translators: %s: source URL path */
+				: sprintf( esc_html__( 'Redirect from %s is valid.', 'legacy-redirector' ), $source );
 			wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
-			$this->display_warning_notices( $redirect_context );
+			$this->display_warning_notices( $source );
 			return;
 		}
 
@@ -179,11 +177,15 @@ final class ValidationNotices {
 			return;
 		}
 
+		$message = '' === $source
+			? esc_html__( 'Redirect is not valid.', 'legacy-redirector' )
+			/* translators: %s: source URL path */
+			: sprintf( esc_html__( 'Redirect from %s is not valid.', 'legacy-redirector' ), $source );
 		wp_admin_notice(
-			esc_html__( 'Redirect is not valid', 'legacy-redirector' ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $finding_type->description() . '. ' . $finding_type->remedy() . '.' ),
+			wp_kses_post( $message ) . '<br />' . esc_html( $finding_type->description() . '. ' . $finding_type->remedy() . '.' ),
 			self::ERROR_NOTICE_ARGS
 		);
-		$this->display_warning_notices( $redirect_context );
+		$this->display_warning_notices( $source );
 	}
 
 	/**
@@ -193,10 +195,10 @@ final class ValidationNotices {
 	 * uncontrolled, and a crafted URL must not be able to present a problem
 	 * finding under warning styling.
 	 *
-	 * @param string $redirect_context The "for /path" context fragment, already escaped.
+	 * @param string $source The source path as escaped HTML, or '' when unknown.
 	 * @return void
 	 */
-	private function display_warning_notices( string $redirect_context ): void {
+	private function display_warning_notices( string $source ): void {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		if ( ! isset( $_GET['warnings'] ) ) {
 			return;
@@ -212,8 +214,12 @@ final class ValidationNotices {
 				continue;
 			}
 
+			$heading = '' === $source
+				? esc_html( $type->label() )
+				/* translators: 1: problem found, e.g. "Source serves content", 2: source URL path */
+				: sprintf( esc_html__( '%1$s for %2$s', 'legacy-redirector' ), esc_html( $type->label() ), $source );
 			wp_admin_notice(
-				esc_html( $type->label() ) . wp_kses_post( $redirect_context ) . '<br />' . esc_html( $type->description() . '. ' . $type->remedy() . '.' ),
+				wp_kses_post( $heading ) . '<br />' . esc_html( $type->description() . '. ' . $type->remedy() . '.' ),
 				self::WARNING_NOTICE_ARGS
 			);
 		}

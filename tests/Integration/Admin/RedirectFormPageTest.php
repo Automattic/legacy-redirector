@@ -1231,7 +1231,8 @@ final class RedirectFormPageTest extends TestCase {
 		preg_match( '/^var legacyRedirectorForm = (\{.*\});$/s', $data, $matches );
 
 		$settings = json_decode( $matches[1], true );
-		$this->assertSame( array( 'postId', 'duplicateMessage', 'editRedirectUrl', 'editExistingLabel', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage', 'suggestionsMessage', 'noSuggestionsMessage' ), array_keys( $settings ) );
+		$this->assertSame( array( 'postId', 'duplicateMessage', 'editRedirectUrl', 'editExistingLabel', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage', 'suggestionsMessage', 'noSuggestionsMessage', 'idFormat', 'postTypeLabels' ), array_keys( $settings ) );
+		$this->assertSame( 'Page', $settings['postTypeLabels']['page'] );
 
 		// The inline messages and suggestions are announced through wp.a11y.
 		$this->assertContains( 'wp-a11y', wp_scripts()->registered['legacy-redirector-form']->deps );

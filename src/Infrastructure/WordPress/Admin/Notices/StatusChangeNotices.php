@@ -221,12 +221,17 @@ final class StatusChangeNotices {
 	private function display_bulk_refusal_notice( string $summary, int $failed, string $reason ): void {
 		if ( 'duplicate' === $reason ) {
 			$why = sprintf(
-				/* translators: %s: link to the Duplicate sources view */
-				esc_html( _n( 'It shares its source with a live redirect, and a source can answer for only one: see %s.', 'The first shares its source with a live redirect, and a source can answer for only one: see %s.', $failed, 'legacy-redirector' ) ),
+				1 === $failed
+					/* translators: %s: link to the Duplicate sources view */
+					? esc_html__( 'It shares its source with a live redirect, and a source can answer for only one: see %s.', 'legacy-redirector' )
+					/* translators: %s: link to the Duplicate sources view */
+					: esc_html__( 'The first shares its source with a live redirect, and a source can answer for only one: see %s.', 'legacy-redirector' ),
 				'<a href="' . esc_url( ViewFilters::duplicate_sources_url() ) . '">' . esc_html__( 'Duplicate sources', 'legacy-redirector' ) . '</a>'
 			);
 		} else {
-			$why = esc_html( _n( 'It could not be saved.', 'The first could not be saved.', $failed, 'legacy-redirector' ) );
+			$why = 1 === $failed
+				? esc_html__( 'It could not be saved.', 'legacy-redirector' )
+				: esc_html__( 'The first could not be saved.', 'legacy-redirector' );
 		}
 
 		wp_admin_notice(
