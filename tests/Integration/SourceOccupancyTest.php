@@ -138,10 +138,29 @@ final class SourceOccupancyTest extends TestCase {
 
 	/**
 	 * Test the home page and reserved paths are never looked up as posts.
+	 *
+	 * A page is published at the reserved path, so only the is_reserved()
+	 * guard keeps it from being reported.
 	 */
 	public function test_ignores_home_and_reserved_paths(): void {
 		self::factory()->post->create( array( 'post_status' => 'pending' ) );
+		$parent = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'wp-admin',
+			)
+		);
+		$child  = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'legacy',
+				'post_parent' => $parent,
+			)
+		);
 
+		$this->assertSame( $child, get_page_by_path( 'wp-admin/legacy' )?->ID, 'The page must exist at the reserved path.' );
 		$this->assertNull( $this->occupant( '/' ) );
 		$this->assertNull( $this->occupant( '/wp-admin/legacy' ) );
 	}

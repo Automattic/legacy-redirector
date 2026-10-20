@@ -25,10 +25,10 @@ final class UrlTest extends YoastTestCase {
 	 * Run a callback with LC_CTYPE forced to a UTF-8 locale.
 	 *
 	 * The bug this class exists for only manifests where iscntrl() reports
-	 * true for 0x80-0x9F, which is the UTF-8 locale case. CI runs under the C
-	 * locale, where a bare parse_url() behaves itself and every assertion
-	 * below would pass with or without the fix. Forcing the locale is what
-	 * makes these tests mean anything on Linux.
+	 * true for 0x80-0x9F. macOS libc does that under a UTF-8 LC_CTYPE; glibc
+	 * (CI) and musl do not under any locale, so there a bare parse_url()
+	 * behaves itself and the assertions below pass with or without the fix.
+	 * These tests guard macOS dev machines, where a regression would show.
 	 *
 	 * @param callable $assertions The assertions to run.
 	 * @return void
@@ -52,7 +52,7 @@ final class UrlTest extends YoastTestCase {
 	 * Test raw multibyte bytes survive parsing under a UTF-8 LC_CTYPE.
 	 *
 	 * The regression test for the whole class. A bare parse_url() here returns
-	 * '/日_日_' on an affected host, because 0xE6 0x97 0xA5 has its 0x97 byte
+	 * '/日_日_' on an affected host (macOS), because 0xE6 0x97 0xA5 has its 0x97 byte
 	 * rewritten to '_'. Asserting on the hex makes the failure legible rather
 	 * than a mojibake diff.
 	 *

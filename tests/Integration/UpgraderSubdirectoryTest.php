@@ -158,10 +158,10 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	/**
 	 * A unicode legacy source is repathed and stays reachable.
 	 *
-	 * Upgrader::strip_home_prefix() slices by byte offset, so a multibyte path
-	 * would be cut mid-sequence if the offset were ever computed in characters
-	 * - producing a post_title that is not valid UTF-8 and a hash no request
-	 * can match. The rehash has to agree with what SourceUrl produces from the
+	 * HomePath::make_relative() strips the home path segment by segment, and
+	 * must leave the multibyte remainder whole: a path cut mid-sequence would
+	 * give a post_title that is not valid UTF-8 and a hash no request can
+	 * match. The rehash has to agree with what SourceUrl produces from the
 	 * percent-encoded request a browser actually sends.
 	 *
 	 * @return void
@@ -225,6 +225,34 @@ final class UpgraderSubdirectoryTest extends TestCase {
 		$pending = $this->upgrader->count_pending();
 
 		$this->assertSame( 1, $pending['repathed'], 'The dry run should count the repath it would perform.' );
+	}
+
+	/**
+	 * The dry run frees a key an earlier batch's row would leave, as the run does.
+	 *
+	 * '/blog/old-page' moves off md5( '/blog/old-page' ) onto md5( '/old-page' ),
+	 * and the later '/blog/blog/old-page' strips to '/blog/old-page' and wants
+	 * the key it left. The run writes the first move before planning the
+	 * second, so the later row simply takes the key; the dry run writes
+	 * nothing, and only forgetting the rows it marked as gone keeps the
+	 * database's stale owner from making the later row a duplicate. A batch
+	 * of one puts the two rows in separate batches.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_frees_a_key_an_earlier_batch_would_leave(): void {
+		$this->create_legacy_redirect( '/old-page' );
+		$later = $this->create_legacy_redirect( '/blog/old-page' );
+
+		$pending = $this->upgrader->count_pending( null, 1 );
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( md5( '/blog/old-page' ), get_post( $later )->post_name, 'The run should hand the later row the freed key.' );
+		$this->assertSame( 2, $result['repathed'] );
+		$this->assertSame( 0, $result['deduped'] );
+		$this->assertSame( 2, $pending['repathed'], 'The dry run should predict both repaths.' );
+		$this->assertSame( 0, $pending['deduped'], 'The dry run should not predict a duplicate the run does not find.' );
+		$this->assertSame( array(), $pending['conflicts'] );
 	}
 
 	/**

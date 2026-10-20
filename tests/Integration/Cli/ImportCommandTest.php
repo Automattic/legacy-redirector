@@ -542,7 +542,7 @@ final class ImportCommandTest extends CliTestCase {
 	/**
 	 * Test upsert mode re-points a disabled redirect rather than duplicating it.
 	 *
-	 * @see https://linear.app/a8c/issue/VIPPLUG-133
+	 * @see VIPPLUG-133
 	 */
 	public function test_import_upsert_updates_disabled_redirect(): void {
 		$redirect_id = $this->create_redirect( '/import-upsert-disabled', 'https://example.com/original' );
@@ -577,7 +577,7 @@ final class ImportCommandTest extends CliTestCase {
 	 * would send this upsert down the create path, to fail on a duplicate the
 	 * cache had just told it did not exist.
 	 *
-	 * @see https://linear.app/a8c/issue/VIPPLUG-113
+	 * @see VIPPLUG-113
 	 */
 	public function test_import_upsert_updates_disabled_redirect_after_frontend_lookup(): void {
 		$redirect_id = $this->create_redirect( '/import-upsert-cached', 'https://example.com/original' );
@@ -609,7 +609,7 @@ final class ImportCommandTest extends CliTestCase {
 	/**
 	 * Test re-running an upsert import is idempotent for disabled redirects.
 	 *
-	 * @see https://linear.app/a8c/issue/VIPPLUG-133
+	 * @see VIPPLUG-133
 	 */
 	public function test_import_upsert_is_idempotent_for_disabled_redirects(): void {
 		$file = $this->create_csv( "/import-upsert-twice,https://example.com/a,disabled\n" );
@@ -632,7 +632,7 @@ final class ImportCommandTest extends CliTestCase {
 	/**
 	 * Test a row longer than 2,000 bytes imports intact.
 	 *
-	 * @see https://linear.app/a8c/issue/VIPPLUG-149
+	 * @see VIPPLUG-149
 	 */
 	public function test_import_does_not_truncate_long_rows(): void {
 		$destination = 'https://example.com/new-page?utm_campaign=' . str_repeat( 'x', 2500 );

@@ -61,10 +61,13 @@ final class HomePathTest extends MonkeyStubs {
 	 * Test a raw unicode home path survives, whatever the runner's locale.
 	 *
 	 * PHP's parse_url() replaces every byte iscntrl() calls a control with
-	 * '_'. Under a UTF-8 LC_CTYPE that includes 0x80-0x9F, the C1 range - and
-	 * ordinary UTF-8 continuation-byte territory. A bare wp_parse_url() here
-	 * would return '/日_日_' on a macOS dev box and '/日本' on Linux CI, so
-	 * the home path would strip on one and not the other.
+	 * '_'. Under a UTF-8 LC_CTYPE on macOS that includes 0x80-0x9F, the C1
+	 * range - and ordinary UTF-8 continuation-byte territory. A bare
+	 * wp_parse_url() here would return '/日_日_' on a macOS dev box and
+	 * '/日本' on Linux CI, so the home path would strip on one and not the
+	 * other. glibc (CI) and musl leave those bytes alone under every locale,
+	 * so this test only guards macOS dev machines: on Linux it passes with or
+	 * without the fix.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\HomePath::current
 	 */

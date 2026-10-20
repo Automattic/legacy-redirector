@@ -563,26 +563,20 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * Test get_redirect_data returns null for invalid source URL.
 	 *
 	 * When SourceUrl::from_string() throws InvalidArgumentException (e.g., for
-	 * malformed URLs that esc_url_raw empties), get_redirect_data() catches it
-	 * and returns null.
+	 * a URL its sanitizing empties), get_redirect_data() catches it and
+	 * returns null.
 	 *
 	 * We simulate this by having the request_path filter return a string that
-	 * causes SourceUrl::from_string() to throw (e.g., a URL with only a scheme
-	 * that esc_url_raw accepts but has no path).
+	 * causes SourceUrl::from_string() to throw.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_for_invalid_source_url(): void {
 		$this->stub_home_url();
 
-		// The filter returns a path that, when passed to SourceUrl::from_string(),
-		// will cause an InvalidArgumentException because after parsing it has
-		// neither path nor query.
-		// We use 'http://example.com' - after esc_url_raw it remains, but when
-		// normalized in SourceUrl, it has no path (just scheme and host).
-		// However the stub for esc_url_raw returns the input, and wp_parse_url
-		// will parse it correctly giving just host/scheme with no path.
-
+		// The filter returns a URL with a scheme and host but neither path
+		// nor query, which SourceUrl::from_string() rejects once Url::parse()
+		// has split it.
 		$url_without_path = 'http://example.com';
 
 		Filters\expectApplied( 'legacy_redirector_request_path' )
@@ -808,12 +802,8 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * Test a unicode path under an ASCII subsite prefix is looked up correctly.
 	 *
 	 * Requests are asserted percent-encoded throughout this section because
-	 * that is what a browser sends, and because PHP's parse_url() replaces raw
-	 * bytes in the 0x80-0x9F range with '_' whenever LC_CTYPE is a UTF-8
-	 * locale (those bytes are C1 controls there), which would make any
-	 * raw-UTF-8 assertion pass or fail on the runner's locale rather than on
-	 * this plugin's behavior. SourceUrl sidesteps that by percent-encoding
-	 * before it parses; extract_path() parses the request URL directly.
+	 * that is what a browser sends. The raw-UTF-8 case has its own test,
+	 * test_raw_multibyte_request_matches_the_stored_source().
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
@@ -936,8 +926,9 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 * as control characters - so the request resolved to '/日_日_' and matched
 	 * nothing.
 	 *
-	 * The locale is forced because CI runs under the C locale, where the
-	 * unfixed code passes this test too.
+	 * Only macOS libc flags that range, and only under a UTF-8 LC_CTYPE, so
+	 * the locale is forced. glibc (CI) and musl never flag it, so on Linux the
+	 * unfixed code passes this test too: it guards macOS dev machines.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */

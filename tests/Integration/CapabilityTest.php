@@ -63,6 +63,23 @@ final class CapabilityTest extends TestCase {
 	}
 
 	/**
+	 * Test a configured role that does not exist is skipped, not fatal.
+	 *
+	 * The core get_role() returns null for it, and the roles after it still
+	 * get the capability.
+	 *
+	 * @return void
+	 */
+	public function test_registration_skips_a_role_that_does_not_exist() {
+		$this->assertNull( get_role( 'no-such-role' ) );
+
+		$this->assertTrue( ( new Capability( array( 'no-such-role', 'editor' ) ) )->register() );
+
+		$this->assertNull( get_role( 'no-such-role' ) );
+		$this->assertRoleHasRedirectsCapability( 'editor' );
+	}
+
+	/**
 	 * Test a revoked capability stays revoked while the stored version is current.
 	 *
 	 * The grant runs on every request's init, so it must not undo a site's

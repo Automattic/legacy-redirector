@@ -52,9 +52,8 @@ final class UpgraderMultisiteTest extends TestCase {
 	/**
 	 * The subsite's path segment, without slashes.
 	 *
-	 * Unique per test: the shared Integration TestCase does not call
-	 * parent::set_up(), so WP_UnitTestCase never opens its rollback
-	 * transaction and created sites persist for the whole run.
+	 * The site itself is rolled back with WP_UnitTestCase's per-test
+	 * transaction, so the unique suffix is not needed for isolation.
 	 *
 	 * @var string
 	 */

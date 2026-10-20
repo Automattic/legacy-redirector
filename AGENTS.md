@@ -10,7 +10,7 @@ Handles large volumes of redirects for a site's legacy URLs.
 | **Text domain** | `legacy-redirector` |
 | **Namespace** | `Automattic\LegacyRedirector` |
 | **Composer package** | `automattic/wpcom-legacy-redirector` (kept from the pre-2.0 name; see below) |
-| **WP-CLI namespace** | `legacy-redirector` (plus `legacy-redirector` as a deprecated alias) |
+| **WP-CLI namespace** | `legacy-redirector` (plus `wpcom-legacy-redirector` as a deprecated alias) |
 | **Filter prefix** | `legacy_redirector_` |
 | **Post type** | `vip-legacy-redirect` |
 | **Source directory** | `src/` |

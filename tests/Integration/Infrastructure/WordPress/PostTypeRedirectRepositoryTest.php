@@ -229,8 +229,8 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test exists returns false for a trashed redirect.
 	 *
-	 * WordPress appends __trashed to the post_name when trashing,
-	 * which breaks the hash-based lookup. This is expected behavior.
+	 * The trash holds no source: the lookup leaves trashed rows out
+	 * explicitly, whatever their post_name.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
@@ -241,12 +241,11 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		$saved = $this->repository->save( $redirect );
 
-		// Trash the post - WordPress appends __trashed to post_name.
+		// Trash the post.
 		wp_trash_post( $saved->id() );
 
 		$exists = $this->repository->exists( $source );
 
-		// exists() won't find trashed posts because post_name changes.
 		$this->assertFalse( $exists );
 	}
 
@@ -322,7 +321,7 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::save
 	 *
-	 * @see https://linear.app/a8c/issue/VIPPLUG-133
+	 * @see VIPPLUG-133
 	 */
 	public function test_save_rejects_duplicate_source_on_insert(): void {
 		$source      = SourceUrl::from_string( '/save-duplicate-source' );
@@ -556,8 +555,8 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	/**
 	 * Test get_id_by_source returns 0 for trashed redirect.
 	 *
-	 * WordPress appends __trashed to the post_name when trashing,
-	 * which breaks the hash-based lookup.
+	 * The trash holds no source: the lookup leaves trashed rows out
+	 * explicitly, whatever their post_name.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
 	 */
@@ -568,12 +567,11 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 
 		$saved = $this->repository->save( $redirect );
 
-		// Trash the post - WordPress appends __trashed to post_name.
+		// Trash the post.
 		wp_trash_post( $saved->id() );
 
 		$id = $this->repository->get_id_by_source( $source );
 
-		// get_id_by_source won't find trashed posts because post_name changes.
 		$this->assertSame( 0, $id );
 	}
 

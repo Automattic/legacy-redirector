@@ -92,7 +92,6 @@ final class AmpersandEscapingTest extends TestCase {
 		$this->assertTrue( $this->manager()->enable( $id ) );
 
 		$this->assertStored( $id, '/find?q=a&page=2', '/newer?a=1&b=2' );
-		$this->clear_lookup_cache( '/find?q=a&page=2' );
 		$found = $this->repository()->find_by_source( SourceUrl::from_string( '/find?q=a&page=2' ) );
 		$this->assertInstanceOf( Redirect::class, $found );
 		$this->assertSame( '/newer?a=1&b=2', $found->destination()->as_url()->value() );
@@ -125,7 +124,6 @@ final class AmpersandEscapingTest extends TestCase {
 		$this->assertTrue( $this->manager()->enable( $id ) );
 
 		$this->assertSame( md5( '/a&b' ), get_post( $id )->post_name );
-		$this->clear_lookup_cache( '/a&b' );
 		$this->assertInstanceOf( Redirect::class, $this->repository()->find_by_source( SourceUrl::from_string( '/a&b' ) ) );
 	}
 

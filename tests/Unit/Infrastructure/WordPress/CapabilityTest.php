@@ -73,34 +73,6 @@ final class CapabilityTest extends TestCase {
 	}
 
 	/**
-	 * Test register handles null role gracefully when VIP functions are available.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::register
-	 */
-	public function test_register_handles_nonexistent_role_with_vip(): void {
-		$capability = new Capability( array( 'nonexistent_role' ) );
-
-		Functions\expect( 'get_option' )
-			->once()
-			->with( 'manage_redirects_capability_version', 0 )
-			->andReturn( 0 );
-
-		// VIP function handles non-existent roles gracefully.
-		Functions\expect( 'wpcom_vip_add_role_caps' )
-			->once()
-			->with( 'nonexistent_role', 'manage_redirects' );
-
-		Functions\expect( 'update_option' )
-			->once()
-			->with( 'manage_redirects_capability_version', 1 )
-			->andReturn( true );
-
-		$result = $capability->register();
-
-		$this->assertTrue( $result );
-	}
-
-	/**
 	 * Test custom roles can be configured via constructor with VIP functions.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability::__construct

@@ -119,8 +119,8 @@ final class MultisiteTest extends TestCase {
 	 * for '/ging-tips' would fire on the wrong URL in its place.
 	 */
 	public function test_subsite_prefix_is_stripped_only_on_a_path_boundary(): void {
-		// Unique per run: the Integration TestCase has no rollback transaction,
-		// so sites created here persist for the whole run.
+		// The site is rolled back with WP_UnitTestCase's per-test transaction,
+		// so the unique suffix is not needed for isolation.
 		$prefix  = 'blog' . substr( md5( (string) microtime( true ) ), 0, 6 );
 		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $prefix . '/' ) );
 

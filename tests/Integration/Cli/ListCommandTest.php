@@ -260,11 +260,11 @@ final class ListCommandTest extends CliTestCase {
 			array( 'limit' => '2' )
 		);
 
-		// Should show pagination info when more results exist.
 		$stdout = $this->get_stdout();
 		// Count how many redirects are shown (look for paths).
 		$matches = preg_match_all( '/\/limit-(one|two|three)/', $stdout );
 		$this->assertEquals( 2, $matches, 'Should only show 2 redirects with limit=2' );
+		$this->assertStringContainsString( 'Showing 1-2 of 3 redirects.', $stdout, 'Should show pagination info when more results exist' );
 	}
 
 	/**
