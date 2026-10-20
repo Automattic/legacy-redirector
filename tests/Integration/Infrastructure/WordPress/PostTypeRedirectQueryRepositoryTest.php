@@ -74,6 +74,36 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 	}
 
 	/**
+	 * A listing page is read in one unsplit query and leaves the post cache
+	 * empty. Split, WP_Query would prime the cache with every row, which
+	 * under memcache evicts the entries the site serves.
+	 */
+	public function test_find_matching_reads_one_query_and_caches_no_posts(): void {
+		global $wpdb;
+
+		$ids = $this->create_redirects_with_one_date( 3 );
+		wp_cache_flush();
+
+		$reads = array();
+		$log   = static function ( string $sql ) use ( &$reads, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts}" ) ) {
+				$reads[] = $sql;
+			}
+			return $sql;
+		};
+		add_filter( 'query', $log );
+		$found = $this->query_repository()->find_matching( new RedirectCriteria( null, null, null, 'ID', 'ASC', 10 ) );
+		remove_filter( 'query', $log );
+
+		$this->assertCount( 1, $reads, implode( "\n", $reads ) );
+		$this->assertStringContainsString( "{$wpdb->posts}.*", $reads[0] );
+		$this->assertSame( $ids, array_map( static fn ( Redirect $redirect ): ?int => $redirect->id(), $found ) );
+		foreach ( $ids as $id ) {
+			$this->assertFalse( wp_cache_get( $id, 'posts' ), "Redirect $id must not be cached." );
+		}
+	}
+
+	/**
 	 * Destination type counts are exact, cover disabled redirects but not the
 	 * Trash, count a row in every type it matches, and take one query.
 	 */

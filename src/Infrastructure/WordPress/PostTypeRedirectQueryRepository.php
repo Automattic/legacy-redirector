@@ -82,12 +82,30 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * Redirect::is_corrupt()), so the result count agrees with
 	 * count_matching() and corrupt rows stay visible to listings and audits.
 	 *
+	 * The rows are read in one query and kept out of the object cache. Under
+	 * a persistent object cache WP_Query otherwise splits the query and
+	 * primes the post cache with every row, whatever cache_results says, so
+	 * an export of the whole table would push the site's live entries out of
+	 * memcache. Every caller is a listing that maps the rows and moves on,
+	 * so a cached copy would never be read.
+	 *
 	 * @param RedirectCriteria $criteria The query criteria.
 	 * @return Redirect[] Array of matching redirects.
 	 */
 	#[\Override]
 	public function find_matching( RedirectCriteria $criteria ): array {
-		$query = new WP_Query( $this->build_query_args( $criteria ) );
+		$args                  = $this->build_query_args( $criteria );
+		$args['cache_results'] = false;
+
+		$query   = new WP_Query();
+		$unsplit = static fn( bool $split, WP_Query $current ): bool => $current !== $query && $split;
+
+		add_filter( 'split_the_query', $unsplit, 10, 2 );
+		try {
+			$query->query( $args );
+		} finally {
+			remove_filter( 'split_the_query', $unsplit, 10 );
+		}
 
 		return array_map(
 			array( $this, 'map_post_to_redirect' ),

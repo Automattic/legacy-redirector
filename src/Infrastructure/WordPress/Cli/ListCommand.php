@@ -303,7 +303,9 @@ final class ListCommand extends WP_CLI_Command {
 	 * Yield the redirects matching the criteria, fetched a page at a time.
 	 *
 	 * Relies on the query repository's ID tiebreaker, without which rows that
-	 * share a date could repeat or go missing across page boundaries.
+	 * share a date could repeat or go missing across page boundaries. The
+	 * repository keeps each page out of the object cache, so memory stays at
+	 * one page with no flush between them.
 	 *
 	 * @param RedirectCriteria $criteria The criteria; its limit and offset bound the whole walk.
 	 * @return \Generator<int, Redirect> The matching redirects.
@@ -335,13 +337,6 @@ final class ListCommand extends WP_CLI_Command {
 			}
 
 			$fetched += $size;
-
-			// The posts each page loads stay in the runtime object cache.
-			if ( function_exists( 'vip_reset_local_object_cache' ) ) {
-				vip_reset_local_object_cache();
-			} elseif ( wp_cache_supports( 'flush_runtime' ) ) {
-				wp_cache_flush_runtime();
-			}
 		}
 	}
 
