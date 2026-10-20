@@ -147,8 +147,8 @@ final class Upgrader {
 	 * Web requests hold off their batches while it exists: they would walk
 	 * the same rows as the CLI and pull the shared cursor back under it,
 	 * sending it over rows it has already done. Short-lived and refreshed
-	 * every batch, so a CLI run that dies hands back to web requests within
-	 * minutes.
+	 * as each batch runs, so a CLI run that dies hands back to web requests
+	 * within minutes.
 	 */
 	private const string CLI_LOCK = 'wpcom_legacy_redirector_upgrade_cli';
 
@@ -336,6 +336,20 @@ final class Upgrader {
 	private string $lock_value = '';
 
 	/**
+	 * When this runner last took or renewed the batch lock, by this process's clock; see keep_lock().
+	 *
+	 * @var float
+	 */
+	private float $locked_at = 0.0;
+
+	/**
+	 * Whether this runner holds web batches off, and so keeps holding them while a batch runs; see hold_web_batches().
+	 *
+	 * @var bool
+	 */
+	private bool $holds_web = false;
+
+	/**
 	 * Whether the walk under way repairs what 1.x left in stored destinations; see normalized_excerpt().
 	 *
 	 * @var bool
@@ -456,12 +470,14 @@ final class Upgrader {
 	/**
 	 * Keep web requests from running batches for the next few minutes.
 	 *
-	 * For the CLI to call before each of its batches; see CLI_LOCK.
+	 * For the CLI to call before each of its batches; see CLI_LOCK. A batch
+	 * renews it as it renews its lock, so one that runs long keeps it.
 	 *
 	 * @return void
 	 */
 	public function hold_web_batches(): void {
 		set_transient( self::CLI_LOCK, 1, 5 * MINUTE_IN_SECONDS );
+		$this->holds_web = true;
 	}
 
 	/**
@@ -730,6 +746,15 @@ final class Upgrader {
 		$this->touched        = array();
 
 		foreach ( $this->in_walk_order( $posts ) as $post ) {
+			try {
+				$this->keep_lock();
+			} catch ( RuntimeException $e ) {
+				// Rows already written stay written, and a rerun finds them
+				// done, so their cached copies must go now or never.
+				$this->clean_up_writes();
+				throw $e;
+			}
+
 			if ( $post->post_modified_gmt > $started ) {
 				$rows[] = array( 'skip', $post, null, null );
 				continue;
@@ -900,10 +925,11 @@ final class Upgrader {
 	 * Take the batch lock, waiting up to a number of seconds for it; see BATCH_LOCK.
 	 *
 	 * The row is created with INSERT IGNORE, which only one caller can do,
-	 * where add_option() would quietly overwrite another's. A lock older than
-	 * any batch runs was left by a runner that died, and is taken over; the
-	 * delete is conditional on its age, so two callers cannot both do so.
-	 * Ages go by the database's clock, which every web server shares.
+	 * where add_option() would quietly overwrite another's. A running batch
+	 * renews its lock (see keep_lock()), so one not renewed for five minutes
+	 * was left by a runner that died, and is taken over; the delete is
+	 * conditional on its age, so two callers cannot both do so. Ages go by
+	 * the database's clock, which every web server shares.
 	 *
 	 * Once held, what this process has cached of the walk's state is dropped:
 	 * another runner may have moved the walk on while this one waited.
@@ -930,6 +956,7 @@ final class Upgrader {
 
 			if ( 1 === $taken ) {
 				$this->lock_value = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::BATCH_LOCK ) );
+				$this->locked_at  = microtime( true );
 				break;
 			}
 
@@ -945,6 +972,49 @@ final class Upgrader {
 
 		foreach ( array( 'notoptions', self::STARTED_OPTION, self::CURSOR_OPTION, self::CEILING_OPTION, self::RETRY_OPTION, self::REKEYED_OPTION ) as $option ) {
 			wp_cache_delete( $option, 'options' );
+		}
+	}
+
+	/**
+	 * Renew the batch lock once a minute while a batch runs, or stop the batch if it is no longer ours.
+	 *
+	 * A lock five minutes old is taken over by lock(), so a batch that runs
+	 * longer would otherwise lose it to one that plans the same rows against
+	 * a re-key record read before this one's writes. Called before each row,
+	 * so no write follows a takeover. The age is measured by this process's
+	 * clock, the new value is the database's, as lock() stores. The CLI's
+	 * hold on web batches is renewed with it.
+	 *
+	 * @return void
+	 *
+	 * @throws RuntimeException When another runner has taken the lock over, or the database refuses.
+	 */
+	private function keep_lock(): void {
+		if ( microtime( true ) - $this->locked_at < MINUTE_IN_SECONDS ) {
+			return;
+		}
+
+		global $wpdb;
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The lock row lock() created.
+		$now  = (string) $wpdb->get_var( 'SELECT UNIX_TIMESTAMP()' );
+		$kept = '' === $now ? false : $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", $now, self::BATCH_LOCK, $this->lock_value ) );
+		// phpcs:enable
+
+		if ( false === $kept ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+			throw new RuntimeException( 'the database could not renew the migration lock: ' . self::write_error() );
+		}
+
+		if ( 1 !== $kept ) {
+			throw new RuntimeException( 'another migration batch took over the lock while this one ran' );
+		}
+
+		$this->lock_value = $now;
+		$this->locked_at  = microtime( true );
+
+		if ( $this->holds_web ) {
+			$this->hold_web_batches();
 		}
 	}
 
