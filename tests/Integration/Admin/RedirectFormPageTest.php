@@ -294,6 +294,7 @@ final class RedirectFormPageTest extends TestCase {
 	 * add_submenu_page() is the only gate, so this asks core's own access
 	 * check, as wp-admin/admin.php does before rendering a page.
 	 *
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
 	 * @dataProvider data_form_page_access
 	 *
 	 * @param string $role     The role of the user requesting the page.

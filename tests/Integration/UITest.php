@@ -286,6 +286,19 @@ final class UITest extends TestCase {
 	 * it must do nothing at all.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
 	 * @dataProvider data_validation_action_nonces
 	 *
 	 * @param string|null $nonce_action The action the nonce was made for, or null for no nonce.

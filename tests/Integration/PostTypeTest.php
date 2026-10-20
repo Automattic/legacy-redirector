@@ -133,6 +133,13 @@ final class PostTypeTest extends TestCase {
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::register
 	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
 	 */
 	public function test_core_capabilities_on_a_redirect_require_manage_redirects() {
 		( new Capability() )->register();
