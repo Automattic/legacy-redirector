@@ -67,13 +67,14 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 * : Name of the meta key to import from. The meta value contains the From value. The To is the post ID that the meta key is for.
 	 *
 	 * [--start=<start-offset>]
-	 * : Starting offset.
+	 * : Starting offset: how many of the key's rows to pass over first,
+	 * counting in the order the rows were added.
 	 * ---
 	 * default: 0
 	 * ---
 	 *
 	 * [--end=<end-offset>]
-	 * : Ending offset.
+	 * : Ending offset: the position to stop before, counted the same way.
 	 * ---
 	 * default: 99999999
 	 * ---
@@ -160,6 +161,23 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 			? \WP_CLI\Utils\make_progress_bar( ( $dry_run ? 'Checking ' : 'Importing ' ) . self::count_of( $slice, 'redirect', 'redirects' ), $slice )
 			: null;
 
+		// Rows are read in meta_id order, which is unique, so no row is read
+		// twice or skipped where a page ends. --start counts positions in that
+		// order: one OFFSET lookup turns it into a meta_id, and every page
+		// after that is a range scan of the meta_key index (which carries
+		// meta_id), so a page late in the key costs what the first one does.
+		$after = 0;
+		if ( $offset > 0 && $offset < $end_offset ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- CLI command for bulk operation.
+			$after = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT meta_id FROM $wpdb->postmeta WHERE meta_key = %s ORDER BY meta_id ASC LIMIT %d, 1",
+					$meta_key,
+					$offset - 1
+				)
+			);
+		}
+
 		while ( $offset < $end_offset ) {
 			// Never past --end, even part-way through a page.
 			$page_size = min( self::PAGE_SIZE, $end_offset - $offset );
@@ -167,9 +185,9 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- CLI command for bulk operation.
 			$redirects = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = %s ORDER BY post_id ASC LIMIT %d, %d",
+					"SELECT meta_id, post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = %s AND meta_id > %d ORDER BY meta_id ASC LIMIT %d",
 					$meta_key,
-					$offset,
+					$after,
 					$page_size
 				)
 			);
@@ -246,6 +264,7 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 				break;
 			}
 
+			$after   = (int) $redirects[ $page_size - 1 ]->meta_id;
 			$offset += $page_size;
 		}
 

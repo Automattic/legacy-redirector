@@ -580,4 +580,41 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'The row after the hundredth clears the object cache.' );
 		$this->assertLessThan( 1.0, microtime( true ) - $started, 'A dry run writes nothing, so never pauses.' );
 	}
+
+	/**
+	 * Test rows on one post that span a page boundary are each read once, and
+	 * the next page starts after the last meta_id read rather than at an offset.
+	 */
+	public function test_rows_on_one_post_spanning_a_page_are_each_read_once(): void {
+		// Rows with no path fail before any lookup, which keeps 1,001 rows fast.
+		$post_id  = self::factory()->post->create();
+		$meta_ids = array();
+		foreach ( range( 1, 1001 ) as $i ) {
+			$meta_ids[] = add_post_meta( $post_id, $this->meta_key, "https://example.com#$i" );
+		}
+
+		$queries = array();
+		$capture = function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+		add_filter( 'query', $capture );
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+				'dry-run'  => true,
+			)
+		);
+		remove_filter( 'query', $capture );
+
+		$read = array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'redirect_from' );
+		$this->assertCount( 1001, $read );
+		$this->assertCount( 1001, array_unique( $read ) );
+		$this->assertNotEmpty( preg_grep( '/AND meta_id > ' . $meta_ids[999] . ' ORDER BY meta_id ASC LIMIT 1$/', $queries ), 'The second page is a range from the last meta_id read.' );
+	}
 }

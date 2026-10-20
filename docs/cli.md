@@ -313,8 +313,8 @@ destination:
 wp legacy-redirector import-from-meta --meta-key=legacy-url
 ```
 
-Work through a large set in slices with `--start` and `--end`, and preview with
-`--dry-run`. A dry run checks each row as the import would, so a source that already has
+Work through a large set in slices with `--start` and `--end`, which count the key's rows
+in the order they were added, and preview with `--dry-run`. A dry run checks each row as the import would, so a source that already has
 a redirect, or a destination post that is not published, is reported rather than promised:
 
 ```bash
