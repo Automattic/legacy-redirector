@@ -288,6 +288,65 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
+	 * Test only a redirect manager can open the Add and Edit pages.
+	 *
+	 * The render callbacks check nothing themselves: the capability given to
+	 * add_submenu_page() is the only gate, so this asks core's own access
+	 * check, as wp-admin/admin.php does before rendering a page.
+	 *
+	 * @dataProvider data_form_page_access
+	 *
+	 * @param string $role     The role of the user requesting the page.
+	 * @param string $slug     The page slug.
+	 * @param string $pagenow  The wp-admin file the page is requested through.
+	 * @param string $typenow  The post type in the request, if any.
+	 * @param bool   $expected Whether core lets the user in.
+	 */
+	public function test_form_pages_are_gated_on_manage_redirects( string $role, string $slug, string $pagenow, string $typenow, bool $expected ): void {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		( new Capability() )->register();
+
+		$names  = array( 'menu', 'submenu', '_wp_menu_nopriv', '_wp_submenu_nopriv', '_wp_nopriv_pages', '_registered_pages', '_parent_pages', 'pagenow', 'typenow', 'plugin_page' );
+		$backup = array();
+		foreach ( $names as $name ) {
+			$backup[ $name ]  = $GLOBALS[ $name ] ?? null;
+			$GLOBALS[ $name ] = in_array( $name, array( 'pagenow', 'typenow', 'plugin_page' ), true ) ? null : array();
+		}
+
+		try {
+			wp_set_current_user( self::factory()->user->create( array( 'role' => $role ) ) );
+			$this->page->register_pages();
+
+			// The request core's access check reads; all three are restored below.
+			// phpcs:disable WordPress.WP.GlobalVariablesOverride.Prohibited
+			$GLOBALS['pagenow']     = $pagenow;
+			$GLOBALS['typenow']     = $typenow;
+			$GLOBALS['plugin_page'] = $slug;
+			// phpcs:enable WordPress.WP.GlobalVariablesOverride.Prohibited
+
+			$this->assertSame( $expected, user_can_access_admin_page() );
+		} finally {
+			foreach ( $backup as $name => $value ) {
+				$GLOBALS[ $name ] = $value;
+			}
+		}
+	}
+
+	/**
+	 * Data provider for who may open which form page.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string, 3: string, 4: bool}>
+	 */
+	public static function data_form_page_access(): array {
+		return array(
+			'author, add page'  => array( 'author', 'add-redirect', 'edit.php', 'vip-legacy-redirect', false ),
+			'author, edit page' => array( 'author', 'edit-redirect', 'admin.php', '', false ),
+			'editor, add page'  => array( 'editor', 'add-redirect', 'edit.php', 'vip-legacy-redirect', true ),
+			'editor, edit page' => array( 'editor', 'edit-redirect', 'admin.php', '', true ),
+		);
+	}
+
+	/**
 	 * Test empty fields redirect back to the add page with an error.
 	 */
 	public function test_empty_fields_redirect_with_error(): void {

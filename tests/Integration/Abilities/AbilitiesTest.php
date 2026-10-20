@@ -139,17 +139,15 @@ final class AbilitiesTest extends TestCase {
 	public function test_abilities_are_registered(): void {
 		$this->assertTrue( wp_has_ability_category( AbilitiesRegistrar::CATEGORY ) );
 
-		$expected = array(
-			'create-redirect',
-			'get-redirect',
-			'list-redirects',
-			'update-redirect',
-			'set-redirect-status',
-			'delete-redirect',
-			'validate-redirects',
-			'test-redirects',
-			'find-redirect-domains',
-		);
+		// The refusal test's provider is the list, so a new ability cannot skip it.
+		$expected   = array_keys( self::data_every_ability_with_valid_input() );
+		$registered = array();
+		foreach ( wp_get_abilities() as $ability ) {
+			if ( str_starts_with( $ability->get_name(), 'legacy-redirector/' ) ) {
+				$registered[] = substr( $ability->get_name(), strlen( 'legacy-redirector/' ) );
+			}
+		}
+		$this->assertEqualsCanonicalizing( $expected, $registered );
 
 		foreach ( $expected as $name ) {
 			$this->assertSame(
@@ -581,24 +579,70 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
-	 * Test a user without the capability cannot read or change redirects.
+	 * Test a user without the capability is refused by every ability, and changes nothing.
 	 *
+	 * Each ability names its own permission callback, so one ability left on
+	 * __return_true would pass a test of the others.
+	 *
+	 * @dataProvider data_every_ability_with_valid_input
+	 *
+	 * @param string                    $name  The ability name, without the plugin namespace.
+	 * @param array<string, mixed>|null $input Input that passes the ability's schema, or null for an ability that takes none.
 	 * @return void
 	 */
-	public function test_abilities_require_the_manage_redirects_capability(): void {
-		$this->create_redirect( '/private', '/destination' );
+	public function test_every_ability_refuses_a_user_without_the_capability( string $name, ?array $input ): void {
+		$redirect_id = $this->create_redirect( '/private', 'https://example.com/destination' );
 
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 
-		$read = $this->ability( 'list-redirects' )->execute( array() );
+		$result = $this->ability( $name )->execute( $input );
 
-		$this->assertInstanceOf( 'WP_Error', $read );
-		$this->assertSame( 'ability_invalid_permissions', $read->get_error_code() );
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'ability_invalid_permissions', $result->get_error_code() );
 
-		$write = $this->ability( 'delete-redirect' )->execute( array( 'redirects' => array( '/private' ) ) );
+		$post = get_post( $redirect_id );
+		$this->assertNotNull( $post, 'The redirect is still there.' );
+		$this->assertSame( 'publish', $post->post_status );
+		$this->assertSame( 'https://example.com/destination', $post->post_excerpt );
+	}
 
-		$this->assertInstanceOf( 'WP_Error', $write );
-		$this->assertSame( 'ability_invalid_permissions', $write->get_error_code() );
+	/**
+	 * Data provider: every ability the plugin registers, with input its schema accepts.
+	 *
+	 * The registration test fails if an ability is added without a row here.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>|null}>
+	 */
+	public static function data_every_ability_with_valid_input(): array {
+		return array(
+			'create-redirect'       => array(
+				'create-redirect',
+				array(
+					'from' => '/new-source',
+					'to'   => 'https://example.com/elsewhere',
+				),
+			),
+			'get-redirect'          => array( 'get-redirect', array( 'redirect' => '/private' ) ),
+			'list-redirects'        => array( 'list-redirects', array() ),
+			'update-redirect'       => array(
+				'update-redirect',
+				array(
+					'redirects' => array( '/private' ),
+					'to'        => 'https://example.com/elsewhere',
+				),
+			),
+			'set-redirect-status'   => array(
+				'set-redirect-status',
+				array(
+					'redirects' => array( '/private' ),
+					'status'    => 'disabled',
+				),
+			),
+			'delete-redirect'       => array( 'delete-redirect', array( 'redirects' => array( '/private' ) ) ),
+			'validate-redirects'    => array( 'validate-redirects', array( 'redirects' => array( '/private' ) ) ),
+			'test-redirects'        => array( 'test-redirects', array( 'redirects' => array( '/private' ) ) ),
+			'find-redirect-domains' => array( 'find-redirect-domains', null ),
+		);
 	}
 
 	/**

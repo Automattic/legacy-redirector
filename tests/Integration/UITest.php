@@ -279,6 +279,60 @@ final class UITest extends TestCase {
 	}
 
 	/**
+	 * Test the no-JS Test row action runs only with its own nonce.
+	 *
+	 * The action is a GET link, so without the nonce a crafted link could
+	 * make a manager's browser run live requests; with the wrong or no nonce
+	 * it must do nothing at all.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @dataProvider data_validation_action_nonces
+	 *
+	 * @param string|null $nonce_action The action the nonce was made for, or null for no nonce.
+	 * @param bool        $runs         Whether the action should run and redirect.
+	 */
+	public function test_validation_action_runs_only_with_its_nonce( ?string $nonce_action, bool $runs ): void {
+		$redirect_id = $this->create_redirect( '/nonce-checked', 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
+				'response' => array( 'code' => 200 ),
+				'headers'  => array(),
+				'body'     => '',
+			)
+		);
+
+		$_GET = array(
+			'action' => 'validate',
+			'post'   => (string) $redirect_id,
+		);
+		if ( null !== $nonce_action ) {
+			$_REQUEST['_validate_redirect'] = wp_create_nonce( $nonce_action );
+		}
+
+		try {
+			$sent = $this->redirect_sent_by( array( $this->notices, 'handle_validation_action' ) );
+		} finally {
+			unset( $_REQUEST['_validate_redirect'] );
+		}
+
+		$this->assertSame( $runs, null !== $sent );
+	}
+
+	/**
+	 * Data provider for the Test action's nonce.
+	 *
+	 * @return array<string, array{0: string|null, 1: bool}>
+	 */
+	public static function data_validation_action_nonces(): array {
+		return array(
+			'its own nonce'           => array( 'validate_vip_legacy_redirect', true ),
+			'a nonce for another one' => array( 'disable_redirect', false ),
+			'no nonce'                => array( null, false ),
+		);
+	}
+
+	/**
 	 * Test customize_views adds destination type filters with counts.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
