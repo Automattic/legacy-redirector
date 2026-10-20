@@ -55,8 +55,8 @@ final class TrashRedirectEnhancer {
 	 * @return string Modified redirect URL.
 	 */
 	public function add_source_to_redirect( string $location ): string {
-		// Only process redirects to our post type edit screen with trashed=1.
-		if ( ! str_contains( $location, 'post_type=' . PostType::POST_TYPE ) || ! str_contains( $location, 'trashed=1' ) ) {
+		// Only process redirects to our post type's list screen.
+		if ( ! str_contains( $location, 'post_type=' . PostType::POST_TYPE ) ) {
 			return $location;
 		}
 
@@ -68,8 +68,9 @@ final class TrashRedirectEnhancer {
 
 		parse_str( $query_string, $query_args );
 
-		// Only add source for single item trash.
-		if ( ! isset( $query_args['ids'] ) ) {
+		// Only after a trash, read as a parameter: "untrashed=1" contains
+		// "trashed=1" too. Only for a single item.
+		if ( empty( $query_args['trashed'] ) || ! isset( $query_args['ids'] ) ) {
 			return $location;
 		}
 
