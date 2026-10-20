@@ -239,7 +239,7 @@ Version 1.3.0 shipped three commands. All three change:
 |-------------|-----------------|
 | `insert-redirect <from> <to>` | `create <from> <to>` — validates the destination by default, so pass `--skip-validation` for the 1.x behavior, and `--porcelain` to capture the new ID |
 | `import-from-csv --csv=<file>` | `import <file>` — `-` reads from STDIN, and `--mode=upsert` updates redirects that already exist |
-| `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` — flags are now kebab-case, and `--skip_dupes=<bool>` is now the plain flag `--skip-dupes` |
+| `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` — flags are now kebab-case, and `--skip_dupes=<bool>` is now the plain flag `--skip-dupes`. `--start` and `--end` now count rows in the order they were added, not by post ID, so finish a sliced run on the version you started it on |
 
 #### Upgrading from a `develop` snapshot
 
