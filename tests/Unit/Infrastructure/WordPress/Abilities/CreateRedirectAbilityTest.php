@@ -213,6 +213,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'legacy_redirector_invalid_redirect', $result->get_error_code() );
+		$this->assertStringContainsString( 'Post ID must contain only digits.', $result->get_error_message() );
 	}
 
 	/**
