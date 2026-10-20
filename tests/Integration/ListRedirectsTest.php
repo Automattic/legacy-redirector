@@ -628,6 +628,53 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test a user without the capability gets no row actions at all, not even core's Trash.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager::modify_row_actions
+	 */
+	public function test_row_actions_are_empty_without_the_capability(): void {
+		( new Capability() )->register();
+		$post = get_post( $this->create_redirect( '/no-actions', '/internal-destination' ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		$this->assertSame(
+			array(),
+			$this->row_actions_manager->modify_row_actions( array( 'trash' => '<a href="#">Trash</a>' ), $post )
+		);
+	}
+
+	/**
+	 * Test each row action carries the nonce its handler checks.
+	 *
+	 * The links and the handlers build the nonce action separately, so a
+	 * rename on one side would leave every link refused as a failed security
+	 * check.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager::modify_row_actions
+	 */
+	public function test_row_action_nonces_are_the_ones_their_handlers_accept(): void {
+		( new Capability() )->register();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$redirect_id = $this->create_redirect( '/nonce-links', '/internal-destination' );
+
+		$query = static function ( string $link ): array {
+			preg_match( '#href="([^"]+)"#', $link, $href );
+			parse_str( (string) wp_parse_url( html_entity_decode( $href[1] ), PHP_URL_QUERY ), $args );
+
+			return $args;
+		};
+
+		$live = $this->row_actions_manager->modify_row_actions( array(), get_post( $redirect_id ) );
+		$this->assertNotFalse( wp_verify_nonce( $query( $live['disable'] )['_wpnonce'], 'disable_redirect_' . $redirect_id ) );
+		$this->assertNotFalse( wp_verify_nonce( $query( $live['validate'] )['_validate_redirect'], 'validate_vip_legacy_redirect' ) );
+
+		$this->manager()->disable( $redirect_id );
+		$disabled = $this->row_actions_manager->modify_row_actions( array(), get_post( $redirect_id ) );
+		$this->assertNotFalse( wp_verify_nonce( $query( $disabled['enable'] )['_wpnonce'], 'enable_redirect_' . $redirect_id ) );
+	}
+
+	/**
 	 * Test modify_row_actions returns unchanged actions for non-redirect post types.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager::modify_row_actions
