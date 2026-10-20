@@ -63,6 +63,8 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 		$this->handler    = new RedirectRequestHandler( new RedirectResolver( $this->repository ) );
 
 		$GLOBALS['legacy_redirector_sent_headers'] = array();
+
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
 	}
 
 	/**
@@ -112,6 +114,21 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 
 		$this->assertSame(
 			array( 'Cache-Control: max-age=3600' ),
+			$this->send_cache_control_header( 'https://example.com/destination', 301 )
+		);
+	}
+
+	/**
+	 * Test a logged-in user gets no max-age, keeping core's no-cache headers.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 */
+	public function test_cache_control_header_is_not_sent_to_logged_in_users(): void {
+		Functions\when( 'is_user_logged_in' )->justReturn( true );
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )->never();
+
+		$this->assertSame(
+			array(),
 			$this->send_cache_control_header( 'https://example.com/destination', 301 )
 		);
 	}
