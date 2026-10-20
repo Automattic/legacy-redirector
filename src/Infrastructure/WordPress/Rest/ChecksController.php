@@ -193,9 +193,7 @@ final class ChecksController {
 		}
 
 		try {
-			$destination = Destination::from_mixed(
-				is_numeric( $raw ) ? (int) $raw : $raw
-			);
+			$destination = Destination::from_mixed( $raw );
 		} catch ( \InvalidArgumentException $e ) {
 			// A malformed destination is the submit-time validation's report to
 			// make; this check only answers the allowed-host question.

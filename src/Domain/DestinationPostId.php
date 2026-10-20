@@ -54,15 +54,16 @@ final class DestinationPostId {
 	/**
 	 * Create a DestinationPostId from a mixed value.
 	 *
-	 * Accepts integers or numeric strings.
+	 * Accepts integers or strings of digits only. A looser check such as
+	 * is_numeric() would let (int) turn '12.7' into 12 and '1e3' into 1000.
 	 *
 	 * @param int|string $value The post ID value.
 	 * @return self
 	 *
-	 * @throws InvalidRedirectValue If the value is not numeric or not positive.
+	 * @throws InvalidRedirectValue If the value is not all digits or not positive.
 	 */
 	public static function from_mixed( int|string $value ): self {
-		if ( ! is_numeric( $value ) ) {
+		if ( is_string( $value ) && ! ctype_digit( $value ) ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
 			throw InvalidRedirectValue::because( InvalidRedirectValue::POST_ID_NOT_NUMERIC );
 		}

@@ -34,6 +34,7 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
@@ -234,21 +235,61 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test an unusable destination is rejected before anything is changed.
+	 * Test a string of digits still names a post.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility::execute
 	 */
-	public function test_execute_rejects_an_invalid_destination(): void {
+	public function test_execute_treats_a_digits_string_as_a_post_id(): void {
+		$redirect = $this->given_redirect( 4 );
+
+		$this->manager->shouldReceive( 'update_destination' )
+			->once()
+			->with( 4, Mockery::on( static fn ( Destination $destination ): bool => $destination->is_post_id() && 123 === $destination->as_post_id()->value() ), null )
+			->andReturn( RedirectCreationResult::success( $redirect ) );
+
+		$result = $this->ability->execute(
+			array(
+				'redirects' => array( 4 ),
+				'to'        => '123',
+			)
+		);
+
+		$this->assertSame( 1, $result['updated'] );
+	}
+
+	/**
+	 * Test an unusable destination is rejected before anything is changed,
+	 * including a numeric string (int) would cast to some other post.
+	 *
+	 * @dataProvider data_invalid_destinations
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility::execute
+	 *
+	 * @param string $to The destination.
+	 */
+	public function test_execute_rejects_an_invalid_destination( string $to ): void {
 		$this->manager->shouldNotReceive( 'update_destination' );
 
 		$result = $this->ability->execute(
 			array(
 				'redirects' => array( 4 ),
-				'to'        => 'nonsense',
+				'to'        => $to,
 			)
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'legacy_redirector_invalid_destination', $result->get_error_code() );
+	}
+
+	/**
+	 * Destinations that are neither a post ID nor a valid URL.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_invalid_destinations(): array {
+		return array(
+			'word'     => array( 'nonsense' ),
+			'decimal'  => array( '12.7' ),
+			'exponent' => array( '1e3' ),
+		);
 	}
 }

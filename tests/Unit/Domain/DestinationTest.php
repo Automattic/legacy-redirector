@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\InvalidRedirectValue;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
 use LogicException;
 
@@ -21,6 +22,7 @@ use LogicException;
  * @covers \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
 final class DestinationTest extends MonkeyStubs {
@@ -52,27 +54,91 @@ final class DestinationTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test from_mixed with numeric value creates post ID destination.
+	 * Test an int, or a string of digits only, is a post ID.
 	 *
+	 * @dataProvider data_post_id_values
 	 * @covers \Automattic\LegacyRedirector\Domain\Destination::from_mixed
+	 *
+	 * @param int|string $value    The destination value.
+	 * @param int        $expected The post ID it names.
 	 */
-	public function test_from_mixed_numeric_creates_post_destination(): void {
-		$destination = Destination::from_mixed( 456 );
+	public function test_from_mixed_treats_digits_as_a_post_id( int|string $value, int $expected ): void {
+		$destination = Destination::from_mixed( $value );
 
 		$this->assertTrue( $destination->is_post_id() );
-		$this->assertSame( 456, $destination->as_post_id()->value() );
+		$this->assertSame( $expected, $destination->as_post_id()->value() );
 	}
 
 	/**
-	 * Test from_mixed with numeric string creates post ID destination.
+	 * Destination values that name a post.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\Destination::from_mixed
+	 * @return array<string, array{int|string, int}>
 	 */
-	public function test_from_mixed_numeric_string_creates_post_destination(): void {
-		$destination = Destination::from_mixed( '789' );
+	public static function data_post_id_values(): array {
+		return array(
+			'int'           => array( 456, 456 ),
+			'digits string' => array( '789', 789 ),
+		);
+	}
 
-		$this->assertTrue( $destination->is_post_id() );
-		$this->assertSame( 789, $destination->as_post_id()->value() );
+	/**
+	 * Test a numeric-looking string that is not all digits is parsed as a
+	 * URL and refused, rather than cast to some other post's ID.
+	 *
+	 * @dataProvider data_numeric_but_not_digits
+	 * @covers \Automattic\LegacyRedirector\Domain\Destination::from_mixed
+	 *
+	 * @param string $value The destination value.
+	 */
+	public function test_from_mixed_refuses_numeric_strings_that_are_not_all_digits( string $value ): void {
+		$this->expectException( InvalidRedirectValue::class );
+		$this->expectExceptionMessage( 'Absolute destination URLs must use http or https scheme.' );
+
+		Destination::from_mixed( $value );
+	}
+
+	/**
+	 * Strings is_numeric() accepts that are not a post ID.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_numeric_but_not_digits(): array {
+		return array(
+			'decimal'        => array( '12.7' ),
+			'exponent'       => array( '1e3' ),
+			'leading space'  => array( ' 12' ),
+			'trailing space' => array( '12 ' ),
+			'negative'       => array( '-5' ),
+			'plus sign'      => array( '+12' ),
+			'hexadecimal'    => array( '0x1A' ), // phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- Pinned as a string that is not a post ID.
+		);
+	}
+
+	/**
+	 * Test zero is still refused as a post ID, as an int or a string.
+	 *
+	 * @dataProvider data_zero_values
+	 * @covers \Automattic\LegacyRedirector\Domain\Destination::from_mixed
+	 *
+	 * @param int|string $value The destination value.
+	 */
+	public function test_from_mixed_refuses_zero( int|string $value ): void {
+		$this->expectException( InvalidRedirectValue::class );
+		$this->expectExceptionMessage( 'Post ID must be a positive integer.' );
+
+		Destination::from_mixed( $value );
+	}
+
+	/**
+	 * Zero in each form.
+	 *
+	 * @return array<string, array{int|string}>
+	 */
+	public static function data_zero_values(): array {
+		return array(
+			'int'    => array( 0 ),
+			'string' => array( '0' ),
+		);
 	}
 
 	/**

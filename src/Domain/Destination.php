@@ -68,7 +68,9 @@ final class Destination {
 	/**
 	 * Create a Destination from a mixed value.
 	 *
-	 * Automatically determines if the value is a post ID (numeric) or URL.
+	 * An int, or a string of digits only, is a post ID. Anything else is a
+	 * URL, so '12.7', '1e3' and ' 12' are refused as invalid URLs rather
+	 * than truncated or expanded into some other post's ID.
 	 *
 	 * @param int|string $value The destination value.
 	 * @return self
@@ -76,8 +78,7 @@ final class Destination {
 	 * @throws InvalidArgumentException If the value cannot be parsed.
 	 */
 	public static function from_mixed( int|string $value ): self {
-		// Numeric values are treated as post IDs.
-		if ( is_numeric( $value ) ) {
+		if ( is_int( $value ) || ctype_digit( $value ) ) {
 			return self::from_post_id( DestinationPostId::from_mixed( $value ) );
 		}
 

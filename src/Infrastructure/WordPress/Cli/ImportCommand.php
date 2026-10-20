@@ -227,8 +227,7 @@ final class ImportCommand extends WP_CLI_Command {
 		}
 
 		try {
-			$to_value    = ctype_digit( $redirect_to ) ? (int) $redirect_to : $redirect_to;
-			$destination = Destination::from_mixed( $to_value );
+			$destination = Destination::from_mixed( $redirect_to );
 		} catch ( \InvalidArgumentException $e ) {
 			return $this->result_row( $redirect_from, $redirect_to, 'error', 'Invalid destination: ' . $e->getMessage() );
 		}

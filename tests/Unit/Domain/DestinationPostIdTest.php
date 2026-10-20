@@ -79,15 +79,35 @@ final class DestinationPostIdTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test from_mixed throws for non-numeric string.
+	 * Test from_mixed throws for any string that is not all digits, including
+	 * those is_numeric() accepts, which (int) would cast to a different post.
 	 *
+	 * @dataProvider data_not_all_digits
 	 * @covers \Automattic\LegacyRedirector\Domain\DestinationPostId::from_mixed
+	 *
+	 * @param string $value The post ID value.
 	 */
-	public function test_from_mixed_throws_for_non_numeric(): void {
+	public function test_from_mixed_throws_for_a_string_that_is_not_all_digits( string $value ): void {
 		$this->expectException( InvalidArgumentException::class );
-		$this->expectExceptionMessage( 'Post ID must be numeric.' );
+		$this->expectExceptionMessage( 'Post ID must contain only digits.' );
 
-		DestinationPostId::from_mixed( 'abc' );
+		DestinationPostId::from_mixed( $value );
+	}
+
+	/**
+	 * Strings that are not a post ID.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_not_all_digits(): array {
+		return array(
+			'letters'       => array( 'abc' ),
+			'decimal'       => array( '12.7' ),
+			'exponent'      => array( '1e3' ),
+			'leading space' => array( ' 12' ),
+			'negative'      => array( '-5' ),
+			'hexadecimal'   => array( '0x1A' ), // phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- Pinned as a string that is not a post ID.
+		);
 	}
 
 	/**

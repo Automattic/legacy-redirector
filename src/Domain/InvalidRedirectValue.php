@@ -53,7 +53,7 @@ final class InvalidRedirectValue extends InvalidArgumentException {
 				self::DESTINATION_SCHEME   => 'Absolute destination URLs must use http or https scheme.',
 				self::DESTINATION_NO_HOST  => 'Absolute destination URLs must include a host.',
 				self::POST_ID_NOT_POSITIVE => 'Post ID must be a positive integer.',
-				self::POST_ID_NOT_NUMERIC  => 'Post ID must be numeric.',
+				self::POST_ID_NOT_NUMERIC  => 'Post ID must contain only digits.',
 			}
 		);
 

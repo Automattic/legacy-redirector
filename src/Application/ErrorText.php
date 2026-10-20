@@ -56,7 +56,7 @@ final class ErrorText {
 			InvalidRedirectValue::DESTINATION_SCHEME   => __( 'Absolute destination URLs must use http or https scheme.', 'legacy-redirector' ),
 			InvalidRedirectValue::DESTINATION_NO_HOST  => __( 'Absolute destination URLs must include a host.', 'legacy-redirector' ),
 			InvalidRedirectValue::POST_ID_NOT_POSITIVE => __( 'Post ID must be a positive integer.', 'legacy-redirector' ),
-			InvalidRedirectValue::POST_ID_NOT_NUMERIC  => __( 'Post ID must be numeric.', 'legacy-redirector' ),
+			InvalidRedirectValue::POST_ID_NOT_NUMERIC  => __( 'Post ID must contain only digits.', 'legacy-redirector' ),
 			default                                    => null,
 		};
 	}

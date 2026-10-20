@@ -366,9 +366,7 @@ final class RedirectFormPage {
 
 		// Create destination object.
 		try {
-			$destination = Destination::from_mixed(
-				is_numeric( $redirect_to ) ? (int) $redirect_to : $redirect_to
-			);
+			$destination = Destination::from_mixed( $redirect_to );
 		} catch ( \InvalidArgumentException $e ) {
 			$this->redirect_with_error( $redirect_id, 'invalid_destination', $redirect_from, $redirect_to, $redirect_status );
 		}
