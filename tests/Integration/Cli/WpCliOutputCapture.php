@@ -32,6 +32,8 @@ class WpCliOutputCapture {
 		if ( class_exists( '\WP_CLI', false ) && method_exists( '\WP_CLI', 'reset' ) ) {
 			\WP_CLI::reset();
 		}
+
+		$GLOBALS['wp_cli_format_items_calls'] = array();
 	}
 
 	/**
@@ -53,22 +55,9 @@ class WpCliOutputCapture {
 	}
 
 	/**
-	 * Record an error manually (for exceptions).
-	 *
-	 * @param string $message The error message.
-	 * @return void
-	 */
-	public function record_error( string $message ): void {
-		if ( class_exists( '\WP_CLI', false ) ) {
-			// Manually add to the stub's call log.
-			\WP_CLI::error( $message, false ); // Pass false to prevent exit (stub ignores it anyway).
-		}
-	}
-
-	/**
 	 * Get stdout as a single string.
 	 *
-	 * Includes: line, log, success, warning messages.
+	 * Includes: line, log and success messages.
 	 *
 	 * @return string
 	 */
@@ -86,8 +75,6 @@ class WpCliOutputCapture {
 				$lines[] = $call[1] ?? '';
 			} elseif ( 'success' === $method ) {
 				$lines[] = 'Success: ' . ( $call[1] ?? '' );
-			} elseif ( 'warning' === $method ) {
-				$lines[] = 'Warning: ' . ( $call[1] ?? '' );
 			}
 		}
 
@@ -97,7 +84,7 @@ class WpCliOutputCapture {
 	/**
 	 * Get stderr as a single string.
 	 *
-	 * Includes: error messages.
+	 * Includes: warning and error messages, which real WP-CLI writes to STDERR.
 	 *
 	 * @return string
 	 */
@@ -110,7 +97,9 @@ class WpCliOutputCapture {
 
 		// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- Static property in stub.
 		foreach ( \WP_CLI::$calls as $call ) {
-			if ( 'error' === $call[0] ) {
+			if ( 'warning' === $call[0] ) {
+				$lines[] = 'Warning: ' . ( $call[1] ?? '' );
+			} elseif ( 'error' === $call[0] ) {
 				$lines[] = 'Error: ' . ( $call[1] ?? '' );
 			}
 		}

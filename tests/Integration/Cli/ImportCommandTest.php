@@ -667,8 +667,6 @@ final class ImportCommandTest extends CliTestCase {
 	public function test_import_json_prints_only_the_rows(): void {
 		$file = $this->create_csv( "/import-json,https://example.com/a\n" );
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
-
 		$this->invoke_command(
 			$this->command,
 			array( $file ),

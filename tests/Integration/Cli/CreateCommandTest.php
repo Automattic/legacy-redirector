@@ -228,7 +228,7 @@ final class CreateCommandTest extends CliTestCase {
 			array()
 		);
 
-		$this->assert_command_error();
+		$this->assert_error_contains( 'Post ID that does not exist' );
 	}
 
 	/**
@@ -243,7 +243,7 @@ final class CreateCommandTest extends CliTestCase {
 			array()
 		);
 
-		$this->assert_command_error();
+		$this->assert_error_contains( 'not published' );
 	}
 
 	/**
@@ -312,14 +312,14 @@ final class CreateCommandTest extends CliTestCase {
 			array()
 		);
 
-		$this->assert_command_error();
+		$this->assert_error_contains( 'source and destination are the same' );
 	}
 
 	/**
 	 * Test that a duplicate source is rejected.
 	 */
 	public function test_create_rejects_duplicate(): void {
-		$this->create_redirect( '/duplicate-source', 'https://example.com/first' );
+		$existing_id = $this->create_redirect( '/duplicate-source', 'https://example.com/first' );
 
 		$this->invoke_command(
 			$this->command,
@@ -327,7 +327,20 @@ final class CreateCommandTest extends CliTestCase {
 			array()
 		);
 
-		$this->assert_command_error();
+		$this->assert_error_contains( 'already has the source' );
+		$this->assertSame( 'https://example.com/first', get_post_field( 'post_excerpt', $existing_id ), 'The existing redirect keeps its destination.' );
+		$this->assertCount(
+			1,
+			get_posts(
+				array(
+					'post_type'      => 'vip-legacy-redirect',
+					'post_status'    => 'any',
+					'posts_per_page' => -1,
+					'fields'         => 'ids',
+				)
+			),
+			'No second redirect was saved.'
+		);
 	}
 
 	/**
@@ -340,6 +353,6 @@ final class CreateCommandTest extends CliTestCase {
 			array( 'skip-validation' => true )
 		);
 
-		$this->assert_command_error();
+		$this->assert_error_contains( 'does not validate' );
 	}
 }
