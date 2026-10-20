@@ -182,7 +182,8 @@ class RedirectAuditor {
 	 * Audit a redirect's destination.
 	 *
 	 * Checks if the redirect's destination is (still) valid:
-	 * - For post IDs: checks if post exists and is published
+	 * - For post IDs: checks if post exists, is published, and is of a
+	 *   post type visitors can view
 	 * - For relative paths: checks if path resolves to a published post
 	 * - For absolute URLs: checks the host is allowed, and optionally whether
 	 *   the URL responds
@@ -248,6 +249,16 @@ class RedirectAuditor {
 		// report an attachment of a trashed parent by its pre-trash status.
 		if ( 'trash' === $post->post_status ) {
 			return new AuditFinding( $redirect, AuditFindingType::POST_TRASHED );
+		}
+
+		// A template, a navigation menu, another redirect: published or not,
+		// a post of a type no visitor can view is not public content.
+		if ( ! is_post_type_viewable( $post->post_type ) ) {
+			return new AuditFinding(
+				$redirect,
+				AuditFindingType::POST_UNPUBLISHED,
+				'post type: ' . $post->post_type
+			);
 		}
 
 		// Attachments store 'inherit', never 'publish'; get_post_status()
@@ -360,14 +371,16 @@ class RedirectAuditor {
 	 *
 	 * The same rules check_post_status() reports findings from: the raw
 	 * property for trash (so attachments of trashed parents are not resolved
-	 * to their pre-trash status), get_post_status() otherwise (so
-	 * attachments' 'inherit' resolves against the parent).
+	 * to their pre-trash status), a viewable post type, and get_post_status()
+	 * otherwise (so attachments' 'inherit' resolves against the parent).
 	 *
 	 * @param \WP_Post $post The destination post.
 	 * @return bool True when published.
 	 */
 	private function is_published( \WP_Post $post ): bool {
-		return 'trash' !== $post->post_status && 'publish' === get_post_status( $post );
+		return 'trash' !== $post->post_status
+			&& is_post_type_viewable( $post->post_type )
+			&& 'publish' === get_post_status( $post );
 	}
 
 	/**
@@ -401,7 +414,7 @@ class RedirectAuditor {
 		// Trashing renames post_name with a __trashed suffix, so a direct
 		// lookup misses trashed destinations - check for the renamed slug.
 		if ( null === $post ) {
-			$trashed = get_page_by_path( $slug . '__trashed', OBJECT, get_post_types() );
+			$trashed = get_page_by_path( $slug . '__trashed', OBJECT, PostPathResolver::viewable_post_types() );
 			if ( null !== $trashed && 'trash' === $trashed->post_status ) {
 				return new AuditFinding( $redirect, AuditFindingType::POST_TRASHED );
 			}

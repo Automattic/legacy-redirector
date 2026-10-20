@@ -9,7 +9,9 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
@@ -378,6 +380,58 @@ final class RedirectsTest extends TestCase {
 		$this->assertTrue( $result->is_error() );
 		// 'non-public' is returned for posts that exist but aren't published.
 		$this->assertEquals( 'non-public', $result->error_code() );
+	}
+
+	/**
+	 * Test a published post of a type no visitor can view is refused as a destination.
+	 *
+	 * A template, or another redirect, has no page to send a visitor to.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_redirect_to_non_viewable_post_id_fails(): void {
+		$template_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'wp_template',
+				'post_status' => 'publish',
+				'post_name'   => 'single',
+			)
+		);
+		$redirect_id = $this->create_redirect( '/another-redirect', '/somewhere' );
+
+		$to_template = $this->create_redirect_result( '/redirect-to-template', $template_id, true );
+		$to_redirect = $this->create_redirect_result( '/redirect-to-redirect', $redirect_id, true );
+
+		$this->assertSame( 'non-public', $to_template->error_code() );
+		$this->assertSame( 'non-public', $to_redirect->error_code() );
+
+		$finding = $this->auditor()->audit_destination(
+			Redirect::create( SourceUrl::from_string( '/stored' ), Destination::from_mixed( $template_id ) )
+		);
+		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $finding?->type() );
+		$this->assertSame( 'post type: wp_template', $finding->extra_info() );
+	}
+
+	/**
+	 * Test published posts, pages and attachments are still accepted as destinations.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectValidator::validate
+	 */
+	public function test_redirect_to_viewable_post_ids_succeeds(): void {
+		$post_id       = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$page_id       = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+		$attachment_id = self::factory()->attachment->create_object( 'viewable.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+
+		$this->assertFalse( $this->create_redirect_result( '/redirect-to-post', $post_id, true )->is_error() );
+		$this->assertFalse( $this->create_redirect_result( '/redirect-to-page', $page_id, true )->is_error() );
+		$this->assertFalse( $this->create_redirect_result( '/redirect-to-attachment', $attachment_id, true )->is_error() );
 	}
 
 	/**
