@@ -835,4 +835,55 @@ final class UpgraderMultisiteTest extends TestCase {
 		$this->assertCount( 2, $result['conflicts'] );
 		$this->assertCount( 2, $pending['conflicts'] );
 	}
+
+	/**
+	 * Upgrading a subsite leaves another site's redirects and upgrade state alone.
+	 *
+	 * Each site upgrades its own tables on its own schedule, so the main site,
+	 * still on 1.x data and mid-batch, neither holds the subsite up nor has
+	 * its rows, version or lock touched.
+	 *
+	 * @return void
+	 */
+	public function test_upgrading_a_subsite_leaves_another_site_alone() {
+		global $wpdb;
+
+		switch_to_blog( get_main_site_id() );
+		delete_option( Upgrader::VERSION_OPTION );
+		$other_id = (int) wp_insert_post(
+			array(
+				'post_name'    => md5( '/old-page/' ),
+				'post_title'   => '/old-page/',
+				'post_excerpt' => 'https://example.com/new',
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'draft',
+			)
+		);
+		$lock     = static fn(): ?string => $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wpcom_legacy_redirector_upgrade_lock' ) );
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => 'wpcom_legacy_redirector_upgrade_lock',
+				'option_value' => (string) time(),
+				'autoload'     => 'off',
+			)
+		);
+		$held     = $lock();
+		restore_current_blog();
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertTrue( $result['complete'] );
+		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
+
+		switch_to_blog( get_main_site_id() );
+		$other = get_post( $other_id );
+		$this->assertSame( '/old-page/', $other->post_title );
+		$this->assertSame( 'draft', $other->post_status );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+		$this->assertSame( $held, $lock() );
+		restore_current_blog();
+	}
 }
