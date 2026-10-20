@@ -306,6 +306,38 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * Each batch that changes a status leaves wp_count_posts() current.
+	 *
+	 * Core clears its cached counts only on transition_post_status, which the
+	 * migration's direct writes never fire, so the list screen's status counts
+	 * and the audit sweep's total would stay as they were before the batch.
+	 * The first batch only bulk-publishes and the second only trashes, so each
+	 * write path is checked on its own.
+	 *
+	 * @return void
+	 */
+	public function test_status_changes_clear_the_cached_post_counts() {
+		$published_id = $this->create_legacy_redirect( '/old-page', 'https://example.com/same' );
+		$trashed_id   = $this->create_legacy_redirect( '/old-page/', 'https://example.com/same' );
+
+		$this->assertSame( 2, (int) wp_count_posts( PostType::POST_TYPE )->draft );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( 'publish', get_post_status( $published_id ) );
+		$counts = wp_count_posts( PostType::POST_TYPE );
+		$this->assertSame( 1, (int) $counts->publish, 'The bulk publish should be counted.' );
+		$this->assertSame( 1, (int) $counts->draft );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( 'trash', get_post_status( $trashed_id ) );
+		$counts = wp_count_posts( PostType::POST_TYPE );
+		$this->assertSame( 0, (int) $counts->draft, 'The trashed duplicate should no longer count as a draft.' );
+		$this->assertSame( 1, (int) $counts->trash );
+	}
+
+	/**
 	 * Publishing a 1.x draft drops the stale "nothing here" cache entry.
 	 *
 	 * A path requested while its redirect was still an unpublished 1.x draft
