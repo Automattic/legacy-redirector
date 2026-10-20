@@ -24,6 +24,15 @@ use WP_CLI_Command;
  */
 final class ImportFromMetaCommand extends WP_CLI_Command {
 
+	use CountsInWords;
+
+	/**
+	 * How many meta rows are read per query.
+	 *
+	 * @var int
+	 */
+	private const int PAGE_SIZE = 1000;
+
 	/**
 	 * The redirect manager.
 	 *
@@ -73,13 +82,15 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 * : Skip source URLs that already have a redirect.
 	 *
 	 * [--dry-run]
-	 * : Preview the import without making changes.
+	 * : Preview the import without making changes. Each row is checked as a
+	 * live run would check it, so a row the import would refuse is reported.
 	 *
 	 * [--verbose]
 	 * : Report successful imports and skipped duplicates, not just problems.
 	 *
 	 * [--format=<format>]
-	 * : Render per-row notices in a particular format.
+	 * : Render per-row notices in a particular format. Formats other than
+	 * table print only the notices, with no run heading or closing line.
 	 * ---
 	 * default: table
 	 * options:
@@ -96,6 +107,9 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 	 *     ---Live Run---
 	 *     Importing 143 redirects
 	 *     All of your redirects have been imported. Nice work!
+	 *
+	 *     # Preview the first thousand rows.
+	 *     $ wp legacy-redirector import-from-meta --meta-key=my-redirect --start=0 --end=1000 --dry-run
 	 *
 	 * @when after_wp_load
 	 *
@@ -116,14 +130,13 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 		$format     = $assoc_args['format'] ?? 'table';
 		$dry_run    = isset( $assoc_args['dry-run'] );
 		$verbose    = isset( $assoc_args['verbose'] );
+		$is_table   = 'table' === $format;
 		$notices    = array();
 		$processed  = 0;
 		$failed     = 0;
 
-		if ( $dry_run ) {
-			WP_CLI::line( '---Dry Run---' );
-		} else {
-			WP_CLI::line( '---Live Run---' );
+		if ( $is_table ) {
+			WP_CLI::line( $dry_run ? '---Dry Run---' : '---Live Run---' );
 		}
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- CLI command for bulk operation.
@@ -139,28 +152,34 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 			return;
 		}
 
-		$progress = \WP_CLI\Utils\make_progress_bar(
-			sprintf( 'Importing %s redirects', number_format( (int) $total_redirects ) ),
-			(int) $total_redirects
-		);
+		// The bar counts the slice --start and --end select, not every row
+		// under the key, so a slice of a large set still reaches the end.
+		$end_offset = min( $end_offset, (int) $total_redirects );
+		$slice      = max( 0, $end_offset - $offset );
+		$progress   = $is_table
+			? \WP_CLI\Utils\make_progress_bar( ( $dry_run ? 'Checking ' : 'Importing ' ) . self::count_of( $slice, 'redirect', 'redirects' ), $slice )
+			: null;
 
-		do {
+		while ( $offset < $end_offset ) {
+			// Never past --end, even part-way through a page.
+			$page_size = min( self::PAGE_SIZE, $end_offset - $offset );
+
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- CLI command for bulk operation.
 			$redirects = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = %s ORDER BY post_id ASC LIMIT %d, 1000",
+					"SELECT post_id, meta_value FROM $wpdb->postmeta WHERE meta_key = %s ORDER BY post_id ASC LIMIT %d, %d",
 					$meta_key,
-					$offset
+					$offset,
+					$page_size
 				)
 			);
 
-			$i     = 0;
-			$total = count( $redirects );
+			$i = 0;
 
 			foreach ( $redirects as $redirect ) {
 				++$i;
 				++$processed;
-				$progress->tick();
+				$progress?->tick();
 
 				// A 1.x source out of postmeta can hold raw multibyte bytes, which
 				// a bare parse_url() corrupts on some hosts. The path stays
@@ -194,21 +213,24 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 					continue;
 				}
 
-				if ( ! $dry_run ) {
-					try {
-						$destination = Destination::from_post_id( DestinationPostId::from_int( (int) $redirect->post_id ) );
-						$result      = $this->manager->create_redirect( $source, $destination );
+				try {
+					$destination = Destination::from_post_id( DestinationPostId::from_int( (int) $redirect->post_id ) );
 
-						if ( $result->is_error() ) {
-							++$failed;
-							$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $result->error_message() ?? 'Could not insert redirect' );
-						} elseif ( $verbose ) {
-							$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, 'Successfully imported' );
-						}
-					} catch ( \InvalidArgumentException $e ) {
+					// A dry run asks the questions the live write would, so the
+					// preview does not promise rows the import will refuse.
+					$error = $dry_run
+						? $this->manager->check( $source, $destination, false )->error_message()
+						: $this->manager->create_redirect( $source, $destination )->error_message();
+
+					if ( null !== $error ) {
 						++$failed;
-						$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
+						$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $error );
+					} elseif ( $verbose ) {
+						$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $dry_run ? 'Would be imported' : 'Successfully imported' );
 					}
+				} catch ( \InvalidArgumentException $e ) {
+					++$failed;
+					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
 				}
 
 				if ( 0 === $i % 100 ) {
@@ -218,20 +240,43 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 					sleep( 1 );
 				}
 			}
-			$offset += 1000;
-		} while ( $total >= 1000 && $offset < $end_offset );
 
-		$progress->finish();
-
-		if ( count( $notices ) > 0 ) {
-			\WP_CLI\Utils\format_items( $format, $notices, array( 'redirect_from', 'redirect_to', 'message' ) );
-
-			// Any failed row fails a live run, so scripts do not mistake a
-			// partial import for a clean one.
-			if ( ! $dry_run && $failed > 0 ) {
-				WP_CLI::error( sprintf( 'Processed %d of %d rows: %d failed.', $processed - $failed, $processed, $failed ) );
+			if ( count( $redirects ) < $page_size ) {
+				break;
 			}
-		} else {
+
+			$offset += $page_size;
+		}
+
+		$progress?->finish();
+
+		// Only a table gets prose; the other formats print the notices alone,
+		// so an empty JSON result is `[]`.
+		if ( ! $is_table || count( $notices ) > 0 ) {
+			\WP_CLI\Utils\format_items( $format, $notices, array( 'redirect_from', 'redirect_to', 'message' ) );
+		}
+
+		// Any failed row fails a live run, so scripts do not mistake a
+		// partial import for a clean one.
+		if ( ! $dry_run && $failed > 0 ) {
+			WP_CLI::error( sprintf( 'Processed %d of %s: %d failed.', $processed - $failed, self::count_of( $processed, 'row', 'rows' ), $failed ) );
+			return;
+		}
+
+		if ( ! $is_table ) {
+			return;
+		}
+
+		if ( $dry_run ) {
+			if ( $failed > 0 ) {
+				WP_CLI::warning( sprintf( 'Dry run: %s would fail. Nothing was changed.', self::count_of( $failed, 'row', 'rows' ) ) );
+			} else {
+				WP_CLI::success( 'Dry run: no problems found. Nothing was changed.' );
+			}
+			return;
+		}
+
+		if ( 0 === count( $notices ) ) {
 			WP_CLI::log( WP_CLI::colorize( '%GAll of your redirects have been imported. Nice work!%n ' ) );
 		}
 	}

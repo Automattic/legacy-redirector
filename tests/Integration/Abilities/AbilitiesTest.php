@@ -288,7 +288,63 @@ final class AbilitiesTest extends TestCase {
 		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
 
 		$this->assertSame( $path, $created['to'] );
+		$this->assertSame( array(), $created['warnings'] );
+		unset( $created['warnings'] );
 		$this->assertSame( $fetched, $created );
+	}
+
+	/**
+	 * Test create and update report the warnings CLI create prints, but still write.
+	 *
+	 * @return void
+	 */
+	public function test_writes_report_warnings_about_what_they_saved(): void {
+		$this->create_redirect( '/warn-first', '/warn-second' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/warn-second',
+				'to'   => '/warn-first',
+			)
+		);
+
+		$this->assertIsArray( $created, 'Creation should succeed despite the warning.' );
+		$this->assertCount( 1, $created['warnings'] );
+		$this->assertSame( $created['id'], $created['warnings'][0]['id'] );
+		$this->assertSame( 'warning', $created['warnings'][0]['severity'] );
+		$this->assertSame( 'Possible redirect loop', $created['warnings'][0]['issue'] );
+
+		$updated = $this->ability( 'update-redirect' )->execute(
+			array(
+				'redirects' => array( '/warn-first' ),
+				'to'        => '/warn-second',
+			)
+		);
+
+		$this->assertSame( 1, $updated['updated'] );
+		$this->assertCount( 1, $updated['warnings'] );
+		$this->assertSame( '/warn-first', $updated['warnings'][0]['from'] );
+		$this->assertSame( 'Possible redirect loop', $updated['warnings'][0]['issue'] );
+	}
+
+	/**
+	 * Test a duplicate source names the redirect that already has it.
+	 *
+	 * @return void
+	 */
+	public function test_create_on_a_taken_source_names_the_existing_redirect(): void {
+		$existing = $this->create_redirect( '/taken-source', 'https://example.org/somewhere' );
+
+		$result = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/taken-source',
+				'to'   => 'https://example.org/elsewhere',
+			)
+		);
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'legacy_redirector_duplicate_redirect_uri', $result->get_error_code() );
+		$this->assertStringContainsString( sprintf( 'Redirect #%d already has the source', $existing ), $result->get_error_message() );
 	}
 
 	/**

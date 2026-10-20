@@ -78,7 +78,12 @@ class RedirectValidator {
 		if ( $existing_id > 0 && $existing_id !== $redirect->id() ) {
 			return ValidationResult::invalid(
 				'duplicate-redirect-uri',
-				__( 'A redirect for this URI already exists', 'legacy-redirector' )
+				sprintf(
+					/* translators: 1: existing redirect ID, 2: source path. */
+					__( 'Redirect #%1$d already has the source "%2$s". Update redirect #%1$d instead.', 'legacy-redirector' ),
+					$existing_id,
+					$source->path()
+				)
 			);
 		}
 
@@ -119,7 +124,7 @@ class RedirectValidator {
 				if ( $destination_path && $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 					return ValidationResult::invalid(
 						'invalid-values',
-						__( '"Redirect From" and "Redirect To" values are required and should not match.', 'legacy-redirector' )
+						__( 'The source and destination are the same, so the redirect would loop.', 'legacy-redirector' )
 					);
 				}
 			}
@@ -150,7 +155,7 @@ class RedirectValidator {
 		if ( $this->normalize_path( $source->path() ) === $this->normalize_path( $destination_path ) ) {
 			return ValidationResult::invalid(
 				'invalid-values',
-				__( '"Redirect From" and "Redirect To" values are required and should not match.', 'legacy-redirector' )
+				__( 'The source and destination are the same, so the redirect would loop.', 'legacy-redirector' )
 			);
 		}
 

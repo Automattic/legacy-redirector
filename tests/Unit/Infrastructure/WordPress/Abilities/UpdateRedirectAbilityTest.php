@@ -9,9 +9,12 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
@@ -37,6 +40,11 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_schema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_to_array
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  */
 final class UpdateRedirectAbilityTest extends MonkeyStubs {
 
@@ -53,6 +61,13 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 	 * @var RedirectRepositoryInterface&Mockery\MockInterface
 	 */
 	private $repository;
+
+	/**
+	 * The mock auditor.
+	 *
+	 * @var RedirectAuditor&Mockery\MockInterface
+	 */
+	private $auditor;
 
 	/**
 	 * The ability under test.
@@ -73,9 +88,12 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 
 		$this->manager    = Mockery::mock( RedirectManager::class );
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
-		$this->ability    = new UpdateRedirectAbility(
+		$this->auditor    = Mockery::mock( RedirectAuditor::class );
+		$this->auditor->shouldReceive( 'warnings' )->andReturn( array() )->byDefault();
+		$this->ability = new UpdateRedirectAbility(
 			$this->manager,
-			new RedirectBatch( new RedirectFetcher( $this->repository ) )
+			new RedirectBatch( new RedirectFetcher( $this->repository ) ),
+			$this->auditor
 		);
 	}
 
@@ -156,6 +174,35 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		);
 
 		$this->assertSame( 1, $result['updated'] );
+		$this->assertSame( array(), $result['warnings'] );
+	}
+
+	/**
+	 * Test warnings about each saved redirect are returned, and none for one that failed.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility::execute
+	 */
+	public function test_execute_returns_warnings_about_the_saved_redirects(): void {
+		$saved = $this->given_redirect( 4 );
+		$this->given_redirect( 5 );
+
+		$this->manager->shouldReceive( 'update_destination' )->with( 4, Mockery::type( Destination::class ), null )->andReturn( RedirectCreationResult::success( $saved ) );
+		$this->manager->shouldReceive( 'update_destination' )->with( 5, Mockery::type( Destination::class ), null )->andReturn( RedirectCreationResult::error( 'save-failed', 'Could not save.' ) );
+		$this->auditor->shouldReceive( 'warnings' )
+			->once()
+			->with( $saved )
+			->andReturn( array( new AuditFinding( $saved, AuditFindingType::POSSIBLE_LOOP, '/new -> /old' ) ) );
+
+		$result = $this->ability->execute(
+			array(
+				'redirects' => array( 4, 5 ),
+				'to'        => '/newer',
+			)
+		);
+
+		$this->assertCount( 1, $result['warnings'] );
+		$this->assertSame( 4, $result['warnings'][0]['id'] );
+		$this->assertSame( 'Possible redirect loop', $result['warnings'][0]['issue'] );
 	}
 
 	/**

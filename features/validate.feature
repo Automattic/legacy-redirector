@@ -44,3 +44,32 @@ Feature: Validate redirects
       """
       Destination is valid
       """
+
+  # Contract test: machine-readable formats print the data alone.
+  Scenario: Validate a redirect with no issues as JSON
+    Given there is a published post with a slug of "json-destination"
+    And there is a redirect from "/validate-json" to "/json-destination"
+
+    When I try `wp legacy-redirector validate /validate-json --format=json`
+    Then the return code should be 0
+    And STDOUT should be:
+      """
+      []
+      """
+
+  # Contract test: a redirect named but not found fails the run, as it does
+  # for update and delete, after the others are checked.
+  Scenario: Validate a redirect that does not exist alongside one that does
+    Given there is a published post with a slug of "partial-destination"
+    And there is a redirect from "/validate-partial" to "/partial-destination"
+
+    When I try `wp legacy-redirector validate /validate-partial /validate-missing`
+    Then the return code should be 1
+    And STDOUT should contain:
+      """
+      No issues found.
+      """
+    And STDERR should contain:
+      """
+      Only validated 1 of 2 redirects.
+      """

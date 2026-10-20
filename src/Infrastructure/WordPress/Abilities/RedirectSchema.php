@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
 
 /**
@@ -138,7 +139,7 @@ final class RedirectSchema {
 	public static function failures_schema(): array {
 		return array(
 			'type'        => 'array',
-			'description' => __( 'Redirects that could not be changed, and why.', 'legacy-redirector' ),
+			'description' => __( 'The redirects given that could not be acted on, and why.', 'legacy-redirector' ),
 			'items'       => array(
 				'type'                 => 'object',
 				'required'             => array( 'redirect', 'reason' ),
@@ -149,11 +150,45 @@ final class RedirectSchema {
 					),
 					'reason'   => array(
 						'type'        => 'string',
-						'description' => __( 'Why the redirect could not be changed.', 'legacy-redirector' ),
+						'description' => __( 'Why the redirect could not be acted on.', 'legacy-redirector' ),
 					),
 				),
 				'additionalProperties' => false,
 			),
 		);
+	}
+
+	/**
+	 * Get the JSON Schema for the warnings a write reports about what it saved.
+	 *
+	 * Each warning is a finding in the shape validate-redirects reports.
+	 *
+	 * @return array<string, mixed> The schema.
+	 */
+	public static function warnings_schema(): array {
+		return array(
+			'type'        => 'array',
+			'description' => __( 'Warnings about the saved redirects: each works, but deserves a look. Empty when there are none.', 'legacy-redirector' ),
+			'items'       => ValidateRedirectsAbility::finding_schema(),
+		);
+	}
+
+	/**
+	 * Format the warnings for saved redirects as ability output.
+	 *
+	 * @param RedirectAuditor $auditor   The auditor, which owns the warning rules.
+	 * @param Redirect[]      $redirects The redirects as saved.
+	 * @return array<int, array<string, mixed>> The warnings, in the order the redirects were given.
+	 */
+	public static function warnings( RedirectAuditor $auditor, array $redirects ): array {
+		$warnings = array();
+
+		foreach ( $redirects as $redirect ) {
+			foreach ( $auditor->warnings( $redirect ) as $warning ) {
+				$warnings[] = ValidateRedirectsAbility::finding_to_array( $warning );
+			}
+		}
+
+		return $warnings;
 	}
 }

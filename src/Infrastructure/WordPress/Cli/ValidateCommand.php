@@ -94,7 +94,9 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *
 	 * [--format=<format>]
 	 * : Render the findings for the redirects given. With no redirects,
-	 * `count` prints how many redirects have problems or warnings.
+	 * `count` prints how many redirects have problems or warnings, and the
+	 * other formats print how many were validated, with problems and with
+	 * warnings.
 	 * ---
 	 * default: table
 	 * options:
@@ -114,7 +116,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector validate /old-page
 	 *
 	 *     # Re-check every redirect the background check flagged as a problem.
-	 *     $ wp legacy-redirector list --has-issues=problem --format=ids | xargs wp legacy-redirector validate
+	 *     $ wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs wp legacy-redirector validate
 	 *
 	 * @when after_wp_load
 	 *
@@ -135,23 +137,42 @@ final class ValidateCommand extends WP_CLI_Command {
 		$redirects = RedirectBatch::redirects( $items );
 
 		if ( array() === $redirects ) {
-			WP_CLI::error( 'No matching redirects found.' );
+			$this->fail_incomplete_batch( $items, 'validate', 'validated' );
 			return;
 		}
 
 		$findings = $this->sweep->validate_redirects( $redirects );
 
+		$this->print_findings( $findings, $format );
+
+		// After the findings, so a script still gets them, but exits non-zero
+		// when some of the redirects it named were not checked.
+		$this->fail_incomplete_batch( $items, 'validate', 'validated' );
+	}
+
+	/**
+	 * Print the findings for the named redirects.
+	 *
+	 * A table gets a sentence when there is nothing to show; the other
+	 * formats print only their structured value, so an empty JSON result
+	 * is `[]` rather than prose a parser cannot read.
+	 *
+	 * @param AuditFinding[] $findings The findings.
+	 * @param string         $format   The output format.
+	 * @return void
+	 */
+	private function print_findings( array $findings, string $format ): void {
 		if ( 'count' === $format ) {
 			WP_CLI::line( (string) count( $findings ) );
 			return;
 		}
 
-		if ( array() === $findings ) {
-			WP_CLI::success( 'No issues found.' );
-			return;
-		}
-
 		if ( 'table' === $format ) {
+			if ( array() === $findings ) {
+				WP_CLI::success( 'No issues found.' );
+				return;
+			}
+
 			WP_CLI::warning( 'Found ' . self::count_of( count( $findings ), 'issue', 'issues' ) . '.' );
 		}
 
@@ -206,6 +227,21 @@ final class ValidateCommand extends WP_CLI_Command {
 
 		if ( 'count' === $format ) {
 			WP_CLI::line( (string) ( $counts['problem'] + $counts['warning'] ) );
+			return;
+		}
+
+		if ( 'table' !== $format ) {
+			\WP_CLI\Utils\format_items(
+				$format,
+				array(
+					array(
+						'validated' => $total,
+						'problems'  => $counts['problem'],
+						'warnings'  => $counts['warning'],
+					),
+				),
+				array( 'validated', 'problems', 'warnings' )
+			);
 			return;
 		}
 

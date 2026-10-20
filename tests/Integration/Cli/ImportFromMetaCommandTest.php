@@ -117,7 +117,7 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 			array(),
 			array(
 				'meta-key' => $this->meta_key,
-				'format'   => 'csv',
+				'format'   => 'table',
 			)
 		);
 
@@ -166,7 +166,7 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 			array(),
 			array(
 				'meta-key' => $this->meta_key,
-				'format'   => 'csv',
+				'format'   => 'table',
 			)
 		);
 
@@ -315,7 +315,7 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 			array(),
 			array(
 				'meta-key' => $this->meta_key,
-				'format'   => 'csv',
+				'format'   => 'table',
 				'dry-run'  => true,
 			)
 		);
@@ -459,5 +459,98 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		);
 
 		$this->assert_error_contains( 'No redirects found for meta_key' );
+	}
+
+	/**
+	 * Test a dry run reports a row the live run would refuse, without failing.
+	 */
+	public function test_dry_run_reports_what_the_live_run_would_refuse(): void {
+		$existing = $this->create_redirect( '/dry-run-taken', '/original-destination' );
+		$this->create_post_with_legacy_url( '/dry-run-taken' );
+		$draft = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		add_post_meta( $draft, $this->meta_key, '/dry-run-draft' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'dry-run'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( sprintf( 'Redirect #%d already has the source "/dry-run-taken"', $existing ) );
+		$this->assert_stdout_contains( 'not published' );
+		$this->assert_warning_contains( 'Dry run: 2 rows would fail. Nothing was changed.' );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertNull( $this->find_redirect( '/dry-run-draft' ) );
+	}
+
+	/**
+	 * Test a clean dry run says nothing was imported, rather than that everything was.
+	 */
+	public function test_clean_dry_run_does_not_claim_an_import(): void {
+		$this->create_post_with_legacy_url( '/dry-run-clean' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'dry-run'  => true,
+				'verbose'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Would be imported' );
+		$this->assert_success_contains( 'Dry run: no problems found. Nothing was changed.' );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+	}
+
+	/**
+	 * Test structured formats print the notices alone, with no run heading or closing line.
+	 */
+	public function test_structured_format_prints_only_the_notices(): void {
+		$this->create_post_with_legacy_url( '/json-clean' );
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+			)
+		);
+
+		$this->assertSame( '', $this->get_stdout() );
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'] );
+		$this->assertSame( 'json', $GLOBALS['wp_cli_format_items_calls'][0][0] );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'][0][1] );
+		$this->assertNotNull( $this->find_redirect( '/json-clean' ) );
+	}
+
+	/**
+	 * Test --end stops at the row it names, not at the end of a page.
+	 */
+	public function test_end_offset_stops_within_a_page(): void {
+		$this->create_post_with_legacy_url( '/end-first' );
+		$this->create_post_with_legacy_url( '/end-second' );
+		$this->create_post_with_legacy_url( '/end-third' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'start'    => 1,
+				'end'      => 2,
+			)
+		);
+
+		$this->assertNull( $this->find_redirect( '/end-first' ) );
+		$this->assertNotNull( $this->find_redirect( '/end-second' ) );
+		$this->assertNull( $this->find_redirect( '/end-third' ) );
 	}
 }

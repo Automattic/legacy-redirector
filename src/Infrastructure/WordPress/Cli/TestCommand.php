@@ -112,7 +112,7 @@ final class TestCommand extends WP_CLI_Command {
 		$redirects = RedirectBatch::redirects( $items );
 
 		if ( array() === $redirects ) {
-			WP_CLI::error( 'No matching redirects found.' );
+			$this->fail_incomplete_batch( $items, 'test', 'tested' );
 			return;
 		}
 
@@ -132,10 +132,9 @@ final class TestCommand extends WP_CLI_Command {
 
 		if ( 'count' === $format ) {
 			WP_CLI::line( (string) count( $not_ok ) );
-			return;
+		} else {
+			\WP_CLI\Utils\format_items( $format, $rows, array( 'ID', 'from', 'to', 'severity', 'issue', 'detail', 'remedy' ) );
 		}
-
-		\WP_CLI\Utils\format_items( $format, $rows, array( 'ID', 'from', 'to', 'severity', 'issue', 'detail', 'remedy' ) );
 
 		if ( 'table' === $format ) {
 			if ( array() === $not_ok ) {
@@ -144,6 +143,10 @@ final class TestCommand extends WP_CLI_Command {
 				WP_CLI::warning( sprintf( 'Tested %s: %s attention.', self::count_of( count( $redirects ), 'redirect', 'redirects' ), self::count_of( count( $not_ok ), 'result needs', 'results need' ) ) );
 			}
 		}
+
+		// After the results, so a script still gets them, but exits non-zero
+		// when some of the redirects it named were not tested.
+		$this->fail_incomplete_batch( $items, 'test', 'tested' );
 	}
 
 	/**

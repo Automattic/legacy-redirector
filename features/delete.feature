@@ -19,3 +19,13 @@ Feature: Delete a redirect
 
     When I try `wp legacy-redirector get /delete-source`
     Then the return code should not be 0
+
+  # Contract test: nothing is asked about when nothing would be deleted.
+  Scenario: Deleting a redirect that does not exist fails without prompting
+    When I try `wp legacy-redirector delete /delete-never-existed`
+    Then the return code should be 1
+    And STDERR should contain:
+      """
+      Redirect not found: /delete-never-existed
+      """
+    And STDOUT should not match /Are you sure/

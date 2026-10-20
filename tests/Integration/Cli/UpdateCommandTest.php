@@ -18,6 +18,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * Integration tests for UpdateCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CountsInWords
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
@@ -46,6 +47,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\UpdateCommand;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  */
 final class UpdateCommandTest extends CliTestCase {
 
@@ -66,7 +68,8 @@ final class UpdateCommandTest extends CliTestCase {
 
 		$this->command = new UpdateCommand(
 			$this->manager(),
-			new RedirectBatch( new RedirectFetcher( $this->repository() ) )
+			new RedirectBatch( new RedirectFetcher( $this->repository() ) ),
+			$this->auditor()
 		);
 	}
 
@@ -218,7 +221,7 @@ final class UpdateCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /nonexistent' );
 	}
 
 	/**
@@ -250,5 +253,39 @@ final class UpdateCommandTest extends CliTestCase {
 		);
 
 		$this->assert_error_contains( 'Invalid destination' );
+	}
+
+	/**
+	 * Test an update that closes a loop warns as create does, but still updates.
+	 */
+	public function test_update_warns_when_closing_a_loop(): void {
+		$this->create_redirect( '/update-loop-first', '/update-loop-second' );
+		$this->create_redirect( '/update-loop-second', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-loop-second' ),
+			array( 'to' => '/update-loop-first' )
+		);
+
+		$this->assert_warning_contains( '/update-loop-second: Following the destination through the stored redirects leads back to this one' );
+		$this->assert_success_contains( 'Updated redirect: /update-loop-second' );
+		$this->assertSame( '/update-loop-first', $this->get_destination( '/update-loop-second' ) );
+	}
+
+	/**
+	 * Test a mixed batch names the shortfall with the right plural.
+	 */
+	public function test_update_partial_failure_counts_in_words(): void {
+		$this->create_redirect( '/update-partial', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/update-partial', '/update-partial-missing' ),
+			array( 'status' => 'disabled' )
+		);
+
+		$this->assert_warning_contains( 'Redirect not found: /update-partial-missing' );
+		$this->assert_error_contains( 'Only updated 1 of 2 redirects.' );
 	}
 }

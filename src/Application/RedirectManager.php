@@ -167,8 +167,8 @@ class RedirectManager {
 	 * Change the status of a redirect.
 	 *
 	 * Refused for corrupt redirects: re-saving one would overwrite the
-	 * stored row with its placeholder values. Delete it, or update it with
-	 * a full new source and destination.
+	 * stored row with its placeholder values. Delete it, or repair it with
+	 * update_redirect() or update_by_source(), which replace every field.
 	 *
 	 * @param int    $redirect_id The redirect ID.
 	 * @param string $new_status  The new status ('publish' or 'draft').
@@ -502,7 +502,7 @@ class RedirectManager {
 			'corrupt-redirect',
 			sprintf(
 				/* translators: %d: redirect ID. */
-				__( 'Redirect %d is corrupt and cannot be re-saved. Delete it, or update it with a full new source and destination.', 'legacy-redirector' ),
+				__( 'Redirect %d is corrupt and cannot be re-saved. Repair it with a new source and destination on its edit screen or with `wp legacy-redirector import --mode=upsert`, or delete it.', 'legacy-redirector' ),
 				$redirect_id
 			)
 		);

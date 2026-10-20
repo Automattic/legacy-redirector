@@ -10,6 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
 use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
@@ -29,12 +30,21 @@ final class CreateRedirectAbility implements AbilityInterface {
 	private RedirectManager $manager;
 
 	/**
+	 * The redirect auditor, which owns the warning rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
+	 * @param RedirectAuditor $auditor The redirect auditor.
 	 */
-	public function __construct( RedirectManager $manager ) {
+	public function __construct( RedirectManager $manager, RedirectAuditor $auditor ) {
 		$this->manager = $manager;
+		$this->auditor = $auditor;
 	}
 
 	/**
@@ -56,7 +66,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Create Redirect', 'legacy-redirector' ),
-			'description'         => __( 'Creates a redirect from a path on this site to a new destination, so visitors and search engines following the old URL are sent to the right place. The destination may be a path, an absolute URL, or the ID of a post on this site. Fails if a redirect already exists for the path, or if the destination is invalid.', 'legacy-redirector' ),
+			'description'         => __( 'Creates a redirect from a path on this site to a new destination, so visitors and search engines following the old URL are sent to the right place. The destination may be a path, an absolute URL, or the ID of a post on this site. Fails if a redirect already exists for the path, or if the destination is invalid. Returns the redirect as saved, with any warnings about it, such as a possible loop.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
 				'type'                 => 'object',
@@ -79,7 +89,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 				),
 				'additionalProperties' => false,
 			),
-			'output_schema'       => RedirectSchema::object_schema(),
+			'output_schema'       => self::output_schema(),
 			'execute_callback'    => array( $this, 'execute' ),
 			'permission_callback' => array( Capability::class, 'current_user_can_manage' ),
 			'meta'                => array(
@@ -133,7 +143,26 @@ final class CreateRedirectAbility implements AbilityInterface {
 		}
 
 		// The saved redirect, not the input: an internal absolute URL is stored
-		// as its path, and get-redirect reports it that way.
-		return RedirectSchema::to_array( $result->redirect() );
+		// as its path, and get-redirect reports it that way. Only that form
+		// lets the loop check follow it, too.
+		$redirect = $result->redirect();
+
+		return RedirectSchema::to_array( $redirect ) + array(
+			'warnings' => RedirectSchema::warnings( $this->auditor, array( $redirect ) ),
+		);
+	}
+
+	/**
+	 * The output schema: the created redirect, plus the warnings about it.
+	 *
+	 * @return array<string, mixed> The schema.
+	 */
+	private static function output_schema(): array {
+		$schema = RedirectSchema::object_schema();
+
+		$schema['required'][]             = 'warnings';
+		$schema['properties']['warnings'] = RedirectSchema::warnings_schema();
+
+		return $schema;
 	}
 }

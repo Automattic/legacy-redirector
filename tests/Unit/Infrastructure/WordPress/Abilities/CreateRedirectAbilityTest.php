@@ -9,8 +9,11 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
@@ -26,6 +29,8 @@ use WP_Error;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
@@ -33,6 +38,8 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_schema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_to_array
  */
 final class CreateRedirectAbilityTest extends MonkeyStubs {
 
@@ -42,6 +49,13 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 	 * @var RedirectManager&Mockery\MockInterface
 	 */
 	private $manager;
+
+	/**
+	 * The mock auditor.
+	 *
+	 * @var RedirectAuditor&Mockery\MockInterface
+	 */
+	private $auditor;
 
 	/**
 	 * The ability under test.
@@ -61,7 +75,9 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		Functions\when( '__' )->returnArg( 1 );
 
 		$this->manager = Mockery::mock( RedirectManager::class );
-		$this->ability = new CreateRedirectAbility( $this->manager );
+		$this->auditor = Mockery::mock( RedirectAuditor::class );
+		$this->auditor->shouldReceive( 'warnings' )->andReturn( array() )->byDefault();
+		$this->ability = new CreateRedirectAbility( $this->manager, $this->auditor );
 	}
 
 	/**
@@ -85,14 +101,42 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 
 		$this->assertSame(
 			array(
-				'id'     => 42,
-				'from'   => '/old-page',
-				'to'     => '/new-page',
-				'type'   => 'url',
-				'status' => 'enabled',
+				'id'       => 42,
+				'from'     => '/old-page',
+				'to'       => '/new-page',
+				'type'     => 'url',
+				'status'   => 'enabled',
+				'warnings' => array(),
 			),
 			$result
 		);
+	}
+
+	/**
+	 * Test the warnings CLI create prints come back with the created redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_returns_warnings_about_the_saved_redirect(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )->once()->andReturnUsing( $this->saved_as( 42 ) );
+		$this->auditor->shouldReceive( 'warnings' )
+			->once()
+			->with( Mockery::on( static fn ( Redirect $redirect ): bool => 42 === $redirect->id() ) )
+			->andReturnUsing( static fn ( Redirect $redirect ): array => array( new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, '/new-page -> /old-page' ) ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => '/new-page',
+			)
+		);
+
+		$this->assertCount( 1, $result['warnings'] );
+		$this->assertSame( 42, $result['warnings'][0]['id'] );
+		$this->assertSame( 'warning', $result['warnings'][0]['severity'] );
+		$this->assertSame( 'Possible redirect loop', $result['warnings'][0]['issue'] );
+		$this->assertSame( 'Point one redirect in the loop elsewhere, or disable it', $result['warnings'][0]['remedy'] );
 	}
 
 	/**

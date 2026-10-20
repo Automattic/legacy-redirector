@@ -160,10 +160,10 @@ final class AbilitiesRegistrar {
 	 */
 	public function abilities(): array {
 		return array(
-			new CreateRedirectAbility( $this->manager ),
+			new CreateRedirectAbility( $this->manager, $this->auditor ),
 			new GetRedirectAbility( $this->fetcher ),
 			new ListRedirectsAbility( $this->query_repository ),
-			new UpdateRedirectAbility( $this->manager, $this->batch ),
+			new UpdateRedirectAbility( $this->manager, $this->batch, $this->auditor ),
 			new SetRedirectStatusAbility( $this->manager, $this->batch ),
 			new DeleteRedirectAbility( $this->manager, $this->batch ),
 			new ValidateRedirectsAbility( $this->query_repository, $this->batch, $this->sweep, $this->flags ),

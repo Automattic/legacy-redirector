@@ -198,8 +198,8 @@ final class ListCommand extends WP_CLI_Command {
 	 *     # Get count of all redirects.
 	 *     $ wp legacy-redirector list --format=count
 	 *
-	 *     # Export all redirects to a CSV file.
-	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
+	 *     # Export all redirects to a CSV file that import can read back.
+	 *     $ wp legacy-redirector list --limit=100000 --fields=from,to,status --format=csv > redirects.csv
 	 *
 	 *     # List the redirects the background check found problems with.
 	 *     $ wp legacy-redirector list --has-issues=problem
@@ -253,19 +253,13 @@ final class ListCommand extends WP_CLI_Command {
 			return;
 		}
 
+		// With no rows, the formatter prints just the header row.
 		if ( 'csv' === $format ) {
 			$rows = ( function () use ( $criteria ) {
 				foreach ( $this->each_matching( $criteria ) as $redirect ) {
 					yield $this->redirect_row( $redirect );
 				}
 			} )();
-
-			// Runs the generator up to its first row, which the formatter's
-			// foreach then picks up without rewinding past it.
-			if ( ! $rows->valid() ) {
-				WP_CLI::warning( 'No redirects found.' );
-				return;
-			}
 
 			\WP_CLI\Utils\format_items( $format, $rows, $fields );
 			return;
@@ -274,7 +268,8 @@ final class ListCommand extends WP_CLI_Command {
 		// Table, JSON and YAML need every row at once to lay out their output.
 		$redirects = $this->query_repository->find_matching( $criteria );
 
-		if ( empty( $redirects ) ) {
+		// Only a table says so in words; JSON and YAML print an empty list.
+		if ( empty( $redirects ) && 'table' === $format ) {
 			WP_CLI::warning( 'No redirects found.' );
 			return;
 		}
@@ -394,7 +389,7 @@ final class ListCommand extends WP_CLI_Command {
 			return;
 		}
 
-		if ( array() === $items ) {
+		if ( array() === $items && 'table' === $format ) {
 			WP_CLI::success( 'No redirects are disabled as duplicate sources.' );
 			return;
 		}

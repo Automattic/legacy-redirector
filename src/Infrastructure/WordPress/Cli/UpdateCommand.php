@@ -9,7 +9,9 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
+use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectManager;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -38,14 +40,23 @@ final class UpdateCommand extends WP_CLI_Command {
 	private RedirectBatch $batch;
 
 	/**
+	 * The redirect auditor, which owns the warning rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param RedirectManager $manager The redirect manager.
 	 * @param RedirectBatch   $batch   The batch resolver.
+	 * @param RedirectAuditor $auditor The redirect auditor.
 	 */
-	public function __construct( RedirectManager $manager, RedirectBatch $batch ) {
+	public function __construct( RedirectManager $manager, RedirectBatch $batch, RedirectAuditor $auditor ) {
 		$this->manager = $manager;
 		$this->batch   = $batch;
+		$this->auditor = $auditor;
 	}
 
 	/**
@@ -111,18 +122,33 @@ final class UpdateCommand extends WP_CLI_Command {
 			$post_status = 'disabled' === $status_flag ? 'draft' : 'publish';
 		}
 
+		$saved = array();
 		$items = $this->batch->apply(
 			$args,
-			fn( Redirect $redirect ) => null !== $destination
-				? $this->manager->update_destination( $redirect->id(), $destination, $post_status )
-				: $this->manager->change_status( $redirect->id(), $post_status )
+			function ( Redirect $redirect ) use ( $destination, $post_status, &$saved ): RedirectCreationResult {
+				$result = null !== $destination
+					? $this->manager->update_destination( $redirect->id(), $destination, $post_status )
+					: $this->manager->change_status( $redirect->id(), $post_status );
+
+				if ( $result->is_success() ) {
+					$saved[] = $result->redirect();
+				}
+
+				return $result;
+			}
 		);
 
-		$updated = $this->report_batch_failures( $items, 'update' );
-		$failed  = count( $items ) - $updated;
+		// The saved redirect, not the input, as create warns: only the stored
+		// destination lets the loop check follow it.
+		foreach ( $saved as $redirect ) {
+			foreach ( $this->auditor->warnings( $redirect ) as $warning ) {
+				WP_CLI::warning( $redirect->source()->path() . ': ' . $warning->description() . '. ' . $warning->remedy() . '.' );
+			}
+		}
 
-		if ( $failed > 0 ) {
-			WP_CLI::error( sprintf( 'Only updated %d of %d redirects.', $updated, count( $args ) ) );
+		$updated = $this->report_batch_failures( $items, 'update' );
+
+		if ( $this->fail_incomplete_batch( $items, 'update', 'updated' ) ) {
 			return;
 		}
 

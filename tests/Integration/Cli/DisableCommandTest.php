@@ -17,6 +17,7 @@ use Automattic\LegacyRedirector\Application\RedirectFetcher;
  * Integration tests for DisableCommand.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DisableCommand
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\CountsInWords
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\AbstractStatusCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
@@ -130,7 +131,7 @@ final class DisableCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /nonexistent' );
 	}
 
 	/**
@@ -144,7 +145,7 @@ final class DisableCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Invalid source path' );
+		$this->assert_error_contains( 'Invalid source path' );
 	}
 
 	/**
@@ -162,6 +163,23 @@ final class DisableCommandTest extends CliTestCase {
 		);
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Could not disable redirect: ' . $redirect_id );
+		$this->assert_error_contains( 'Could not disable redirect: ' . $redirect_id );
+	}
+
+	/**
+	 * Test a mixed batch disables what it can, then names the shortfall.
+	 */
+	public function test_disable_partial_failure(): void {
+		$redirect_id = $this->create_redirect( '/disable-partial', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/disable-partial', '/disable-partial-missing' ),
+			array()
+		);
+
+		$this->assert_warning_contains( 'Redirect not found: /disable-partial-missing' );
+		$this->assert_error_contains( 'Only disabled 1 of 2 redirects.' );
+		$this->assertSame( 'draft', get_post_status( $redirect_id ) );
 	}
 }

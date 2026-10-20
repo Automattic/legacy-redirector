@@ -486,6 +486,43 @@ final class ListCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test structured formats print an empty list rather than a sentence.
+	 *
+	 * @dataProvider data_empty_structured_lists
+	 *
+	 * @param array<string, mixed> $assoc_args The command's flags.
+	 */
+	public function test_empty_structured_list_is_data_not_prose( array $assoc_args ): void {
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command( $this->command, array(), $assoc_args );
+
+		$this->assertSame( '', $this->get_stdout() );
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'] );
+		$this->assertSame( $assoc_args['format'], $GLOBALS['wp_cli_format_items_calls'][0][0] );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'][0][1] );
+	}
+
+	/**
+	 * Empty listings in each structured format.
+	 *
+	 * @return array<string, array{array<string, mixed>}>
+	 */
+	public static function data_empty_structured_lists(): array {
+		return array(
+			'json'            => array( array( 'format' => 'json' ) ),
+			'yaml'            => array( array( 'format' => 'yaml' ) ),
+			'csv'             => array( array( 'format' => 'csv' ) ),
+			'duplicates json' => array(
+				array(
+					'duplicates' => true,
+					'format'     => 'json',
+				),
+			),
+		);
+	}
+
+	/**
 	 * Test --duplicates validates fields against its own set.
 	 */
 	public function test_list_duplicates_rejects_fields_it_does_not_have(): void {

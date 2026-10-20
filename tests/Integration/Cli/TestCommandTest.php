@@ -369,7 +369,21 @@ final class TestCommandTest extends CliTestCase {
 		$this->invoke_command( $this->command, array( '/test-nonexistent' ), array() );
 
 		$this->assert_command_error();
-		$this->assert_stdout_contains( 'Redirect not found: /test-nonexistent' );
+		$this->assert_error_contains( 'Redirect not found: /test-nonexistent' );
+	}
+
+	/**
+	 * Test a redirect named but not found fails the run, after the others are tested.
+	 */
+	public function test_partly_unknown_redirects_are_an_error(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/test-partly-found', $post_id );
+
+		$this->invoke_command( $this->command, array( '/test-partly-found', '/test-partly-missing' ), array( 'only' => 'destination' ) );
+
+		$this->assert_warning_contains( 'Redirect not found: /test-partly-missing' );
+		$this->assert_stdout_contains( 'Destination is valid' );
+		$this->assert_error_contains( 'Only tested 1 of 2 redirects.' );
 	}
 
 	/**
