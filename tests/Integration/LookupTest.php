@@ -499,4 +499,50 @@ final class LookupTest extends TestCase {
 		$this->assertNull( $this->repository()->find_by_source( $source ) );
 		$this->assertSame( 0, $this->repository()->get_id_by_source( $source ) );
 	}
+
+	/**
+	 * Test a miss cached while a redirect was in the trash does not outlive its return.
+	 *
+	 * Untrashing restores it as disabled, so it takes an enable as well before
+	 * the source should redirect again. Enabled through the plugin, its save
+	 * refreshes the entry; enabled through core, only the plugin's
+	 * clean_post_cache hooks do.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+	 * @dataProvider data_enabled_through
+	 *
+	 * @param bool $through_core Whether to enable it with core's post API rather than the manager.
+	 */
+	public function test_a_redirect_back_from_the_trash_is_found_again( bool $through_core ): void {
+		$post_id = $this->create_redirect( '/back-from-trash', 'https://example.com/destination' );
+		wp_trash_post( $post_id );
+
+		// A cold lookup, as a later request makes, so what it caches is the miss.
+		$this->clear_lookup_cache( '/back-from-trash' );
+		$this->assertNull( $this->resolver()->get_redirect_data( '/back-from-trash' ) );
+		$this->assertSame( 0, wp_cache_get( CachingRedirectRepository::cache_key( md5( '/back-from-trash' ) ), CachingRedirectRepository::CACHE_GROUP ) );
+
+		wp_untrash_post( $post_id );
+		if ( $through_core ) {
+			wp_publish_post( $post_id );
+		} else {
+			$this->assertTrue( $this->manager()->enable( $post_id ) );
+		}
+
+		$this->assertSame( 'https://example.com/destination', $this->resolver()->get_redirect_data( '/back-from-trash' )['url'] ?? null );
+	}
+
+	/**
+	 * Data provider: the ways a redirect is enabled.
+	 *
+	 * @return array<string, array{0: bool}>
+	 */
+	public static function data_enabled_through(): array {
+		return array(
+			'the manager' => array( false ),
+			'core'        => array( true ),
+		);
+	}
 }
