@@ -486,6 +486,63 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test a page of rows loads no destination post one row at a time.
+	 *
+	 * The To and Health columns both need each row's destination post; the
+	 * list query loads the page's post ID destinations together, so rendering
+	 * runs no single-post load for any of them.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::prime_destination_posts
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::render_column
+	 */
+	public function test_list_page_loads_destination_posts_together(): void {
+		$this->set_permalink_structure( '/%postname%/' );
+
+		$destinations = array();
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$destination    = self::factory()->post->create(
+				array(
+					'post_status' => 'publish',
+					'post_name'   => "list-target-$i",
+				)
+			);
+			$destinations[] = $destination;
+			$this->create_redirect( "/to-post-$i", $destination );
+			$this->create_redirect( "/to-path-$i", "/no-post-at-$i" );
+		}
+
+		$this->columns_manager->register();
+
+		// As on a fresh request, nothing is in the object cache yet.
+		wp_cache_flush();
+
+		$query = new \WP_Query();
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored by the test framework; main-query semantics need the real global.
+		$GLOBALS['wp_the_query'] = $query;
+		$query->query( array( 'post_type' => PostType::POST_TYPE ) );
+
+		$queries = array();
+		$record  = static function ( string $sql ) use ( &$queries ): string {
+			$queries[] = $sql;
+			return $sql;
+		};
+		add_filter( 'query', $record );
+
+		ob_start();
+		foreach ( $query->posts as $post ) {
+			$this->columns_manager->render_column( 'to', $post->ID );
+			$this->columns_manager->render_column( 'health', $post->ID );
+		}
+		ob_end_clean();
+
+		remove_filter( 'query', $record );
+
+		$single_loads = preg_grep( '/WHERE ID = (' . implode( '|', $destinations ) . ')\b/', $queries );
+
+		$this->assertSame( array(), $single_loads, 'No destination post may be loaded on its own.' );
+	}
+
+	/**
 	 * Test modify_row_actions adds validate and follow links.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\RowActionsManager::modify_row_actions

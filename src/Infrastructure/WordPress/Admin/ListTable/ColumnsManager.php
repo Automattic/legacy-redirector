@@ -57,7 +57,37 @@ final class ColumnsManager {
 		add_action( 'manage_' . PostType::POST_TYPE . '_posts_custom_column', array( $this, 'render_column' ), 10, 2 );
 		add_filter( 'manage_edit-' . PostType::POST_TYPE . '_sortable_columns', array( $this, 'set_sortable_columns' ) );
 		add_action( 'pre_get_posts', array( $this, 'handle_sorting' ) );
+		add_filter( 'the_posts', array( $this, 'prime_destination_posts' ), 10, 2 );
 		add_filter( 'list_table_primary_column', array( $this, 'set_primary_column' ), 10, 2 );
+	}
+
+	/**
+	 * Whether a query is the redirect list screen's own.
+	 *
+	 * @param \WP_Query $query The query object.
+	 * @return bool True for the list table's main query.
+	 */
+	private static function is_list_query( \WP_Query $query ): bool {
+		return is_admin() && $query->is_main_query() && PostType::POST_TYPE === $query->get( 'post_type' );
+	}
+
+	/**
+	 * Load the page's post ID destinations in one query.
+	 *
+	 * The To and Health columns each need every row's destination post, and
+	 * would otherwise load them one row at a time. A post ID destination is
+	 * stored as the row's post_parent.
+	 *
+	 * @param \WP_Post[] $posts The page of redirect posts.
+	 * @param \WP_Query  $query The query object.
+	 * @return \WP_Post[] The posts, unchanged.
+	 */
+	public function prime_destination_posts( array $posts, \WP_Query $query ): array {
+		if ( self::is_list_query( $query ) ) {
+			update_post_parent_caches( $posts );
+		}
+
+		return $posts;
 	}
 
 	/**
@@ -109,11 +139,7 @@ final class ColumnsManager {
 	 * @return void
 	 */
 	public function handle_sorting( \WP_Query $query ): void {
-		if ( ! is_admin() || ! $query->is_main_query() ) {
-			return;
-		}
-
-		if ( PostType::POST_TYPE !== $query->get( 'post_type' ) ) {
+		if ( ! self::is_list_query( $query ) ) {
 			return;
 		}
 
