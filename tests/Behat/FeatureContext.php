@@ -305,6 +305,14 @@ final class FeatureContext extends WpEnvFeatureContext {
 	 * is excluded from a post_type=any query because the post type is not
 	 * public.
 	 *
+	 * Options a scenario may change are put back too, so a feature behaves the
+	 * same run alone as after any other: the plugin's upgrade and audit state
+	 * goes, and its data version is set to current rather than deleted, as a
+	 * missing version means a site still to upgrade. Permalinks are set to
+	 * /%postname%/, because the plugin only redirects 404s and with plain
+	 * permalinks an unmatched path is not a 404. A feature needing other
+	 * permalinks sets them in its Background.
+	 *
 	 * @throws RuntimeException If the reset fails.
 	 * @return void
 	 */
@@ -321,6 +329,15 @@ foreach ( get_users( array( 'fields' => 'ID' ) ) as $uid ) {
 	}
 }
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_%' OR option_name LIKE '\_site\_transient\_%'" );
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'wpcom\_legacy\_redirector\_upgrade\_%' OR option_name LIKE 'legacy\_redirector\_audit\_%'" );
+if ( class_exists( '\Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader' ) ) {
+	update_option( \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::VERSION_OPTION, \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::DB_VERSION );
+}
+if ( '/%postname%/' !== get_option( 'permalink_structure' ) ) {
+	global $wp_rewrite;
+	$wp_rewrite->set_permalink_structure( '/%postname%/' );
+	flush_rewrite_rules( false );
+}
 wp_cache_flush();
 foreach ( get_posts( array( 'post_type' => 'vip-legacy-redirect', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids' ) ) as $id ) {
 	wp_delete_post( $id, true );

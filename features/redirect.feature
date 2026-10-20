@@ -3,11 +3,11 @@ Feature: Front-end redirects
   I want legacy URLs to redirect me to their new destination
   So that old links keep working
 
+  # The between-scenario reset leaves pretty permalinks on, which these
+  # need: the plugin only redirects 404s, and with plain permalinks an
+  # unmatched path is not a 404.
   Background:
     Given a WP installation with the Legacy Redirector plugin
-    # The plugin only redirects 404s; with plain permalinks an unmatched
-    # path is not a 404, so pretty permalinks are required.
-    And I run `wp rewrite structure /%postname%/ --hard`
 
   # End-to-end test: a stored redirect issues a real HTTP 301 response to its
   # destination, identified via the X-Redirect-By header.

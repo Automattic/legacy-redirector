@@ -8,12 +8,10 @@ Feature: Upgrading from version 1.3.0
   # HTTP before the upgrade. That tests the migration against what 1.x
   # really wrote and really served, not against a model of it: 1.x ran each
   # source through esc_url_raw() before hashing it, and a hand-built fixture
-  # is exactly where a detail like that gets lost.
+  # is exactly where a detail like that gets lost. Both versions only
+  # redirect 404s, so they rely on the reset leaving pretty permalinks on.
   Background:
     Given a WP installation with the Legacy Redirector plugin
-    # 1.3.0 and 2.0 only redirect 404s, and with plain permalinks an
-    # unmatched path is not a 404.
-    And I run `wp rewrite structure /%postname%/ --hard`
 
   Scenario: Every request 1.3.0 redirected still redirects to the same place
     Given version 1.3.0 is active in place of this plugin
