@@ -605,4 +605,40 @@ final class ListCommandTest extends CliTestCase {
 		$this->assert_command_error();
 		$this->assert_error_contains( 'Invalid --has-issues severity: broken' );
 	}
+
+	/**
+	 * Test a csv export whose limit ends part-way through a page stops at the limit.
+	 */
+	public function test_csv_export_stops_at_a_limit_inside_a_page(): void {
+		global $wpdb;
+
+		// One page is 5,000 rows, so the limit ends two rows into the second.
+		$values = array();
+		for ( $i = 1; $i <= 5003; $i++ ) {
+			$values[] = "('2026-01-01 00:00:00', '2026-01-01 00:00:00', '', '/limited-$i', '/target', 'publish', 'vip-legacy-redirect', '', '', '')";
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- Bulk fixture of literal values.
+		$wpdb->query( "INSERT INTO {$wpdb->posts} (post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_type, to_ping, pinged, post_content_filtered) VALUES " . implode( ',', $values ) );
+		$ids = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s ORDER BY ID DESC LIMIT 5002", PostType::POST_TYPE ) ) );
+
+		$pages = array();
+		add_action(
+			'pre_get_posts',
+			static function ( \WP_Query $query ) use ( &$pages ): void {
+				$pages[] = (int) $query->get( 'posts_per_page' );
+			}
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'format' => 'csv',
+				'limit'  => '5002',
+			)
+		);
+
+		$this->assertSame( array( 5000, 2 ), $pages );
+		$this->assertSame( $ids, array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'ID' ) );
+	}
 }

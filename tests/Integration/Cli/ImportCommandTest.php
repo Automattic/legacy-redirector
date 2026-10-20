@@ -727,4 +727,60 @@ final class ImportCommandTest extends CliTestCase {
 		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'A blank hundredth line still clears the object cache.' );
 		$this->assertSame( array( 1 ), $GLOBALS['legacy_redirector_cli_sleeps'], 'A live run pauses once per hundred rows.' );
 	}
+
+	/**
+	 * Test an upsert the validator refuses reports the update's reason, not a create's.
+	 */
+	public function test_import_upsert_reports_why_an_update_was_refused(): void {
+		$this->create_redirect( '/import-upsert-refused', 'https://example.com/original' );
+		$file = $this->create_csv( "/import-upsert-refused,https://not-allowed.invalid/x\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array( 'mode' => 'upsert' ) );
+
+		$this->assert_error_contains( 'The only row failed.' );
+		$this->assert_stdout_contains( 'destination host is not allowed' );
+		$this->assert_stdout_not_contains( 'already has the source' );
+		$this->assertSame( 1, $this->count_redirect_posts( '/import-upsert-refused' ) );
+	}
+
+	/**
+	 * Test a file with no rows to import warns, and is not an error.
+	 *
+	 * @dataProvider data_files_without_rows
+	 *
+	 * @param string $content The CSV content.
+	 */
+	public function test_import_file_without_rows_warns( string $content ): void {
+		$file = $this->create_csv( $content );
+
+		$this->invoke_command( $this->command, array( $file ), array() );
+
+		$this->assert_warning_contains( 'No rows processed.' );
+		$this->assertFalse( $this->output->had_error() );
+	}
+
+	/**
+	 * Files with no rows to import.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_files_without_rows(): array {
+		return array(
+			'empty'       => array( '' ),
+			'header only' => array( "from,to,status\n" ),
+		);
+	}
+
+	/**
+	 * Test an imported row the auditor warns about is imported, with the warning printed.
+	 */
+	public function test_import_warns_about_an_imported_row(): void {
+		$file = $this->create_csv( "/wp-admin/import-reserved,https://example.com/a\n" );
+
+		$this->invoke_command( $this->command, array( $file ), array() );
+
+		$this->assert_success_contains( 'Processed 1 redirect.' );
+		$this->assert_warning_contains( '/wp-admin/import-reserved: The source is a path WordPress itself serves.' );
+		$this->assertTrue( $this->redirect_exists( '/wp-admin/import-reserved' ) );
+	}
 }

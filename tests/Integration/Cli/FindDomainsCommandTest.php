@@ -62,4 +62,31 @@ final class FindDomainsCommandTest extends CliTestCase {
 		$this->assertSame( 2, $this->query_repository()->count_external_destinations() );
 		$this->assertSame( $this->query_repository()->count_by_destination_type()['external'], $this->query_repository()->count_external_destinations() );
 	}
+
+	/**
+	 * Test a host used by two redirects is reported once, in the list and in the count.
+	 */
+	public function test_find_domains_counts_each_host_once(): void {
+		$redirects = array(
+			'/one'   => 'https://shared.example/a',
+			'/two'   => 'https://shared.example/b',
+			'/three' => 'https://other.example/c',
+		);
+		foreach ( $redirects as $source => $destination ) {
+			$this->insert_redirect_post(
+				array(
+					'post_title'   => $source,
+					'post_name'    => md5( $source ),
+					'post_excerpt' => $destination,
+				)
+			);
+		}
+		$command = new FindDomainsCommand( $this->query_repository() );
+
+		$this->invoke_command( $command, array(), array( 'format' => 'count' ) );
+		$this->assertSame( '2', $this->get_stdout() );
+
+		$this->invoke_command( $command, array(), array( 'format' => 'csv' ) );
+		$this->assertSame( array( 'other.example', 'shared.example' ), explode( "\n", trim( $this->get_stdout() ) ) );
+	}
 }

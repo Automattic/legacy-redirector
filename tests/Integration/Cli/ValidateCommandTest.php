@@ -581,4 +581,23 @@ final class ValidateCommandTest extends CliTestCase {
 		$this->assertStringContainsString( 'Unpublish the content at the source', $rows[0]['remedy'] );
 		$this->assertSame( 'warning', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
+
+	/**
+	 * Test a full pass waits for a lock another check holds, rather than giving up at once.
+	 *
+	 * The fixture lock is a second short of abandoned, so the wait ends in a
+	 * second or two; the command's own wait is far longer.
+	 */
+	public function test_validate_all_waits_for_another_checks_lock(): void {
+		global $wpdb;
+
+		$this->create_redirect( '/validated-after-wait', 'https://example.com/fine' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixture: a lock row another check holds.
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, UNIX_TIMESTAMP() - %d, 'off')", AuditSweep::LOCK_OPTION, 5 * MINUTE_IN_SECONDS - 1 ) );
+
+		$this->invoke_command( $this->command, array(), array() );
+
+		$this->assert_success_contains( 'Validated 1 redirect: 0 with problems, 0 with warnings.' );
+	}
 }
