@@ -157,6 +157,42 @@ jobs:
             echo "::warning::In the ZIP but not the source archive - missing from .distignore: $(echo "$ONLY_DIST" | tr '\n' ' ')"
           fi
 
+      # No npm cache: a cache shared with other workflows could feed a
+      # poisoned dependency into the job that publishes the release.
+      - name: Set up Node.js for wp-env
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install wp-env
+        run: npm ci
+
+      - name: Check the ZIP activates and works without vendor/
+        run: |
+          set -eu
+
+          # The ZIP ships no vendor/, so an install from it loads classes
+          # through the fallback autoloader in the main plugin file, while
+          # every test run has Composer's. Run the unzipped plugin in a fresh
+          # WordPress and put a redirect through it, so a class the fallback
+          # cannot load fails the release here rather than on a site.
+          SMOKE="$RUNNER_TEMP/smoke"
+          mkdir -p "$SMOKE"
+          unzip -q "$ZIP_PATH" -d "$SMOKE"
+          test ! -e "$SMOKE/$SLUG/vendor"
+
+          # Mount the unzipped copy in place of the checkout.
+          printf '{ "plugins": [ "%s" ] }\n' "$SMOKE/$SLUG" > .wp-env.override.json
+          npx wp-env start
+
+          wp() { npx wp-env run cli wp "$@"; }
+          wp plugin activate "$SLUG"
+          wp legacy-redirector create /release-smoke https://example.com/release-smoke --skip-validation
+          wp legacy-redirector get /release-smoke --field=to | grep -qF 'https://example.com/release-smoke'
+          wp legacy-redirector list --format=count | grep -qx '1'
+          wp legacy-redirector delete /release-smoke --yes
+
       - name: Prepare release title and notes
         id: prep
         env:
