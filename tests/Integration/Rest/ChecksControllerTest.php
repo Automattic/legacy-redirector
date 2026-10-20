@@ -153,20 +153,21 @@ final class ChecksControllerTest extends TestCase {
 	}
 
 	/**
-	 * Test a source URL with an existing redirect reports a duplicate.
+	 * Test a source URL with an existing redirect reports a duplicate, and which redirect has it.
 	 */
 	public function test_existing_source_reports_duplicate(): void {
 		$this->login_as_redirect_manager();
-		$this->create_redirect( '/duplicated-page', 'https://example.com/destination' );
+		$redirect_id = $this->create_redirect( '/duplicated-page', 'https://example.com/destination' );
 
 		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/duplicated-page' ) );
 
 		$this->assertSame( 200, $response->get_status() );
 		$this->assertSame(
 			array(
-				'exists'   => true,
-				'reserved' => false,
-				'occupied' => false,
+				'exists'      => true,
+				'existing_id' => $redirect_id,
+				'reserved'    => false,
+				'occupied'    => false,
 			),
 			$response->get_data()
 		);
@@ -197,9 +198,10 @@ final class ChecksControllerTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'exists'   => false,
-				'reserved' => false,
-				'occupied' => false,
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => false,
 			),
 			$response->get_data()
 		);
@@ -226,9 +228,10 @@ final class ChecksControllerTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'exists'   => false,
-				'reserved' => false,
-				'occupied' => false,
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => false,
 			),
 			$response->get_data()
 		);
@@ -244,9 +247,10 @@ final class ChecksControllerTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'exists'   => false,
-				'reserved' => false,
-				'occupied' => false,
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => false,
 			),
 			$response->get_data()
 		);
@@ -271,9 +275,10 @@ final class ChecksControllerTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'exists'   => false,
-				'reserved' => false,
-				'occupied' => true,
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => true,
 			),
 			$response->get_data()
 		);
@@ -291,9 +296,10 @@ final class ChecksControllerTest extends TestCase {
 
 		$this->assertSame(
 			array(
-				'exists'   => false,
-				'reserved' => true,
-				'occupied' => false,
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => true,
+				'occupied'    => false,
 			),
 			$response->get_data()
 		);

@@ -105,10 +105,12 @@ final class UITest extends TestCase {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
 	 */
 	public function test_vip_redirects_custom_post_status_filters_renames_statuses(): void {
+		// Core's markup, with the labels a non-English site would show: the
+		// rename must not depend on the English words.
 		$views = array(
 			'all'     => '<a href="#">All</a>',
-			'publish' => '<a href="#">Published (5)</a>',
-			'draft'   => '<a href="#">Draft (1)</a>',
+			'publish' => '<a href="#" class="current" aria-current="page">Publiés <span class="count">(5)</span></a>',
+			'draft'   => '<a href="#">Brouillon <span class="count">(1)</span></a>',
 			'trash'   => '<a href="#">Trash</a>',
 		);
 
@@ -119,13 +121,8 @@ final class UITest extends TestCase {
 		$this->assertArrayHasKey( 'draft', $result );
 		$this->assertArrayHasKey( 'trash', $result );
 
-		// Published should be renamed to Enabled.
-		$this->assertStringContainsString( 'Enabled', $result['publish'] );
-		$this->assertStringNotContainsString( 'Published', $result['publish'] );
-
-		// Draft should be renamed to Disabled.
-		$this->assertStringContainsString( 'Disabled', $result['draft'] );
-		$this->assertStringNotContainsString( 'Draft', $result['draft'] );
+		$this->assertSame( '<a href="#" class="current" aria-current="page">Enabled <span class="count">(5)</span></a>', $result['publish'] );
+		$this->assertSame( '<a href="#">Disabled <span class="count">(1)</span></a>', $result['draft'] );
 	}
 
 	/**

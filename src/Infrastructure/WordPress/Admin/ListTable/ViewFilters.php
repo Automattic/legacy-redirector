@@ -74,23 +74,9 @@ final class ViewFilters {
 		$trash = $views['trash'] ?? null;
 		unset( $views['trash'] );
 
-		// Rename "Published" to "Enabled" for clarity.
-		if ( isset( $views['publish'] ) && is_string( $views['publish'] ) ) {
-			$views['publish'] = preg_replace(
-				'/\bPublished\b/',
-				__( 'Enabled', 'legacy-redirector' ),
-				$views['publish']
-			);
-		}
-
-		// Rename "Draft" / "Drafts" to "Disabled" for clarity.
-		if ( isset( $views['draft'] ) && is_string( $views['draft'] ) ) {
-			$views['draft'] = preg_replace(
-				'/\bDrafts?\b/',
-				__( 'Disabled', 'legacy-redirector' ),
-				$views['draft']
-			);
-		}
+		// Rename "Published" to "Enabled" and "Drafts" to "Disabled".
+		$views = self::relabel_view( $views, 'publish', __( 'Enabled', 'legacy-redirector' ) );
+		$views = self::relabel_view( $views, 'draft', __( 'Disabled', 'legacy-redirector' ) );
 
 		// Add destination type filters.
 		$views = $this->add_destination_type_views( $views );
@@ -104,6 +90,30 @@ final class ViewFilters {
 		// Re-add Trash at the end.
 		if ( null !== $trash ) {
 			$views['trash'] = $trash;
+		}
+
+		return $views;
+	}
+
+	/**
+	 * Replace the label of one of core's status views, keeping its link and count.
+	 *
+	 * Core's label is whatever the site's language calls the status, so the
+	 * label is found by position - the link text before the count - rather
+	 * than by matching the English word.
+	 *
+	 * @param array<string, string> $views The views.
+	 * @param string                $key   The view to relabel.
+	 * @param string                $label The new label.
+	 * @return array<string, string> The views.
+	 */
+	private static function relabel_view( array $views, string $key, string $label ): array {
+		if ( isset( $views[ $key ] ) && is_string( $views[ $key ] ) ) {
+			$views[ $key ] = (string) preg_replace_callback(
+				'#^(<a\b[^>]*>)[^<]*(<span class="count">)#',
+				static fn( array $m ): string => $m[1] . esc_html( $label ) . ' ' . $m[2],
+				$views[ $key ]
+			);
 		}
 
 		return $views;

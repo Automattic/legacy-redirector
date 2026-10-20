@@ -14,6 +14,7 @@
  * @var string   $destination_display Human-readable destination for the display field.
  * @var string   $message             Success message code ('created', 'updated', or '').
  * @var string   $error_message       Resolved error message, or '' if none.
+ * @var string   $duplicate_url       Edit URL of the redirect that already has the source, or ''.
  * @var string   $source_warning      The warning for the stored source, or '' if none.
  *
  * @package Automattic\LegacyRedirector
@@ -45,7 +46,11 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 	<?php if ( '' !== $error_message ) : ?>
 		<div id="message" class="error notice is-dismissible">
-			<p><?php echo esc_html( $error_message ); ?></p>
+			<p><?php echo esc_html( $error_message ); ?>
+				<?php if ( '' !== $duplicate_url ) : ?>
+					<a href="<?php echo esc_url( $duplicate_url ); ?>"><?php esc_html_e( 'Edit the existing redirect', 'legacy-redirector' ); ?></a>
+				<?php endif; ?>
+			</p>
 		</div>
 	<?php endif; ?>
 

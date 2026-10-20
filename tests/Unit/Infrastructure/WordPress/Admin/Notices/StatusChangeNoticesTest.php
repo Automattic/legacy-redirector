@@ -71,6 +71,19 @@ final class StatusChangeNoticesTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test the Test bulk action submitted without JavaScript says what to do instead.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\StatusChangeNotices::display
+	 */
+	public function test_bulk_test_without_javascript_explains_the_alternatives(): void {
+		$output = $this->render( array( 'bulk_test_needs_js' => '1' ) );
+
+		$this->assertStringContainsString( 'notice-warning', $output );
+		$this->assertStringContainsString( 'needs JavaScript', $output );
+		$this->assertStringContainsString( '<code>wp legacy-redirector test</code>', $output );
+	}
+
+	/**
 	 * Test a fully successful bulk enable keeps its success notice.
 	 */
 	public function test_bulk_enable_success_is_unchanged(): void {

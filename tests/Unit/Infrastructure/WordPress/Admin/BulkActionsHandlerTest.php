@@ -137,6 +137,23 @@ final class BulkActionsHandlerTest extends MonkeyStubs {
 	}
 
 	/**
+	 * Test the Test bulk action, which only reaches the server without
+	 * JavaScript, comes back flagged for a notice instead of doing nothing.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler::handle_bulk_actions
+	 */
+	public function test_handle_bulk_actions_flags_test_without_javascript(): void {
+		Functions\expect( 'add_query_arg' )
+			->once()
+			->with( 'bulk_test_needs_js', 1, 'http://example.com/wp-admin/edit.php' )
+			->andReturn( 'http://example.com/wp-admin/edit.php?bulk_test_needs_js=1' );
+
+		$result = $this->handler->handle_bulk_actions( 'http://example.com/wp-admin/edit.php', 'test_redirects', array( 1, 2 ) );
+
+		$this->assertSame( 'http://example.com/wp-admin/edit.php?bulk_test_needs_js=1', $result );
+	}
+
+	/**
 	 * Test handle_bulk_actions enables redirects.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler::handle_bulk_actions

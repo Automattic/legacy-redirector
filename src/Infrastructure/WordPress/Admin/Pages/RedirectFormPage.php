@@ -115,6 +115,8 @@ final class RedirectFormPage {
 			array(
 				'postId'                => $redirect_id,
 				'duplicateMessage'      => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
+				'editRedirectUrl'       => admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' ),
+				'editExistingLabel'     => __( 'Edit the existing redirect', 'legacy-redirector' ),
 				'reservedMessage'       => self::reserved_source_message(),
 				'occupiedMessage'       => self::occupied_source_message(),
 				'hostNotAllowedMessage' => self::host_not_allowed_message(),
@@ -245,13 +247,8 @@ final class RedirectFormPage {
 			$destination     = $redirect->destination();
 
 			if ( $destination->is_post_id() ) {
-				$destination_value = $destination->as_post_id()->value();
-				$parent_post       = get_post( $destination_value );
-				if ( $parent_post ) {
-					$destination_display = get_the_title( $parent_post ) . ' (ID: ' . $destination_value . ')';
-				} else {
-					$destination_display = (string) $destination_value;
-				}
+				$destination_value   = $destination->as_post_id()->value();
+				$destination_display = self::post_id_display( $destination_value );
 			} else {
 				$destination_value   = $destination->as_url()->value();
 				$destination_display = $destination_value;
@@ -273,8 +270,9 @@ final class RedirectFormPage {
 				$redirect_from = trim( wp_unslash( $_GET['redirect_from'] ) );
 			}
 			if ( isset( $_GET['redirect_to'] ) ) {
-				$destination_value   = trim( wp_unslash( $_GET['redirect_to'] ) );
-				$destination_display = $destination_value;
+				$destination_value = trim( wp_unslash( $_GET['redirect_to'] ) );
+				// A post picked from the suggestions reads as it did when picked.
+				$destination_display = ctype_digit( $destination_value ) ? self::post_id_display( (int) $destination_value ) : $destination_value;
 			}
 			// phpcs:enable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			if ( isset( $_GET['redirect_status'] ) && in_array( $_GET['redirect_status'], array( 'publish', 'draft' ), true ) ) {
@@ -290,6 +288,15 @@ final class RedirectFormPage {
 
 		$post_id       = $is_edit ? (int) $redirect->id() : 0;
 		$error_message = '' !== $error ? $this->get_error_message( $error ) : '';
+
+		// A duplicate source names the redirect that already has it, so the
+		// way on is one click away.
+		$duplicate_url = '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Just reading an ID for a link; the redirect is looked up before it is used.
+		$duplicate_of = 'duplicate' === $error && isset( $_GET['duplicate_of'] ) ? absint( $_GET['duplicate_of'] ) : 0;
+		if ( $duplicate_of > 0 && $duplicate_of !== $post_id && null !== $this->repository->find_by_id( $duplicate_of ) ) {
+			$duplicate_url = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $duplicate_of );
+		}
 
 		// Accepted, but flagged every time the redirect is opened: a reserved
 		// path can lock the admin out (see SourceUrl::is_reserved()), and
@@ -390,7 +397,7 @@ final class RedirectFormPage {
 		$validation = $this->validator->validate( $proposed );
 
 		if ( $validation->is_invalid() ) {
-			$this->redirect_with_error( $redirect_id, self::form_error_for( $validation->error_code() ), $redirect_from, $redirect_to, $redirect_status );
+			$this->redirect_with_error( $redirect_id, self::form_error_for( $validation->error_code() ), $redirect_from, $redirect_to, $redirect_status, $source );
 		}
 
 		// Reachability check for relative destinations only: a path with no
@@ -412,7 +419,7 @@ final class RedirectFormPage {
 			$result = $this->manager->update_redirect( $redirect_id, $redirect_from, $destination, $redirect_status );
 
 			if ( $result->is_error() ) {
-				$this->redirect_with_error( $redirect_id, self::form_error_for( $result->error_code() ), $redirect_from, $redirect_to, $redirect_status );
+				$this->redirect_with_error( $redirect_id, self::form_error_for( $result->error_code() ), $redirect_from, $redirect_to, $redirect_status, $source );
 			}
 
 			wp_safe_redirect(
@@ -424,7 +431,7 @@ final class RedirectFormPage {
 			$result = $this->manager->create_redirect( $source, $destination, true, $redirect_status );
 
 			if ( $result->is_error() ) {
-				$this->redirect_with_error( 0, self::form_error_for( $result->error_code() ), $redirect_from, $redirect_to, $redirect_status );
+				$this->redirect_with_error( 0, self::form_error_for( $result->error_code() ), $redirect_from, $redirect_to, $redirect_status, $source );
 			}
 
 			$redirect_id = $result->redirect_id();
@@ -434,6 +441,19 @@ final class RedirectFormPage {
 			);
 			exit;
 		}
+	}
+
+	/**
+	 * How the destination field shows a post ID: the post's title and ID, as
+	 * a suggestion reads when picked, or the bare ID if the post is gone.
+	 *
+	 * @param int $post_id The destination post ID.
+	 * @return string The display value.
+	 */
+	private static function post_id_display( int $post_id ): string {
+		$post = get_post( $post_id );
+
+		return $post ? get_the_title( $post ) . ' (ID: ' . $post_id . ')' : (string) $post_id;
 	}
 
 	/**
@@ -532,14 +552,15 @@ final class RedirectFormPage {
 	/**
 	 * Redirect with an error message, preserving form values.
 	 *
-	 * @param int    $redirect_id The redirect ID (0 for add page).
-	 * @param string $error       The error code.
-	 * @param string $from        The redirect from value to preserve.
-	 * @param string $to          The redirect to value to preserve.
-	 * @param string $status      The redirect status to preserve.
+	 * @param int            $redirect_id The redirect ID (0 for add page).
+	 * @param string         $error       The error code.
+	 * @param string         $from        The redirect from value to preserve.
+	 * @param string         $to          The redirect to value to preserve.
+	 * @param string         $status      The redirect status to preserve.
+	 * @param SourceUrl|null $source      The parsed source, which a duplicate error links from.
 	 * @return never
 	 */
-	private function redirect_with_error( int $redirect_id, string $error, string $from = '', string $to = '', string $status = 'publish' ): void {
+	private function redirect_with_error( int $redirect_id, string $error, string $from = '', string $to = '', string $status = 'publish', ?SourceUrl $source = null ): void {
 		// add_query_arg() does not encode the values it adds, so the URLs are
 		// encoded here or a & # or + in them would corrupt the query string.
 		$args = array(
@@ -554,6 +575,11 @@ final class RedirectFormPage {
 
 		if ( $redirect_id > 0 ) {
 			$args['redirect_id'] = $redirect_id;
+		}
+
+		// Name the redirect that already has the source, for the form to link to.
+		if ( 'duplicate' === $error && null !== $source ) {
+			$args['duplicate_of'] = $this->repository->get_id_by_source( $source );
 		}
 
 		$url = add_query_arg( $args, admin_url( 'edit.php' ) );

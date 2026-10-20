@@ -15,6 +15,9 @@
  * `legacyRedirectorForm`:
  * - postId            Redirect post ID being edited (0 on the Add page).
  * - duplicateMessage  Message shown when the source already redirects.
+ * - editRedirectUrl   Edit Redirect URL awaiting a redirect ID, for the link
+ *                     to the redirect that already has the source.
+ * - editExistingLabel Text of that link.
  * - reservedMessage   Warning shown when the source is a path WordPress
  *                     itself serves. The form still saves.
  * - occupiedMessage   Warning shown when published content already lives at
@@ -47,8 +50,10 @@ jQuery( document ).ready( function ( $ ) {
 
 	// Show or clear one of the inline messages under a field. A visible
 	// message is announced, since the field has lost focus by the time it
-	// appears; an error also marks the field invalid.
-	function setMessage( $message, $field, text ) {
+	// appears; an error also marks the field invalid. An optional link
+	// follows the text, such as the way to the redirect that already has
+	// the source.
+	function setMessage( $message, $field, text, link ) {
 		if ( ! text ) {
 			$message.hide().text( '' );
 			if ( $field ) {
@@ -58,6 +63,9 @@ jQuery( document ).ready( function ( $ ) {
 		}
 
 		$message.text( text ).show();
+		if ( link ) {
+			$message.append( ' ', $( '<a>', { href: link.href } ).text( link.text ) );
+		}
 		if ( $field ) {
 			$field.attr( 'aria-invalid', 'true' );
 		}
@@ -138,7 +146,12 @@ jQuery( document ).ready( function ( $ ) {
 		wp.apiFetch( {
 			path: '/legacy-redirector/v1/check-source?source=' + encodeURIComponent( newFrom ) + '&exclude_id=' + postId
 		} ).then( function ( result ) {
-			setMessage( $( '#redirect_from_error' ), $field, result.exists ? settings.duplicateMessage : '' );
+			setMessage(
+				$( '#redirect_from_error' ),
+				$field,
+				result.exists ? settings.duplicateMessage : '',
+				result.existing_id ? { href: settings.editRedirectUrl + parseInt( result.existing_id, 10 ), text: settings.editExistingLabel } : null
+			);
 
 			var warning = '';
 			if ( result.reserved ) {

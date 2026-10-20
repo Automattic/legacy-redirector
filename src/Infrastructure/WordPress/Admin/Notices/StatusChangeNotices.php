@@ -67,6 +67,18 @@ final class StatusChangeNotices {
 			$this->display_single_disabled_notice( $redirect_source );
 		}
 
+		// The Test bulk action submitted without JavaScript.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.
+		if ( isset( $_GET['bulk_test_needs_js'] ) ) {
+			wp_admin_notice(
+				wp_kses(
+					__( 'Testing several redirects at once needs JavaScript. Use the Test link on each row instead, or <code>wp legacy-redirector test</code>.', 'legacy-redirector' ),
+					array( 'code' => array() )
+				),
+				array( 'type' => 'warning' ) + self::NOTICE_ARGS
+			);
+		}
+
 		// Rows a bulk action could not change, and why the first one failed.
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Reading URL params for notice display.
 		$failed = isset( $_GET['bulk_redirects_failed'] ) ? absint( $_GET['bulk_redirects_failed'] ) : 0;

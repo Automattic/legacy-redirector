@@ -110,13 +110,13 @@ final class FormScreenSetup {
 	 */
 	private function get_source_help(): string {
 		return '<p>' . __( 'The <strong>Redirect From</strong> field specifies the old URL path that should trigger the redirect.', 'legacy-redirector' ) . '</p>' .
-			'<p>' . __( 'The leading forward slash is shown as a prefix, so just enter the path. For example:', 'legacy-redirector' ) . '</p>' .
+			'<p>' . __( 'The site\'s home URL is shown before the field, so just enter the path. For example:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
 			'<li><code>old-page</code></li>' .
 			'<li><code>blog/2020/old-post</code></li>' .
 			'<li><code>products/discontinued-item</code></li>' .
 			'</ul>' .
-			'<p>' . __( 'The path is relative to your site\'s root. Do not include the domain name.', 'legacy-redirector' ) . '</p>' .
+			'<p>' . __( 'The path is read relative to that home URL, which on a site installed in a subdirectory is not the domain root. Do not include the domain name.', 'legacy-redirector' ) . '</p>' .
 			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'Each source path can only have one redirect. Duplicate sources are not allowed.', 'legacy-redirector' ) . '</p>' .
 			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'A source on a path WordPress itself serves, such as <code>wp-admin</code> or <code>wp-login.php</code>, is accepted with a warning: the redirect lies dormant while that path works, but takes over if the path ever returns a 404. A source a published post or page already answers gets a warning too: the redirect stays dormant until that content goes.', 'legacy-redirector' ) . '</p>';
 	}

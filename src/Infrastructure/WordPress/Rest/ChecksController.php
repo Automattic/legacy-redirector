@@ -140,16 +140,17 @@ final class ChecksController {
 	 * itself serves.
 	 *
 	 * @param \WP_REST_Request $request The request.
-	 * @return array{exists: bool, reserved: bool, occupied: bool} Whether the source is taken, whether it is reserved, and whether published content already answers it.
+	 * @return array{exists: bool, existing_id: int, reserved: bool, occupied: bool} Whether the source is taken and by which redirect, whether it is reserved, and whether published content already answers it.
 	 */
 	public function check_source( \WP_REST_Request $request ): array {
 		$raw        = (string) $request->get_param( 'source' );
 		$exclude_id = (int) $request->get_param( 'exclude_id' );
 
 		$none = array(
-			'exists'   => false,
-			'reserved' => false,
-			'occupied' => false,
+			'exists'      => false,
+			'existing_id' => 0,
+			'reserved'    => false,
+			'occupied'    => false,
 		);
 
 		if ( '' === $raw ) {
@@ -163,13 +164,15 @@ final class ChecksController {
 		}
 
 		$existing = $this->repository->get_id_by_source( $source );
+		$taken    = $existing > 0 && $existing !== $exclude_id;
 		$warnings = $this->auditor->source_warnings( $source );
 
 		// Both are warnings, not refusals: the form still saves.
 		return array(
-			'exists'   => $existing > 0 && $existing !== $exclude_id,
-			'reserved' => in_array( AuditFindingType::RESERVED_SOURCE, $warnings, true ),
-			'occupied' => in_array( AuditFindingType::SOURCE_SERVES_CONTENT, $warnings, true ),
+			'exists'      => $taken,
+			'existing_id' => $taken ? $existing : 0,
+			'reserved'    => in_array( AuditFindingType::RESERVED_SOURCE, $warnings, true ),
+			'occupied'    => in_array( AuditFindingType::SOURCE_SERVES_CONTENT, $warnings, true ),
 		);
 	}
 
