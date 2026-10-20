@@ -43,6 +43,8 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_to_array
  * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
  * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
  */
 final class CreateRedirectAbilityTest extends MonkeyStubs {
 

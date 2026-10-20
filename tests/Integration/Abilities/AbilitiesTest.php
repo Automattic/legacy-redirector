@@ -75,6 +75,8 @@ use WP_Ability;
  * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
  * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
  */
 final class AbilitiesTest extends TestCase {
 
@@ -347,6 +349,37 @@ final class AbilitiesTest extends TestCase {
 		$this->assertInstanceOf( 'WP_Error', $result );
 		$this->assertSame( 'legacy_redirector_duplicate_redirect_uri', $result->get_error_code() );
 		$this->assertStringContainsString( sprintf( 'Redirect #%d already has the source', $existing ), $result->get_error_message() );
+	}
+
+	/**
+	 * Test why a source was refused reaches the caller in the user's language.
+	 *
+	 * The Domain's exception message is English, for logs and the CLI; the
+	 * ability must say it through translation instead.
+	 *
+	 * @return void
+	 */
+	public function test_refused_source_reason_is_translated(): void {
+		$translate = static function ( string $translation, string $text, string $domain ): string {
+			return 'legacy-redirector' === $domain && 'The URL contains neither a path nor query string.' === $text
+				? 'Die URL enthält weder einen Pfad noch eine Abfrage.'
+				: $translation;
+		};
+		add_filter( 'gettext', $translate, 10, 3 );
+
+		try {
+			$result = $this->ability( 'create-redirect' )->execute(
+				array(
+					'from' => 'http://example.com',
+					'to'   => '/somewhere',
+				)
+			);
+		} finally {
+			remove_filter( 'gettext', $translate );
+		}
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertStringContainsString( 'Die URL enthält weder einen Pfad noch eine Abfrage.', $result->get_error_message() );
 	}
 
 	/**

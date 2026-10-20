@@ -45,6 +45,7 @@ trait ReportsBatchFailures {
 			$message = match ( $item['outcome'] ) {
 				BatchOutcome::SUCCESS   => null,
 				BatchOutcome::INVALID   => sprintf( 'Invalid source path: %s (%s)', $identifier, (string) $error ),
+				BatchOutcome::AMBIGUOUS => (string) $error,
 				BatchOutcome::NOT_FOUND => sprintf( 'Redirect not found: %s', $identifier ),
 				BatchOutcome::FAILED    => sprintf(
 					'Could not %s redirect: %s%s',

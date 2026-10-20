@@ -34,6 +34,11 @@ enum BatchOutcome {
 	case INVALID;
 
 	/**
+	 * The identifier is a source path more than one redirect has, so it names none of them.
+	 */
+	case AMBIGUOUS;
+
+	/**
 	 * The identifier is well-formed, but no redirect matches it.
 	 */
 	case NOT_FOUND;

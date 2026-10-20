@@ -47,6 +47,9 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectReposit
  * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
  * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  */
 final class ImportCommandTest extends CliTestCase {
 

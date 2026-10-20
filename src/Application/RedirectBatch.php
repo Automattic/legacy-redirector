@@ -55,8 +55,11 @@ final class RedirectBatch {
 
 			try {
 				$redirect = $this->fetcher->fetch( $identifier );
+			} catch ( AmbiguousSourceException $e ) {
+				$items[] = self::item( $identifier, BatchOutcome::AMBIGUOUS, null, $e->getMessage() );
+				continue;
 			} catch ( \InvalidArgumentException $e ) {
-				$items[] = self::item( $identifier, BatchOutcome::INVALID, null, $e->getMessage() );
+				$items[] = self::item( $identifier, BatchOutcome::INVALID, null, ErrorText::of( $e ) );
 				continue;
 			}
 

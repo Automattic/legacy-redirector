@@ -9,8 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Domain;
 
-use InvalidArgumentException;
-
 /**
  * Immutable value object representing a redirect destination URL.
  *
@@ -50,13 +48,14 @@ final class DestinationUrl {
 	 * @param string $url The destination URL or path.
 	 * @return self
 	 *
-	 * @throws InvalidArgumentException If the URL is empty or invalid.
+	 * @throws InvalidRedirectValue If the URL is empty or invalid.
 	 */
 	public static function from_string( string $url ): self {
 		$url = trim( $url );
 
 		if ( empty( $url ) ) {
-			throw new InvalidArgumentException( 'Destination URL cannot be empty.' );
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+			throw InvalidRedirectValue::because( InvalidRedirectValue::DESTINATION_EMPTY );
 		}
 
 		// Check if it's a relative path (starts with /).
@@ -71,12 +70,14 @@ final class DestinationUrl {
 			$parts  = Url::parse_encoded( $url ) ?? array();
 			$scheme = $parts['scheme'] ?? '';
 			if ( ! in_array( $scheme, array( 'http', 'https' ), true ) ) {
-				throw new InvalidArgumentException( 'Absolute destination URLs must use http or https scheme.' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+				throw InvalidRedirectValue::because( InvalidRedirectValue::DESTINATION_SCHEME );
 			}
 
 			// Reject malformed forms such as `https:/evil.com`, which browsers normalize to `https://evil.com`.
 			if ( empty( $parts['host'] ) ) {
-				throw new InvalidArgumentException( 'Absolute destination URLs must include a host.' );
+				// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
+				throw InvalidRedirectValue::because( InvalidRedirectValue::DESTINATION_NO_HOST );
 			}
 		}
 

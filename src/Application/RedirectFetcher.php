@@ -47,7 +47,8 @@ final class RedirectFetcher {
 	 * It would resolve to the live one, whichever spelling was typed, and the
 	 * usual reason to name a duplicate is to delete it.
 	 *
-	 * @throws \InvalidArgumentException If the identifier is not a valid ID or source path, or more than one redirect has the source.
+	 * @throws AmbiguousSourceException If more than one redirect has the source. An invalid source path
+	 *                                  throws the Domain's InvalidRedirectValue.
 	 */
 	public function fetch( string $identifier ): ?Redirect {
 		if ( ctype_digit( $identifier ) ) {
@@ -66,14 +67,14 @@ final class RedirectFetcher {
 		if ( array() !== $duplicate_ids ) {
 			$ids     = array_merge( array( $redirect_id ), $duplicate_ids );
 			$message = sprintf(
-				/* translators: 1: number of redirects, 2: comma-separated redirect IDs. */
-				__( '%1$d redirects share this source, IDs %2$s; use an ID', 'legacy-redirector' ),
-				count( $ids ),
-				implode( ', ', $ids )
+				/* translators: 1: number of redirects, always two or more; 2: list of their IDs, such as "7 and 9" */
+				_n( '%1$s redirect has this source, IDs %2$s. Name one by its ID.', '%1$s redirects share this source, IDs %2$s. Name one by its ID.', count( $ids ), 'legacy-redirector' ),
+				number_format_i18n( count( $ids ) ),
+				wp_sprintf_l( '%l', $ids )
 			);
 
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception message, not output.
-			throw new \InvalidArgumentException( $message );
+			throw new AmbiguousSourceException( $message );
 		}
 
 		return $this->repository->find_by_id( $redirect_id );

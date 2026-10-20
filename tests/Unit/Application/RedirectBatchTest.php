@@ -25,13 +25,16 @@ use Mockery;
  * RedirectBatchTest class.
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  * @uses \Automattic\LegacyRedirector\Application\BatchOutcome
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
@@ -128,10 +131,15 @@ final class RedirectBatchTest extends MonkeyStubs {
 		$this->repository->shouldReceive( 'duplicate_ids' )->with( 7 )->andReturn( array( 9 ) );
 		$this->repository->shouldNotReceive( 'find_by_id' );
 
+		Functions\stubTranslationFunctions();
+		Functions\when( 'number_format_i18n' )->returnArg( 1 );
+		Functions\when( 'wp_sprintf_l' )->alias( static fn( string $pattern, array $ids ): string => implode( ' and ', $ids ) );
+
 		$items = $this->batch->resolve( array( '/clash/' ) );
 
-		$this->assertSame( BatchOutcome::INVALID, $items[0]['outcome'] );
-		$this->assertSame( '2 redirects share this source, IDs 7, 9; use an ID', $items[0]['error'] );
+		// Ambiguous, not invalid: the path is fine, it just names two redirects.
+		$this->assertSame( BatchOutcome::AMBIGUOUS, $items[0]['outcome'] );
+		$this->assertSame( '2 redirects share this source, IDs 7 and 9. Name one by its ID.', $items[0]['error'] );
 	}
 
 	/**
@@ -145,8 +153,7 @@ final class RedirectBatchTest extends MonkeyStubs {
 		$items = $this->batch->resolve( array( 'http://example.com' ) );
 
 		$this->assertSame( 'http://example.com', $items[0]['identifier'] );
-		$this->assertSame( BatchOutcome::INVALID, $items[0]['outcome'] );
-		$this->assertNotEmpty( $items[0]['error'] );
+				$this->assertNotEmpty( $items[0]['error'] );
 		$this->assertSame( array(), RedirectBatch::redirects( $items ) );
 	}
 

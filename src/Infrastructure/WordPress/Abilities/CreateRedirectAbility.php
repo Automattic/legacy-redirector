@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\ErrorText;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
@@ -126,7 +127,7 @@ final class CreateRedirectAbility implements AbilityInterface {
 					__( 'Could not create a redirect from %1$s to %2$s: %3$s', 'legacy-redirector' ),
 					$from,
 					(string) $to,
-					$e->getMessage()
+					ErrorText::of( $e )
 				)
 			);
 		}
