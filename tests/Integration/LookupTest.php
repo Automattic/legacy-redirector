@@ -421,25 +421,64 @@ final class LookupTest extends TestCase {
 	}
 
 	/**
-	 * Test the pre-2.0 hook name still takes effect.
+	 * Test a callback on a pre-2.0 hook name still changes the outcome.
+	 *
+	 * 1.x sites keep these callbacks after upgrading, so each must still reach
+	 * the lookup through apply_filters_deprecated().
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 * @dataProvider data_deprecated_filters
+	 *
+	 * @param string   $hook     The pre-2.0 hook name.
+	 * @param callable $callback The callback a 1.x site would attach.
+	 * @param string   $request  The request URL.
+	 * @param array    $expected The expected redirect data.
 	 */
-	public function test_get_redirect_data_applies_deprecated_redirect_status_filter(): void {
-		$this->setExpectedDeprecated( 'wpcom_legacy_redirector_redirect_status' );
+	public function test_get_redirect_data_applies_deprecated_filter( string $hook, callable $callback, string $request, array $expected ): void {
+		$this->setExpectedDeprecated( $hook );
 
-		$from_url = '/deprecated-status-filter-test';
-		$to_url   = 'http://example.com/destination';
+		$this->create_redirect( '/deprecated-filter-test', 'http://example.com/destination' );
 
-		$this->create_redirect( $from_url, $to_url );
+		add_filter( $hook, $callback );
 
-		add_filter( 'wpcom_legacy_redirector_redirect_status', fn() => 302 );
+		$this->assertSame( $expected, $this->resolver()->get_redirect_data( $request ) );
+	}
 
-		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
-
-		$this->assertSame( 302, $redirect_data['status_code'] );
-
-		remove_all_filters( 'wpcom_legacy_redirector_redirect_status' );
+	/**
+	 * Data provider for test_get_redirect_data_applies_deprecated_filter.
+	 *
+	 * @return array<string, array{string, callable, string, array}>
+	 */
+	public function data_deprecated_filters(): array {
+		return array(
+			'request path rewritten to a stored source' => array(
+				'wpcom_legacy_redirector_request_path',
+				fn( $path ) => '/old-name' === $path ? '/deprecated-filter-test' : $path,
+				'/old-name',
+				array(
+					'url'         => 'http://example.com/destination',
+					'status_code' => 301,
+				),
+			),
+			'query key preserved onto the destination'  => array(
+				'wpcom_legacy_redirector_preserve_query_params',
+				fn() => array( 'utm_source' ),
+				'/deprecated-filter-test?utm_source=newsletter',
+				array(
+					'url'         => 'http://example.com/destination?utm_source=newsletter',
+					'status_code' => 301,
+				),
+			),
+			'status code changed'                       => array(
+				'wpcom_legacy_redirector_redirect_status',
+				fn() => 302,
+				'/deprecated-filter-test',
+				array(
+					'url'         => 'http://example.com/destination',
+					'status_code' => 302,
+				),
+			),
+		);
 	}
 
 	/**
