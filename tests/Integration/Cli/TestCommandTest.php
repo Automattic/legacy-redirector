@@ -18,7 +18,7 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\TestCommand;
  * Integration tests for TestCommand.
  *
  * Every HTTP request is answered by a canned response: the source probe is
- * told apart by asking not to follow redirects.
+ * told apart by its host, the site's own.
  *
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\TestCommand
  * @uses \Automattic\LegacyRedirector\Application\HomePath
@@ -99,8 +99,7 @@ final class TestCommandTest extends CliTestCase {
 		add_filter(
 			'pre_http_request',
 			function ( $preempt, $args, $url ) use ( $source, $destination ) {
-				// The probe does not follow redirects; the destination check does.
-				if ( 0 === ( $args['redirection'] ?? 5 ) ) {
+				if ( str_starts_with( $url, home_url( '/' ) ) ) {
 					$this->source_requests[] = $url;
 					return $source;
 				}
@@ -164,6 +163,112 @@ final class TestCommandTest extends CliTestCase {
 		$this->assertSame( 'problem', $rows[0]['severity'] );
 		$this->assertSame( 'Destination returns 404', $rows[0]['issue'] );
 		$this->assertSame( 'Point this redirect at a page that exists, or delete it', $rows[0]['remedy'] );
+	}
+
+	/**
+	 * Answer destination requests by URL, recording each one.
+	 *
+	 * @param array<string, array> $responses Responses by URL; any other URL gets a 200.
+	 * @return \ArrayObject<int, string> The URLs requested, filled in as the command runs.
+	 */
+	private function respond_by_url( array $responses ): \ArrayObject {
+		$requested = new \ArrayObject();
+
+		add_filter(
+			'pre_http_request',
+			static function ( $preempt, $args, $url ) use ( $responses, $requested ) {
+				$requested[] = $url;
+
+				return $responses[ $url ] ?? array( 'response' => array( 'code' => 200 ) );
+			},
+			10,
+			3
+		);
+
+		return $requested;
+	}
+
+	/**
+	 * Test a destination redirecting within allowed hosts is followed to where it ends.
+	 */
+	public function test_a_destination_hop_to_an_allowed_host_is_followed(): void {
+		$this->create_redirect( '/test-hop-allowed', self::DESTINATION );
+		$requested = $this->respond_by_url(
+			array(
+				self::DESTINATION           => array(
+					'response' => array( 'code' => 302 ),
+					'headers'  => array( 'location' => 'https://example.com/moved' ),
+				),
+				'https://example.com/moved' => array( 'response' => array( 'code' => 404 ) ),
+			)
+		);
+
+		$issues = array_column( $this->rows( array( '/test-hop-allowed' ), array( 'only' => 'destination' ) ), 'issue' );
+
+		$this->assertSame( array( 'Destination returns 404' ), $issues );
+		$this->assertSame( array( self::DESTINATION, 'https://example.com/moved' ), $requested->getArrayCopy() );
+	}
+
+	/**
+	 * Test a destination redirecting outside allowed hosts is not followed there.
+	 */
+	public function test_a_destination_hop_to_another_host_is_not_requested(): void {
+		$this->create_redirect( '/test-hop-elsewhere', self::DESTINATION );
+		$requested = $this->respond_by_url(
+			array(
+				self::DESTINATION => array(
+					'response' => array( 'code' => 302 ),
+					'headers'  => array( 'location' => 'http://169.254.169.254/latest/' ),
+				),
+			)
+		);
+
+		$issues = array_column( $this->rows( array( '/test-hop-elsewhere' ), array( 'only' => 'destination' ) ), 'issue' );
+
+		$this->assertSame( array( 'Destination responds' ), $issues );
+		$this->assertSame( array( self::DESTINATION ), $requested->getArrayCopy() );
+	}
+
+	/**
+	 * Test a relative Location is resolved against the URL that sent it, as the HTTP API did.
+	 *
+	 * @dataProvider relative_location_provider
+	 *
+	 * @param string $source      The redirect's source.
+	 * @param string $destination The destination, which redirects.
+	 * @param string $location    The relative Location it redirects with.
+	 * @param string $resolved    The URL the hop should request.
+	 */
+	public function test_a_relative_destination_hop_is_resolved( string $source, string $destination, string $location, string $resolved ): void {
+		$this->create_redirect( $source, $destination );
+		$requested = $this->respond_by_url(
+			array(
+				$destination => array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => $location ),
+				),
+				$resolved    => array( 'response' => array( 'code' => 404 ) ),
+			)
+		);
+
+		$issues = array_column( $this->rows( array( $source ), array( 'only' => 'destination' ) ), 'issue' );
+
+		$this->assertSame( array( 'Destination returns 404' ), $issues );
+		$this->assertSame( array( $destination, $resolved ), $requested->getArrayCopy() );
+	}
+
+	/**
+	 * Relative Location forms and what each resolves to.
+	 *
+	 * @return array<string, string[]>
+	 */
+	public function relative_location_provider(): array {
+		return array(
+			'root-relative'   => array( '/test-hop-root', 'https://example.com/a/b', '/moved', 'https://example.com/moved' ),
+			'scheme-relative' => array( '/test-hop-scheme', 'https://example.com/a/b', '//example.com/moved', 'https://example.com/moved' ),
+			'path-relative'   => array( '/test-hop-path', 'https://example.com/a/b', 'page2', 'https://example.com/a/page2' ),
+			'parent-relative' => array( '/test-hop-parent', 'https://example.com/a/b/c', '../x', 'https://example.com/a/x' ),
+		);
 	}
 
 	/**

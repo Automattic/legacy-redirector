@@ -382,3 +382,25 @@ if ( ! class_exists( 'WP_Error' ) ) {
 		}
 	}
 }
+
+// WP_Http stub for unit tests.
+if ( ! class_exists( 'WP_Http' ) ) {
+	/**
+	 * Minimal WP_Http stub for unit testing.
+	 *
+	 * Resolving a relative URL is core's job, so integration tests cover it;
+	 * unit tests only pass absolute URLs, which core returns unchanged.
+	 */
+	class WP_Http {
+		/**
+		 * Return the URL unchanged.
+		 *
+		 * @param string $maybe_relative_path The URL to resolve.
+		 * @param string $url                 The URL it was found at (ignored).
+		 * @return string The URL.
+		 */
+		public static function make_absolute_url( $maybe_relative_path, $url ) {
+			return $maybe_relative_path;
+		}
+	}
+}

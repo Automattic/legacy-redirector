@@ -39,6 +39,13 @@ class RedirectAuditor {
 	private const MAX_RESPONSE_SIZE = 65536;
 
 	/**
+	 * The most redirects a URL check follows: the HTTP API's own default.
+	 *
+	 * @var int
+	 */
+	private const MAX_REDIRECTS = 5;
+
+	/**
 	 * The loop detector, the one audit rule needing the repository.
 	 *
 	 * Optional so the write gate, which never asks about loops, can build an
@@ -443,32 +450,60 @@ class RedirectAuditor {
 	/**
 	 * Check if a URL destination is reachable.
 	 *
-	 * The one HTTP check: a GET that follows redirects, so a destination that
-	 * forwards somewhere real passes and one that ends in a 404 fails, however
-	 * many hops it takes to get there.
+	 * The one HTTP check: a GET that follows up to five redirects, so a
+	 * destination that forwards somewhere real passes and one that ends in a
+	 * 404 fails. The hops are followed here rather than by the HTTP API,
+	 * because each one is checked before it is requested: only the site's own
+	 * host and allowed_redirect_hosts are followed. Left to itself, the HTTP
+	 * API follows an allowed host's redirect to any address it treats as
+	 * public, link-local ones included. A hop to any other host is not
+	 * requested and counts as the destination answering, since that is what
+	 * an ordinary canonical redirect (example.com to www.example.com) looks
+	 * like.
 	 *
 	 * @param Redirect $redirect The redirect.
 	 * @param string   $url      The destination URL.
 	 * @return AuditFinding|null The finding if broken, null if valid.
 	 */
 	private function check_url_destination( Redirect $redirect, string $url ): ?AuditFinding {
-		$response = $this->remote_get( $url );
+		for ( $hop = 0; $hop <= self::MAX_REDIRECTS; $hop++ ) {
+			$response = $this->remote_get_without_redirects( $url );
 
-		if ( is_wp_error( $response ) ) {
-			return new AuditFinding(
-				$redirect,
-				AuditFindingType::URL_REQUEST_FAILED,
-				$response->get_error_message()
-			);
+			if ( is_wp_error( $response ) ) {
+				return new AuditFinding(
+					$redirect,
+					AuditFindingType::URL_REQUEST_FAILED,
+					$response->get_error_message()
+				);
+			}
+
+			$status_code = (int) wp_remote_retrieve_response_code( $response );
+
+			// Core and the VIP helper report transport failures as a WP_Error,
+			// so a response without a status only comes from a misbehaving
+			// pre_http_request filter. It says nothing about the destination.
+			if ( $status_code <= 0 ) {
+				return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, 'no status code' );
+			}
+
+			$location = (string) wp_remote_retrieve_header( $response, 'location' );
+
+			// A redirect with no Location goes nowhere, so it is the answer.
+			if ( $status_code < 300 || $status_code >= 400 || '' === $location ) {
+				break;
+			}
+
+			// Resolved as the HTTP API resolved it, path-relative forms included.
+			$url = wp_validate_redirect( \WP_Http::make_absolute_url( $location, $url ), '' );
+
+			if ( '' === $url ) {
+				return null;
+			}
 		}
 
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
-
-		// Core and the VIP helper report transport failures as a WP_Error, so
-		// a response without a status only comes from a misbehaving
-		// pre_http_request filter. It says nothing about the destination.
-		if ( $status_code <= 0 ) {
-			return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, 'no status code' );
+		// The error the HTTP API reported when it followed the hops itself.
+		if ( $hop > self::MAX_REDIRECTS ) {
+			return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, 'Too many redirects' );
 		}
 
 		if ( 404 === $status_code ) {
@@ -723,38 +758,6 @@ class RedirectAuditor {
 			array(
 				'timeout'             => 5,
 				'redirection'         => 0,
-				'limit_response_size' => self::MAX_RESPONSE_SIZE,
-			)
-		);
-	}
-
-	/**
-	 * Request a URL.
-	 *
-	 * Protected so tests can stub the network.
-	 *
-	 * @param string $url The URL to request.
-	 * @return array|\WP_Error The response or error.
-	 */
-	protected function remote_get( string $url ) {
-		if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
-			return vip_safe_wp_remote_get(
-				$url,
-				'',
-				3,
-				1,
-				20,
-				array(
-					'reject_unsafe_urls'  => true,
-					'limit_response_size' => self::MAX_RESPONSE_SIZE,
-				)
-			);
-		}
-
-		return wp_safe_remote_get(
-			$url,
-			array(
-				'timeout'             => 5,
 				'limit_response_size' => self::MAX_RESPONSE_SIZE,
 			)
 		);
