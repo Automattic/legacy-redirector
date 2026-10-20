@@ -22,16 +22,24 @@ Feature: List redirects
       /list-test-2
       """
 
-  # Contract test: CSV format is the supported export path.
+    # Newest first, so the second redirect created is listed first.
+    When I run `wp legacy-redirector list --format=json`
+    Then STDOUT should be JSON containing:
+      """
+      [
+        {"from": "/list-test-2", "to": "/list-destination", "type": "url", "status": "enabled"},
+        {"from": "/list-test-1", "to": "/list-destination", "type": "url", "status": "enabled"}
+      ]
+      """
+
+  # Contract test: CSV format is the supported export path, so its header and
+  # columns are what scripts parse. import.feature reads one back in.
   Scenario: Export redirects as CSV
     Given there is a published post with a slug of "csv-destination"
     And there is a redirect from "/csv-test-1" to "/csv-destination"
 
     When I run `wp legacy-redirector list --format=csv`
-    Then STDOUT should contain:
-      """
-      /csv-test-1
-      """
+    Then STDOUT should match #^ID,from,to,type,status\n\d+,/csv-test-1,/csv-destination,url,enabled$#
 
   # Contract test: machine-readable formats print the data alone, so an empty
   # listing parses as an empty list rather than as a sentence.

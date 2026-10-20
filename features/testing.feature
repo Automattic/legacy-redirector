@@ -37,6 +37,20 @@
       `wp wpcom-legacy-redirector find-domains` is deprecated since 2.0.0. Use `wp legacy-redirector find-domains` instead.
       """
 
+    When I run `wp post create --post_title=deprecated-meta --post_status=publish --porcelain`
+    And save STDOUT as {POST_ID}
+    And I run `wp post meta add {POST_ID} legacy_redirect_url /deprecated-meta-source`
+    And I try `wp wpcom-legacy-redirector import-from-meta --meta-key=legacy_redirect_url`
+    Then the return code should be 0
+    And STDOUT should contain:
+      """
+      All of your redirects have been imported.
+      """
+    And STDERR should contain:
+      """
+      `wp wpcom-legacy-redirector import-from-meta` is deprecated since 2.0.0. Use `wp legacy-redirector import-from-meta` instead.
+      """
+
   Scenario Outline: A command removed in 2.0 fails and names its replacement
     Given a WP installation with the Legacy Redirector plugin
 

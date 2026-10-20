@@ -80,6 +80,13 @@ final class FeatureContext extends WpEnvFeatureContext {
 	private bool $legacy_active = false;
 
 	/**
+	 * What the next WP-CLI command reads on STDIN, or null for nothing.
+	 *
+	 * @var string|null
+	 */
+	private ?string $stdin = null;
+
+	/**
 	 * Get the plugin slug for wp-env command execution.
 	 *
 	 * Derived rather than hardcoded because wp-env mounts the plugin at
@@ -236,8 +243,15 @@ final class FeatureContext extends WpEnvFeatureContext {
 	 * @return void
 	 */
 	protected function run_wp_cli_command( string $command, bool $should_fail = false ): void {
+		// Base64 keeps the input free of quotes and newlines on its way
+		// through docker exec's sh -c, however the PyString is written.
+		$pipe = null === $this->stdin
+			? ''
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encoding for shell safety.
+			: sprintf( 'echo %s | base64 -d | ', escapeshellarg( base64_encode( $this->stdin ) ) );
+
 		list( $output_lines, $exit_code ) = self::run_in_container(
-			'wp ' . $this->replace_variables( $command ) . ' 2>&1',
+			$pipe . 'wp ' . $this->replace_variables( $command ) . ' 2>&1',
 			true
 		);
 
@@ -379,6 +393,27 @@ RESET;
 		if ( 0 !== $this->exit_code ) {
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 			throw new RuntimeException( sprintf( "`%s` exited %d.\nSTDOUT:\n%s\n\nSTDERR:\n%s", $command, $this->exit_code, $this->output, $this->error_output ) );
+		}
+	}
+
+	/**
+	 * Run a WP-CLI command that is expected to succeed, with the given text on STDIN.
+	 *
+	 * Saved variables are replaced in the text, so a command's saved output
+	 * can be piped into another, as `list --format=csv | import -` would.
+	 *
+	 * @When /^I run `([^`]+)` with STDIN:$/
+	 * @param string                           $command The command to run.
+	 * @param \Behat\Gherkin\Node\PyStringNode $stdin   What the command reads on STDIN.
+	 * @return void
+	 */
+	public function i_run_with_stdin( string $command, \Behat\Gherkin\Node\PyStringNode $stdin ): void {
+		$this->stdin = $this->replace_variables( $stdin->getRaw() );
+
+		try {
+			$this->i_run( $command );
+		} finally {
+			$this->stdin = null;
 		}
 	}
 

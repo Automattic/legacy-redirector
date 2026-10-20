@@ -27,6 +27,32 @@ Feature: Import redirects from CSV
       /destination-post
       """
 
+  # Contract test: the export `list` documents imports unedited, header and
+  # status included, piped in on STDIN.
+  Scenario: A list export imports back from STDIN
+    Given there is a published post with a slug of "destination-post"
+    And there is a redirect from "/round-trip" to "/destination-post"
+
+    When I run `wp legacy-redirector disable /round-trip`
+    And I run `wp legacy-redirector list --fields=from,to,status --format=csv`
+    And save STDOUT as {EXPORT}
+    And I run `wp legacy-redirector delete /round-trip --yes`
+    And I run `wp legacy-redirector import -` with STDIN:
+      """
+      {EXPORT}
+      """
+    Then STDOUT should contain:
+      """
+      Processed 1 redirect.
+      """
+
+    When I run `wp legacy-redirector get /round-trip --fields=to,status --format=csv`
+    Then STDOUT should be:
+      """
+      to,status
+      /destination-post,disabled
+      """
+
   # Contract test: one refused row fails the run, so a script cannot mistake a
   # partial import for a clean one, and the rows that passed are still saved.
   Scenario: An import with a refused row exits non-zero

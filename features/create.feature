@@ -20,6 +20,21 @@ Feature: Creating a redirect
       /foo -> /bar
       """
 
+  # Contract test: --porcelain prints the new redirect's ID and nothing else,
+  # so a script can capture it.
+  Scenario: Create a redirect with --porcelain prints only its ID
+    Given there is a published post with a slug of "porcelain-target"
+
+    When I run `wp legacy-redirector create /porcelain-source /porcelain-target --porcelain`
+    Then STDOUT should match /^\d+$/
+
+    When save STDOUT as {REDIRECT_ID}
+    And I run `wp legacy-redirector get {REDIRECT_ID} --field=from`
+    Then STDOUT should be:
+      """
+      /porcelain-source
+      """
+
   # Contract test: duplicate sources are rejected with a non-zero exit code.
   Scenario: Creating a duplicate redirect fails
     Given there is a published post with a slug of "dupe-target"
