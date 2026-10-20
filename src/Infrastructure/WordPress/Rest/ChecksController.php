@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Rest;
 
+use Automattic\LegacyRedirector\Application\FindingText;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
@@ -230,9 +231,9 @@ final class ChecksController {
 		foreach ( $findings as $finding ) {
 			if ( $finding->is_warning() ) {
 				$warnings[] = array(
-					'label'       => $finding->label(),
-					'description' => $finding->description() . '.',
-					'remedy'      => $finding->remedy() . '.',
+					'label'       => FindingText::label( $finding->type() ),
+					'description' => FindingText::description( $finding->type(), $finding->detail() ),
+					'remedy'      => FindingText::remedy( $finding->type() ),
 				);
 			} else {
 				$problems[] = $finding;
@@ -252,8 +253,8 @@ final class ChecksController {
 			return array(
 				'valid'    => false,
 				'status'   => $finding->type()->value,
-				'message'  => $finding->description() . '.',
-				'remedy'   => $finding->remedy() . '.',
+				'message'  => FindingText::description( $finding->type(), $finding->detail() ),
+				'remedy'   => FindingText::remedy( $finding->type() ),
 				'warnings' => $warnings,
 				'probe'    => $probe,
 			);
@@ -293,7 +294,7 @@ final class ChecksController {
 		return array(
 			'status'  => $probe['status'],
 			'message' => $message,
-			'remedy'  => null === $finding ? '' : $finding->remedy() . '.',
+			'remedy'  => null === $finding ? '' : FindingText::remedy( $finding->type() ),
 		);
 	}
 }

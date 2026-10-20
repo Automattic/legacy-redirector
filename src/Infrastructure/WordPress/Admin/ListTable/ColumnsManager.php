@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
 
+use Automattic\LegacyRedirector\Application\FindingText;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\Redirect;
@@ -291,8 +292,8 @@ final class ColumnsManager {
 				$is_warning ? 'dashicons-flag' : 'dashicons-warning',
 				$is_warning ? '#dba617' : '#d63638',
 				$is_warning ? __( 'Warning:', 'legacy-redirector' ) : __( 'Problem:', 'legacy-redirector' ),
-				$finding->label(),
-				$finding->description() . '. ' . $finding->remedy() . '.'
+				FindingText::label( $finding->type() ),
+				FindingText::summary( $finding->type(), $finding->detail() )
 			);
 		}
 	}

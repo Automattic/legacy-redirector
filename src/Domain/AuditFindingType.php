@@ -17,7 +17,8 @@ namespace Automattic\LegacyRedirector\Domain;
  * is_warning(). Independently, a finding is conclusive unless the check could
  * not tell (a failed request, a server error); see is_conclusive().
  *
- * Adding a case? docs/redirect-health.md is the full list of checks for
+ * Adding a case? Word it in FindingText too, for every surface but the CLI.
+ * docs/redirect-health.md is the full list of checks for
  * users, and says what else to update with it.
  */
 enum AuditFindingType: string {

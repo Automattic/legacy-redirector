@@ -39,6 +39,8 @@ use WP_Post;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class RedirectValidatorTest extends MonkeyStubs {
 
@@ -67,14 +69,7 @@ final class RedirectValidatorTest extends MonkeyStubs {
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
 		$this->validator  = new RedirectValidator( $this->repository, new RedirectAuditor() );
 
-		// Default stub for __ translation function.
-		Functions\stubs(
-			array(
-				'__' => static function ( $text ) {
-					return $text;
-				},
-			)
-		);
+		Functions\stubTranslationFunctions();
 	}
 
 	/**

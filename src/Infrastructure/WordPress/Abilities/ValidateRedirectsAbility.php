@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities;
 
+use Automattic\LegacyRedirector\Application\FindingText;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\RedirectCriteria;
@@ -264,9 +265,9 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 			RedirectSchema::to_array( $finding->redirect() ),
 			array(
 				'severity'    => $finding->severity(),
-				'issue'       => $finding->label(),
-				'description' => $finding->description(),
-				'remedy'      => $finding->remedy(),
+				'issue'       => FindingText::label( $finding->type() ),
+				'description' => FindingText::description( $finding->type(), $finding->detail() ),
+				'remedy'      => FindingText::remedy( $finding->type() ),
 			)
 		);
 	}

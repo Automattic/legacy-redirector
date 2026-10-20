@@ -318,8 +318,10 @@ wp i18n make-php legacy-redirector-de_DE.po
 Some text stays in English whatever the site's language:
 
 - WP-CLI output, on purpose, so scripts and logs read the same everywhere.
-- The redirect health findings, and some error messages that describe why a source or
-  destination was refused.
+- Some error messages that describe why a source or destination was refused, or why a
+  stored row cannot be read.
+- Messages that come from outside the plugin, such as an HTTP request's error, which are in
+  whatever language their source uses.
 
 ## Uninstalling
 

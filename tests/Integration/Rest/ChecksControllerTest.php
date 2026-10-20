@@ -51,6 +51,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class ChecksControllerTest extends TestCase {
 
@@ -576,5 +578,41 @@ final class ChecksControllerTest extends TestCase {
 			),
 			$response->get_data()
 		);
+	}
+
+	/**
+	 * Test a finding reaches the Test button in the user's language.
+	 *
+	 * The Domain words findings in English for the CLI; the REST response must
+	 * go through translation instead, or every locale sees English.
+	 */
+	public function test_finding_text_is_translated(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/translated-page', 'https://example.com/gone' );
+
+		$translate   = static function ( string $translation, string $text, string $domain ): string {
+			$german = array(
+				'The destination URL returns a 404 Not Found response.'   => 'Die Ziel-URL antwortet mit 404 Nicht gefunden.',
+				'Point this redirect at a page that exists, or delete it.' => 'Lass diese Weiterleitung auf eine vorhandene Seite zeigen oder lösche sie.',
+			);
+
+			return 'legacy-redirector' === $domain && isset( $german[ $text ] ) ? $german[ $text ] : $translation;
+		};
+		$respond_404 = static fn(): array => array(
+			'response' => array( 'code' => 404 ),
+			'body'     => '',
+		);
+		add_filter( 'gettext', $translate, 10, 3 );
+		add_filter( 'pre_http_request', $respond_404, 20 );
+
+		try {
+			$data = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" )->get_data();
+		} finally {
+			remove_filter( 'gettext', $translate );
+			remove_filter( 'pre_http_request', $respond_404, 20 );
+		}
+
+		$this->assertSame( 'Die Ziel-URL antwortet mit 404 Nicht gefunden.', $data['message'] );
+		$this->assertSame( 'Lass diese Weiterleitung auf eine vorhandene Seite zeigen oder lösche sie.', $data['remedy'] );
 	}
 }
