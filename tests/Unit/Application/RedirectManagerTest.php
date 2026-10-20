@@ -20,6 +20,7 @@ use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 use Mockery;
 
@@ -141,6 +142,38 @@ final class RedirectManagerTest extends MonkeyStubs {
 	public function test_create_redirect_allowed_on_front_end_via_filter(): void {
 		Functions\when( 'current_user_can' )->justReturn( false );
 		Functions\when( 'apply_filters' )->justReturn( true );
+
+		$source      = SourceUrl::from_string( '/old-page' );
+		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
+
+		$this->validator
+			->shouldReceive( 'validate' )
+			->once()
+			->andReturn( ValidationResult::valid() );
+
+		$this->repository
+			->shouldReceive( 'save' )
+			->once()
+			->andReturn( Redirect::reconstitute( 123, $source, $destination, 'publish' ) );
+
+		$result = $this->manager->create_redirect( $source, $destination );
+
+		$this->assertFalse( $result->is_error() );
+		$this->assertSame( 123, $result->redirect_id() );
+	}
+
+	/**
+	 * Test the pre-2.0 wpcom_legacy_redirector_allow_insert hook still permits creation.
+	 *
+	 * Its value feeds the 2.0 filter, so a 1.x callback keeps working unless a
+	 * 2.0 callback overrides it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
+	 */
+	public function test_create_redirect_allowed_on_front_end_via_deprecated_filter(): void {
+		Functions\when( 'current_user_can' )->justReturn( false );
+		Filters\expectApplied( 'wpcom_legacy_redirector_allow_insert' )->once()->with( false )->andReturn( true );
+		Filters\expectApplied( 'legacy_redirector_allow_insert' )->once()->with( true )->andReturnFirstArg();
 
 		$source      = SourceUrl::from_string( '/old-page' );
 		$destination = Destination::from_url( DestinationUrl::from_string( '/new-page' ) );
