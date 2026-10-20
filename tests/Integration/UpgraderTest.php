@@ -61,6 +61,7 @@ final class UpgraderTest extends TestCase {
 		delete_option( 'wpcom_legacy_redirector_upgrade_cursor' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_ceiling' );
 		delete_transient( 'wpcom_legacy_redirector_upgrade_cli' );
+		delete_transient( 'wpcom_legacy_redirector_upgrade_backoff' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_retry' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_rekeyed' );
 
@@ -918,6 +919,7 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertTrue( $this->upgrader->needs_upgrade(), 'A failed read must not complete the upgrade.' );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
+		$this->assertNotFalse( get_transient( 'wpcom_legacy_redirector_upgrade_backoff' ), 'A failed batch should hold the next requests off.' );
 	}
 
 	/**
@@ -1136,6 +1138,80 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
 		$this->assertFalse( get_transient( 'wpcom_legacy_redirector_upgrade_cli' ), 'Completing the upgrade should release the hold.' );
+	}
+
+	/**
+	 * A web request that finds the lock held holds the next requests off, until the backoff expires.
+	 *
+	 * Otherwise every page view sends writes to the primary to try the lock.
+	 *
+	 * @return void
+	 */
+	public function test_web_batches_back_off_while_another_holds_the_lock() {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => 'wpcom_legacy_redirector_upgrade_lock',
+				'option_value' => (string) time(),
+				'autoload'     => 'off',
+			)
+		);
+
+		$this->upgrader->maybe_upgrade();
+
+		$this->assertNotFalse( get_transient( 'wpcom_legacy_redirector_upgrade_backoff' ) );
+
+		$attempts = 0;
+		$count    = static function ( string $query ) use ( &$attempts ): string {
+			if ( str_contains( $query, 'wpcom_legacy_redirector_upgrade_lock' ) ) {
+				++$attempts;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $count );
+		$this->upgrader->maybe_upgrade();
+		remove_filter( 'query', $count );
+
+		$this->assertSame( 0, $attempts, 'A request during the backoff should not try the lock.' );
+
+		$wpdb->delete( $wpdb->options, array( 'option_name' => 'wpcom_legacy_redirector_upgrade_lock' ) );
+		update_option( '_transient_timeout_wpcom_legacy_redirector_upgrade_backoff', time() - 1, false );
+
+		$this->upgrader->maybe_upgrade();
+
+		$this->assertSame( 'publish', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * A web batch that succeeds lifts a backoff set while it ran, by a request that lost the lock to it.
+	 *
+	 * @return void
+	 */
+	public function test_successful_web_batch_lifts_the_backoff() {
+		global $wpdb;
+
+		$this->create_legacy_redirect( '/old-page' );
+		$this->create_legacy_redirect( '/other-page' );
+
+		$lost = false;
+		$lose = static function ( string $query ) use ( &$lost, $wpdb ): string {
+			if ( ! $lost && str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ) {
+				$lost = true;
+				set_transient( 'wpcom_legacy_redirector_upgrade_backoff', 1, MINUTE_IN_SECONDS );
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $lose );
+		$this->upgrader->maybe_upgrade();
+		remove_filter( 'query', $lose );
+
+		$this->assertTrue( $lost, 'The losing request should have run.' );
+		$this->assertFalse( get_transient( 'wpcom_legacy_redirector_upgrade_backoff' ) );
 	}
 
 	/**
