@@ -266,7 +266,7 @@ final class LookupTest extends TestCase {
 
 		$this->create_redirect( $from_url, $to_url );
 
-		// First call should set cache.
+		// The save pre-warmed the cache, so even the first call reads it.
 		$first_result = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertSame( $to_url, $first_result['url'] );
 
@@ -301,8 +301,8 @@ final class LookupTest extends TestCase {
 		// Delete the post permanently.
 		wp_delete_post( $post_id, true );
 
-		// The redirect should no longer work.
-		// Note: Cache still holds the post ID, but get_post() returns null.
+		// The redirect should no longer work: deleting the post ran
+		// clean_post_cache, which dropped the cache entry.
 		$result_after_delete = $this->resolver()->get_redirect_data( $from_url );
 		$this->assertNull( $result_after_delete );
 	}

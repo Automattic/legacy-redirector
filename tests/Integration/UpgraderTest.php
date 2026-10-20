@@ -68,20 +68,6 @@ final class UpgraderTest extends TestCase {
 		delete_option( 'wpcom_legacy_redirector_upgrade_retry' );
 		delete_option( 'wpcom_legacy_redirector_upgrade_rekeyed' );
 
-		// The shared Integration TestCase does not call parent::set_up(), so
-		// WP_UnitTestCase never opens its rollback transaction and posts leak
-		// between tests. Clear the post type explicitly.
-		foreach ( get_posts(
-			array(
-				'post_type'      => PostType::POST_TYPE,
-				'post_status'    => 'any',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-			)
-		) as $stale_id ) {
-			wp_delete_post( (int) $stale_id, true );
-		}
-
 		$this->upgrader = new Upgrader();
 	}
 

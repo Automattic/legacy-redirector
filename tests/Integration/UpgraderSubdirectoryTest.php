@@ -158,10 +158,10 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	/**
 	 * A unicode legacy source is repathed and stays reachable.
 	 *
-	 * Upgrader::strip_home_prefix() slices by byte offset, so a multibyte path
-	 * would be cut mid-sequence if the offset were ever computed in characters
-	 * - producing a post_title that is not valid UTF-8 and a hash no request
-	 * can match. The rehash has to agree with what SourceUrl produces from the
+	 * HomePath::make_relative() strips the home path segment by segment, and
+	 * must leave the multibyte remainder whole: a path cut mid-sequence would
+	 * give a post_title that is not valid UTF-8 and a hash no request can
+	 * match. The rehash has to agree with what SourceUrl produces from the
 	 * percent-encoded request a browser actually sends.
 	 *
 	 * @return void

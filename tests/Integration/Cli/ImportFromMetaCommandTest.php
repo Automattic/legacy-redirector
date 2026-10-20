@@ -61,9 +61,8 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	/**
 	 * Meta key unique to the current test.
 	 *
-	 * The integration TestCase does not start a database transaction, so posts
-	 * and post meta created by one test are still present in the next. A unique
-	 * key per test keeps the meta rows seen by the command isolated.
+	 * Posts and post meta are rolled back with WP_UnitTestCase's per-test
+	 * transaction, so the unique key is not needed for isolation.
 	 *
 	 * @var string
 	 */
