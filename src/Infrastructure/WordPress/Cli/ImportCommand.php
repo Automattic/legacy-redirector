@@ -148,8 +148,13 @@ final class ImportCommand extends WP_CLI_Command {
 			WP_CLI::warning( 'Dry run mode - no changes will be made.' );
 		}
 
-		$row     = 0;
-		$results = array();
+		// Counts by action, plus only the rows the report will print: every
+		// row when asked (or when previewing), otherwise just the errors, so a
+		// large live import does not hold a result for every row.
+		$row       = 0;
+		$counts    = array();
+		$shown     = array();
+		$every_row = $verbose || $dry_run;
 
 		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- Standard CSV reading pattern.
 		while ( ( $data = fgetcsv( $handle, 0, ',', '"', '\\' ) ) !== false ) {
@@ -174,7 +179,12 @@ final class ImportCommand extends WP_CLI_Command {
 				WP_CLI::line( "Processing row $row" );
 			}
 
-			$results[] = $this->process_row( $redirect_from, $redirect_to, $status, $mode, $validate, $dry_run );
+			$result = $this->process_row( $redirect_from, $redirect_to, $status, $mode, $validate, $dry_run );
+
+			$counts[ $result['action'] ] = ( $counts[ $result['action'] ] ?? 0 ) + 1;
+			if ( $every_row || 'error' === $result['action'] ) {
+				$shown[] = $result;
+			}
 
 			// The object cache otherwise holds every post and lookup the run
 			// touched. Only a live run writes, so only a live run pauses.
@@ -189,7 +199,7 @@ final class ImportCommand extends WP_CLI_Command {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CLI command, WP_Filesystem not appropriate.
 		fclose( $handle );
 
-		$this->display_results( $results, $format, $dry_run, $verbose );
+		$this->display_results( $counts, $shown, $format, $dry_run, $every_row );
 	}
 
 	/**
@@ -336,19 +346,15 @@ final class ImportCommand extends WP_CLI_Command {
 	/**
 	 * Display the results summary.
 	 *
-	 * @param array  $results The results array.
-	 * @param string $format  The output format.
-	 * @param bool   $dry_run Whether this was a dry run.
-	 * @param bool   $verbose Whether to report every row.
+	 * @param array<string, int> $counts    How many rows ended in each action, in first-seen order.
+	 * @param array              $shown     The rows to print.
+	 * @param string             $format    The output format.
+	 * @param bool               $dry_run   Whether this was a dry run.
+	 * @param bool               $every_row Whether $shown holds every row, not just the errors.
 	 */
-	private function display_results( array $results, string $format, bool $dry_run, bool $verbose ): void {
+	private function display_results( array $counts, array $shown, string $format, bool $dry_run, bool $every_row ): void {
 		$is_table = 'table' === $format;
-		$errors   = array_filter( $results, fn( $r ) => 'error' === $r['action'] );
-
-		// Every row when asked (or when previewing), otherwise just the errors.
-		$every_row = $verbose || $dry_run;
-		$shown     = $every_row ? $results : $errors;
-		$fields    = $every_row ? array( 'source', 'dest', 'action', 'message' ) : array( 'source', 'dest', 'message' );
+		$fields   = $every_row ? array( 'source', 'dest', 'action', 'message' ) : array( 'source', 'dest', 'message' );
 
 		// Only a table gets the summary, headings and closing sentence; the
 		// other formats print the rows alone, so an empty JSON result is `[]`.
@@ -356,14 +362,15 @@ final class ImportCommand extends WP_CLI_Command {
 			\WP_CLI\Utils\format_items( $format, $shown, $fields );
 		}
 
-		if ( empty( $results ) ) {
+		$total = array_sum( $counts );
+
+		if ( 0 === $total ) {
 			WP_CLI::warning( 'No rows processed.' );
 			return;
 		}
 
 		// Summarize by action for table output.
 		if ( $is_table ) {
-			$counts = array_count_values( array_column( $results, 'action' ) );
 			WP_CLI::line( '' );
 			WP_CLI::line( 'Summary:' );
 			foreach ( $counts as $action => $count ) {
@@ -379,8 +386,7 @@ final class ImportCommand extends WP_CLI_Command {
 			\WP_CLI\Utils\format_items( $format, $shown, $fields );
 		}
 
-		$total  = count( $results );
-		$failed = count( $errors );
+		$failed = $counts['error'] ?? 0;
 
 		if ( $failed === $total ) {
 			WP_CLI::error( 1 === $total ? 'The only row failed.' : sprintf( 'All %s failed.', self::count_of( $total, 'row', 'rows' ) ) );
@@ -402,7 +408,7 @@ final class ImportCommand extends WP_CLI_Command {
 			return;
 		}
 
-		$skipped = count( array_filter( $results, fn( $r ) => 'skipped' === $r['action'] ) );
+		$skipped = $counts['skipped'] ?? 0;
 		$message = 'Processed ' . self::count_of( $total - $skipped, 'redirect', 'redirects' );
 		if ( $skipped > 0 ) {
 			$message .= sprintf( ', skipped %d unchanged', $skipped );
