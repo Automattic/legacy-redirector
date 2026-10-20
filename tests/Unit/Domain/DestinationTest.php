@@ -82,8 +82,8 @@ final class DestinationTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test a numeric-looking string that is not all digits is parsed as a
-	 * URL and refused, rather than cast to some other post's ID.
+	 * Test a numeric string that is not all digits is refused as a post ID,
+	 * not cast to some other post's ID or refused as a URL.
 	 *
 	 * @dataProvider data_numeric_but_not_digits
 	 * @covers \Automattic\LegacyRedirector\Domain\Destination::from_mixed
@@ -92,7 +92,7 @@ final class DestinationTest extends MonkeyStubs {
 	 */
 	public function test_from_mixed_refuses_numeric_strings_that_are_not_all_digits( string $value ): void {
 		$this->expectException( InvalidRedirectValue::class );
-		$this->expectExceptionMessage( 'Absolute destination URLs must use http or https scheme.' );
+		$this->expectExceptionMessage( 'Post ID must contain only digits.' );
 
 		Destination::from_mixed( $value );
 	}
@@ -110,7 +110,35 @@ final class DestinationTest extends MonkeyStubs {
 			'trailing space' => array( '12 ' ),
 			'negative'       => array( '-5' ),
 			'plus sign'      => array( '+12' ),
-			'hexadecimal'    => array( '0x1A' ), // phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- Pinned as a string that is not a post ID.
+		);
+	}
+
+	/**
+	 * Test a string that is neither digits nor numeric is still parsed as a
+	 * URL and refused with the URL error.
+	 *
+	 * @dataProvider data_not_numeric
+	 * @covers \Automattic\LegacyRedirector\Domain\Destination::from_mixed
+	 *
+	 * @param string $value The destination value.
+	 */
+	public function test_from_mixed_refuses_non_numeric_junk_as_a_url( string $value ): void {
+		$this->expectException( InvalidRedirectValue::class );
+		$this->expectExceptionMessage( 'Absolute destination URLs must use http or https scheme.' );
+
+		Destination::from_mixed( $value );
+	}
+
+	/**
+	 * Strings is_numeric() refuses that are not a URL either.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_not_numeric(): array {
+		return array(
+			'word'          => array( 'nonsense' ),
+			'digits, words' => array( '12abc' ),
+			'hexadecimal'   => array( '0x1A' ), // phpcs:ignore PHPCompatibility.Miscellaneous.ValidIntegers.HexNumericStringFound -- Pinned as a string that is not a post ID.
 		);
 	}
 

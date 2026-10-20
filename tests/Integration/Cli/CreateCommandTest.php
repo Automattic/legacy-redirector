@@ -174,7 +174,7 @@ final class CreateCommandTest extends CliTestCase {
 			array()
 		);
 
-		$this->assert_error_contains( 'Absolute destination URLs must use http or https scheme.' );
+		$this->assert_error_contains( 'Post ID must contain only digits.' );
 		$this->assertSame(
 			array(),
 			get_posts(
