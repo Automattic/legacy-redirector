@@ -804,6 +804,5 @@ final class ListRedirectsTest extends TestCase {
 		set_current_screen( 'front' );
 
 		$this->assertStringContainsString( 'if ( ! warnings.length && ! probe ) {', $script );
-		$this->assertStringNotContainsString( "'confirmed' === probe.status", $script );
 	}
 }

@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration;
 
 use Automattic\LegacyRedirector\Application\LoopDetector;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\SourceOccupancy;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\MenuBadge;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
@@ -25,10 +26,12 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\RedirectManager
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Destination
@@ -81,7 +84,7 @@ final class AuditSweepTest extends TestCase {
 	 */
 	private function sweep(): AuditSweep {
 		$audited = &$this->audited;
-		$auditor = new class( new LoopDetector( $this->repository() ), $audited ) extends RedirectAuditor {
+		$auditor = new class( new LoopDetector( $this->repository() ), new SourceOccupancy(), $audited ) extends RedirectAuditor {
 
 			/**
 			 * Audited IDs, shared with the test.
@@ -93,11 +96,12 @@ final class AuditSweepTest extends TestCase {
 			/**
 			 * Constructor.
 			 *
-			 * @param LoopDetector $loop_detector The loop detector.
-			 * @param int[]        $log           Audited IDs, by reference.
+			 * @param LoopDetector    $loop_detector    The loop detector.
+			 * @param SourceOccupancy $source_occupancy The occupied-source check.
+			 * @param int[]           $log              Audited IDs, by reference.
 			 */
-			public function __construct( LoopDetector $loop_detector, array &$log ) {
-				parent::__construct( $loop_detector );
+			public function __construct( LoopDetector $loop_detector, SourceOccupancy $source_occupancy, array &$log ) {
+				parent::__construct( $loop_detector, $source_occupancy );
 				$this->log = &$log;
 			}
 
@@ -357,10 +361,14 @@ final class AuditSweepTest extends TestCase {
 
 		$sweep->tick();
 
-		$status = $sweep->status();
-		$this->assertSame( 5, $status['total'] );
-		$this->assertIsInt( $status['estimate'] );
-		$this->assertGreaterThanOrEqual( 5 * MINUTE_IN_SECONDS, $status['estimate'] );
+		$state = get_option( AuditSweep::STATE_OPTION );
+		$this->assertGreaterThan( 0.0, $state['rate'] );
+		$this->assertSame( 5, $sweep->status()['total'] );
+
+		// Pin the rate so the formula shows: 5 rows at 0.1 a second is 50
+		// seconds of work, which takes three 20-second ticks, 5 minutes apart.
+		update_option( AuditSweep::STATE_OPTION, array( 'rate' => 0.1 ) + $state );
+		$this->assertSame( 3 * 5 * MINUTE_IN_SECONDS, $sweep->status()['estimate'] );
 	}
 
 	/**

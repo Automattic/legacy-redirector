@@ -228,6 +228,34 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	}
 
 	/**
+	 * The dry run frees a key an earlier batch's row would leave, as the run does.
+	 *
+	 * '/blog/old-page' moves off md5( '/blog/old-page' ) onto md5( '/old-page' ),
+	 * and the later '/blog/blog/old-page' strips to '/blog/old-page' and wants
+	 * the key it left. The run writes the first move before planning the
+	 * second, so the later row simply takes the key; the dry run writes
+	 * nothing, and only forgetting the rows it marked as gone keeps the
+	 * database's stale owner from making the later row a duplicate. A batch
+	 * of one puts the two rows in separate batches.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_frees_a_key_an_earlier_batch_would_leave(): void {
+		$this->create_legacy_redirect( '/old-page' );
+		$later = $this->create_legacy_redirect( '/blog/old-page' );
+
+		$pending = $this->upgrader->count_pending( null, 1 );
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( md5( '/blog/old-page' ), get_post( $later )->post_name, 'The run should hand the later row the freed key.' );
+		$this->assertSame( 2, $result['repathed'] );
+		$this->assertSame( 0, $result['deduped'] );
+		$this->assertSame( 2, $pending['repathed'], 'The dry run should predict both repaths.' );
+		$this->assertSame( 0, $pending['deduped'], 'The dry run should not predict a duplicate the run does not find.' );
+		$this->assertSame( array(), $pending['conflicts'] );
+	}
+
+	/**
 	 * A retry strips the home path, as the walk that failed the row would have.
 	 *
 	 * The retry comes once the upgrade has completed, when a walk would no
