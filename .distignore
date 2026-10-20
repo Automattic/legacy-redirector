@@ -27,3 +27,4 @@ package.json
 package-lock.json
 phpunit-integration.xml.dist
 phpunit.xml.dist
+playwright.config.js

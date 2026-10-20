@@ -4,9 +4,15 @@
   "description": "WordPress plugin for handling large volumes of legacy redirects in a scalable manner.",
   "private": true,
   "scripts": {
+    "lint:js": "wp-scripts lint-js js tests/e2e playwright.config.js",
+    "test:e2e": "wp-scripts test-playwright",
+    "test:e2e:debug": "wp-scripts test-playwright --debug",
     "wp-env": "wp-env"
   },
   "devDependencies": {
-    "@wordpress/env": "^11.17.0"
+    "@playwright/test": "^1.64.1",
+    "@wordpress/e2e-test-utils-playwright": "^3.1.0",
+    "@wordpress/env": "^11.17.0",
+    "@wordpress/scripts": "^37.0.0"
   }
 }
