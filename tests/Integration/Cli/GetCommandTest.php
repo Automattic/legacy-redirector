@@ -273,4 +273,32 @@ final class GetCommandTest extends CliTestCase {
 
 		$this->assert_error_contains( 'Invalid fields' );
 	}
+
+	/**
+	 * Test a structured format prints the redirect as one record, not as field and value rows.
+	 */
+	public function test_get_json_prints_one_record(): void {
+		$redirect_id = $this->create_redirect( '/json-get', 'https://example.com/dest' );
+
+		$this->invoke_command( $this->command, array( '/json-get' ), array( 'format' => 'json' ) );
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertSame(
+			array(
+				'json',
+				array(
+					array(
+						'ID'     => $redirect_id,
+						'from'   => '/json-get',
+						'to'     => 'https://example.com/dest',
+						'type'   => 'url',
+						'status' => 'enabled',
+						'hash'   => md5( '/json-get' ),
+					),
+				),
+				array( 'ID', 'from', 'to', 'type', 'status', 'hash' ),
+			),
+			$GLOBALS['wp_cli_format_items_calls'][0]
+		);
+	}
 }

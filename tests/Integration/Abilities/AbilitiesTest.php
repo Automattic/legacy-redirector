@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Abilities;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper;
 use Automattic\LegacyRedirector\Tests\Integration\TestCase;
@@ -709,5 +710,98 @@ final class AbilitiesTest extends TestCase {
 		$this->assertCount( 1, $result['results'][0]['issues'] );
 		$this->assertSame( 'Destination returns 404', $result['results'][0]['issues'][0]['issue'] );
 		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test `only` runs just the one check it names, requesting just that URL.
+	 *
+	 * @dataProvider data_test_redirects_only
+	 *
+	 * @param string      $only      The check to run.
+	 * @param string      $requested The one URL path that should be requested.
+	 * @param string|null $source    The expected source outcome.
+	 * @param string[]    $issues    The expected issue labels.
+	 * @return void
+	 */
+	public function test_test_redirects_only_runs_the_named_check( string $only, string $requested, ?string $source, array $issues ): void {
+		$this->create_redirect( '/tested-once', 'https://example.com/once-target' );
+
+		$urls    = array();
+		$respond = static function ( $preempt, $args, $url ) use ( &$urls ) {
+			$urls[] = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+			if ( str_contains( $url, '/tested-once' ) ) {
+				return array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/once-target' ),
+				);
+			}
+
+			return array( 'response' => array( 'code' => 404 ) );
+		};
+		add_filter( 'pre_http_request', $respond, 10, 3 );
+
+		try {
+			$result = $this->ability( 'test-redirects' )->execute(
+				array(
+					'redirects' => array( '/tested-once' ),
+					'only'      => $only,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 10 );
+		}
+
+		$this->assertSame( array( $requested ), $urls );
+		$this->assertSame( $source, $result['results'][0]['source'] );
+		$this->assertSame( $issues, array_column( $result['results'][0]['issues'], 'issue' ) );
+	}
+
+	/**
+	 * Data provider: each value of `only`, and what it should request and report.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string|null, 3: string[]}>
+	 */
+	public static function data_test_redirects_only(): array {
+		return array(
+			'source'      => array( 'source', '/tested-once', 'confirmed', array() ),
+			'destination' => array( 'destination', '/once-target', null, array( 'Destination returns 404' ) ),
+		);
+	}
+
+	/**
+	 * Test validate reports a named redirect that does not exist, and checks the rest.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reports_an_unknown_named_redirect_as_failed(): void {
+		$this->create_redirect( '/validated-and-known', 'https://example.com/fine' );
+
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/validated-and-known', '/never-created' ) ) );
+
+		$this->assertSame( 1, $result['checked'] );
+		$this->assertSame( array( '/never-created' ), array_column( $result['failed'], 'redirect' ) );
+	}
+
+	/**
+	 * Test validate says when the last full pass finished, once one has.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reports_when_the_last_full_check_finished(): void {
+		$this->create_redirect( '/swept', 'https://example.com/fine' );
+
+		$sweep = new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() );
+		$this->assertTrue( $sweep->lock( 0 ) );
+		try {
+			$sweep->start_pass();
+			$sweep->run_batch();
+		} finally {
+			$sweep->unlock();
+		}
+
+		$result = $this->ability( 'validate-redirects' )->execute( array() );
+
+		$this->assertSame( gmdate( 'c', ( new AuditFlags() )->checked_at() ), $result['last_full_check'] );
 	}
 }

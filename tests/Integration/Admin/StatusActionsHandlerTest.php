@@ -177,13 +177,35 @@ final class StatusActionsHandlerTest extends TestCase {
 	}
 
 	/**
-	 * Test the enable action is gated by its own nonce and the capability.
+	 * Test the enable action is gated by its own nonce, not the disable one.
 	 */
 	public function test_enable_redirect_requires_a_valid_nonce(): void {
 		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
 		$this->request( 'disable_redirect', $redirect_id );
 
 		$this->assert_dies_with( 'Security check failed.', 'handle_enable_redirect' );
+	}
+
+	/**
+	 * Test enabling a disabled redirect through the row action publishes it and says which one.
+	 */
+	public function test_enable_redirect_sets_the_redirect_to_publish(): void {
+		$redirect_id = $this->create_redirect( '/old-page', 'https://example.com/new-page' );
+		$this->manager()->disable( $redirect_id );
+		$this->request( 'enable_redirect', $redirect_id );
+
+		$location = $this->capture_redirect( 'handle_enable_redirect' );
+
+		$this->assertStringContainsString( 'redirect_enabled=1', $location );
+		$this->assertStringContainsString( 'redirect_source=' . rawurlencode( '/old-page' ), $location );
+		$this->assertSame( 'publish', get_post_status( $redirect_id ) );
+	}
+
+	/**
+	 * Test a request naming no redirect stops before anything else.
+	 */
+	public function test_missing_redirect_id_dies(): void {
+		$this->assert_dies_with( 'No redirect specified.', 'handle_enable_redirect' );
 	}
 
 	/**

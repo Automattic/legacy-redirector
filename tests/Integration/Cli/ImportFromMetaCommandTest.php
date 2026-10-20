@@ -414,6 +414,27 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	}
 
 	/**
+	 * Test re-running without --skip-dupes refuses the rows already imported, naming the redirect that has each.
+	 */
+	public function test_rerun_without_skip_dupes_reports_each_existing_redirect(): void {
+		$this->create_post_with_legacy_url( '/meta-rerun' );
+		$assoc_args = array(
+			'meta-key' => $this->meta_key,
+			'format'   => 'csv',
+		);
+
+		$this->invoke_command( $this->command, array(), $assoc_args );
+		$this->assertFalse( $this->output->had_error() );
+		$existing = $this->find_redirect( '/meta-rerun' );
+
+		$this->invoke_command( $this->command, array(), $assoc_args );
+
+		$this->assert_stdout_contains( sprintf( 'Redirect #%d already has the source', $existing->id() ) );
+		$this->assert_error_contains( 'Processed 0 of 1 row: 1 failed.' );
+		$this->assertSame( $existing->id(), $this->find_redirect( '/meta-rerun' )->id() );
+	}
+
+	/**
 	 * Test a dry run does not fail on rows only a live run would refuse.
 	 */
 	public function test_dry_run_with_invalid_row_is_not_an_error(): void {

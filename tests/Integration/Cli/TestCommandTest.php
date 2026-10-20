@@ -408,4 +408,23 @@ final class TestCommandTest extends CliTestCase {
 		$this->assertSame( 'Corrupt stored data', $rows[0]['issue'] );
 		$this->assertSame( array(), $this->source_requests );
 	}
+
+	/**
+	 * Test a warning is reported without stopping the destination counting as fine.
+	 */
+	public function test_a_warning_leaves_the_destination_fine(): void {
+		$this->create_redirect( '/wp-admin/test-reserved', self::DESTINATION );
+		$this->respond( self::redirects_to_destination(), array( 'response' => array( 'code' => 200 ) ) );
+
+		$rows = $this->rows( array( '/wp-admin/test-reserved' ) );
+
+		$this->assertSame(
+			array(
+				array( 'warning', 'Reserved WordPress path' ),
+				array( 'ok', 'Destination responds' ),
+				array( 'ok', 'Source redirects to the destination' ),
+			),
+			array_map( static fn( array $row ) => array( $row['severity'], $row['issue'] ), $rows )
+		);
+	}
 }
