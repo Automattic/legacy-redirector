@@ -59,4 +59,49 @@ final class PostPathResolverTest extends TestCase {
 
 		$this->assertSame( $page_id, PostPathResolver::post( 'shared-slug' )?->ID );
 	}
+
+	/**
+	 * Test asking about the same path twice in a row costs nothing the second time.
+	 *
+	 * An audit resolves a destination, then asks whether only HTTP can judge
+	 * it, so the second lookup must not repeat the queries or object cache
+	 * round trips of the first. Only the posts last-changed check remains.
+	 */
+	public function test_answers_a_repeated_lookup_from_memory(): void {
+		global $wpdb, $wp_object_cache;
+
+		$this->set_permalink_structure( '/%postname%/' );
+
+		PostPathResolver::post( 'nothing-lives-here' );
+
+		$queries = $wpdb->num_queries;
+		$lookups = $wp_object_cache->cache_hits + $wp_object_cache->cache_misses;
+
+		$this->assertNull( PostPathResolver::post( 'nothing-lives-here' ) );
+		$this->assertSame( $queries, $wpdb->num_queries, 'A repeated lookup must not query the database.' );
+		$this->assertLessThanOrEqual( 1, $wp_object_cache->cache_hits + $wp_object_cache->cache_misses - $lookups, 'A repeated lookup must not go back to the object cache.' );
+	}
+
+	/**
+	 * Test a remembered answer does not outlive a post being saved.
+	 *
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository::find_by_destination_post
+	 */
+	public function test_sees_a_post_saved_since_the_last_lookup(): void {
+		$this->assertNull( PostPathResolver::post( 'arrives-later' ) );
+
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'arrives-later',
+			)
+		);
+
+		$this->assertSame( $page_id, PostPathResolver::post( 'arrives-later' )?->ID );
+
+		wp_trash_post( $page_id );
+
+		$this->assertNull( PostPathResolver::post( 'arrives-later' ) );
+	}
 }
