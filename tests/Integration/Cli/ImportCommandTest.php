@@ -703,13 +703,28 @@ final class ImportCommandTest extends CliTestCase {
 	 * Test every hundred rows clear the object cache, and a dry run does not pause.
 	 */
 	public function test_import_dry_run_clears_cache_without_pausing(): void {
-		$file = $this->create_csv( implode( "\n", array_map( fn( $i ) => "/import-pause-$i", range( 1, 100 ) ) ) . "\n" );
+		$file = $this->create_csv( implode( "\n", array_map( fn( $i ) => "/import-pause-$i", range( 1, 101 ) ) ) . "\n" );
 		wp_cache_set( 'sentinel', 'kept', 'legacy-redirector-test' );
 
-		$started = microtime( true );
 		$this->invoke_command( $this->command, array( $file ), array( 'dry-run' => true ) );
 
-		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'The hundredth row clears the object cache.' );
-		$this->assertLessThan( 1.0, microtime( true ) - $started, 'A dry run writes nothing, so never pauses.' );
+		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'The row after the hundredth clears the object cache.' );
+		$this->assertSame( array(), $GLOBALS['legacy_redirector_cli_sleeps'], 'A dry run writes nothing, so never pauses.' );
+	}
+
+	/**
+	 * Test a blank line on the hundredth row still counts towards the cleanup,
+	 * and a live run pauses once per hundred rows.
+	 */
+	public function test_import_blank_hundredth_line_still_clears_cache_and_pauses(): void {
+		$lines     = array_map( fn( $i ) => "/import-blank-$i", range( 1, 101 ) );
+		$lines[99] = '';
+		$file      = $this->create_csv( implode( "\n", $lines ) . "\n" );
+		wp_cache_set( 'sentinel', 'kept', 'legacy-redirector-test' );
+
+		$this->invoke_command( $this->command, array( $file ), array() );
+
+		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'A blank hundredth line still clears the object cache.' );
+		$this->assertSame( array( 1 ), $GLOBALS['legacy_redirector_cli_sleeps'], 'A live run pauses once per hundred rows.' );
 	}
 }

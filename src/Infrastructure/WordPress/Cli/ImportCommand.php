@@ -158,6 +158,17 @@ final class ImportCommand extends WP_CLI_Command {
 
 		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- Standard CSV reading pattern.
 		while ( ( $data = fgetcsv( $handle, 0, ',', '"', '\\' ) ) !== false ) {
+			// Before the line, not after it, so the blank and header lines
+			// skipped below count towards the pause too. The object cache
+			// otherwise holds every post and lookup the run touched. Only a
+			// live run writes, so only a live run pauses.
+			if ( $row > 0 && 0 === $row % 100 ) {
+				\WP_CLI\Utils\wp_clear_object_cache();
+				if ( ! $dry_run ) {
+					sleep( 1 );
+				}
+			}
+
 			++$row;
 			$redirect_from = trim( $data[0] ?? '' );
 			$redirect_to   = trim( $data[1] ?? '' );
@@ -184,15 +195,6 @@ final class ImportCommand extends WP_CLI_Command {
 			$counts[ $result['action'] ] = ( $counts[ $result['action'] ] ?? 0 ) + 1;
 			if ( $every_row || 'error' === $result['action'] ) {
 				$shown[] = $result;
-			}
-
-			// The object cache otherwise holds every post and lookup the run
-			// touched. Only a live run writes, so only a live run pauses.
-			if ( 0 === $row % 100 ) {
-				\WP_CLI\Utils\wp_clear_object_cache();
-				if ( ! $dry_run ) {
-					sleep( 1 );
-				}
 			}
 		}
 

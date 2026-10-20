@@ -53,6 +53,7 @@ delete_option( \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability:
 // This must be loaded after WordPress bootstrap but before tests run.
 require_once dirname( __DIR__ ) . '/Stubs/WpCliUtilsStubs.php';
 require_once dirname( __DIR__ ) . '/Stubs/WordPressStubs.php';
+require_once dirname( __DIR__ ) . '/Stubs/CliSleepStub.php';
 
 // Add custom test case.
 require __DIR__ . '/TestCase.php';
