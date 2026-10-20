@@ -33,7 +33,8 @@ class WpCliOutputCapture {
 			\WP_CLI::reset();
 		}
 
-		$GLOBALS['wp_cli_format_items_calls'] = array();
+		$GLOBALS['wp_cli_format_items_calls']    = array();
+		$GLOBALS['legacy_redirector_cli_sleeps'] = array();
 	}
 
 	/**
