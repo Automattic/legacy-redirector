@@ -188,10 +188,20 @@ final class SourceUrl {
 		}
 
 		// Strip percent-encoded line breaks until none remain, as core's
-		// _deep_replace() does, so '%0%0dd' cannot reassemble into one.
-		$count = 1;
-		while ( $count > 0 ) {
-			$url = str_replace( array( '%0d', '%0a', '%0D', '%0A' ), '', $url, $count );
+		// _deep_replace() does, so '%0%0dd' cannot reassemble into one. A
+		// stack gives the same result in one pass; rescanning the whole URL
+		// after each removal is quadratic on nested input.
+		if ( str_contains( $url, '%0' ) ) {
+			$stripped = $url;
+			$length   = 0;
+			$bytes    = strlen( $url );
+			for ( $i = 0; $i < $bytes; $i++ ) {
+				$stripped[ $length++ ] = $url[ $i ];
+				if ( $length >= 3 && '%' === $stripped[ $length - 3 ] && '0' === $stripped[ $length - 2 ] && str_contains( 'dDaA', $stripped[ $length - 1 ] ) ) {
+					$length -= 3;
+				}
+			}
+			$url = substr( $stripped, 0, $length );
 		}
 
 		$url = str_replace( ';//', '://', $url );

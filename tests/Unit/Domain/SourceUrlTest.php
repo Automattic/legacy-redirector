@@ -328,6 +328,74 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
+	 * Test the line-break strip reaches the same result as repeated deletion.
+	 *
+	 * @dataProvider data_encoded_line_break_strips
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::sanitise_url
+	 *
+	 * @param string $url      The URL to sanitise.
+	 * @param string $expected The sanitised URL.
+	 */
+	public function test_sanitise_url_strips_encoded_line_breaks( string $url, string $expected ): void {
+		$this->assertSame( $expected, SourceUrl::sanitise_url( $url ) );
+	}
+
+	/**
+	 * Data provider of URLs and their line-break-stripped forms.
+	 *
+	 * @return array<string, array{string, string}>
+	 */
+	public static function data_encoded_line_break_strips(): array {
+		return array(
+			'all four casings'             => array( '/a%0d%0a%0D%0Ab', '/ab' ),
+			'deeply nested'                => array( '/a%0%0%0%0dddd', '/a' ),
+			'nested mixed letters'         => array( '/a%0%0ad', '/a' ),
+			'nested mixed case'            => array( '/a%0%0DA', '/a' ),
+			'removal joins at a boundary'  => array( '/a%%0d0d', '/a' ),
+			'removal joins the next match' => array( '/a%0%0a%0Dd', '/a' ),
+			'other escapes kept'           => array( '/a%0b%0E%0', '/a%0b%0E%0' ),
+			'leftover percent kept'        => array( '/a%%0d', '/a%' ),
+			'raw UTF-8 kept'               => array( "/caf\xC3\xA9%0%0dd/\xE2\x82\xAC", "/caf\xC3\xA9/\xE2\x82\xAC" ),
+			'raw UTF-8 breaks no escape'   => array( "/a%0\xC3\xA9d", "/a%0\xC3\xA9d" ),
+		);
+	}
+
+	/**
+	 * Test the line-break strip matches the original repeated str_replace loop.
+	 *
+	 * Stored source keys are built from this output, so any divergence from
+	 * the loop it replaced would orphan existing redirects. The alphabet is
+	 * small so random strings hit nested and overlapping escapes often.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::sanitise_url
+	 */
+	public function test_sanitise_url_line_break_strip_matches_repeated_replace(): void {
+		$alphabet = array( '%', '0', 'd', 'a', 'D', 'A', 'x', '/' );
+		// phpcs:disable WordPress.WP.AlternativeFunctions.rand_seeding_mt_srand, WordPress.WP.AlternativeFunctions.rand_mt_rand -- Seeded so every run checks the same strings.
+		mt_srand( 277 );
+
+		for ( $run = 0; $run < 5000; $run++ ) {
+			$url    = '/';
+			$length = mt_rand( 0, 24 );
+			for ( $i = 0; $i < $length; $i++ ) {
+				$url .= $alphabet[ mt_rand( 0, count( $alphabet ) - 1 ) ];
+			}
+
+			$expected = $url;
+			$count    = 1;
+			while ( $count > 0 ) {
+				$expected = str_replace( array( '%0d', '%0a', '%0D', '%0A' ), '', $expected, $count );
+			}
+
+			$this->assertSame( $expected, SourceUrl::sanitise_url( $url ), $url );
+		}
+
+		mt_srand();
+		// phpcs:enable
+	}
+
+	/**
 	 * Test a non-http(s) scheme is rejected.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
