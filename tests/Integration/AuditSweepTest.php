@@ -438,4 +438,129 @@ final class AuditSweepTest extends TestCase {
 		( new MenuBadge( new AuditFlags() ) )->add_badge();
 		$this->assertSame( 'Redirects', $GLOBALS['menu'][ $index ][0] );
 	}
+
+	/**
+	 * Test a runner whose lock was taken over leaves the new holder's lock alone.
+	 *
+	 * The first runner's lock is taken under a database clock an hour behind,
+	 * so it is abandoned by the time a second runner asks. Unlocking by name
+	 * alone would delete the second runner's lock and let a third in beside it.
+	 */
+	public function test_unlock_leaves_a_lock_taken_over_since_alone(): void {
+		global $wpdb;
+
+		$stale = $this->sweep();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Moves this session's database clock, which the lock ages by.
+		$wpdb->query( 'SET timestamp = UNIX_TIMESTAMP() - 3600' );
+		try {
+			$this->assertTrue( $stale->lock( 0 ) );
+		} finally {
+			$wpdb->query( 'SET timestamp = DEFAULT' );
+		}
+		// phpcs:enable
+
+		$this->assertTrue( $this->sweep()->lock( 0 ), 'An hour-old lock is taken over.' );
+
+		$stale->unlock();
+
+		$this->assertFalse( $this->sweep()->lock( 0 ), 'The runner that took over still holds the lock.' );
+	}
+
+	/**
+	 * Test a lock about to be abandoned is waited for, then taken over.
+	 */
+	public function test_lock_waits_for_a_busy_lock(): void {
+		global $wpdb;
+
+		// One second short of the age at which a lock counts as abandoned.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Fixture: a lock row another runner holds.
+		$wpdb->query( $wpdb->prepare( "INSERT INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, UNIX_TIMESTAMP() - %d, 'off')", AuditSweep::LOCK_OPTION, 5 * MINUTE_IN_SECONDS - 1 ) );
+
+		$this->assertFalse( $this->sweep()->lock( 0 ), 'Without a wait, the busy lock is refused.' );
+		$this->assertTrue( $this->sweep()->lock( 5 ), 'Waiting outlasts the lock.' );
+	}
+
+	/**
+	 * Test a batch does nothing once another runner has finished the pass.
+	 */
+	public function test_run_batch_stops_once_another_runner_finished_the_pass(): void {
+		$this->create_broken_redirects( 2, 'sweep-finished' );
+		$sweep = $this->sweep();
+
+		$this->assertTrue( $sweep->lock( 0 ) );
+		$sweep->start_pass();
+		$sweep->unlock();
+
+		// Another runner carries the pass to its end.
+		$this->run_pass( $this->sweep(), false );
+		$this->assertCount( 2, $this->audited );
+
+		$this->assertTrue( $sweep->lock( 0 ) );
+		try {
+			$batch = $sweep->run_batch();
+		} finally {
+			$sweep->unlock();
+		}
+
+		$this->assertSame(
+			array(
+				'audited' => 0,
+				'done'    => true,
+			),
+			$batch
+		);
+		$this->assertCount( 2, $this->audited, 'No row is audited a second time.' );
+	}
+
+	/**
+	 * Test a tick that wins the lock after another runner finished the pass leaves it finished.
+	 *
+	 * The pass finishes while this tick is taking the lock, after its first
+	 * check that the sweep is not resting.
+	 */
+	public function test_a_tick_rechecks_under_the_lock(): void {
+		$this->create_broken_redirects( 2, 'sweep-recheck' );
+
+		$done        = false;
+		$finish_pass = static function ( string $query ) use ( &$done ): string {
+			if ( ! $done && str_contains( $query, 'INSERT IGNORE' ) && str_contains( $query, AuditSweep::LOCK_OPTION ) ) {
+				$done = true;
+				update_option(
+					AuditSweep::STATE_OPTION,
+					array(
+						'started_at'  => time(),
+						'in_progress' => false,
+					),
+					false
+				);
+			}
+
+			return $query;
+		};
+		add_filter( 'query', $finish_pass );
+
+		try {
+			$this->sweep()->tick();
+		} finally {
+			remove_filter( 'query', $finish_pass );
+		}
+
+		$this->assertSame( array(), $this->audited );
+	}
+
+	/**
+	 * Test the cron event reaches the tick once the sweep is registered.
+	 */
+	public function test_the_cron_hook_runs_a_tick(): void {
+		$this->create_broken_redirects( 2, 'sweep-cron' );
+
+		// The plugin's own sweep is registered too, and would take the pass first.
+		remove_all_actions( AuditSweep::HOOK );
+		$this->sweep()->register();
+
+		do_action( AuditSweep::HOOK );
+
+		$this->assertCount( 2, $this->audited );
+	}
 }
