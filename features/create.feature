@@ -29,7 +29,7 @@ Feature: Creating a redirect
     Then the return code should be 1
     And STDERR should contain:
       """
-      already exists
+      already has the source
       """
 
   # Regression test: a non-ASCII source survives the shell, WP-CLI, and the
@@ -76,5 +76,5 @@ Feature: Creating a redirect
     Then the return code should be 1
     And STDERR should contain:
       """
-      already exists
+      already has the source
       """
