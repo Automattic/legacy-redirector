@@ -315,6 +315,13 @@ final class Upgrader {
 	private array $stale_keys = array();
 
 	/**
+	 * Whether the batch being processed changed a status, which leaves core's cached post counts stale; see clean_up_writes().
+	 *
+	 * @var bool
+	 */
+	private bool $counts_stale = false;
+
+	/**
 	 * The keys recorded as given; see REKEYED_OPTION.
 	 *
 	 * @var array<int, string>
@@ -1545,6 +1552,10 @@ final class Upgrader {
 			CachingRedirectRepository::CACHE_GROUP
 		);
 
+		if ( $published > 0 ) {
+			self::forget_post_counts();
+		}
+
 		$this->publish_queue = array();
 	}
 
@@ -2195,6 +2206,9 @@ final class Upgrader {
 		if ( isset( $update['post_name'] ) ) {
 			$this->stale_keys[ $update['post_name'] ] = true;
 		}
+		if ( isset( $update['post_status'] ) ) {
+			$this->counts_stale = true;
+		}
 	}
 
 	/**
@@ -2228,8 +2242,30 @@ final class Upgrader {
 			CachingRedirectRepository::CACHE_GROUP
 		);
 
+		if ( $this->counts_stale ) {
+			self::forget_post_counts();
+			$this->counts_stale = false;
+		}
+
 		$this->written    = array();
 		$this->stale_keys = array();
+	}
+
+	/**
+	 * Clear core's cached wp_count_posts() for redirects.
+	 *
+	 * Core clears it on transition_post_status, which the migration's direct
+	 * writes never fire, so the list screen's status counts and the audit
+	 * sweep's total would stay as they were before the migration. The keys
+	 * come from core's own helper, as its transition handler builds them, so
+	 * they cannot drift from the ones wp_count_posts() reads. As in core, a
+	 * logged-in user's own 'readable' count is the only per-user one cleared.
+	 *
+	 * @return void
+	 */
+	private static function forget_post_counts(): void {
+		wp_cache_delete( _count_posts_cache_key( PostType::POST_TYPE ), 'counts' );
+		wp_cache_delete( _count_posts_cache_key( PostType::POST_TYPE, 'readable' ), 'counts' );
 	}
 
 	/**
