@@ -234,11 +234,22 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 * on every load. A row can match more than one kind (a post ID with a
 	 * path left in post_excerpt) and counts in each, as its list filters show it.
 	 *
+	 * The scan reads every row, since post_excerpt has no index, so the
+	 * result is cached against the posts last-changed time: any post write,
+	 * through core or the migration, moves it on and the next load recounts.
+	 *
 	 * @return array{post_id: int, path: int, external: int} Counts by kind.
 	 */
 	#[\Override]
 	public function count_by_destination_type(): array {
 		global $wpdb;
+
+		$cache_key = CachingRedirectRepository::cache_key( 'destination-type-counts:' . wp_cache_get_last_changed( 'posts' ) );
+		$cached    = wp_cache_get( $cache_key, CachingRedirectRepository::CACHE_GROUP );
+
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
 
 		$post_id  = self::destination_type_condition( 'post_id' );
 		$path     = self::destination_type_condition( 'path' );
@@ -252,11 +263,19 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 		);
 		// phpcs:enable
 
-		return array(
+		$counts = array(
 			'post_id'  => (int) ( $row['post_id'] ?? 0 ),
 			'path'     => (int) ( $row['path'] ?? 0 ),
 			'external' => (int) ( $row['external'] ?? 0 ),
 		);
+
+		// A failed read is not cached as zero counts.
+		if ( null !== $row ) {
+			// Expires so the keys earlier last-changed times left behind go.
+			wp_cache_set( $cache_key, $counts, CachingRedirectRepository::CACHE_GROUP, DAY_IN_SECONDS );
+		}
+
+		return $counts;
 	}
 
 	/**

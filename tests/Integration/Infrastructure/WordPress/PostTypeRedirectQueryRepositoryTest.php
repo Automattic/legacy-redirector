@@ -130,6 +130,32 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 	}
 
 	/**
+	 * The counts are served from the cache until a post changes, and a
+	 * change is counted on the next ask.
+	 */
+	public function test_count_by_destination_type_is_cached_until_a_post_changes(): void {
+		global $wpdb;
+
+		$this->insert_redirect_post( array( 'post_excerpt' => '/path' ) );
+		$this->query_repository()->count_by_destination_type();
+
+		$queries = $wpdb->num_queries;
+		$this->query_repository()->count_by_destination_type();
+		$this->assertSame( $queries, $wpdb->num_queries, 'A repeat ask must not query.' );
+
+		$this->insert_redirect_post( array( 'post_excerpt' => 'https://example.com/external' ) );
+
+		$this->assertSame(
+			array(
+				'post_id'  => 0,
+				'path'     => 1,
+				'external' => 1,
+			),
+			$this->query_repository()->count_by_destination_type()
+		);
+	}
+
+	/**
 	 * Count the live rows the list screen's filter for a destination type shows.
 	 *
 	 * @param string $type Destination kind: 'post_id', 'path', or 'external'.

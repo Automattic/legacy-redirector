@@ -261,6 +261,28 @@ final class AuditSweepTest extends TestCase {
 	}
 
 	/**
+	 * Test the total counts enabled and disabled redirects, not the Trash,
+	 * and a batch's flag writes leave it cached.
+	 */
+	public function test_total_counts_enabled_and_disabled_and_survives_flag_writes(): void {
+		global $wpdb;
+
+		$enabled = $this->insert_redirect_post();
+		$this->insert_redirect_post( array( 'post_status' => 'draft' ) );
+		$this->insert_redirect_post( array( 'post_status' => 'trash' ) );
+
+		$sweep = $this->sweep();
+		$this->assertSame( 2, $sweep->total() );
+
+		// A batch's flag write, which moves the posts last-changed time on.
+		update_post_meta( $enabled, AuditFlags::META_KEY, 'problem' );
+
+		$queries = $wpdb->num_queries;
+		$this->assertSame( 2, $sweep->total() );
+		$this->assertSame( $queries, $wpdb->num_queries, 'The total must come from the cache.' );
+	}
+
+	/**
 	 * Test a budget of zero turns the background sweep off.
 	 */
 	public function test_a_zero_budget_turns_the_sweep_off(): void {

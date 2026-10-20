@@ -12,7 +12,6 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\Redirect;
-use Automattic\LegacyRedirector\Domain\RedirectCriteria;
 use Automattic\LegacyRedirector\Domain\RedirectQueryRepositoryInterface;
 
 /**
@@ -404,12 +403,19 @@ final class AuditSweep {
 	/**
 	 * How many redirects a pass covers.
 	 *
+	 * From core's post counts, which are cached until a post changes status,
+	 * rather than a count query: the list screen asks on every load and the
+	 * Validate all button after every batch, and each batch's flag writes
+	 * would invalidate a cached query. The migration publishes drafts without
+	 * clearing those counts, which moves rows between the two but leaves
+	 * their sum alone.
+	 *
 	 * @return int The count of enabled and disabled redirects.
 	 */
 	public function total(): int {
-		return $this->query_repository->count_matching(
-			new RedirectCriteria( null, null, null, 'ID', 'ASC', 1, 0 )
-		);
+		$counts = wp_count_posts( PostType::POST_TYPE );
+
+		return (int) ( $counts->publish ?? 0 ) + (int) ( $counts->draft ?? 0 );
 	}
 
 	/**
