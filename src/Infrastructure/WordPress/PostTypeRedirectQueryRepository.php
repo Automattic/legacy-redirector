@@ -94,6 +94,38 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	 */
 	#[\Override]
 	public function find_matching( RedirectCriteria $criteria ): array {
+		return array_map(
+			array( $this, 'map_post_to_redirect' ),
+			$this->query_matching( $criteria )->posts
+		);
+	}
+
+	/**
+	 * Find a page of matching redirects, with the total that match.
+	 *
+	 * The total comes from the page's own query, which counts its matches
+	 * anyway, rather than from a second query over the same criteria.
+	 *
+	 * @param RedirectCriteria $criteria The query criteria.
+	 * @return array{redirects: Redirect[], total: int} The page, and the count ignoring limit and offset.
+	 */
+	#[\Override]
+	public function find_page( RedirectCriteria $criteria ): array {
+		$query = $this->query_matching( $criteria );
+
+		return array(
+			'redirects' => array_map( array( $this, 'map_post_to_redirect' ), $query->posts ),
+			'total'     => (int) $query->found_posts,
+		);
+	}
+
+	/**
+	 * Run the query behind find_matching() and find_page().
+	 *
+	 * @param RedirectCriteria $criteria The query criteria.
+	 * @return WP_Query The query that ran.
+	 */
+	private function query_matching( RedirectCriteria $criteria ): WP_Query {
 		$args                  = $this->build_query_args( $criteria );
 		$args['cache_results'] = false;
 
@@ -107,10 +139,7 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 			remove_filter( 'split_the_query', $unsplit, 10 );
 		}
 
-		return array_map(
-			array( $this, 'map_post_to_redirect' ),
-			$query->posts
-		);
+		return $query;
 	}
 
 	/**

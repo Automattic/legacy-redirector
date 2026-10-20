@@ -148,14 +148,11 @@ final class ListRedirectsAbility implements AbilityInterface {
 			(int) ( $input['offset'] ?? 0 )
 		);
 
-		$redirects = array_map(
-			array( RedirectSchema::class, 'to_array' ),
-			$this->query_repository->find_matching( $criteria )
-		);
+		$page = $this->query_repository->find_page( $criteria );
 
 		return array(
-			'total'     => $this->query_repository->count_matching( $criteria ),
-			'redirects' => $redirects,
+			'total'     => $page['total'],
+			'redirects' => array_map( array( RedirectSchema::class, 'to_array' ), $page['redirects'] ),
 		);
 	}
 

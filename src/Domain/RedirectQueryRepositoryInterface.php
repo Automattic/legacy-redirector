@@ -35,6 +35,17 @@ interface RedirectQueryRepositoryInterface {
 	public function find_matching( RedirectCriteria $criteria ): array;
 
 	/**
+	 * Find a page of matching redirects, with the total that match.
+	 *
+	 * For callers that show both, in place of find_matching() followed by
+	 * count_matching(), which would search twice.
+	 *
+	 * @param RedirectCriteria $criteria The query criteria.
+	 * @return array{redirects: Redirect[], total: int} The page, and the count ignoring limit and offset.
+	 */
+	public function find_page( RedirectCriteria $criteria ): array;
+
+	/**
 	 * Find the IDs of the redirects find_matching() would return.
 	 *
 	 * @param RedirectCriteria $criteria The query criteria.
