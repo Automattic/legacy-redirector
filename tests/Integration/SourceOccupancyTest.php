@@ -164,4 +164,50 @@ final class SourceOccupancyTest extends TestCase {
 		$this->assertNull( $this->occupant( '/' ) );
 		$this->assertNull( $this->occupant( '/wp-admin/legacy' ) );
 	}
+
+	/**
+	 * Test primed sources are answered without a slug query each, and a
+	 * post published since priming is still found.
+	 */
+	public function test_primed_sources_need_no_slug_query_each(): void {
+		global $wpdb;
+
+		$page      = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'primed-page',
+			)
+		);
+		$paths     = array( '/primed-page/', '/primed-nothing', '/wp-admin/primed', '/' );
+		$sources   = array_map( array( SourceUrl::class, 'from_string' ), $paths );
+		$occupancy = new SourceOccupancy();
+
+		$occupancy->prime( $sources );
+
+		$probes = array();
+		$log    = static function ( string $query ) use ( &$probes, $wpdb ): string {
+			if ( str_contains( $query, "FROM {$wpdb->posts} WHERE post_name = " ) ) {
+				$probes[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$found = array_map( static fn( SourceUrl $source ): ?int => $occupancy->occupying_post( $source )?->ID, $sources );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( array( $page, null, null, null ), $found );
+		$this->assertSame( array(), $probes );
+
+		$later = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'primed-nothing',
+			)
+		);
+
+		$this->assertSame( $later, $occupancy->occupying_post( $sources[1] )?->ID );
+	}
 }

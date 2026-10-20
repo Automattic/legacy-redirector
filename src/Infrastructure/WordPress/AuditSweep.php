@@ -375,13 +375,16 @@ final class AuditSweep {
 	/**
 	 * Audit redirects together, then record every flag at once.
 	 *
-	 * Together so the flags can be compared in one query and only the
-	 * changed ones written.
+	 * Together so the auditor can look up all their sources in one query,
+	 * and the flags can be compared in one more and only the changed ones
+	 * written.
 	 *
 	 * @param Redirect[] $redirects The redirects.
 	 * @return array<int, AuditFinding[]> Each redirect's findings, in the order given.
 	 */
 	private function audit_and_record( array $redirects ): array {
+		$this->auditor->prime( $redirects );
+
 		$findings = array_map( fn( Redirect $redirect ): array => $this->auditor->audit( $redirect ), $redirects );
 		$ids      = array_map( static fn( Redirect $redirect ): int => (int) $redirect->id(), $redirects );
 

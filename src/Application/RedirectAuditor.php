@@ -80,6 +80,19 @@ class RedirectAuditor {
 	}
 
 	/**
+	 * Prepare to audit a batch of redirects, one after another.
+	 *
+	 * Looks up every source in one query rather than one per redirect.
+	 * Optional: an audit without it gives the same answers.
+	 *
+	 * @param Redirect[] $redirects The redirects about to be audited.
+	 * @return void
+	 */
+	public function prime( array $redirects ): void {
+		$this->source_occupancy?->prime( array_map( static fn( Redirect $redirect ): SourceUrl => $redirect->source(), $redirects ) );
+	}
+
+	/**
 	 * Audit a redirect, stored or proposed.
 	 *
 	 * Returns every finding: destination problems and warnings alike. A

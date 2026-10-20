@@ -211,6 +211,8 @@ final class DestinationPostWatcher {
 			return;
 		}
 
+		$this->auditor->prime( $redirects );
+
 		$findings = array();
 		foreach ( $redirects as $redirect ) {
 			$findings[ (int) $redirect->id() ] = $this->auditor->audit( $redirect );

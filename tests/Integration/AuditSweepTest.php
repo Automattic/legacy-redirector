@@ -322,6 +322,35 @@ final class AuditSweepTest extends TestCase {
 	}
 
 	/**
+	 * Test a steady-state pass over post-ID rows costs the same number of
+	 * queries however many rows it covers.
+	 *
+	 * Uses the full auditor, source lookups included. Each row's source was
+	 * looked up with a query of its own, and each row's flag with another.
+	 */
+	public function test_a_steady_state_pass_costs_no_queries_per_row(): void {
+		global $wpdb;
+
+		$target = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$sweep  = new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() );
+		$counts = array();
+
+		foreach ( array( 5, 10 ) as $total ) {
+			for ( $i = count( $counts ) * 5 + 1; $i <= $total; $i++ ) {
+				$this->create_redirect( "/sweep-steady-post-{$i}", $target );
+			}
+
+			$this->run_pass( $sweep );
+
+			$queries = $wpdb->num_queries;
+			$this->run_pass( $sweep );
+			$counts[] = $wpdb->num_queries - $queries;
+		}
+
+		$this->assertSame( $counts[0], $counts[1] );
+	}
+
+	/**
 	 * Test a budget of zero turns the background sweep off.
 	 */
 	public function test_a_zero_budget_turns_the_sweep_off(): void {
