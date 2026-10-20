@@ -177,6 +177,37 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * Test validate reports the flagged total from the counts it has just
+	 * stored, rather than counting the flags a second time.
+	 *
+	 * The stored counts are by severity; a recount over every flag reads
+	 * the flag key alone.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reads_back_the_counts_it_stored(): void {
+		global $wpdb;
+
+		$this->create_redirect( '/stored-count-a', 'https://not-allowed.example.net/a' );
+		$this->create_redirect( '/stored-count-b', 'https://not-allowed.example.net/b' );
+
+		$recounts = array();
+		$log      = static function ( string $sql ) use ( &$recounts, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts} " ) && str_contains( $sql, AuditFlags::META_KEY ) && ! str_contains( $sql, 'meta_value' ) ) {
+				$recounts[] = $sql;
+			}
+			return $sql;
+		};
+
+		add_filter( 'query', $log );
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/stored-count-a', '/stored-count-b' ) ) );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 2, $result['flagged'] );
+		$this->assertSame( array(), $recounts );
+	}
+
+	/**
 	 * Test paging through flagged redirects reaches every one, even as checking unflags some.
 	 *
 	 * A redirect found fine drops off the flagged list when it is checked,
