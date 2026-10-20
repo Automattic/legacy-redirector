@@ -8,8 +8,6 @@
 namespace Automattic\LegacyRedirector\Tests\Behat;
 
 use Automattic\BehatWpEnv\WpEnvFeatureContext;
-use Behat\Testwork\Hook\Scope\BeforeSuiteScope;
-use Behat\Testwork\Hook\Scope\AfterSuiteScope;
 use RuntimeException;
 
 /**
@@ -78,6 +76,13 @@ final class FeatureContext extends WpEnvFeatureContext {
 	 * @var bool
 	 */
 	private bool $legacy_active = false;
+
+	/**
+	 * What the next WP-CLI command reads on STDIN, or null for nothing.
+	 *
+	 * @var string|null
+	 */
+	private ?string $stdin = null;
 
 	/**
 	 * Get the plugin slug for wp-env command execution.
@@ -236,8 +241,15 @@ final class FeatureContext extends WpEnvFeatureContext {
 	 * @return void
 	 */
 	protected function run_wp_cli_command( string $command, bool $should_fail = false ): void {
+		// Base64 keeps the input free of quotes and newlines on its way
+		// through docker exec's sh -c, however the PyString is written.
+		$pipe = null === $this->stdin
+			? ''
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encoding for shell safety.
+			: sprintf( 'echo %s | base64 -d | ', escapeshellarg( base64_encode( $this->stdin ) ) );
+
 		list( $output_lines, $exit_code ) = self::run_in_container(
-			'wp ' . $this->replace_variables( $command ) . ' 2>&1',
+			$pipe . 'wp ' . $this->replace_variables( $command ) . ' 2>&1',
 			true
 		);
 
@@ -291,6 +303,14 @@ final class FeatureContext extends WpEnvFeatureContext {
 	 * is excluded from a post_type=any query because the post type is not
 	 * public.
 	 *
+	 * Options a scenario may change are put back too, so a feature behaves the
+	 * same run alone as after any other: the plugin's upgrade and audit state
+	 * goes, and its data version is set to current rather than deleted, as a
+	 * missing version means a site still to upgrade. Permalinks are set to
+	 * /%postname%/, because the plugin only redirects 404s and with plain
+	 * permalinks an unmatched path is not a 404. A feature needing other
+	 * permalinks sets them in its Background.
+	 *
 	 * @throws RuntimeException If the reset fails.
 	 * @return void
 	 */
@@ -307,6 +327,15 @@ foreach ( get_users( array( 'fields' => 'ID' ) ) as $uid ) {
 	}
 }
 $wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\_transient\_%' OR option_name LIKE '\_site\_transient\_%'" );
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE 'wpcom\_legacy\_redirector\_upgrade\_%' OR option_name LIKE 'legacy\_redirector\_audit\_%'" );
+if ( class_exists( '\Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader' ) ) {
+	update_option( \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::VERSION_OPTION, \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::DB_VERSION );
+}
+if ( '/%postname%/' !== get_option( 'permalink_structure' ) ) {
+	global $wp_rewrite;
+	$wp_rewrite->set_permalink_structure( '/%postname%/' );
+	flush_rewrite_rules( false );
+}
 wp_cache_flush();
 foreach ( get_posts( array( 'post_type' => 'vip-legacy-redirect', 'post_status' => 'any', 'posts_per_page' => -1, 'fields' => 'ids' ) ) as $id ) {
 	wp_delete_post( $id, true );
@@ -383,6 +412,27 @@ RESET;
 	}
 
 	/**
+	 * Run a WP-CLI command that is expected to succeed, with the given text on STDIN.
+	 *
+	 * Saved variables are replaced in the text, so a command's saved output
+	 * can be piped into another, as `list --format=csv | import -` would.
+	 *
+	 * @When /^I run `([^`]+)` with STDIN:$/
+	 * @param string                           $command The command to run.
+	 * @param \Behat\Gherkin\Node\PyStringNode $stdin   What the command reads on STDIN.
+	 * @return void
+	 */
+	public function i_run_with_stdin( string $command, \Behat\Gherkin\Node\PyStringNode $stdin ): void {
+		$this->stdin = $this->replace_variables( $stdin->getRaw() );
+
+		try {
+			$this->i_run( $command );
+		} finally {
+			$this->stdin = null;
+		}
+	}
+
+	/**
 	 * Run a WP-CLI command for a step's own setup, and fail the step if it does not succeed.
 	 *
 	 * @param string $command The command to run (without 'wp').
@@ -396,52 +446,6 @@ RESET;
 			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
 			throw new RuntimeException( sprintf( '`wp %s` exited %d: %s %s', $command, $this->exit_code, $this->output, $this->error_output ) );
 		}
-	}
-
-	/**
-	 * Create bypass 404 mu-plugin before test suite runs.
-	 *
-	 * This is created once for all scenarios, avoiding per-scenario overhead.
-	 *
-	 * @BeforeSuite
-	 * @param BeforeSuiteScope $scope Suite scope.
-	 * @return void
-	 */
-	public static function setup_bypass_mu_plugin( BeforeSuiteScope $scope ): void {
-		$bypass_validation = <<<'PHP'
-<?php
-/**
- * Bypass 404 validation for Behat tests.
- */
-add_filter( 'pre_http_request', function( $preempt, $args, $url ) {
-	if ( false !== strpos( $url, home_url() ) ) {
-		return array( 'response' => array( 'code' => 404 ) );
-	}
-	return $preempt;
-}, 10, 3 );
-PHP;
-
-		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encoding for shell safety.
-		$encoded = base64_encode( $bypass_validation );
-		self::run_in_container(
-			sprintf(
-				'wp eval \'if ( ! is_dir( WPMU_PLUGIN_DIR ) ) { mkdir( WPMU_PLUGIN_DIR, 0755, true ); } file_put_contents( WPMU_PLUGIN_DIR . "/behat-bypass-404-check.php", base64_decode( "%s" ) );\' 2>&1',
-				$encoded
-			)
-		);
-	}
-
-	/**
-	 * Remove bypass 404 mu-plugin after test suite completes.
-	 *
-	 * @AfterSuite
-	 * @param AfterSuiteScope $scope Suite scope.
-	 * @return void
-	 */
-	public static function teardown_bypass_mu_plugin( AfterSuiteScope $scope ): void {
-		self::run_in_container(
-			'wp eval \'if ( file_exists( WPMU_PLUGIN_DIR . "/behat-bypass-404-check.php" ) ) { unlink( WPMU_PLUGIN_DIR . "/behat-bypass-404-check.php" ); }\' 2>&1'
-		);
 	}
 
 	/**

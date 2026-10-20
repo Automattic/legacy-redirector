@@ -9,8 +9,8 @@ Feature: Migrating 1.x redirect data
   # Smoke test: the command is registered, and a site with no redirects is
   # recorded as current on bootstrap, WP-CLI included, so there is nothing to
   # migrate - and an import that follows is not later mistaken for 1.x data.
-  # The database reset between scenarios leaves options alone, so start from
-  # a fresh install's state.
+  # The reset between scenarios leaves the data version current, so delete
+  # it to start from a fresh install's state.
   Scenario: Migrating a site with no redirects
     Given I run `wp eval 'delete_option( "wpcom_legacy_redirector_db_version" );'`
 

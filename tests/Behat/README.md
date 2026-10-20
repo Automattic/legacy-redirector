@@ -45,7 +45,10 @@ PHPUnit stubs `WP_CLI`, `format_items()` and `write_csv()`, so only Behat sees r
 
 - `When I run` fails the step if the command exits non-zero. Use `When I try` for a command that may fail, then assert `the return code should be N`.
 - For a front-end redirect, assert `Then the response should be a 301 redirect to "/path"`. It checks the status line, the `Location` header and `X-Redirect-By`, so a redirect elsewhere or a core canonical redirect cannot pass.
+- To pipe text into a command, use ``When I run `wp legacy-redirector import -` with STDIN:`` followed by a PyString. Saved variables are replaced in it, so one command's saved output can be fed to the next.
 - The site is reset before the first scenario and after every scenario. Behat runs against the wp-env dev site, so a run deletes its posts and every user except ID 1.
+- The reset also puts options back, so a feature behaves the same run alone as in the full suite: permalinks are set to `/%postname%/` (the plugin only redirects 404s, and with plain permalinks an unmatched path is not a 404), the plugin's upgrade and audit state is deleted, and its data version is set to current. A scenario that needs other permalinks, or a site still to upgrade, sets that up itself.
+- HTTP is not stubbed. Of the CLI commands only `test` makes requests, and the site's own URL (`localhost` on the wp-env port) is not reachable from inside the cli container, so there `test` reports its source check, and the check of any internal destination that is not a post, as inconclusive. Assert on those in PHPUnit (`tests/Integration/Cli/TestCommandTest.php` stubs `pre_http_request`), not here. A stub answering 404 for every home URL used to sit here, and made those checks report a confident, false "not firing" or "not found" instead.
 
 ## What NOT to Test in Behat
 
