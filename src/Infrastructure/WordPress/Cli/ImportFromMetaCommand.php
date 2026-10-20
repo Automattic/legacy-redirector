@@ -174,10 +174,18 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 				)
 			);
 
-			$i = 0;
-
 			foreach ( $redirects as $redirect ) {
-				++$i;
+				// Before the row, not after it, so the rows that skip or fail
+				// below count towards the pause too. The object cache otherwise
+				// holds every post and lookup the run touched. Only a live run
+				// writes, so only a live run pauses.
+				if ( $processed > 0 && 0 === $processed % 100 ) {
+					\WP_CLI\Utils\wp_clear_object_cache();
+					if ( ! $dry_run ) {
+						sleep( 1 );
+					}
+				}
+
 				++$processed;
 				$progress?->tick();
 
@@ -231,13 +239,6 @@ final class ImportFromMetaCommand extends WP_CLI_Command {
 				} catch ( \InvalidArgumentException $e ) {
 					++$failed;
 					$notices[] = $this->notice( $redirect->meta_value, (int) $redirect->post_id, $e->getMessage() );
-				}
-
-				if ( 0 === $i % 100 ) {
-					if ( function_exists( 'vip_inmemory_cleanup' ) ) {
-						vip_inmemory_cleanup();
-					}
-					sleep( 1 );
 				}
 			}
 

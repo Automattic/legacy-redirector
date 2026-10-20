@@ -355,9 +355,10 @@ installed below the domain root. See the README section on site-relative source 
 result is `[]`, and an empty count is `0`. Headings, summaries, and "nothing found"
 sentences are for the table format; warnings and errors go to STDERR whatever the format.
 
-**Imports are deliberately paced.** `import` pauses for a second every 100 rows and
-flushes caches, to keep a large import from overwhelming the database. Budget roughly a
-second per 100 redirects: a 50,000-row file takes at least eight minutes.
+**Imports are deliberately paced.** `import` and `import-from-meta` pause for a second
+every 100 rows and flush caches, to keep a large import from overwhelming the database.
+Budget roughly a second per 100 redirects: a 50,000-row file takes at least eight
+minutes. A dry run writes nothing, so it flushes caches but does not pause.
 
 **Destinations are validated by default.** `create` and `import` check the destination
 before storing it. `--skip-validation` turns that off, which is occasionally needed when

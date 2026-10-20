@@ -554,4 +554,30 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->assertNotNull( $this->find_redirect( '/end-second' ) );
 		$this->assertNull( $this->find_redirect( '/end-third' ) );
 	}
+
+	/**
+	 * Test rows that fail still count towards clearing the object cache, and a
+	 * dry run does not pause.
+	 */
+	public function test_failing_rows_clear_cache_and_dry_run_does_not_pause(): void {
+		$post_id = self::factory()->post->create();
+		foreach ( range( 1, 101 ) as $i ) {
+			add_post_meta( $post_id, $this->meta_key, "https://example.com#$i" );
+		}
+		wp_cache_set( 'sentinel', 'kept', 'legacy-redirector-test' );
+
+		$started = microtime( true );
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+				'dry-run'  => true,
+			)
+		);
+
+		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'The row after the hundredth clears the object cache.' );
+		$this->assertLessThan( 1.0, microtime( true ) - $started, 'A dry run writes nothing, so never pauses.' );
+	}
 }
