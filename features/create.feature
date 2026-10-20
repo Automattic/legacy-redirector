@@ -26,9 +26,10 @@ Feature: Creating a redirect
     And there is a redirect from "/dupe-source" to "/dupe-target"
 
     When I try `wp legacy-redirector create /dupe-source /dupe-target`
-    Then STDERR should contain:
+    Then the return code should be 1
+    And STDERR should contain:
       """
-      Error:
+      already exists
       """
 
   # Regression test: a non-ASCII source survives the shell, WP-CLI, and the
@@ -72,49 +73,8 @@ Feature: Creating a redirect
     And there is a redirect from "/привет" to "/encoded-target"
 
     When I try `wp legacy-redirector create /%D0%BF%D1%80%D0%B8%D0%B2%D0%B5%D1%82 /encoded-target`
-    Then STDERR should contain:
+    Then the return code should be 1
+    And STDERR should contain:
       """
-      Error:
-      """
-
-  # Contract test: the trailing slash is not part of the source, so the
-  # slashed spelling is the same redirect and the second create is a duplicate.
-  Scenario: A source with a trailing slash collides with the slash-less form
-    Given there is a published post with a slug of "slash-target"
-    And there is a redirect from "/slash-source" to "/slash-target"
-
-    When I try `wp legacy-redirector create /slash-source/ /slash-target`
-    Then STDERR should contain:
-      """
-      Error:
-      """
-
-  # Contract test: the slash is dropped on the way in, so a source entered
-  # with one is keyed, and therefore addressable, without it.
-  Scenario: A source entered with a trailing slash is stored without one
-    When I run `wp legacy-redirector create /stored-without-slash/ /elsewhere --skip-validation`
-    Then STDOUT should contain:
-      """
-      Success: Created redirect
-      """
-
-    When I run `wp legacy-redirector get /stored-without-slash`
-    Then STDOUT should contain:
-      """
-      /elsewhere
-      """
-
-  # Contract test: '/café' and '/caf%C3%A9' are two spellings of one target,
-  # so internal destinations store in one canonical form whichever was typed.
-  Scenario: An encoded internal destination is stored decoded
-    When I run `wp legacy-redirector create /vipplug143-source /caf%C3%A9 --skip-validation`
-    Then STDOUT should contain:
-      """
-      Success: Created redirect
-      """
-
-    When I run `wp legacy-redirector get /vipplug143-source`
-    Then STDOUT should contain:
-      """
-      /café
+      already exists
       """

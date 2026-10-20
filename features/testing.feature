@@ -9,15 +9,6 @@
       Hello world.
       """
 
-  Scenario: WP-CLI recognizes plugin commands
-    Given a WP install
-
-    When I run `wp plugin --help`
-    Then STDOUT should contain:
-      """
-      Manages plugins, including installs, activations, and updates.
-      """
-
   Scenario: WP-CLI recognizes legacy-redirector commands when the plugin is loaded
     Given a WP installation with the Legacy Redirector plugin
 
@@ -46,15 +37,24 @@
       `wp wpcom-legacy-redirector find-domains` is deprecated since 2.0.0. Use `wp legacy-redirector find-domains` instead.
       """
 
-  Scenario: The pre-2.0 namespace does not alias commands added in 2.0, and removed ones name their replacement
+  Scenario Outline: A command removed in 2.0 fails and names its replacement
     Given a WP installation with the Legacy Redirector plugin
 
-    When I try `wp wpcom-legacy-redirector insert-redirect /old /new`
+    When I try `wp wpcom-legacy-redirector <removed>`
     Then the return code should be 1
     And STDERR should contain:
       """
-      `wp wpcom-legacy-redirector insert-redirect` was removed in 2.0.0. Use `wp legacy-redirector create <from> <to>` instead.
+      `wp wpcom-legacy-redirector <command>` was removed in 2.0.0. Use `wp legacy-redirector <replacement>
       """
+
+    Examples:
+      | removed                        | command         | replacement |
+      | insert-redirect /old /new      | insert-redirect | create      |
+      | import-from-csv /tmp/none.csv  | import-from-csv | import      |
+      | export-to-csv                  | export-to-csv   | list        |
+
+  Scenario: The pre-2.0 namespace does not alias commands added in 2.0
+    Given a WP installation with the Legacy Redirector plugin
 
     When I try `wp wpcom-legacy-redirector create /new /target`
     Then the return code should be 1

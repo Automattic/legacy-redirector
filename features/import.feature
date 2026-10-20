@@ -20,3 +20,32 @@ Feature: Import redirects from CSV
       """
       Processed 2 redirects.
       """
+
+    When I run `wp legacy-redirector get /another-old-page --field=to`
+    Then STDOUT should be:
+      """
+      /destination-post
+      """
+
+  # Contract test: one refused row fails the run, so a script cannot mistake a
+  # partial import for a clean one, and the rows that passed are still saved.
+  Scenario: An import with a refused row exits non-zero
+    Given there is a published post with a slug of "destination-post"
+    And a CSV file "partial.csv" with content:
+      """
+      /good-row,/destination-post
+      /bad-row,/bad-row
+      """
+
+    When I try `wp legacy-redirector import /tmp/partial.csv`
+    Then the return code should be 1
+    And STDERR should contain:
+      """
+      Processed 1 of 2 rows: 1 failed.
+      """
+
+    When I run `wp legacy-redirector get /good-row --field=to`
+    Then STDOUT should be:
+      """
+      /destination-post
+      """

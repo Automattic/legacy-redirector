@@ -35,22 +35,17 @@ Behat tests provide unique value for:
 4. **WordPress filter contracts** - `allowed_redirect_hosts` etc.
 5. **Environment validation** - Plugin activation, command registration
 
-## Scenarios We Keep (and Why)
+## What the Features Cover
 
-| Feature | Scenario | Rationale |
-|---------|----------|-----------|
-| testing.feature | WP-CLI loads for your tests | Validates wp-env setup works |
-| testing.feature | WP-CLI recognizes plugin commands | Validates plugin activation |
-| testing.feature | WP-CLI recognizes legacy-redirector commands | Validates command registration |
-| create.feature | Create a redirect to a path | Smoke test for basic creation |
-| create.feature | Creating a duplicate redirect fails | Tests error contract and exit code |
-| list.feature | List all redirects | Smoke test for list output format |
-| list.feature | Export redirects as CSV | Tests the supported CSV export path |
-| validate.feature | Validate batch mode with no issues | Tests batch processing with real WordPress |
-| validate.feature | Validate redirect pointing to trashed post | Tests WordPress post state integration |
-| import.feature | Import redirects from a valid CSV file | Tests file I/O + bulk workflow |
+Each file in `features/` covers one command or flow, with a comment above each scenario saying what it proves: a smoke test of the happy path, a CLI contract (exit codes, STDERR, files), or an end-to-end check over real HTTP (`redirect.feature`, `upgrade-from-1.3.feature`). Keep each file to a few scenarios.
 
-**Total: ~10 key scenarios** covering the critical paths.
+PHPUnit stubs `WP_CLI`, `format_items()` and `write_csv()`, so only Behat sees real exit codes, real output formats, real files and STDIN. Those belong here; logic branches belong in PHPUnit.
+
+## Writing Steps
+
+- `When I run` fails the step if the command exits non-zero. Use `When I try` for a command that may fail, then assert `the return code should be N`.
+- For a front-end redirect, assert `Then the response should be a 301 redirect to "/path"`. It checks the status line, the `Location` header and `X-Redirect-By`, so a redirect elsewhere or a core canonical redirect cannot pass.
+- The site is reset before the first scenario and after every scenario. Behat runs against the wp-env dev site, so a run deletes its posts and every user except ID 1.
 
 ## What NOT to Test in Behat
 
@@ -58,7 +53,7 @@ These are better covered by PHPUnit unit or integration tests:
 
 - **Individual error cases** - e.g., "redirect not found" errors
 - **Domain validation logic** - e.g., source/destination matching
-- **Flag combinations** - e.g., `--limit`, `--offset`, `--format`
+- **Flag combinations** - e.g., `--limit`, `--offset`
 - **Edge cases** - e.g., empty results, special characters
 - **CRUD operations** - enable, disable, delete, update, get (except smoke tests)
 
@@ -69,7 +64,7 @@ These scenarios can execute ~100x faster in PHPUnit than in Behat.
 Before adding a Behat scenario, ask:
 
 1. **Does this test something only Behat can verify?** (CLI parsing, file I/O, filter contracts)
-2. **Is this a critical happy path worth the ~15s execution cost?**
+2. **Is this a critical happy path worth the ~2s execution cost?**
 3. **Can this be tested faster with PHPUnit?**
 
 If the answer to #1 or #2 is "no", write a PHPUnit test instead.
@@ -84,7 +79,6 @@ If the answer to #1 or #2 is "no", write a PHPUnit test instead.
 ### Poor Candidates for Behat
 
 - Error handling for invalid inputs
-- Testing different output formats (--format=json/csv/table)
 - Pagination behavior
 - Search/filtering logic
 
@@ -92,13 +86,13 @@ If the answer to #1 or #2 is "no", write a PHPUnit test instead.
 
 ```bash
 # Run all Behat tests
-composer behat
+composer test:behat
 
 # Run a specific feature
-composer behat -- features/testing.feature
+composer test:behat -- features/testing.feature
 
 # Run a specific scenario by line number
-composer behat -- features/create.feature:9
+composer test:behat -- features/create.feature:9
 ```
 
 ## Maintaining Behat Tests
