@@ -693,4 +693,18 @@ final class ImportCommandTest extends CliTestCase {
 
 		$this->assert_error_contains( 'The only row failed.' );
 	}
+
+	/**
+	 * Test every hundred rows clear the object cache, and a dry run does not pause.
+	 */
+	public function test_import_dry_run_clears_cache_without_pausing(): void {
+		$file = $this->create_csv( implode( "\n", array_map( fn( $i ) => "/import-pause-$i", range( 1, 100 ) ) ) . "\n" );
+		wp_cache_set( 'sentinel', 'kept', 'legacy-redirector-test' );
+
+		$started = microtime( true );
+		$this->invoke_command( $this->command, array( $file ), array( 'dry-run' => true ) );
+
+		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'The hundredth row clears the object cache.' );
+		$this->assertLessThan( 1.0, microtime( true ) - $started, 'A dry run writes nothing, so never pauses.' );
+	}
 }

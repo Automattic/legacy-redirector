@@ -176,11 +176,13 @@ final class ImportCommand extends WP_CLI_Command {
 
 			$results[] = $this->process_row( $redirect_from, $redirect_to, $status, $mode, $validate, $dry_run );
 
+			// The object cache otherwise holds every post and lookup the run
+			// touched. Only a live run writes, so only a live run pauses.
 			if ( 0 === $row % 100 ) {
-				if ( function_exists( 'stop_the_insanity' ) ) {
-					stop_the_insanity();
+				\WP_CLI\Utils\wp_clear_object_cache();
+				if ( ! $dry_run ) {
+					sleep( 1 );
 				}
-				sleep( 1 );
 			}
 		}
 
