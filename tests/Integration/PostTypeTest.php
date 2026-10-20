@@ -7,6 +7,7 @@
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\TrashRedirectEnhancer;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
@@ -163,5 +164,119 @@ final class PostTypeTest extends TestCase {
 
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$this->assertFalse( current_user_can( get_post_type_object( PostType::POST_TYPE )->cap->create_posts ), 'Nobody creates a redirect through core.' );
+	}
+
+	/**
+	 * Test trashing one redirect names it in the notice, through both halves.
+	 *
+	 * TrashRedirectEnhancer writes the source into core's redirect after a
+	 * trash, encoded, and the notice reads it back. Each half was only ever
+	 * tested against what the other was assumed to do.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\TrashRedirectEnhancer
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::bulk_post_updated_messages
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 */
+	public function test_trashing_one_redirect_names_it_in_the_notice() {
+		$redirect_id = $this->create_redirect( '/a%2Fb?q=caf%C3%A9', 'https://example.com/destination' );
+		wp_trash_post( $redirect_id );
+
+		$location = ( new TrashRedirectEnhancer( $this->repository() ) )->add_source_to_redirect(
+			admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&trashed=1&ids=' . $redirect_id )
+		);
+
+		// PHP decodes the query string once into $_GET, as parse_str() does.
+		parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
+		$_GET['redirect_source'] = wp_slash( $query['redirect_source'] );
+
+		$messages = ( new PostType() )->bulk_post_updated_messages(
+			array(),
+			array(
+				'updated'   => 0,
+				'locked'    => 0,
+				'deleted'   => 0,
+				'trashed'   => 1,
+				'untrashed' => 0,
+			)
+		);
+
+		unset( $_GET['redirect_source'] );
+
+		// Mirror wp-admin/edit.php, which inserts the count with sprintf().
+		$notice = sprintf( $messages[ PostType::POST_TYPE ]['trashed'], number_format_i18n( 1 ) );
+
+		$this->assertStringContainsString( '<code>/a%2Fb?q=café</code>', $notice, 'The notice names the source as stored, query decoded.' );
+	}
+
+	/**
+	 * Test the enhancer leaves every other redirect alone.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\TrashRedirectEnhancer
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 * @dataProvider data_redirects_the_enhancer_leaves_alone
+	 *
+	 * @param string $query The query string of core's redirect, with {id} for a trashed redirect's ID.
+	 */
+	public function test_the_trash_enhancer_leaves_other_redirects_alone( string $query ) {
+		$redirect_id = $this->create_redirect( '/left-alone', 'https://example.com/destination' );
+		wp_trash_post( $redirect_id );
+		$location = admin_url( 'edit.php?' . str_replace( '{id}', (string) $redirect_id, $query ) );
+
+		$this->assertSame( $location, ( new TrashRedirectEnhancer( $this->repository() ) )->add_source_to_redirect( $location ) );
+	}
+
+	/**
+	 * Data provider for redirects the trash enhancer must not change.
+	 *
+	 * @return array<string, array{0: string}>
+	 */
+	public static function data_redirects_the_enhancer_leaves_alone(): array {
+		return array(
+			'several trashed'   => array( 'post_type=vip-legacy-redirect&trashed=2&ids={id},999' ),
+			'another post type' => array( 'post_type=post&trashed=1&ids={id}' ),
+			'not a trash'       => array( 'post_type=vip-legacy-redirect&untrashed=1&ids={id}' ),
+			'no ids'            => array( 'post_type=vip-legacy-redirect&trashed=1' ),
+			'no such redirect'  => array( 'post_type=vip-legacy-redirect&trashed=1&ids=999999' ),
+		);
 	}
 }

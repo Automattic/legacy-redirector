@@ -236,6 +236,20 @@ if ( ! class_exists( 'WP_CLI' ) ) {
 		}
 
 		/**
+		 * Record a command registration.
+		 *
+		 * @param string                 $name     The command name.
+		 * @param callable|object|string $callable The command.
+		 * @param array<string, mixed>   $args     Registration arguments.
+		 * @return bool Always true.
+		 */
+		public static function add_command( string $name, $callable, array $args = array() ): bool {
+			self::$calls[] = array( 'add_command', $name, $callable, $args );
+
+			return true;
+		}
+
+		/**
 		 * Get a call by method name.
 		 *
 		 * @param string $method The method name.

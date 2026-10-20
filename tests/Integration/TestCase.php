@@ -22,12 +22,17 @@ abstract class TestCase extends WPTestUtilsTestCase {
 	public function set_up() {
 		parent::set_up();
 
-		// We need to trick the plugin into thinking it's run by WP-CLI.
+		// Both constants last for the whole run. WP_CLI lets RedirectManager
+		// create redirects with no user, as WP-CLI does, so its capability
+		// check never runs here; the unit tests cover it.
 		if ( ! defined( 'WP_CLI' ) ) {
 			define( 'WP_CLI', true );
 		}
 
-		// We need to trick the plugin into thinking we're in admin.
+		// WP_ADMIN makes is_admin() true for code under test. The plugin has
+		// already loaded by now, so its admin components are not registered:
+		// tests build each one by hand, PluginBootstrapperTest checks the
+		// wiring, and a test needing a front-end request sets the front screen.
 		if ( ! defined( 'WP_ADMIN' ) ) {
 			define( 'WP_ADMIN', true );
 		}

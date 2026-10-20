@@ -71,6 +71,31 @@ Feature: Upgrading from version 1.3.0
       """
     And every request version 1.3.0 redirected is redirected to the same destination
 
+  # The default for a site that never runs `wp legacy-redirector migrate`:
+  # every page load runs a batch on init, before the redirect is looked up,
+  # so the first visitor after the upgrade already gets the migrated answer.
+  Scenario: A site that never runs the migrate command migrates on its page loads
+    Given version 1.3.0 is active in place of this plugin
+    And version 1.3.0 stores these redirects:
+      | from               | to                 |
+      | /web-plain         | /dest-web-plain    |
+      | /web-slash/        | /dest-web-slash    |
+      | /web-caf%C3%A9     | /dest-web-encoded  |
+    Then version 1.3.0 answers these requests:
+      | request            | status | to                 |
+      | /web-plain         | 301    | /dest-web-plain    |
+      | /web-slash/        | 301    | /dest-web-slash    |
+      | /web-caf%C3%A9     | 301    | /dest-web-encoded  |
+
+    When this plugin replaces version 1.3.0
+    Then every request version 1.3.0 redirected is redirected to the same destination
+
+    When I run `wp legacy-redirector migrate`
+    Then STDOUT should contain:
+      """
+      Redirect data is already up to date; nothing to migrate.
+      """
+
   # kses escaped the '&' in a destination an author saved, and 1.3.0 sent
   # visitors to the escaped URL, whose query has a parameter named 'amp;b'.
   # The migration sends them where the author meant.
