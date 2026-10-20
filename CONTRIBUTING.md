@@ -56,9 +56,27 @@ composer test:integration-coverage
 composer test:integration-ms-coverage
 ```
 
+### End-to-End Tests
+
+The admin screens' JavaScript (the Add/Edit Redirect form's live checks and destination search, the Test row and bulk actions, and the Validate all redirects button) is covered by Playwright tests in `tests/e2e/`. They run against the wp-env site, which must already be started:
+
+```bash
+npx playwright install chromium   # Once, to fetch the browser
+npm run test:e2e                  # Against http://localhost:8888
+WP_ENV_PORT=8920 npm run test:e2e # Against a wp-env started on another port
+npm run test:e2e:debug            # Step through in the Playwright inspector
+```
+
+The tests use the development site's database, as PHPUnit's integration suite and Behat do, so never run any two of them at once. The integration suite also resets the site, deactivating the plugin and clearing the permalink structure, so run `npx wp-env start --update` before the E2E tests if the integration suite ran since wp-env started.
+
+Test makes real requests to the site itself, which wp-env answers inside its container, so the tests need no network: every redirect they create points at a page on the same site.
+
 ### Code Quality
 
 ```bash
+# Check JavaScript coding standards (js/ and tests/e2e/)
+npm run lint:js
+
 # Check PHP syntax
 composer lint
 

@@ -31,17 +31,18 @@
  * - idFormat              Translated "%1$s (ID: %2$s)" pattern for a post and its ID.
  * - postTypeLabels        Post type slug to translated singular name.
  */
+/* global jQuery */
 jQuery( document ).ready( function ( $ ) {
-	var settings = window.legacyRedirectorForm || {};
-	var originalFrom = $( '#redirect_from' ).val();
-	var postId = parseInt( settings.postId, 10 ) || 0;
-	var searchTimeout;
-	var selectedIndex = -1;
-	var entityDecoder = document.createElement( 'textarea' );
-	var $display = $( '#redirect_to_display' );
-	var $suggestions = $( '#redirect_to_suggestions' );
-	var announcements = [];
-	var postTypeLabels = settings.postTypeLabels || {};
+	const settings = window.legacyRedirectorForm || {};
+	const originalFrom = $( '#redirect_from' ).val();
+	const postId = parseInt( settings.postId, 10 ) || 0;
+	let searchTimeout;
+	let selectedIndex = -1;
+	const entityDecoder = document.createElement( 'textarea' );
+	const $display = $( '#redirect_to_display' );
+	const $suggestions = $( '#redirect_to_suggestions' );
+	let announcements = [];
+	const postTypeLabels = settings.postTypeLabels || {};
 
 	// One pass, so a title that itself contains %2$s is left alone.
 	function withId( label, id ) {
@@ -74,7 +75,10 @@ jQuery( document ).ready( function ( $ ) {
 
 		$message.text( text ).show();
 		if ( link ) {
-			$message.append( ' ', $( '<a>', { href: link.href } ).text( link.text ) );
+			$message.append(
+				' ',
+				$( '<a>', { href: link.href } ).text( link.text )
+			);
 		}
 		if ( $field ) {
 			$field.attr( 'aria-invalid', 'true' );
@@ -101,7 +105,9 @@ jQuery( document ).ready( function ( $ ) {
 
 	function hideSuggestions() {
 		$suggestions.hide();
-		$display.attr( 'aria-expanded', 'false' ).removeAttr( 'aria-activedescendant' );
+		$display
+			.attr( 'aria-expanded', 'false' )
+			.removeAttr( 'aria-activedescendant' );
 		selectedIndex = -1;
 	}
 
@@ -119,20 +125,27 @@ jQuery( document ).ready( function ( $ ) {
 		// in both attribute and text positions.
 		$suggestions.empty();
 		$.each( posts, function ( i, post ) {
-			var title = decodeEntities( post.title );
+			const title = decodeEntities( post.title );
 			$( '<div>', {
-				'class': 'redirect-suggestion',
-				'id': 'redirect_to_suggestion_' + i,
-				'role': 'option',
+				class: 'redirect-suggestion',
+				id: 'redirect_to_suggestion_' + i,
+				role: 'option',
 				'aria-selected': 'false',
 				'data-id': post.id,
 				'data-title': title,
-				'style': 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;'
+				style: 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;',
 			} )
 				.append(
 					$( '<strong>' ).text( title ),
 					'<br>',
-					$( '<small>' ).css( 'color', '#646970' ).text( withId( postTypeLabels[ post.subtype ] || post.subtype, post.id ) )
+					$( '<small>' )
+						.css( 'color', '#646970' )
+						.text(
+							withId(
+								postTypeLabels[ post.subtype ] || post.subtype,
+								post.id
+							)
+						)
 				)
 				.appendTo( $suggestions );
 		} );
@@ -145,8 +158,8 @@ jQuery( document ).ready( function ( $ ) {
 	// Check the source on blur: a duplicate blocks the save, a reserved path
 	// only warns, so both are known before anything is submitted.
 	$( '#redirect_from' ).on( 'blur', function () {
-		var $field = $( this );
-		var newFrom = $field.val().trim();
+		const $field = $( this );
+		const newFrom = $field.val().trim();
 		if ( newFrom === originalFrom || newFrom === '' ) {
 			setMessage( $( '#redirect_from_error' ), $field, '' );
 			setMessage( $( '#redirect_from_warning' ), null, '' );
@@ -154,33 +167,46 @@ jQuery( document ).ready( function ( $ ) {
 		}
 
 		wp.apiFetch( {
-			path: '/legacy-redirector/v1/check-source?source=' + encodeURIComponent( newFrom ) + '&exclude_id=' + postId
-		} ).then( function ( result ) {
-			setMessage(
-				$( '#redirect_from_error' ),
-				$field,
-				result.exists ? settings.duplicateMessage : '',
-				result.existing_id ? { href: settings.editRedirectUrl + parseInt( result.existing_id, 10 ), text: settings.editExistingLabel } : null
-			);
+			path:
+				'/legacy-redirector/v1/check-source?source=' +
+				encodeURIComponent( newFrom ) +
+				'&exclude_id=' +
+				postId,
+		} )
+			.then( function ( result ) {
+				setMessage(
+					$( '#redirect_from_error' ),
+					$field,
+					result.exists ? settings.duplicateMessage : '',
+					result.existing_id
+						? {
+								href:
+									settings.editRedirectUrl +
+									parseInt( result.existing_id, 10 ),
+								text: settings.editExistingLabel,
+							}
+						: null
+				);
 
-			var warning = '';
-			if ( result.reserved ) {
-				warning = settings.reservedMessage;
-			} else if ( result.occupied ) {
-				warning = settings.occupiedMessage;
-			}
-			setMessage( $( '#redirect_from_warning' ), null, warning );
-		} ).catch( function () {
-			setMessage( $( '#redirect_from_error' ), $field, '' );
-			setMessage( $( '#redirect_from_warning' ), null, '' );
-		} );
+				let warning = '';
+				if ( result.reserved ) {
+					warning = settings.reservedMessage;
+				} else if ( result.occupied ) {
+					warning = settings.occupiedMessage;
+				}
+				setMessage( $( '#redirect_from_warning' ), null, warning );
+			} )
+			.catch( function () {
+				setMessage( $( '#redirect_from_error' ), $field, '' );
+				setMessage( $( '#redirect_from_warning' ), null, '' );
+			} );
 	} );
 
 	// Check the destination on blur: a host missing from allowed_redirect_hosts
 	// will be refused at save, so it is flagged before anything is submitted.
 	// Leaving the field also closes the suggestions, as Escape does.
 	$display.on( 'blur', function () {
-		var destination = $( '#redirect_to' ).val().trim();
+		const destination = $( '#redirect_to' ).val().trim();
 
 		hideSuggestions();
 
@@ -191,21 +217,33 @@ jQuery( document ).ready( function ( $ ) {
 		}
 
 		wp.apiFetch( {
-			path: '/legacy-redirector/v1/check-destination?destination=' + encodeURIComponent( destination )
-		} ).then( function ( result ) {
-			setMessage( $( '#redirect_to_error' ), $display, false === result.host_allowed ? settings.hostNotAllowedMessage : '' );
-		} ).catch( function () {
-			setMessage( $( '#redirect_to_error' ), $display, '' );
-		} );
+			path:
+				'/legacy-redirector/v1/check-destination?destination=' +
+				encodeURIComponent( destination ),
+		} )
+			.then( function ( result ) {
+				setMessage(
+					$( '#redirect_to_error' ),
+					$display,
+					false === result.host_allowed
+						? settings.hostNotAllowedMessage
+						: ''
+				);
+			} )
+			.catch( function () {
+				setMessage( $( '#redirect_to_error' ), $display, '' );
+			} );
 	} );
 
 	// Mark the highlighted suggestion, for sight through aria-selected's
 	// styling and for assistive technology through aria-activedescendant.
 	function updateHighlight() {
-		var $options = $suggestions.find( '.redirect-suggestion' );
+		const $options = $suggestions.find( '.redirect-suggestion' );
 		$options.attr( 'aria-selected', 'false' );
 		if ( selectedIndex >= 0 && selectedIndex < $options.length ) {
-			var $option = $options.eq( selectedIndex ).attr( 'aria-selected', 'true' );
+			const $option = $options
+				.eq( selectedIndex )
+				.attr( 'aria-selected', 'true' );
 			$display.attr( 'aria-activedescendant', $option.attr( 'id' ) );
 			$option[ 0 ].scrollIntoView( { block: 'nearest' } );
 		} else {
@@ -215,8 +253,8 @@ jQuery( document ).ready( function ( $ ) {
 
 	// Use a suggestion as the destination.
 	function selectSuggestion( $option ) {
-		var id = $option.data( 'id' );
-		var title = $option.data( 'title' );
+		const id = $option.data( 'id' );
+		const title = $option.data( 'title' );
 		$display.val( withId( title, id ) );
 		$( '#redirect_to' ).val( id );
 		hideSuggestions();
@@ -224,7 +262,7 @@ jQuery( document ).ready( function ( $ ) {
 
 	// Handle keyboard navigation.
 	$display.on( 'keydown', function ( e ) {
-		var $options = $suggestions.find( '.redirect-suggestion' );
+		const $options = $suggestions.find( '.redirect-suggestion' );
 		if ( ! $options.length || ! $suggestions.is( ':visible' ) ) {
 			return;
 		}
@@ -232,7 +270,10 @@ jQuery( document ).ready( function ( $ ) {
 		switch ( e.keyCode ) {
 			case 40: // Down arrow
 				e.preventDefault();
-				selectedIndex = Math.min( selectedIndex + 1, $options.length - 1 );
+				selectedIndex = Math.min(
+					selectedIndex + 1,
+					$options.length - 1
+				);
 				updateHighlight();
 				break;
 			case 38: // Up arrow
@@ -255,21 +296,30 @@ jQuery( document ).ready( function ( $ ) {
 
 	// Sync display field to hidden field when user types directly.
 	$display.on( 'input', function () {
-		var val = $( this ).val().trim();
+		const val = $( this ).val().trim();
 		$( '#redirect_to' ).val( val );
 		selectedIndex = -1; // Reset selection on new input.
 
 		// Only search if it looks like text (not a URL or path or number).
 		clearTimeout( searchTimeout );
-		if ( val.length < 2 || /^[\/0-9]/.test( val ) || /^https?:/.test( val ) ) {
+		if (
+			val.length < 2 ||
+			/^[\/0-9]/.test( val ) ||
+			/^https?:/.test( val )
+		) {
 			hideSuggestions();
 			return;
 		}
 
 		searchTimeout = setTimeout( function () {
 			wp.apiFetch( {
-				path: '/wp/v2/search?search=' + encodeURIComponent( val ) + '&subtype=post,page&per_page=10'
-			} ).then( renderSuggestions ).catch( hideSuggestions );
+				path:
+					'/wp/v2/search?search=' +
+					encodeURIComponent( val ) +
+					'&subtype=post,page&per_page=10',
+			} )
+				.then( renderSuggestions )
+				.catch( hideSuggestions );
 		}, 300 );
 	} );
 
@@ -282,7 +332,9 @@ jQuery( document ).ready( function ( $ ) {
 
 	// Highlight on hover (also updates selectedIndex for consistency).
 	$suggestions.on( 'mouseenter', '.redirect-suggestion', function () {
-		selectedIndex = $suggestions.find( '.redirect-suggestion' ).index( this );
+		selectedIndex = $suggestions
+			.find( '.redirect-suggestion' )
+			.index( this );
 		updateHighlight();
 	} );
 } );

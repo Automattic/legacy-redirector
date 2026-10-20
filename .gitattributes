@@ -23,6 +23,7 @@
 /package-lock.json     export-ignore
 /phpunit-integration.xml.dist export-ignore
 /phpunit.xml.dist      export-ignore
+/playwright.config.js   export-ignore
 
 # Auto detect text files and perform LF normalization
 * text=auto

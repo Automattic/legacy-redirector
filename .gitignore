@@ -9,5 +9,8 @@
 # Node.js
 /node_modules/
 
+# Playwright output
+/artifacts/
+
 # wp-env local overrides
 /.wp-env.override.json
