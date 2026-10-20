@@ -119,7 +119,7 @@ final class ColumnsManagerTest extends MonkeyStubs {
 		$output = $this->render_from_column();
 
 		$this->assertStringContainsString(
-			'<span style="color: #888;">' . $expected . '</span>',
+			'<span style="color: #646970;">' . $expected . '</span>',
 			$output,
 			'The gray home URL prefix should precede the source path wherever home is not the domain root.'
 		);
@@ -150,7 +150,7 @@ final class ColumnsManagerTest extends MonkeyStubs {
 		$output = $this->render_from_column();
 
 		$this->assertStringNotContainsString(
-			'color: #888;',
+			'color: #646970;',
 			$output,
 			'Home at the domain root has no ambiguity, so no prefix should be rendered.'
 		);

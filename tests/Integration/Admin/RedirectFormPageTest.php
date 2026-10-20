@@ -692,6 +692,26 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
+	 * Test the form exposes its controls to assistive technology.
+	 *
+	 * The destination field is a combobox owning its suggestions, and the
+	 * status radios have a group name.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_add_page
+	 */
+	public function test_add_page_names_its_controls_for_assistive_technology(): void {
+		$this->login_as_redirect_manager();
+
+		ob_start();
+		$this->page->render_add_page();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="redirect_to_suggestions"', $html );
+		$this->assertStringContainsString( 'id="redirect_to_suggestions" role="listbox"', $html );
+		$this->assertMatchesRegularExpression( '#<fieldset>\s*<legend class="screen-reader-text">Status</legend>#', $html );
+	}
+
+	/**
 	 * Test choosing the disabled status creates a draft redirect.
 	 *
 	 * The redirect must never pass through a published state on the way: a
@@ -1177,7 +1197,10 @@ final class RedirectFormPageTest extends TestCase {
 		preg_match( '/^var legacyRedirectorForm = (\{.*\});$/s', $data, $matches );
 
 		$settings = json_decode( $matches[1], true );
-		$this->assertSame( array( 'postId', 'duplicateMessage', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage' ), array_keys( $settings ) );
+		$this->assertSame( array( 'postId', 'duplicateMessage', 'reservedMessage', 'occupiedMessage', 'hostNotAllowedMessage', 'suggestionsMessage', 'noSuggestionsMessage' ), array_keys( $settings ) );
+
+		// The inline messages and suggestions are announced through wp.a11y.
+		$this->assertContains( 'wp-a11y', wp_scripts()->registered['legacy-redirector-form']->deps );
 	}
 
 	/**

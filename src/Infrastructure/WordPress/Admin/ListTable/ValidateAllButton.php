@@ -137,7 +137,7 @@ final class ValidateAllButton {
 		?>
 		<div class="alignleft actions" id="legacy-redirector-validate-all">
 			<button type="button" class="button" data-restart="<?php echo $status['in_progress'] ? '0' : '1'; ?>" title="<?php echo esc_attr( $title ); ?>"><?php echo esc_html( $label ); ?></button>
-			<progress max="1" value="0" hidden></progress>
+			<progress max="1" value="0" hidden aria-label="<?php esc_attr_e( 'Validation progress', 'legacy-redirector' ); ?>"></progress>
 			<span role="status"><?php echo esc_html( $this->status_text( $status, $counts ) ); ?></span>
 			<?php if ( $show_flagged ) : ?>
 				<a href="<?php echo esc_url( $flagged_url ); ?>"><?php esc_html_e( 'Show them', 'legacy-redirector' ); ?></a>
@@ -208,7 +208,7 @@ final class ValidateAllButton {
 		if ( ! $background ) {
 			return sprintf(
 				/* translators: 1: redirects checked so far, 2: total redirects */
-				_n( 'Validation in progress: %1$s of %2$s redirect checked.', 'Validation in progress: %1$s of %2$s redirects checked.', $total, 'legacy-redirector' ),
+				_n( 'Validation in progress: %1$s of %2$s redirect checked. Stay on this page until it finishes.', 'Validation in progress: %1$s of %2$s redirects checked. Stay on this page until it finishes.', $total, 'legacy-redirector' ),
 				number_format_i18n( $checked ),
 				number_format_i18n( $total )
 			);

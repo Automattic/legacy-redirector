@@ -421,6 +421,7 @@ final class UITest extends TestCase {
 		// External filter should have "current" class.
 		$this->assertArrayHasKey( 'to_external', $result );
 		$this->assertStringContainsString( 'class="current"', $result['to_external'] );
+		$this->assertStringContainsString( 'aria-current="page"', $result['to_external'] );
 	}
 
 	/**

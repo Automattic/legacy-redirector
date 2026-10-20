@@ -126,40 +126,19 @@ final class ViewFilters {
 		// "To ID" filter.
 		if ( $counts['post_id'] > 0 ) {
 			$post_id_url    = add_query_arg( 'destination_type', 'post_id', $base_url );
-			$post_id_class  = 'post_id' === $current_dest_type ? 'current' : '';
-			$views['to_id'] = sprintf(
-				'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
-				esc_url( $post_id_url ),
-				esc_attr( $post_id_class ),
-				esc_html__( 'To ID', 'legacy-redirector' ),
-				number_format_i18n( $counts['post_id'] )
-			);
+			$views['to_id'] = self::view_link( $post_id_url, __( 'To ID', 'legacy-redirector' ), $counts['post_id'], 'post_id' === $current_dest_type );
 		}
 
 		// "To Path" filter (internal paths/URLs).
 		if ( $counts['path'] > 0 ) {
 			$path_url         = add_query_arg( 'destination_type', 'path', $base_url );
-			$path_class       = 'path' === $current_dest_type ? 'current' : '';
-			$views['to_path'] = sprintf(
-				'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
-				esc_url( $path_url ),
-				esc_attr( $path_class ),
-				esc_html__( 'To Path', 'legacy-redirector' ),
-				number_format_i18n( $counts['path'] )
-			);
+			$views['to_path'] = self::view_link( $path_url, __( 'To Path', 'legacy-redirector' ), $counts['path'], 'path' === $current_dest_type );
 		}
 
 		// "To External" filter.
 		if ( $counts['external'] > 0 ) {
 			$external_url         = add_query_arg( 'destination_type', 'external', $base_url );
-			$external_class       = 'external' === $current_dest_type ? 'current' : '';
-			$views['to_external'] = sprintf(
-				'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
-				esc_url( $external_url ),
-				esc_attr( $external_class ),
-				esc_html__( 'To External', 'legacy-redirector' ),
-				number_format_i18n( $counts['external'] )
-			);
+			$views['to_external'] = self::view_link( $external_url, __( 'To External', 'legacy-redirector' ), $counts['external'], 'external' === $current_dest_type );
 		}
 
 		return $views;
@@ -199,21 +178,16 @@ final class ViewFilters {
 			admin_url( 'edit.php?post_type=' . PostType::POST_TYPE )
 		);
 
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
-		$current = isset( $_GET['audit_flagged'] ) ? 'current' : '';
-
-		$views['audit_flagged'] = sprintf(
-			'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
-			esc_url( $url ),
-			esc_attr( $current ),
-			esc_html(
-				sprintf(
-					/* translators: %s: how long ago the last full check completed, e.g. "2 hours" */
-					__( 'Has issues (checked %s ago)', 'legacy-redirector' ),
-					human_time_diff( $checked_at )
-				)
+		$views['audit_flagged'] = self::view_link(
+			$url,
+			sprintf(
+				/* translators: %s: how long ago the last full check completed, e.g. "2 hours" */
+				__( 'Has issues (checked %s ago)', 'legacy-redirector' ),
+				human_time_diff( $checked_at )
 			),
-			number_format_i18n( $counts['problem'] + $counts['warning'] )
+			$counts['problem'] + $counts['warning'],
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
+			isset( $_GET['audit_flagged'] )
 		);
 
 		return $views;
@@ -264,18 +238,35 @@ final class ViewFilters {
 			return $views;
 		}
 
-		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
-		$current = isset( $_GET['duplicate_sources'] ) ? 'current' : '';
-
-		$views['duplicate_sources'] = sprintf(
-			'<a href="%s" class="%s">%s <span class="count">(%s)</span></a>',
-			esc_url( self::duplicate_sources_url() ),
-			esc_attr( $current ),
-			esc_html__( 'Duplicate sources', 'legacy-redirector' ),
-			number_format_i18n( $count )
+		$views['duplicate_sources'] = self::view_link(
+			self::duplicate_sources_url(),
+			__( 'Duplicate sources', 'legacy-redirector' ),
+			$count,
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for filter display.
+			isset( $_GET['duplicate_sources'] )
 		);
 
 		return $views;
+	}
+
+	/**
+	 * Build one view link the way core builds its own status views,
+	 * including aria-current on the view being shown.
+	 *
+	 * @param string $url        The view's URL.
+	 * @param string $label      The view's label.
+	 * @param int    $count      How many redirects it holds.
+	 * @param bool   $is_current Whether it is the view being shown.
+	 * @return string The link markup.
+	 */
+	private static function view_link( string $url, string $label, int $count, bool $is_current ): string {
+		return sprintf(
+			'<a href="%1$s"%2$s>%3$s <span class="count">(%4$s)</span></a>',
+			esc_url( $url ),
+			$is_current ? ' class="current" aria-current="page"' : '',
+			esc_html( $label ),
+			number_format_i18n( $count )
+		);
 	}
 
 	/**

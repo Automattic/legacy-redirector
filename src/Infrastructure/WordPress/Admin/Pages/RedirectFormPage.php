@@ -101,7 +101,7 @@ final class RedirectFormPage {
 		wp_enqueue_script(
 			'legacy-redirector-form',
 			plugins_url( 'js/admin-redirect-form.js', \Automattic\LegacyRedirector\PLUGIN_FILE ),
-			array( 'jquery', 'wp-api-fetch' ),
+			array( 'jquery', 'wp-a11y', 'wp-api-fetch' ),
 			\Automattic\LegacyRedirector\VERSION,
 			true
 		);
@@ -118,6 +118,8 @@ final class RedirectFormPage {
 				'reservedMessage'       => self::reserved_source_message(),
 				'occupiedMessage'       => self::occupied_source_message(),
 				'hostNotAllowedMessage' => self::host_not_allowed_message(),
+				'suggestionsMessage'    => __( 'Suggestions available. Use the up and down arrow keys to choose one, and Enter to select it.', 'legacy-redirector' ),
+				'noSuggestionsMessage'  => __( 'No matching posts or pages.', 'legacy-redirector' ),
 			)
 		);
 	}

@@ -268,42 +268,59 @@ final class ColumnsManager {
 			if ( $this->auditor->destination_needs_http( $redirect ) ) {
 				$is_external = ! $redirect->destination()->is_post_id() && $redirect->destination()->as_url()->is_absolute();
 
-				printf(
-					'<span class="dashicons dashicons-editor-help" style="color: #787c82;" aria-hidden="true"></span><span title="%1$s">%2$s</span>',
-					esc_attr(
-						$is_external
-							? __( 'External destination: only a request can tell whether it responds. Use Test.', 'legacy-redirector' )
-							: __( 'No post serves this path, but it may be an archive, a rewrite endpoint, or served outside WordPress. Use Test to check it responds.', 'legacy-redirector' )
-					),
-					esc_html__( 'Not fully checked', 'legacy-redirector' )
+				self::render_finding(
+					'dashicons-editor-help',
+					'#787c82',
+					'',
+					__( 'Not fully checked', 'legacy-redirector' ),
+					$is_external
+						? __( 'External destination: only a request can tell whether it responds. Use Test.', 'legacy-redirector' )
+						: __( 'No post serves this path, but it may be an archive, a rewrite endpoint, or served outside WordPress. Use Test to check it responds.', 'legacy-redirector' )
 				);
 				return;
 			}
 
-			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'No issues found', 'legacy-redirector' ) . '</span>';
+			echo '<span class="dashicons dashicons-yes-alt" style="color: #00a32a;" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'No issues found', 'legacy-redirector' ) . '</span>';
 			return;
 		}
 
-		foreach ( $findings as $index => $finding ) {
-			if ( $index > 0 ) {
-				echo '<br />';
-			}
-
+		foreach ( $findings as $finding ) {
 			$is_warning = $finding->is_warning();
 
-			// What is wrong and what to do about it: on hover, and as text for
-			// screen readers, which do not reliably announce a title.
-			$detail = $finding->description() . '. ' . $finding->remedy() . '.';
-
-			printf(
-				'<span class="dashicons %1$s" style="color: %2$s;" aria-hidden="true"></span><span class="screen-reader-text">%3$s </span><span title="%4$s">%5$s</span><span class="screen-reader-text"> %4$s</span>',
+			self::render_finding(
 				$is_warning ? 'dashicons-flag' : 'dashicons-warning',
 				$is_warning ? '#dba617' : '#d63638',
-				$is_warning ? esc_html__( 'Warning:', 'legacy-redirector' ) : esc_html__( 'Problem:', 'legacy-redirector' ),
-				esc_attr( $detail ),
-				esc_html( $finding->label() )
+				$is_warning ? __( 'Warning:', 'legacy-redirector' ) : __( 'Problem:', 'legacy-redirector' ),
+				$finding->label(),
+				$finding->description() . '. ' . $finding->remedy() . '.'
 			);
 		}
+	}
+
+	/**
+	 * Render one Health line: a severity icon and label that open to say what
+	 * is wrong and what to do about it.
+	 *
+	 * A native disclosure rather than a title tooltip, so the detail is in
+	 * reach of keyboard and touch users, not only a hovering mouse. The Test
+	 * script builds the same markup for its fresh result.
+	 *
+	 * @param string $icon     Dashicons class.
+	 * @param string $color    Icon color.
+	 * @param string $severity Screen reader prefix, such as "Warning:", or ''.
+	 * @param string $label    Short label.
+	 * @param string $detail   What is wrong and what to do about it.
+	 * @return void
+	 */
+	private static function render_finding( string $icon, string $color, string $severity, string $label, string $detail ): void {
+		printf(
+			'<details class="legacy-redirector-finding"><summary><span class="dashicons %1$s" style="color: %2$s;" aria-hidden="true"></span>%3$s%4$s</summary><p>%5$s</p></details>',
+			esc_attr( $icon ),
+			esc_attr( $color ),
+			'' === $severity ? '' : '<span class="screen-reader-text">' . esc_html( $severity ) . ' </span>',
+			esc_html( $label ),
+			esc_html( $detail )
+		);
 	}
 
 	/**
@@ -343,7 +360,7 @@ final class ColumnsManager {
 			return;
 		}
 
-		printf( '<span style="color: #888;">%s</span>', esc_html( $prefix ) );
+		printf( '<span style="color: #646970;">%s</span>', esc_html( $prefix ) );
 	}
 
 	/**
@@ -377,10 +394,11 @@ final class ColumnsManager {
 	 */
 	private function render_status_column( Redirect $redirect ): void {
 		if ( $redirect->is_active() ) {
-			echo '<span class="dashicons dashicons-yes-alt" style="color: #46b450;" title="' . esc_attr__( 'Enabled', 'legacy-redirector' ) . '"></span> ';
+			// The icon repeats the text beside it, so it is hidden from screen readers.
+			echo '<span class="dashicons dashicons-yes-alt" style="color: #00a32a;" aria-hidden="true"></span> ';
 			echo esc_html__( 'Enabled', 'legacy-redirector' );
 		} else {
-			echo '<span class="dashicons dashicons-no" style="color: #dc3232;" title="' . esc_attr__( 'Disabled', 'legacy-redirector' ) . '"></span> ';
+			echo '<span class="dashicons dashicons-no" style="color: #d63638;" aria-hidden="true"></span> ';
 			echo esc_html__( 'Disabled', 'legacy-redirector' );
 			$this->render_duplicate_note( $redirect );
 		}

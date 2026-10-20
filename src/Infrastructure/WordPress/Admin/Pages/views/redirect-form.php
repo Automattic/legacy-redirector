@@ -31,14 +31,14 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 		<div id="message" class="updated notice is-dismissible">
 			<p>
 				<?php esc_html_e( 'Redirect created successfully.', 'legacy-redirector' ); ?>
-				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?></a>
+				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?><span class="screen-reader-text"> <?php esc_html_e( '(opens in a new tab)', 'legacy-redirector' ); ?></span></a>
 			</p>
 		</div>
 	<?php elseif ( 'updated' === $message && $is_edit ) : ?>
 		<div id="message" class="updated notice is-dismissible">
 			<p>
 				<?php esc_html_e( 'Redirect updated successfully.', 'legacy-redirector' ); ?>
-				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?></a>
+				<a href="<?php echo esc_url( home_url( $redirect_from ) ); ?>" target="_blank"><?php esc_html_e( 'Test it', 'legacy-redirector' ); ?><span class="screen-reader-text"> <?php esc_html_e( '(opens in a new tab)', 'legacy-redirector' ); ?></span></a>
 			</p>
 		</div>
 	<?php endif; ?>
@@ -74,8 +74,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 							<span class="code" style="color: #646970; white-space: nowrap;"><?php echo esc_html( $home_prefix ); ?></span>
 							<input type="text" name="redirect_from" id="redirect_from" value="<?php echo esc_attr( '/' === $redirect_from ? '/' : ltrim( $redirect_from, '/' ) ); ?>" class="regular-text code" style="margin: 0; min-width: 0;" required placeholder="old-page" aria-describedby="redirect_from_error redirect_from_warning redirect_from_description" />
 						</div>
-						<p id="redirect_from_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
-						<p id="redirect_from_warning" class="notice notice-warning inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
+						<p id="redirect_from_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;"></p>
+						<p id="redirect_from_warning" class="notice notice-warning inline" style="display: none; padding: 8px 12px;"></p>
 						<p class="description" id="redirect_from_description">
 							<?php
 							printf(
@@ -101,17 +101,26 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 						<label for="redirect_to_display"><?php esc_html_e( 'Redirect To', 'legacy-redirector' ); ?> <span class="required">*</span></label>
 					</th>
 					<td style="position: relative;">
-						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" class="regular-text" autocomplete="off" required aria-describedby="redirect_to_error" />
+						<input type="text" id="redirect_to_display" value="<?php echo esc_attr( $destination_display ); ?>" class="regular-text" autocomplete="off" required role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="redirect_to_suggestions" aria-describedby="redirect_to_error redirect_to_description" />
 						<input type="hidden" name="redirect_to" id="redirect_to" value="<?php echo esc_attr( (string) $destination_value ); ?>" />
-						<p id="redirect_to_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;" aria-live="polite"></p>
-						<p class="description"><?php esc_html_e( 'Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts.', 'legacy-redirector' ); ?></p>
-						<div id="redirect_to_suggestions" style="display: none; position: absolute; background: #fff; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; z-index: 100; width: 25em; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>
+						<p id="redirect_to_error" class="notice notice-error inline" style="display: none; padding: 8px 12px;"></p>
+						<p class="description" id="redirect_to_description"><?php esc_html_e( 'Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts.', 'legacy-redirector' ); ?></p>
+						<div id="redirect_to_suggestions" role="listbox" aria-label="<?php esc_attr_e( 'Matching posts and pages', 'legacy-redirector' ); ?>" style="display: none; position: absolute; background: #fff; border: 1px solid #ddd; max-height: 200px; overflow-y: auto; z-index: 100; width: 25em; box-shadow: 0 2px 5px rgba(0,0,0,0.1);"></div>
+						<style>
+							/* The outline, unlike a background tint, survives forced-colors mode. */
+							#redirect_to_suggestions .redirect-suggestion[aria-selected="true"] {
+								background-color: #f0f0f1;
+								outline: 2px solid #2271b1;
+								outline-offset: -2px;
+							}
+						</style>
 					</td>
 				</tr>
 				<tr class="form-field">
 					<th scope="row"><?php esc_html_e( 'Status', 'legacy-redirector' ); ?></th>
 					<td>
 						<fieldset>
+							<legend class="screen-reader-text"><?php esc_html_e( 'Status', 'legacy-redirector' ); ?></legend>
 							<label>
 								<input type="radio" name="redirect_status" value="publish" <?php checked( $redirect_status, 'publish' ); ?> />
 								<?php esc_html_e( 'Enabled', 'legacy-redirector' ); ?>
