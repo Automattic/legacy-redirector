@@ -46,7 +46,7 @@
 	},
 	"scripts": {
 		"coverage": "@php ./vendor/bin/phpunit --coverage-html ./build/coverage-html",
-		"coverage-ci": "@php ./vendor/bin/phpunit",
+		"coverage-ci": "@php ./vendor/bin/phpunit --coverage-text=/dev/null",
 		"cs": "@php ./vendor/bin/phpcs -q",
 		"cs-fix": "@php ./vendor/bin/phpcbf -q",
 		"i18n": "@php wp i18n make-pot . ./languages/legacy-redirector.pot",
@@ -64,7 +64,7 @@
 	},
 	"scripts-descriptions": {
 		"coverage": "Run tests with code coverage reporting",
-		"coverage-ci": "Run tests with code coverage reporting and send results to stdout",
+		"coverage-ci": "Run unit tests with a coverage driver, so the strict covers-annotation checks apply",
 		"cs": "Run PHP Code Sniffer",
 		"cs-fix": "Run PHP Code Sniffer and fix violations",
 		"i18n": "Generate a POT file for translation",

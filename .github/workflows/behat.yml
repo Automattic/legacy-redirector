@@ -33,9 +33,26 @@ permissions:
 
 jobs:
   behat:
-    name: Behat Tests (WP trunk, PHP 8.5)
+    name: Behat Tests (WP ${{ matrix.wordpress }}, PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Lowest supported WP with the lowest supported PHP.
+          - wordpress: '6.8'
+            php: '8.3'
+          # Latest WP with the latest PHP.
+          - wordpress: 'master'
+            php: '8.5'
+
+    env:
+      WP_ENV_CORE: WordPress/WordPress#${{ matrix.wordpress }}
+      # Behat drives WP-CLI inside the wp-env container, so the matrix PHP
+      # version has to reach wp-env, not just the runner.
+      WP_ENV_PHP_VERSION: ${{ matrix.php }}
 
     steps:
       - name: Checkout code
@@ -52,10 +69,10 @@ jobs:
       - name: Install Node.js dependencies
         run: npm ci
 
-      - name: Setup PHP 8.5
+      - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
-          php-version: '8.5'
+          php-version: ${{ matrix.php }}
           coverage: none
 
       - name: Install Composer dependencies

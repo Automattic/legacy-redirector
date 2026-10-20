@@ -48,6 +48,14 @@ composer test:behat
 composer test
 ```
 
+PHPUnit only enforces the strict `@covers`/`@uses` checks when a coverage driver is running, so a plain run can pass where CI fails. Before pushing, run the strict variants CI uses. The integration ones need wp-env started with `--xdebug=coverage`:
+
+```bash
+XDEBUG_MODE=coverage composer coverage-ci
+composer test:integration-coverage
+composer test:integration-ms-coverage
+```
+
 ### Code Quality
 
 ```bash
