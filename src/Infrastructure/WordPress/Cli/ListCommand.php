@@ -245,11 +245,7 @@ final class ListCommand extends WP_CLI_Command {
 		// An export can ask for every redirect on the site, so ids and csv are
 		// read a page at a time instead of holding the whole set in memory.
 		if ( 'ids' === $format ) {
-			$ids = array();
-			foreach ( $this->each_matching( $criteria ) as $redirect ) {
-				$ids[] = $redirect->id();
-			}
-			WP_CLI::line( implode( ' ', $ids ) );
+			WP_CLI::line( implode( ' ', iterator_to_array( $this->each_matching( $criteria, true ), false ) ) );
 			return;
 		}
 
@@ -308,25 +304,27 @@ final class ListCommand extends WP_CLI_Command {
 	 * one page with no flush between them.
 	 *
 	 * @param RedirectCriteria $criteria The criteria; its limit and offset bound the whole walk.
-	 * @return \Generator<int, Redirect> The matching redirects.
+	 * @param bool             $ids_only Yield only the IDs, without loading the rows.
+	 * @return \Generator<int, Redirect|int> The matching redirects, or their IDs.
 	 */
-	private function each_matching( RedirectCriteria $criteria ): \Generator {
+	private function each_matching( RedirectCriteria $criteria, bool $ids_only = false ): \Generator {
 		$fetched = 0;
 
 		while ( $fetched < $criteria->limit() ) {
-			$size = min( self::PAGE_SIZE, $criteria->limit() - $fetched );
-			$page = $this->query_repository->find_matching(
-				new RedirectCriteria(
-					$criteria->status(),
-					$criteria->destination_type(),
-					$criteria->search(),
-					$criteria->order_by(),
-					$criteria->order(),
-					$size,
-					$criteria->offset() + $fetched,
-					$criteria->issues()
-				)
+			$size          = min( self::PAGE_SIZE, $criteria->limit() - $fetched );
+			$page_criteria = new RedirectCriteria(
+				$criteria->status(),
+				$criteria->destination_type(),
+				$criteria->search(),
+				$criteria->order_by(),
+				$criteria->order(),
+				$size,
+				$criteria->offset() + $fetched,
+				$criteria->issues()
 			);
+			$page          = $ids_only
+				? $this->query_repository->find_matching_ids( $page_criteria )
+				: $this->query_repository->find_matching( $page_criteria );
 
 			foreach ( $page as $redirect ) {
 				yield $redirect;

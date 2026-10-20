@@ -114,6 +114,24 @@ final class PostTypeRedirectQueryRepository implements RedirectQueryRepositoryIn
 	}
 
 	/**
+	 * Find the IDs of the redirects find_matching() would return.
+	 *
+	 * An ID query is never split, and with cache_results off it stores
+	 * nothing either.
+	 *
+	 * @param RedirectCriteria $criteria The query criteria.
+	 * @return int[] The matching redirect IDs, in the same order.
+	 */
+	#[\Override]
+	public function find_matching_ids( RedirectCriteria $criteria ): array {
+		$args                  = $this->build_query_args( $criteria );
+		$args['fields']        = 'ids';
+		$args['cache_results'] = false;
+
+		return ( new WP_Query( $args ) )->posts;
+	}
+
+	/**
 	 * Count redirects matching the given criteria.
 	 *
 	 * @param RedirectCriteria $criteria The query criteria (limit/offset are ignored).

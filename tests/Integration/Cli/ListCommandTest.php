@@ -323,11 +323,11 @@ final class ListCommandTest extends CliTestCase {
 		$wpdb->query( "INSERT INTO {$wpdb->posts} (post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_type, to_ping, pinged, post_content_filtered) VALUES " . implode( ',', $values ) );
 		$ids = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s ORDER BY ID DESC", PostType::POST_TYPE ) ) );
 
-		$page_sizes = array();
+		$pages = array();
 		add_action(
 			'pre_get_posts',
-			static function ( \WP_Query $query ) use ( &$page_sizes ): void {
-				$page_sizes[] = (int) $query->get( 'posts_per_page' );
+			static function ( \WP_Query $query ) use ( &$pages ): void {
+				$pages[] = array( (int) $query->get( 'posts_per_page' ), $query->get( 'fields' ) );
 			}
 		);
 
@@ -340,7 +340,7 @@ final class ListCommandTest extends CliTestCase {
 			)
 		);
 		$this->assertSame( implode( ' ', $ids ), trim( $this->get_stdout() ) );
-		$this->assertSame( array( 5000, 5000 ), $page_sizes, 'Each query loads at most one page.' );
+		$this->assertSame( array( array( 5000, 'ids' ), array( 5000, 'ids' ) ), $pages, 'Each query reads at most one page of IDs, not rows.' );
 
 		$this->invoke_command(
 			$this->command,

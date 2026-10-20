@@ -63,6 +63,19 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 	}
 
 	/**
+	 * The ID query pages in the same order as the full one, tiebreaker included.
+	 */
+	public function test_find_matching_ids_pages_like_find_matching(): void {
+		$this->create_redirects_with_one_date( 3 );
+		$criteria = new RedirectCriteria( null, null, null, 'date', 'DESC', 2, 1 );
+
+		$this->assertSame(
+			array_map( static fn ( Redirect $redirect ): ?int => $redirect->id(), $this->query_repository()->find_matching( $criteria ) ),
+			$this->query_repository()->find_matching_ids( $criteria )
+		);
+	}
+
+	/**
 	 * Ordering by ID needs no tiebreaker and is passed through as asked.
 	 */
 	public function test_ordering_by_id_is_passed_through(): void {
