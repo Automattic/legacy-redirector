@@ -48,6 +48,45 @@ abstract class TestCase extends WPTestUtilsTestCase {
 	}
 
 	/**
+	 * Run code that may redirect and return the redirect it sends, without letting it exit.
+	 *
+	 * Throws from x_redirect_by, the last filter wp_redirect() applies, so
+	 * the code under test stops before it sends a header or reaches its exit.
+	 * Any other exception the code throws is passed on.
+	 *
+	 * @param callable $action The code to run.
+	 * @return array{location: string, status: int, by: string}|null The redirect, or null if none was sent.
+	 *
+	 * @throws \RuntimeException Whatever the code throws, other than the capture's own.
+	 */
+	protected function redirect_sent_by( callable $action ): ?array {
+		$sent    = null;
+		$capture = static function ( $by, $status, $location ) use ( &$sent ) {
+			$sent = array(
+				'location' => (string) $location,
+				'status'   => (int) $status,
+				'by'       => (string) $by,
+			);
+
+			throw new \RuntimeException( 'Redirect sent.' );
+		};
+
+		add_filter( 'x_redirect_by', $capture, PHP_INT_MAX, 3 );
+
+		try {
+			$action();
+		} catch ( \RuntimeException $e ) {
+			if ( null === $sent ) {
+				throw $e;
+			}
+		} finally {
+			remove_filter( 'x_redirect_by', $capture, PHP_INT_MAX );
+		}
+
+		return $sent;
+	}
+
+	/**
 	 * Strips the manage_redirects capability and its version option.
 	 *
 	 * @return void

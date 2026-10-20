@@ -20,10 +20,10 @@ use Mockery;
 /**
  * RedirectRequestHandlerTest class.
  *
- * Tests the request-handling shell around RedirectResolver. The redirect
- * itself cannot be unit tested (wp_safe_redirect is followed by exit), so
- * these tests cover the early-exit paths, the Cache-Control header, and
- * the allowed-hosts filter logic.
+ * Tests the request-handling shell around RedirectResolver: the early-exit
+ * paths and the Cache-Control header, which a CLI test run cannot observe.
+ * The redirect itself, and the allowed_redirect_hosts check before it, are
+ * tested against real WordPress in the integration RedirectRequestHandlerTest.
  *
  * RedirectResolver is final, so the handler is tested with a real resolver
  * over a mocked repository.
@@ -52,6 +52,13 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	private RedirectRequestHandler $handler;
 
 	/**
+	 * REQUEST_URI before the test, restored in tear_down() even if the test fails.
+	 *
+	 * @var string|null
+	 */
+	private $original_request_uri;
+
+	/**
 	 * Sets up test fixtures.
 	 *
 	 * @return void
@@ -63,8 +70,24 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 		$this->handler    = new RedirectRequestHandler( new RedirectResolver( $this->repository ) );
 
 		$GLOBALS['legacy_redirector_sent_headers'] = array();
+		$this->original_request_uri                = $_SERVER['REQUEST_URI'] ?? null;
 
 		Functions\when( 'is_user_logged_in' )->justReturn( false );
+	}
+
+	/**
+	 * Restores REQUEST_URI.
+	 *
+	 * @return void
+	 */
+	protected function tear_down(): void {
+		if ( null !== $this->original_request_uri ) {
+			$_SERVER['REQUEST_URI'] = $this->original_request_uri;
+		} else {
+			unset( $_SERVER['REQUEST_URI'] );
+		}
+
+		parent::tear_down();
 	}
 
 	/**
@@ -180,9 +203,6 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 			->shouldNotReceive( 'find_by_source' );
 
 		$this->handler->maybe_redirect();
-
-		// If we get here without a lookup, the test passes.
-		$this->assertTrue( true );
 	}
 
 	/**
@@ -191,8 +211,6 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::maybe_redirect
 	 */
 	public function test_maybe_redirect_exits_early_when_request_uri_empty(): void {
-		// Backup and clear REQUEST_URI.
-		$original_request_uri   = $_SERVER['REQUEST_URI'] ?? null;
 		$_SERVER['REQUEST_URI'] = '';
 
 		Functions\expect( 'is_404' )
@@ -204,15 +222,6 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 			->shouldNotReceive( 'find_by_source' );
 
 		$this->handler->maybe_redirect();
-
-		// Restore REQUEST_URI.
-		if ( null !== $original_request_uri ) {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		} else {
-			unset( $_SERVER['REQUEST_URI'] );
-		}
-
-		$this->assertTrue( true );
 	}
 
 	/**
@@ -223,8 +232,6 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 	public function test_maybe_redirect_exits_early_when_no_redirect_found(): void {
 		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
 
-		// Set REQUEST_URI.
-		$original_request_uri   = $_SERVER['REQUEST_URI'] ?? null;
 		$_SERVER['REQUEST_URI'] = '/nonexistent-page';
 
 		Functions\expect( 'is_404' )
@@ -249,15 +256,6 @@ final class RedirectRequestHandlerTest extends MonkeyStubs {
 			->never();
 
 		$this->handler->maybe_redirect();
-
-		// Restore REQUEST_URI.
-		if ( null !== $original_request_uri ) {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		} else {
-			unset( $_SERVER['REQUEST_URI'] );
-		}
-
-		$this->assertTrue( true );
 	}
 
 	/**

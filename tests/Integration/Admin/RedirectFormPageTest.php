@@ -148,27 +148,13 @@ final class RedirectFormPageTest extends TestCase {
 	 * @return string The redirect location.
 	 */
 	private function capture_redirect(): string {
-		$capture = static function ( $location ) {
-			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Location is only read back by the test.
-			throw new \RuntimeException( (string) $location );
-		};
+		$sent = $this->redirect_sent_by( array( $this->page, 'handle_save' ) );
 
-		add_filter( 'wp_redirect', $capture );
-
-		$location = null;
-		try {
-			$this->page->handle_save();
-		} catch ( \RuntimeException $e ) {
-			$location = $e->getMessage();
-		} finally {
-			remove_filter( 'wp_redirect', $capture );
-		}
-
-		if ( null === $location ) {
+		if ( null === $sent ) {
 			$this->fail( 'Expected handle_save() to redirect.' );
 		}
 
-		return $location;
+		return $sent['location'];
 	}
 
 	/**
