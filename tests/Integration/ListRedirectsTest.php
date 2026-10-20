@@ -94,6 +94,30 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Test the Redirect To header offers no sort.
+	 *
+	 * Core cannot order by the stored destination, so the header used to sort
+	 * by date while claiming to sort by destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::register
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::set_sortable_columns
+	 */
+	public function test_redirect_to_column_is_not_sortable(): void {
+		$this->columns_manager->register();
+
+		// phpcs:ignore WordPress.NamingConventions.ValidHookName.UseUnderscores -- Core's hook name.
+		$sortable = apply_filters( 'manage_edit-' . PostType::POST_TYPE . '_sortable_columns', array( 'date' => 'date' ) );
+
+		$this->assertSame(
+			array(
+				'date' => 'date',
+				'from' => 'from',
+			),
+			$sortable
+		);
+	}
+
+	/**
 	 * Test set_columns returns translated labels.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ColumnsManager::set_columns
