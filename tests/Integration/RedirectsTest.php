@@ -246,6 +246,81 @@ final class RedirectsTest extends TestCase {
 	}
 
 	/**
+	 * Preserved query strings, and the parameters each should give the destination.
+	 *
+	 * @return array<string, array{string, array<string, mixed>}>
+	 */
+	public function data_preserved_values_with_reserved_characters(): array {
+		$cases = array();
+
+		foreach ( array( '&', '=', '#', '%', '+', ' ' ) as $character ) {
+			$value = 'x' . $character . 'p=99';
+
+			$cases[ 'value containing ' . rawurlencode( $character ) ] = array(
+				'utm_source=' . rawurlencode( $value ),
+				array(
+					'p'          => '12',
+					'utm_source' => $value,
+				),
+			);
+		}
+
+		$cases['array value'] = array(
+			'utm_source[]=1&utm_source[]=2',
+			array(
+				'p'          => '12',
+				'utm_source' => array( '1', '2' ),
+			),
+		);
+
+		$cases['array key containing &'] = array(
+			'utm_source%5Bx%26p%3D99%5D=1',
+			array(
+				'p'          => '12',
+				'utm_source' => array( 'x&p=99' => '1' ),
+			),
+		);
+
+		return $cases;
+	}
+
+	/**
+	 * A preserved value reaches the destination as that one value.
+	 *
+	 * The request's values arrive decoded from parse_str(), so a value holding
+	 * '&' or '=' would otherwise split into parameters of its own on the destination.
+	 *
+	 * @dataProvider data_preserved_values_with_reserved_characters
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 *
+	 * @param string               $query    The request's query string.
+	 * @param array<string, mixed> $expected The destination's parameters.
+	 */
+	public function test_preserved_value_arrives_as_one_parameter( string $query, array $expected ): void {
+		add_filter( 'legacy_redirector_preserve_query_params', static fn() => array( 'utm_source' ) );
+		$this->create_redirect( '/promo', 'http://example.com/?p=12' );
+
+		$url = $this->resolver()->get_redirect_data( '/promo?' . $query )['url'];
+
+		parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $params );
+		$this->assertSame( $expected, $params );
+	}
+
+	/**
+	 * A plain preserved value is appended exactly as before.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 */
+	public function test_plain_preserved_value_is_unchanged(): void {
+		add_filter( 'legacy_redirector_preserve_query_params', static fn() => array( 'utm_source' ) );
+		$this->create_redirect( '/promo', 'http://example.com/?p=12' );
+
+		$url = $this->resolver()->get_redirect_data( '/promo?utm_source=newsletter' )['url'];
+
+		$this->assertSame( 'http://example.com/?p=12&utm_source=newsletter', $url );
+	}
+
+	/**
 	 * Test redirect to a post ID works correctly (covers CLI use case).
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect

@@ -301,11 +301,40 @@ final class RedirectResolver {
 			$url = $destination->as_url()->resolve( home_url() );
 		}
 
-		// Append preserved query params.
+		// Append preserved query params. add_query_arg() inserts what it is
+		// given verbatim, and parse_str() has already decoded the values, so
+		// they are re-encoded first or a value holding '&' or '=' would add
+		// parameters of its own to the destination.
 		if ( ! empty( $preservable_params ) ) {
-			$url = add_query_arg( $preservable_params, $url );
+			$url = add_query_arg( self::encode_params( $preservable_params ), $url );
 		}
 
 		return $url;
+	}
+
+	/**
+	 * Percent-encode preserved parameters for add_query_arg().
+	 *
+	 * Uses rawurlencode(), as the plugin's other add_query_arg() callers do:
+	 * its '%20' reads as a space to any parser, where urlencode()'s '+' does so
+	 * only to form-style ones, and an external destination may not be one.
+	 * Values and nested keys come from the request, so both are encoded.
+	 * Top-level keys are the site's own names from the filter and are left
+	 * alone, so add_query_arg() still replaces a same-named key already on
+	 * the destination.
+	 *
+	 * @param array<int|string, mixed> $params      Decoded parameters, as parse_str() returns them.
+	 * @param bool                     $encode_keys Whether to encode this level's keys.
+	 * @return array<int|string, mixed> The parameters, encoded.
+	 */
+	private static function encode_params( array $params, bool $encode_keys = false ): array {
+		$encoded = array();
+
+		foreach ( $params as $key => $value ) {
+			$key             = $encode_keys ? rawurlencode( (string) $key ) : $key;
+			$encoded[ $key ] = is_array( $value ) ? self::encode_params( $value, true ) : rawurlencode( $value );
+		}
+
+		return $encoded;
 	}
 }
