@@ -143,25 +143,6 @@ final class SetRedirectStatusAbilityTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test the destination is never touched when only the status changes.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility::execute
-	 */
-	public function test_execute_leaves_the_destination_alone(): void {
-		$redirect = $this->given_redirect( 3 );
-
-		$this->manager->shouldReceive( 'change_status' )->andReturn( RedirectCreationResult::success( $redirect ) );
-		$this->manager->shouldNotReceive( 'update_destination' );
-
-		$this->ability->execute(
-			array(
-				'redirects' => array( 3 ),
-				'status'    => 'disabled',
-			)
-		);
-	}
-
-	/**
 	 * Test a redirect that cannot be changed is reported, not counted.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility::execute

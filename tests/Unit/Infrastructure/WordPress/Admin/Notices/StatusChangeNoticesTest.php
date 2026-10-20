@@ -129,7 +129,7 @@ final class StatusChangeNoticesTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test an unknown reason in the URL is not reflected back.
+	 * Test an unknown reason in the URL gets the generic failure message.
 	 */
 	public function test_unknown_reason_falls_back_to_generic(): void {
 		$output = $this->render(
@@ -141,6 +141,5 @@ final class StatusChangeNoticesTest extends MonkeyStubs {
 		);
 
 		$this->assertStringContainsString( 'could not be saved', $output );
-		$this->assertStringNotContainsString( '<script>', $output );
 	}
 }

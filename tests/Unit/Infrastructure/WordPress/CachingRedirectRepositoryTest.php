@@ -511,18 +511,24 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		Functions\expect( 'wp_cache_delete' )
 			->once()
 			->with( '1:' . $redirect->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( true );
-
-		Functions\expect( 'wp_cache_set' )
-			->once()
-			->with( '1:' . $saved_redirect->source()->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->globally()
+			->ordered()
 			->andReturn( true );
 
 		$this->inner
 			->shouldReceive( 'save' )
 			->once()
 			->with( $redirect )
+			->globally()
+			->ordered()
 			->andReturn( $saved_redirect );
+
+		Functions\expect( 'wp_cache_set' )
+			->once()
+			->with( '1:' . $saved_redirect->source()->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->globally()
+			->ordered()
+			->andReturn( true );
 
 		$result = $this->repository->save( $redirect );
 
@@ -547,27 +553,35 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 			->with( 123 )
 			->andReturn( $existing );
 
-		// Old source invalidated first, then the new source.
+		// Old and new sources both invalidated before the save, in either order.
 		Functions\expect( 'wp_cache_delete' )
 			->once()
 			->with( '1:' . $existing->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
+			->globally()
+			->ordered( 'invalidate' )
 			->andReturn( true );
 
 		Functions\expect( 'wp_cache_delete' )
 			->once()
 			->with( '1:' . $updated->source()->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( true );
-
-		Functions\expect( 'wp_cache_set' )
-			->once()
-			->with( '1:' . $updated->source()->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->globally()
+			->ordered( 'invalidate' )
 			->andReturn( true );
 
 		$this->inner
 			->shouldReceive( 'save' )
 			->once()
 			->with( $updated )
+			->globally()
+			->ordered()
 			->andReturn( $updated );
+
+		Functions\expect( 'wp_cache_set' )
+			->once()
+			->with( '1:' . $updated->source()->hash(), 123, CachingRedirectRepository::CACHE_GROUP )
+			->globally()
+			->ordered()
+			->andReturn( true );
 
 		$result = $this->repository->save( $updated );
 

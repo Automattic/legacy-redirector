@@ -319,7 +319,8 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->repository
 			->shouldReceive( 'save' )
 			->once()
-			->andReturn( $redirect );
+			->with( Mockery::on( fn( Redirect $r ) => 123 === $r->id() && 'publish' === $r->status() ) )
+			->andReturnArg( 0 );
 
 		$result = $this->manager->enable( 123 );
 
@@ -361,7 +362,8 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->repository
 			->shouldReceive( 'save' )
 			->once()
-			->andReturn( $redirect );
+			->with( Mockery::on( fn( Redirect $r ) => 123 === $r->id() && 'draft' === $r->status() ) )
+			->andReturnArg( 0 );
 
 		$result = $this->manager->disable( 123 );
 
@@ -478,7 +480,14 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->repository
 			->shouldReceive( 'save' )
 			->once()
-			->andReturn( $redirect );
+			->with(
+				Mockery::on(
+					fn( Redirect $r ) => 'publish' === $r->status()
+						&& '/updated' === $r->destination()->as_url()->value()
+						&& '/old-page' === $r->source()->path()
+				)
+			)
+			->andReturnArg( 0 );
 
 		$result = $this->manager->update_destination( 123, $new_destination, 'publish' );
 
@@ -509,7 +518,15 @@ final class RedirectManagerTest extends MonkeyStubs {
 		$this->repository
 			->shouldReceive( 'save' )
 			->once()
-			->andReturn( $redirect );
+			->with(
+				Mockery::on(
+					fn( Redirect $r ) => 123 === $r->id()
+						&& '/new-source' === $r->source()->path()
+						&& '/new-destination' === $r->destination()->as_url()->value()
+						&& 'publish' === $r->status()
+				)
+			)
+			->andReturnArg( 0 );
 
 		$result = $this->manager->update_redirect( 123, '/new-source', $new_destination );
 
