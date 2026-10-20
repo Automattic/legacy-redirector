@@ -228,6 +228,36 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	}
 
 	/**
+	 * A retry strips the home path, as the walk that failed the row would have.
+	 *
+	 * The retry comes once the upgrade has completed, when a walk would no
+	 * longer take the data for 1.x.
+	 *
+	 * @return void
+	 */
+	public function test_retry_strips_the_home_path(): void {
+		global $wpdb;
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		$this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $refuse );
+
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+		$this->assertSame( 1, $this->upgrader->pending_retries() );
+
+		$retry = $this->upgrader->retry_failed();
+
+		$post = get_post( $post_id );
+		$this->assertSame( '/old-page', $post->post_title );
+		$this->assertSame( md5( '/old-page' ), $post->post_name );
+		$this->assertSame( 'publish', $post->post_status );
+		$this->assertSame( 1, $retry['repathed'] );
+	}
+
+	/**
 	 * A refused final version write keeps the walk's state, so the home path is not stripped twice.
 	 *
 	 * Were the state cleared, the next batch would take the site for 1.x data

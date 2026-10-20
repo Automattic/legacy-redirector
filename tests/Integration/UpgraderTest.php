@@ -89,18 +89,20 @@ final class UpgraderTest extends TestCase {
 	 * Create a redirect exactly as version 1.x would have stored it.
 	 *
 	 * 1.x called wp_insert_post() with no post_status, so WordPress defaulted
-	 * every redirect to 'draft'.
+	 * every redirect to 'draft'. A redirect to a post kept the post's ID in
+	 * post_parent and left post_excerpt empty.
 	 *
-	 * @param string $source_path The source path as 1.x stored it.
-	 * @param string $destination The destination URL.
+	 * @param string     $source_path The source path as 1.x stored it.
+	 * @param string|int $destination The destination URL, or the ID of the post to redirect to.
 	 * @return int The created post ID.
 	 */
-	private function create_legacy_redirect( string $source_path, string $destination = 'https://example.com/new' ): int {
+	private function create_legacy_redirect( string $source_path, string|int $destination = 'https://example.com/new' ): int {
 		return (int) wp_insert_post(
 			array(
 				'post_name'    => md5( $source_path ),
 				'post_title'   => $source_path,
-				'post_excerpt' => $destination,
+				'post_excerpt' => is_int( $destination ) ? '' : $destination,
+				'post_parent'  => is_int( $destination ) ? $destination : 0,
 				'post_type'    => PostType::POST_TYPE,
 				'post_status'  => 'draft',
 			)
@@ -707,6 +709,32 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * Failures from every batch of a walk await a retry, not only the last batch's.
+	 *
+	 * @return void
+	 */
+	public function test_failures_from_every_batch_of_a_walk_await_a_retry() {
+		$first_id  = $this->create_legacy_redirect( '/first/' );
+		$second_id = $this->create_legacy_redirect( '/second/' );
+
+		$this->with_row_writes_refused(
+			function (): void {
+				do {
+					$batch = $this->upgrader->run_batch( 1 );
+				} while ( ! $batch['complete'] );
+			}
+		);
+
+		$this->assertSame( 2, $this->upgrader->pending_retries() );
+
+		$this->upgrader->retry_failed();
+
+		$this->assertSame( '/first', get_post( $first_id )->post_title );
+		$this->assertSame( '/second', get_post( $second_id )->post_title );
+		$this->assertSame( 0, $this->upgrader->pending_retries() );
+	}
+
+	/**
 	 * A row that fails its retry stays waiting; one deleted meanwhile drops out.
 	 *
 	 * @return void
@@ -1253,12 +1281,15 @@ final class UpgraderTest extends TestCase {
 		};
 
 		add_filter( 'query', $race );
-		$this->upgrader->run_batch( 100 );
+		$result = $this->upgrader->run_batch( 100 );
 		remove_filter( 'query', $race );
 
 		$this->assertTrue( $raced, 'The simulated edit should have run.' );
 		$this->assertSame( 'draft', get_post_status( $bulk_id ) );
 		$this->assertSame( '/other-page/', get_post( $rekey_id )->post_title );
+		$this->assertSame( 2, $result['skipped'] );
+		$this->assertSame( 0, $result['changed'] );
+		$this->assertSame( $result['processed'], $result['changed'] + $result['unchanged'] + $result['skipped'] + count( $result['failed'] ) );
 	}
 
 	/**
@@ -1604,6 +1635,61 @@ final class UpgraderTest extends TestCase {
 
 		$this->assertSame( 'draft', get_post( $loser_id )->post_status );
 		$this->assertSame( 'publish', get_post( $kept )->post_status );
+	}
+
+	/**
+	 * A collision involving a redirect to a post is settled by the post ID.
+	 *
+	 * 1.x stored such a destination in post_parent with an empty excerpt, so
+	 * comparing excerpts alone would call any two of them the same.
+	 *
+	 * @dataProvider data_post_destination_collisions
+	 *
+	 * @param string $first  The kept row's destination: 'post', 'other' (a second post) or 'url'.
+	 * @param string $second The colliding row's destination, likewise.
+	 * @param string $status The colliding row's expected status.
+	 * @return void
+	 */
+	public function test_post_destination_collision_is_settled_by_post_id( string $first, string $second, string $status ) {
+		$destinations = array(
+			'post'  => self::factory()->post->create(),
+			'other' => self::factory()->post->create(),
+			'url'   => 'https://example.com/new',
+		);
+		$labels       = array(
+			'post'  => 'post #' . $destinations['post'],
+			'other' => 'post #' . $destinations['other'],
+			'url'   => 'https://example.com/new',
+		);
+
+		$kept     = $this->create_legacy_redirect( '/a', $destinations[ $first ] );
+		$loser_id = $this->create_legacy_redirect( '/a/', $destinations[ $second ] );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'publish', get_post_status( $kept ) );
+		$this->assertSame( $status, get_post_status( $loser_id ) );
+
+		$expected = 'trash' === $status
+			? array()
+			: array( sprintf( '/a/ → %s (#%d) has the same source as /a → %s (#%d)', $labels[ $second ], $loser_id, $labels[ $first ], $kept ) );
+		$this->assertSame( $expected, $result['conflicts'] );
+		$this->assertSame( (int) ( 'trash' === $status ), $result['deduped'] );
+		$this->assertSame( 0, $result['normalized'] );
+	}
+
+	/**
+	 * Pairs of colliding destinations involving a post, and how the colliding row ends up.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string}>
+	 */
+	public static function data_post_destination_collisions(): array {
+		return array(
+			'the same post'   => array( 'post', 'post', 'trash' ),
+			'different posts' => array( 'post', 'other', 'draft' ),
+			'a post and URL'  => array( 'post', 'url', 'draft' ),
+			'a URL and post'  => array( 'url', 'post', 'draft' ),
+		);
 	}
 
 	/**
@@ -2103,6 +2189,7 @@ final class UpgraderTest extends TestCase {
 
 		$bulk_ids = $this->create_mixed_legacy_set();
 		$pending  = $this->upgrader->count_pending();
+		$small    = $this->upgrader->count_pending( null, 9 );
 		$seen     = array(
 			'bulk'    => 0,
 			'per-row' => 0,
@@ -2131,6 +2218,12 @@ final class UpgraderTest extends TestCase {
 		$keys = array( 'changed', 'unchanged', 'skipped', 'published', 'repathed', 'deduped', 'normalized', 'unfired' );
 		$this->assertSame( wp_array_slice_assoc( $bulk, $keys ), wp_array_slice_assoc( $pending, $keys ), 'dry run' );
 		$this->assertSame( self::by_position( $bulk['conflicts'], $bulk_ids ), self::by_position( $pending['conflicts'], $bulk_ids ), 'dry run' );
+
+		// So does one read in batches of nine, which splits the '/converge/'
+		// pair: the second must collide with the key the first would take in
+		// the previous batch, which the database does not show yet.
+		$this->assertSame( wp_array_slice_assoc( $pending, $keys ), wp_array_slice_assoc( $small, $keys ), 'dry run in batches of nine' );
+		$this->assertSame( $pending['conflicts'], $small['conflicts'], 'dry run in batches of nine' );
 
 		$keys[] = 'processed';
 		$runs   = array(
@@ -2257,6 +2350,43 @@ final class UpgraderTest extends TestCase {
 		$this->assertStringStartsWith( '#' . $long_id . ' (/long): ', $result['failed'][0] );
 		$this->assertSame( '/p?q=' . str_repeat( 'é', 30000 ), get_post( $long_id )->post_excerpt );
 		$this->assertSame( '/other', get_post( $other_id )->post_title );
+	}
+
+	/**
+	 * A value that is not valid UTF-8 is written alone, so it is refused and reported, not mangled.
+	 *
+	 * A UTF-8 table cannot hold such a value, so the read is made to return
+	 * one. In a bulk statement it would take the other rows' writes down with
+	 * it, or be stored mangled; alone, $wpdb->update() refuses it against its
+	 * own row while the rest still go in bulk.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_utf8_value_is_written_alone_and_reported() {
+		global $wpdb;
+
+		$bad_id = $this->create_legacy_redirect( '/bad' );
+		$wpdb->update( $wpdb->posts, array( 'post_excerpt' => 'https://example.com/x?a=1&amp;b=2' ), array( 'ID' => $bad_id ) );
+		$other_id = $this->create_legacy_redirect( '/other/' );
+
+		$read_back = 0;
+		$invalid   = static function ( string $query ) use ( $wpdb, $bad_id, &$read_back ): string {
+			$read_back += (int) str_starts_with( $query, 'SELECT ID, post_title, post_name, post_status, post_excerpt, post_modified_gmt' );
+
+			return str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" )
+				? "SELECT *, IF(ID = {$bad_id}, CONCAT(CAST(post_excerpt AS BINARY), 0xFF), post_excerpt) AS post_excerpt" . substr( $query, strlen( 'SELECT *' ) )
+				: $query;
+		};
+
+		add_filter( 'query', $invalid );
+		$result = $this->upgrader->run_batch( 100 );
+		remove_filter( 'query', $invalid );
+
+		$this->assertCount( 1, $result['failed'] );
+		$this->assertStringStartsWith( '#' . $bad_id . ' (/bad): ', $result['failed'][0] );
+		$this->assertSame( 'https://example.com/x?a=1&amp;b=2', $wpdb->get_var( $wpdb->prepare( "SELECT post_excerpt FROM {$wpdb->posts} WHERE ID = %d", $bad_id ) ) );
+		$this->assertSame( '/other', get_post( $other_id )->post_title );
+		$this->assertSame( 0, $read_back, 'The other row should have gone in a bulk statement that landed.' );
 	}
 
 	/**
