@@ -142,6 +142,11 @@ final class PluginBootstrapper {
 		);
 		$destination_watcher->register();
 
+		// Refuse core's Quick Edit, Bulk Edit, edit screen and XML-RPC saves
+		// of a redirect. Registered in every context: XML-RPC requests do not
+		// define WP_ADMIN.
+		( new CoreEditGuard() )->register();
+
 		// Register WP-CLI commands.
 		$this->register_cli_commands();
 
