@@ -15,7 +15,8 @@ requests pay nothing for this.
 One ability category, `legacy-redirects`, and nine abilities within it.
 
 The annotations matter: MCP clients read them to decide what to confirm with a user before
-calling. `readonly` means the ability cannot change anything, `destructive` means data is
+calling. `readonly` means the ability only reads what is stored: it changes nothing and
+makes no requests. `destructive` means data is
 lost, and `idempotent` means calling twice with the same input has the same effect as
 calling once.
 
@@ -28,7 +29,7 @@ calling once.
 | `legacy-redirector/set-redirect-status` | Enable or disable one or more redirects | No | No | Yes |
 | `legacy-redirector/delete-redirect` | Delete one or more redirects | No | **Yes** | Yes |
 | `legacy-redirector/validate-redirects` | Check redirects' stored details for problems, say what to do about each, and record the result; given none, re-check the flagged ones, a page at a time | No | No | Yes |
-| `legacy-redirector/test-redirects` | Check up to 20 named redirects live: whether the destination responds and the source redirects | Yes | No | Yes |
+| `legacy-redirector/test-redirects` | Check up to 20 named redirects live: whether the destination responds and the source redirects | No | No | Yes |
 | `legacy-redirector/find-redirect-domains` | List the domains destinations point at | Yes | No | Yes |
 
 `create-redirect` is not idempotent because a second call with the same source is a
@@ -40,7 +41,9 @@ just stops being served to visitors. Only `delete-redirect` loses data.
 
 `validate-redirects` is not read-only because it records the per-row flags behind the admin
 "Has issues" view and the menu badge, though it never changes a redirect. `test-redirects`
-records nothing.
+records nothing, but is not read-only either: it makes live HTTP requests from the server,
+to each destination and to the site's own source URLs, so a client should ask before
+running it.
 
 ## Connecting a client
 
@@ -57,7 +60,7 @@ every one of these abilities checks the capability. A client authenticating as a
 without it gets a permission error rather than an empty result. See
 [configuration.md](configuration.md) for how to grant it.
 
-**Read-only is still gated.** `get-redirect`, `list-redirects`, `test-redirects`, and
+**Read-only is still gated.** `get-redirect`, `list-redirects`, and
 `find-redirect-domains` all require `manage_redirects` too. There is no anonymous or
 subscriber-level read access to the redirect map.
 

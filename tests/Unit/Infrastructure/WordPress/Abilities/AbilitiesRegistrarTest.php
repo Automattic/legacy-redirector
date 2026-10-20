@@ -168,9 +168,13 @@ final class AbilitiesRegistrarTest extends MonkeyStubs {
 			$annotations['legacy-redirector/validate-redirects']['readonly'],
 			'Validating records the per-row flags.'
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			$annotations['legacy-redirector/test-redirects']['readonly'],
-			'Testing only reports.'
+			'Testing makes live requests to destinations and the site.'
+		);
+		$this->assertFalse(
+			$annotations['legacy-redirector/test-redirects']['destructive'],
+			'Testing records nothing, so it is not destructive.'
 		);
 	}
 

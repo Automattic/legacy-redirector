@@ -98,11 +98,11 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 	 * @return array{count: int, domains: array<int, string>} The domains found.
 	 */
 	public function execute(): array {
-		$domains = array();
-		$offset  = 0;
+		$domains  = array();
+		$after_id = 0;
 
 		do {
-			$destination_urls = $this->query_repository->get_external_destination_urls( self::PAGE_SIZE, $offset );
+			$destination_urls = $this->query_repository->get_external_destination_urls( $after_id, self::PAGE_SIZE );
 
 			foreach ( $destination_urls as $destination_url ) {
 				$host = $destination_url ? wp_parse_url( $destination_url, PHP_URL_HOST ) : null;
@@ -112,7 +112,7 @@ final class FindRedirectDomainsAbility implements AbilityInterface {
 				}
 			}
 
-			$offset       += self::PAGE_SIZE;
+			$after_id      = (int) array_key_last( $destination_urls );
 			$fetched_count = count( $destination_urls );
 		} while ( self::PAGE_SIZE === $fetched_count );
 
