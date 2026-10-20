@@ -182,6 +182,9 @@ New checks belong in `RedirectAuditor`, as a new `AuditFindingType` case: every 
 this page reads its findings from there, so they cannot disagree. Which findings refuse a
 save is decided separately, in `RedirectValidator::refusal_for()`.
 
+A case's words live twice: in English on the enum, which the CLI shows, and translatable in
+`FindingText`, which every other surface shows. Add both; a unit test fails until they match.
+
 When adding a case, update the table on this page, and the places that describe checks to
 people where they work: the list screen's "What is checked" help
 (`ListScreenSetup::get_checks_help()`), the Add/Edit form's help (`FormScreenSetup`), the

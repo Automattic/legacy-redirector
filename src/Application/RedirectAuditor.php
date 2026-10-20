@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Application;
 
+use Automattic\LegacyRedirector\Domain\AuditDetail;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -91,7 +92,7 @@ class RedirectAuditor {
 	 */
 	public function audit( Redirect $redirect, bool $check_destination = false ): array {
 		if ( $redirect->is_corrupt() ) {
-			return array( new AuditFinding( $redirect, AuditFindingType::CORRUPT_DATA, $redirect->corruption() ) );
+			return array( new AuditFinding( $redirect, AuditFindingType::CORRUPT_DATA, AuditDetail::corruption( (string) $redirect->corruption() ) ) );
 		}
 
 		$findings = array();
@@ -123,7 +124,7 @@ class RedirectAuditor {
 
 		$cycle = null !== $this->loop_detector ? $this->loop_detector->find_cycle( $redirect ) : array();
 		if ( array() !== $cycle ) {
-			$warnings[] = new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, implode( ' -> ', $cycle ) );
+			$warnings[] = new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, AuditDetail::loop( $cycle ) );
 		}
 
 		return $warnings;
@@ -196,7 +197,7 @@ class RedirectAuditor {
 		// A corrupt row carries placeholder values; checking them would report
 		// nonsense. Report the corruption itself.
 		if ( $redirect->is_corrupt() ) {
-			return new AuditFinding( $redirect, AuditFindingType::CORRUPT_DATA, $redirect->corruption() );
+			return new AuditFinding( $redirect, AuditFindingType::CORRUPT_DATA, AuditDetail::corruption( (string) $redirect->corruption() ) );
 		}
 
 		$destination = $redirect->destination();
@@ -257,7 +258,7 @@ class RedirectAuditor {
 			return new AuditFinding(
 				$redirect,
 				AuditFindingType::POST_UNPUBLISHED,
-				'post type: ' . $post->post_type
+				AuditDetail::post_type( $post->post_type )
 			);
 		}
 
@@ -270,7 +271,7 @@ class RedirectAuditor {
 			return new AuditFinding(
 				$redirect,
 				AuditFindingType::POST_UNPUBLISHED,
-				'status: ' . $status
+				AuditDetail::post_status( (string) $status )
 			);
 		}
 
@@ -453,7 +454,7 @@ class RedirectAuditor {
 			return new AuditFinding(
 				$redirect,
 				AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED,
-				is_string( $host ) ? 'host: ' . $host : null
+				is_string( $host ) ? AuditDetail::host( $host ) : null
 			);
 		}
 
@@ -486,7 +487,7 @@ class RedirectAuditor {
 				return new AuditFinding(
 					$redirect,
 					AuditFindingType::URL_REQUEST_FAILED,
-					$response->get_error_message()
+					AuditDetail::error( $response->get_error_message() )
 				);
 			}
 
@@ -496,7 +497,7 @@ class RedirectAuditor {
 			// so a response without a status only comes from a misbehaving
 			// pre_http_request filter. It says nothing about the destination.
 			if ( $status_code <= 0 ) {
-				return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, 'no status code' );
+				return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, AuditDetail::no_status_code() );
 			}
 
 			$location = (string) wp_remote_retrieve_header( $response, 'location' );
@@ -516,7 +517,7 @@ class RedirectAuditor {
 
 		// The error the HTTP API reported when it followed the hops itself.
 		if ( $hop > self::MAX_REDIRECTS ) {
-			return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, 'Too many redirects' );
+			return new AuditFinding( $redirect, AuditFindingType::URL_REQUEST_FAILED, AuditDetail::too_many_redirects() );
 		}
 
 		if ( 404 === $status_code ) {
@@ -527,7 +528,7 @@ class RedirectAuditor {
 			return new AuditFinding(
 				$redirect,
 				AuditFindingType::URL_SERVER_ERROR,
-				'status: ' . $status_code
+				AuditDetail::http_status( $status_code )
 			);
 		}
 
@@ -679,7 +680,7 @@ class RedirectAuditor {
 			return null;
 		}
 
-		$location = isset( $probe['location'] ) && '' !== $probe['location'] ? 'to: ' . $probe['location'] : null;
+		$location = isset( $probe['location'] ) && '' !== $probe['location'] ? AuditDetail::location( $probe['location'] ) : null;
 
 		return match ( $probe['status'] ) {
 			'diverted'    => new AuditFinding( $redirect, AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE, $location ),

@@ -32,27 +32,27 @@ final class AuditFinding {
 	private AuditFindingType $type;
 
 	/**
-	 * Optional extra information about the finding.
+	 * The specific fact behind the finding, if there is one.
 	 *
-	 * @var string|null
+	 * @var AuditDetail|null
 	 */
-	private ?string $extra_info;
+	private ?AuditDetail $detail;
 
 	/**
 	 * Constructor.
 	 *
 	 * @param Redirect         $redirect   The redirect the finding is about.
 	 * @param AuditFindingType $type       The type of finding.
-	 * @param string|null      $extra_info Optional extra information (e.g., HTTP status code, post status).
+	 * @param AuditDetail|null $detail   The specific fact behind the finding, such as a post status or host.
 	 */
 	public function __construct(
 		Redirect $redirect,
 		AuditFindingType $type,
-		?string $extra_info = null
+		?AuditDetail $detail = null
 	) {
-		$this->redirect   = $redirect;
-		$this->type       = $type;
-		$this->extra_info = $extra_info;
+		$this->redirect = $redirect;
+		$this->type     = $type;
+		$this->detail   = $detail;
 	}
 
 	/**
@@ -74,12 +74,21 @@ final class AuditFinding {
 	}
 
 	/**
-	 * Get the extra info.
+	 * Get the specific fact behind the finding.
+	 *
+	 * @return AuditDetail|null
+	 */
+	public function detail(): ?AuditDetail {
+		return $this->detail;
+	}
+
+	/**
+	 * Get the specific fact behind the finding, in English.
 	 *
 	 * @return string|null
 	 */
 	public function extra_info(): ?string {
-		return $this->extra_info;
+		return $this->detail?->english();
 	}
 
 	/**
@@ -137,7 +146,7 @@ final class AuditFinding {
 	 * @return string
 	 */
 	public function description(): string {
-		return $this->type->description( $this->extra_info );
+		return $this->type->description( $this->extra_info() );
 	}
 
 	/**

@@ -46,6 +46,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaComma
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class ImportFromMetaCommandTest extends CliTestCase {
 

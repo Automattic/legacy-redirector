@@ -73,6 +73,8 @@ use WP_Ability;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class AbilitiesTest extends TestCase {
 
@@ -439,7 +441,7 @@ final class AbilitiesTest extends TestCase {
 		$this->assertSame( '/points-at-a-post', $result['issues'][0]['from'] );
 		$this->assertNotEmpty( $result['issues'][0]['description'] );
 		$this->assertSame( 'problem', $result['issues'][0]['severity'] );
-		$this->assertSame( 'Point this redirect at another destination, or delete it', $result['issues'][0]['remedy'] );
+		$this->assertSame( 'Point this redirect at another destination, or delete it.', $result['issues'][0]['remedy'] );
 		$this->assertNull( $result['last_full_check'] );
 	}
 

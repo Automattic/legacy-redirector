@@ -35,6 +35,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class UITest extends TestCase {
 

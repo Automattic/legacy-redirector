@@ -49,6 +49,8 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
  * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
  * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class ValidateAllButtonTest extends TestCase {
 

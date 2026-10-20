@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices;
 
+use Automattic\LegacyRedirector\Application\FindingText;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
@@ -182,7 +183,7 @@ final class ValidationNotices {
 			/* translators: %s: source URL path */
 			: sprintf( esc_html__( 'Redirect from %s is not valid.', 'legacy-redirector' ), $source );
 		wp_admin_notice(
-			wp_kses_post( $message ) . '<br />' . esc_html( $finding_type->description() . '. ' . $finding_type->remedy() . '.' ),
+			wp_kses_post( $message ) . '<br />' . esc_html( FindingText::summary( $finding_type ) ),
 			self::ERROR_NOTICE_ARGS
 		);
 		$this->display_warning_notices( $source );
@@ -215,11 +216,11 @@ final class ValidationNotices {
 			}
 
 			$heading = '' === $source
-				? esc_html( $type->label() )
+				? esc_html( FindingText::label( $type ) )
 				/* translators: 1: problem found, e.g. "Source serves content", 2: source URL path */
-				: sprintf( esc_html__( '%1$s for %2$s', 'legacy-redirector' ), esc_html( $type->label() ), $source );
+				: sprintf( esc_html__( '%1$s for %2$s', 'legacy-redirector' ), esc_html( FindingText::label( $type ) ), $source );
 			wp_admin_notice(
-				wp_kses_post( $heading ) . '<br />' . esc_html( $type->description() . '. ' . $type->remedy() . '.' ),
+				wp_kses_post( $heading ) . '<br />' . esc_html( FindingText::summary( $type ) ),
 				self::WARNING_NOTICE_ARGS
 			);
 		}

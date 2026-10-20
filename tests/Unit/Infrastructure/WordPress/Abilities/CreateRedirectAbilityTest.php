@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilit
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\AuditDetail;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -40,6 +41,8 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_schema
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_to_array
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class CreateRedirectAbilityTest extends MonkeyStubs {
 
@@ -73,6 +76,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		parent::set_up();
 
 		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( '_x' )->returnArg( 1 );
 
 		$this->manager = Mockery::mock( RedirectManager::class );
 		$this->auditor = Mockery::mock( RedirectAuditor::class );
@@ -123,7 +127,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		$this->auditor->shouldReceive( 'warnings' )
 			->once()
 			->with( Mockery::on( static fn ( Redirect $redirect ): bool => 42 === $redirect->id() ) )
-			->andReturnUsing( static fn ( Redirect $redirect ): array => array( new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, '/new-page -> /old-page' ) ) );
+			->andReturnUsing( static fn ( Redirect $redirect ): array => array( new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, AuditDetail::loop( array( '/new-page', '/old-page' ) ) ) ) );
 
 		$result = $this->ability->execute(
 			array(
@@ -136,7 +140,7 @@ final class CreateRedirectAbilityTest extends MonkeyStubs {
 		$this->assertSame( 42, $result['warnings'][0]['id'] );
 		$this->assertSame( 'warning', $result['warnings'][0]['severity'] );
 		$this->assertSame( 'Possible redirect loop', $result['warnings'][0]['issue'] );
-		$this->assertSame( 'Point one redirect in the loop elsewhere, or disable it', $result['warnings'][0]['remedy'] );
+		$this->assertSame( 'Point one redirect in the loop elsewhere, or disable it.', $result['warnings'][0]['remedy'] );
 	}
 
 	/**

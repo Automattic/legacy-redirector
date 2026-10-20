@@ -13,6 +13,7 @@ use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectCreationResult;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\AuditDetail;
 use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
@@ -45,6 +46,8 @@ use WP_Error;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_to_array
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
  */
 final class UpdateRedirectAbilityTest extends MonkeyStubs {
 
@@ -85,6 +88,7 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		parent::set_up();
 
 		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( '_x' )->returnArg( 1 );
 
 		$this->manager    = Mockery::mock( RedirectManager::class );
 		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
@@ -191,7 +195,7 @@ final class UpdateRedirectAbilityTest extends MonkeyStubs {
 		$this->auditor->shouldReceive( 'warnings' )
 			->once()
 			->with( $saved )
-			->andReturn( array( new AuditFinding( $saved, AuditFindingType::POSSIBLE_LOOP, '/new -> /old' ) ) );
+			->andReturn( array( new AuditFinding( $saved, AuditFindingType::POSSIBLE_LOOP, AuditDetail::loop( array( '/new', '/old' ) ) ) ) );
 
 		$result = $this->ability->execute(
 			array(
