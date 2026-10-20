@@ -150,22 +150,21 @@ final class ColumnsManager {
 
 		$orderby = $query->get( 'orderby' );
 
-		if ( 'from' === $orderby ) {
-			$query->set( 'orderby', 'title' );
-		}
-
-		// The default date ordering needs an ID tiebreaker: an import creates
-		// hundreds of rows in the same second, and ties ordered arbitrarily by
-		// the database make pagination unstable - a row can appear on no page
-		// (and another on two) while the item count says otherwise.
-		if ( '' === $orderby || 'date' === $orderby ) {
-			$order = strtoupper( (string) $query->get( 'order' ) );
-			$order = 'ASC' === $order ? 'ASC' : 'DESC';
+		// Both orderings need an ID tiebreaker: an import creates hundreds of
+		// rows in the same second, duplicates the 2.0 migration disabled keep
+		// the live redirect's source as their title, and ties ordered
+		// arbitrarily by the database make pagination unstable - a row can
+		// appear on no page (and another on two) while the item count says
+		// otherwise.
+		if ( '' === $orderby || 'date' === $orderby || 'from' === $orderby ) {
+			$order  = strtoupper( (string) $query->get( 'order' ) );
+			$order  = 'ASC' === $order ? 'ASC' : 'DESC';
+			$column = 'from' === $orderby ? 'title' : 'date';
 			$query->set(
 				'orderby',
 				array(
-					'date' => $order,
-					'ID'   => $order,
+					$column => $order,
+					'ID'    => $order,
 				)
 			);
 		}
