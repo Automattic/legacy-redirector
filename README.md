@@ -179,7 +179,7 @@ WP-CLI.
 ## Documentation
 
 - **[docs/cli.md](docs/cli.md)** — WP-CLI commands and recipes
-- **[docs/configuration.md](docs/configuration.md)** — capabilities, filters, and what uninstalling keeps
+- **[docs/configuration.md](docs/configuration.md)** — capabilities, filters, translations, and what uninstalling keeps
 - **[docs/redirect-health.md](docs/redirect-health.md)** — how redirects are checked, and where to see problems
 - **[docs/abilities.md](docs/abilities.md)** — abilities and MCP clients
 - **[UPGRADING.md](UPGRADING.md)** — upgrading from 1.x to 2.0
