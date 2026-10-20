@@ -160,7 +160,7 @@ final class RowActionsManager {
 			esc_attr( $source ),
 			/* translators: %s: redirect source path */
 			esc_attr( sprintf( __( 'Test redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
-			esc_html__( 'Test', 'legacy-redirector' )
+			esc_html_x( 'Test', 'verb: check a redirect live', 'legacy-redirector' )
 		);
 
 		// Follow link - use home_url() so the stored home-relative path is
@@ -171,7 +171,7 @@ final class RowActionsManager {
 			esc_url( home_url( $source ) ),
 			/* translators: %s: redirect source path */
 			esc_attr( sprintf( __( 'Follow redirect from &#8220;%s&#8221; (opens in a new tab)', 'legacy-redirector' ), $source ) ),
-			esc_html__( 'Follow', 'legacy-redirector' )
+			esc_html_x( 'Follow', 'verb: open the source URL', 'legacy-redirector' )
 		);
 
 		// Re-insert trash link.
@@ -208,15 +208,25 @@ final class RowActionsManager {
 		<script>
 		jQuery(document).ready(function($) {
 			var i18n = {
-				testing: '<?php echo esc_js( __( 'Testing...', 'legacy-redirector' ) ); ?>',
-				test: '<?php echo esc_js( __( 'Test', 'legacy-redirector' ) ); ?>',
+				testing: '<?php echo esc_js( __( 'Testing…', 'legacy-redirector' ) ); ?>',
+				test: '<?php echo esc_js( _x( 'Test', 'verb: check a redirect live', 'legacy-redirector' ) ); ?>',
 				noIssues: '<?php echo esc_js( __( 'No issues found', 'legacy-redirector' ) ); ?>',
 				requestFailed: '<?php echo esc_js( __( 'Test request failed.', 'legacy-redirector' ) ); ?>',
 				problem: '<?php echo esc_js( __( 'Problem:', 'legacy-redirector' ) ); ?>',
 				warning: '<?php echo esc_js( __( 'Warning:', 'legacy-redirector' ) ); ?>',
 				tested: '<?php /* translators: %s: redirect source path */ echo esc_js( __( 'Tested %s:', 'legacy-redirector' ) ); ?>',
-				bulkDone: '<?php echo esc_js( __( 'Finished testing the selected redirects. The results are in the Health column.', 'legacy-redirector' ) ); ?>'
+				bulkDone: '<?php echo esc_js( __( 'Finished testing the selected redirects. The results are in the Health column.', 'legacy-redirector' ) ); ?>',
+				sentences: '<?php /* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */ echo esc_js( _x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ) ); ?>',
+				labelled: '<?php /* translators: 1: a severity, such as "Warning:"; 2: what was found */ echo esc_js( _x( '%1$s %2$s', 'severity, then the finding', 'legacy-redirector' ) ); ?>'
 			};
+
+			// Fill a translated "%1$s %2$s" pattern in one pass, so text that
+			// itself contains a placeholder is left alone.
+			function fill( pattern, first, second ) {
+				return pattern.replace( /%([12])\$s/g, function ( match, n ) {
+					return '1' === n ? first : second;
+				} );
+			}
 
 			// One line in the Health cell, in the same markup the column
 			// renders server-side, so a tested row reads identically: a
@@ -244,7 +254,7 @@ final class RowActionsManager {
 
 			// The detail for a line: what is wrong, then what to do.
 			function detail( description, remedy ) {
-				return [ description, remedy ].filter( Boolean ).join( ' ' );
+				return description && remedy ? fill( i18n.sentences, description, remedy ) : ( description || remedy );
 			}
 
 			// Replace the row's Health cell with the fresh, HTTP-inclusive
@@ -270,7 +280,7 @@ final class RowActionsManager {
 
 				function add( icon, color, severity, text, detailText ) {
 					$healthColumn.append( healthLine( icon, color, severity, text, detailText ) );
-					labels.push( severity ? severity + ' ' + text : text );
+					labels.push( severity ? fill( i18n.labelled, severity, text ) : text );
 				}
 
 				// The live behaviour leads - "the redirect works" - and any
@@ -306,7 +316,9 @@ final class RowActionsManager {
 
 				function report( labels ) {
 					if ( ! quiet ) {
-						wp.a11y.speak( i18n.tested.replace( '%s', $link.data( 'source' ) ) + ' ' + labels.join( ' ' ) );
+						wp.a11y.speak( labels.reduce( function ( said, label ) {
+							return fill( i18n.sentences, said, label );
+						}, i18n.tested.replace( '%s', $link.data( 'source' ) ) ) );
 					}
 				}
 

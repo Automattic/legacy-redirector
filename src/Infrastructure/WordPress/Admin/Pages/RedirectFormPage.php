@@ -533,7 +533,11 @@ final class RedirectFormPage {
 	 * @return string The translated error.
 	 */
 	private static function host_not_allowed_message(): string {
-		return __( 'The destination domain is not allowed, so the redirect would never run. Add the domain to the "allowed_redirect_hosts" filter first.', 'legacy-redirector' );
+		return sprintf(
+			/* translators: %s: the name of a WordPress filter, allowed_redirect_hosts; do not translate it. */
+			__( 'The destination domain is not allowed, so the redirect would never run. Add the domain to the "%s" filter first.', 'legacy-redirector' ),
+			'allowed_redirect_hosts'
+		);
 	}
 
 	/**

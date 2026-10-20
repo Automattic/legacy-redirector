@@ -13,7 +13,9 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
  * Writes a count with the phrase that agrees with it: "1 redirect", "2 redirects".
  *
  * CLI output is not translated, so English singular and plural are enough;
- * the admin uses _n() for the same job.
+ * the admin uses _n() for the same job. Numbers are formatted the English
+ * way too, whatever the site's locale, so they agree with the words around
+ * them.
  */
 trait CountsInWords {
 
@@ -26,6 +28,6 @@ trait CountsInWords {
 	 * @return string The count and phrase, e.g. "2 redirects need".
 	 */
 	private static function count_of( int $count, string $one, string $many ): string {
-		return number_format_i18n( $count ) . ' ' . ( 1 === $count ? $one : $many );
+		return number_format( $count ) . ' ' . ( 1 === $count ? $one : $many );
 	}
 }

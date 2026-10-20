@@ -140,7 +140,11 @@ final class FormScreenSetup {
 			'<li><code>https://example.com/page</code></li>' .
 			'<li><code>https://newsite.com/destination</code></li>' .
 			'</ul>' .
-			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . __( 'External domains must be allowed via the <code>allowed_redirect_hosts</code> filter before a redirect can point at them.', 'legacy-redirector' ) . '</p>' .
+			'<p><strong>' . __( 'Note:', 'legacy-redirector' ) . '</strong> ' . sprintf(
+				/* translators: %s: the name of a WordPress filter, allowed_redirect_hosts; do not translate it. */
+				__( 'External domains must be allowed via the %s filter before a redirect can point at them.', 'legacy-redirector' ),
+				'<code>allowed_redirect_hosts</code>'
+			) . '</p>' .
 			'<h4>' . __( '3. Post ID', 'legacy-redirector' ) . '</h4>' .
 			'<p>' . __( 'Select an existing post or page using the search field. The redirect will point to that content\'s permalink, which automatically updates if the slug changes.', 'legacy-redirector' ) . '</p>';
 	}
@@ -152,7 +156,7 @@ final class FormScreenSetup {
 	 */
 	private function get_tips_help(): string {
 		return '<ul>' .
-			'<li>' . __( '<strong>Test your redirects</strong> &mdash; After saving, use the "Test it" link or visit the source URL to verify it works.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Test your redirects</strong> &mdash; After saving, use the "Follow" link or visit the source URL to verify it works.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Use Post IDs for internal content</strong> &mdash; If redirecting to a post or page on your site, selecting it by Post ID ensures the redirect stays valid even if the slug changes.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Avoid redirect chains and loops</strong> &mdash; Don\'t create redirects where the destination is another redirect source. A chain slows visitors down, and a set of redirects pointing back at each other is warned about as a possible loop.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Check for existing content</strong> &mdash; Redirects only work when the source URL returns a 404. If a page exists at that URL, delete or rename it first.', 'legacy-redirector' ) . '</li>' .

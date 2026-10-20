@@ -72,6 +72,7 @@ final class TestRedirectsAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Test Redirects', 'legacy-redirector' ),
+			/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 			'description'         => __( 'Checks named redirects live. Runs every stored-details check validate-redirects runs, requests the destination where only a request can judge it (a URL, or a path that resolves to no post), and requests the source to see whether visiting it redirects to the destination. A disabled redirect\'s source is not requested. Each finding says what is wrong and what to do about it; a timeout or an error from a server is reported as inconclusive rather than broken. Nothing is recorded, but this is not read-only: it makes live HTTP requests from the server, to each destination and to this site\'s own source URLs. Slow, because each redirect is up to two HTTP requests.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(
@@ -115,6 +116,7 @@ final class TestRedirectsAbility implements AbilityInterface {
 									'source' => array(
 										'type'        => array( 'string', 'null' ),
 										'enum'        => array( 'confirmed', 'diverted', 'dormant', 'not-firing', 'unreachable', null ),
+										/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 										'description' => __( 'What requesting the source got: confirmed (it redirected to the destination), diverted (it redirected elsewhere), dormant (the site served content), not-firing (a 404), unreachable (the check could not tell), or null if the source was not requested.', 'legacy-redirector' ),
 									),
 									'issues' => array(

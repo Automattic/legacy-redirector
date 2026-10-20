@@ -192,7 +192,7 @@ final class MigrateCommand extends WP_CLI_Command {
 			WP_CLI::warning( sprintf( '%s the same source as another redirect with a different destination. Sources that differed only in form, such as /old and /old/, become one source, and only one redirect can answer it: the one already there would stay live, and the other would be disabled.', self::count_of( count( $pending['conflicts'] ), 'redirect would have', 'redirects would have' ) ) );
 			$this->list_capped( $pending['conflicts'], 'To list every one, repeat this dry run with --debug=legacy-redirector; like this one, it changes nothing.' );
 			if ( $pending['unfired'] > 0 ) {
-				WP_CLI::line( 1 === $pending['unfired'] ? '1 of them never fired under 1.x (marked above), so disabling it will change nothing for visitors.' : sprintf( '%s of them never fired under 1.x (marked above), so disabling them will change nothing for visitors.', number_format_i18n( $pending['unfired'] ) ) );
+				WP_CLI::line( 1 === $pending['unfired'] ? '1 of them never fired under 1.x (marked above), so disabling it will change nothing for visitors.' : sprintf( '%s of them never fired under 1.x (marked above), so disabling them will change nothing for visitors.', number_format( $pending['unfired'] ) ) );
 			}
 			WP_CLI::line( 'A real run disables them and explains how to settle each one.' );
 		}
@@ -207,7 +207,7 @@ final class MigrateCommand extends WP_CLI_Command {
 	 */
 	private function migrate( int $done, int $total ): void {
 		if ( $done > 0 ) {
-			WP_CLI::line( sprintf( 'Resuming where the last run stopped: %s of %s already done.', number_format_i18n( $done ), self::count_of( $total, 'redirect', 'redirects' ) ) );
+			WP_CLI::line( sprintf( 'Resuming where the last run stopped: %s of %s already done.', number_format( $done ), self::count_of( $total, 'redirect', 'redirects' ) ) );
 		}
 
 		$left = $total - $done;
@@ -275,11 +275,11 @@ final class MigrateCommand extends WP_CLI_Command {
 			'%s %s inspected in this run: %s changed, %s, %s, and %s. Of those changed, %s published, %s rewritten, %s trashed, %s made relative.',
 			$headline,
 			self::count_of( $totals['processed'], 'redirect', 'redirects' ),
-			number_format_i18n( $totals['changed'] ),
+			number_format( $totals['changed'] ),
 			self::count_of( $totals['unchanged'], 'needed no change', 'needed no change' ),
 			self::count_of( $totals['skipped'], 'left alone because it was edited after the upgrade began', 'left alone because they were edited after the upgrade began' ),
 			self::count_of( count( $totals['failed'] ), 'could not be written', 'could not be written' ),
-			number_format_i18n( $totals['published'] ),
+			number_format( $totals['published'] ),
 			self::count_of( $totals['repathed'], 'source path', 'source paths' ),
 			self::count_of( $totals['deduped'], 'duplicate', 'duplicates' ),
 			self::count_of( $totals['normalized'], 'destination', 'destinations' )
@@ -318,7 +318,7 @@ final class MigrateCommand extends WP_CLI_Command {
 	 */
 	private function explain_duplicates( int $disabled, int $unfired ): void {
 		if ( $unfired > 0 ) {
-			WP_CLI::line( 1 === $unfired ? '1 of them never fired under 1.x (marked above), so disabling it changed nothing for visitors. Delete it unless you want its destination.' : sprintf( '%s of them never fired under 1.x (marked above), so disabling them changed nothing for visitors. Delete them unless you want their destination.', number_format_i18n( $unfired ) ) );
+			WP_CLI::line( 1 === $unfired ? '1 of them never fired under 1.x (marked above), so disabling it changed nothing for visitors. Delete it unless you want its destination.' : sprintf( '%s of them never fired under 1.x (marked above), so disabling them changed nothing for visitors. Delete them unless you want their destination.', number_format( $unfired ) ) );
 		}
 
 		if ( $disabled > $unfired ) {

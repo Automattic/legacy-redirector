@@ -76,6 +76,7 @@ final class UpdateRedirectAbility implements AbilityInterface {
 	public function args(): array {
 		return array(
 			'label'               => __( 'Update Redirects', 'legacy-redirector' ),
+			/* translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them. */
 			'description'         => __( 'Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead. Returns any warnings about the redirects as saved, such as a possible loop.', 'legacy-redirector' ),
 			'category'            => AbilitiesRegistrar::CATEGORY,
 			'input_schema'        => array(

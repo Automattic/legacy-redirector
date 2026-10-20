@@ -223,14 +223,13 @@ final class PostType {
 					$bulk_counts['locked'],
 					'legacy-redirector'
 				),
-			/* translators: %s: Number of redirects or redirect source path. */
+			/* translators: %s: Number of redirects. */
 			'deleted'   => _n(
 				'%s redirect permanently deleted.',
 				'%s redirects permanently deleted.',
 				$bulk_counts['deleted'],
 				'legacy-redirector'
 			),
-			/* translators: %s: Number of redirects or redirect source path. */
 			'trashed'   => $trashed_message,
 			/* translators: %s: Number of redirects. */
 			'untrashed' => _n(

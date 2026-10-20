@@ -71,7 +71,7 @@ final class BulkActionsHandler {
 
 		$actions['enable_redirects']  = __( 'Enable', 'legacy-redirector' );
 		$actions['disable_redirects'] = __( 'Disable', 'legacy-redirector' );
-		$actions['test_redirects']    = __( 'Test', 'legacy-redirector' );
+		$actions['test_redirects']    = _x( 'Test', 'verb: check a redirect live', 'legacy-redirector' );
 
 		return $actions;
 	}

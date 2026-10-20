@@ -136,7 +136,7 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'Redirect From', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The source URL path that triggers the redirect. Trailing slashes are ignored, so <code>/old-page</code> and <code>/old-page/</code> are the same redirect and only one of them needs creating.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Redirect To', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The destination where visitors are sent. Can be a relative path, absolute URL, or post ID.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Health', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'What the checks found wrong with the redirect, if anything. Select a finding to read what it means and what to do about it. A tick means nothing was found; "Not fully checked" means only a Test can tell.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Status', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Whether the redirect is Enabled (active) or Disabled (inactive).', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'Status', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Whether the redirect is Enabled or Disabled.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'Date', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'When the redirect was created.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
 			'<p>' . __( 'Click the column headers to sort by that column.', 'legacy-redirector' ) . '</p>';
@@ -151,10 +151,10 @@ final class ListScreenSetup {
 		return '<p>' . __( 'Hover over a redirect to reveal these actions:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
 			'<li><strong>' . __( 'Edit', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Modify the redirect source or destination.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Enable/Disable', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Toggle whether the redirect is active.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Test', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The full, live check of one redirect: runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Follow', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Test the redirect by visiting the source URL in a new tab.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Trash', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Move the redirect to the trash.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . __( 'Enable/Disable', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Toggle whether the redirect is enabled.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'Test', 'verb: check a redirect live', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'The full, live check of one redirect: runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'Follow', 'verb: open the source URL', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Visit the source URL in a new tab, to see the redirect as a visitor does.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'Trash', 'verb: move a redirect to the trash', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Move the redirect to the trash.', 'legacy-redirector' ) . '</li>' .
 			'</ul>';
 	}
 
@@ -166,10 +166,10 @@ final class ListScreenSetup {
 	private function get_filters_help(): string {
 		return '<p>' . __( 'Use the status filters above the table to view:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
-			'<li><strong>' . __( 'All', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'All redirects regardless of status.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Enabled', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Only active redirects.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Disabled', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Only inactive redirects.', 'legacy-redirector' ) . '</li>' .
-			'<li><strong>' . __( 'Trash', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Deleted redirects awaiting permanent removal.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'All', 'view of every redirect', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'All redirects regardless of status.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'Enabled', 'view of the redirects that are enabled', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Only enabled redirects.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'Disabled', 'view of the redirects that are disabled', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Only disabled redirects.', 'legacy-redirector' ) . '</li>' .
+			'<li><strong>' . _x( 'Trash', 'noun: the view of trashed redirects', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Deleted redirects awaiting permanent removal.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
 			'<p>' . __( 'Additionally, you can filter by destination type:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
@@ -177,7 +177,7 @@ final class ListScreenSetup {
 			'<li><strong>' . __( 'To Path', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to relative paths on this site.', 'legacy-redirector' ) . '</li>' .
 			'<li><strong>' . __( 'To External', 'legacy-redirector' ) . '</strong> &mdash; ' . __( 'Redirects to absolute URLs (may include external sites).', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'While the 2.0 upgrade has left redirects disabled because another redirect has the same source, a <strong>Duplicate sources</strong> filter lists them, and the Status column of each says how to settle it.', 'legacy-redirector' ) . '</p>' .
+			'<p>' . __( 'While the 2.0 migration has left redirects disabled because another redirect has the same source, a <strong>Duplicate sources</strong> filter lists them, and the Status column of each says how to settle it.', 'legacy-redirector' ) . '</p>' .
 			'<p>' . __( 'Once every redirect has been checked, by the background check or <strong>Validate all redirects</strong>, a <strong>Has issues</strong> filter shows only the redirects the check flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with when the last full check finished: editing a redirect clears its flag until it is next checked. See the Validate and Test help tab for what validation can and cannot see.', 'legacy-redirector' ) . '</p>';
 	}
 
@@ -195,7 +195,12 @@ final class ListScreenSetup {
 			'<li>' . __( '<strong>Validate all redirects</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. Validation never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals. The same check runs in the background, a few seconds every five minutes, so every redirect is checked regularly without anyone pressing the button; the line beside the button says when the last full check finished and how long one takes.', 'legacy-redirector' ) . '</li>' .
 			'<li>' . __( '<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored, because a timeout says nothing definite about a redirect.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'So a clean validation does not prove a redirect works end to end - a destination page can still be down, and only a Test (or <code>wp legacy-redirector test</code>) can see that. On the command line, <code>wp legacy-redirector validate</code> and <code>test</code> do the same two jobs. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look. Every finding says what to do about it: select it in the Health column to read more. Nothing disables a redirect automatically, because almost no problem has a fix the plugin can safely apply.', 'legacy-redirector' ) . '</p>';
+			'<p>' . sprintf(
+				/* translators: 1: a WP-CLI command, wp legacy-redirector test; 2: a WP-CLI command, wp legacy-redirector validate. Do not translate the commands. */
+				__( 'So a clean validation does not prove a redirect works end to end - a destination page can still be down, and only a Test (or %1$s) can see that. On the command line, %2$s and %1$s do the same two jobs. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look. Every finding says what to do about it: select it in the Health column to read more. Nothing disables a redirect automatically, because almost no problem has a fix the plugin can safely apply.', 'legacy-redirector' ),
+				'<code>wp legacy-redirector test</code>',
+				'<code>wp legacy-redirector validate</code>'
+			) . '</p>';
 	}
 
 	/**
@@ -212,11 +217,19 @@ final class ListScreenSetup {
 			'<p>' . __( 'The destination (Redirect To) is checked according to its form:', 'legacy-redirector' ) . '</p>' .
 			'<ul>' .
 			'<li>' . __( '<strong>Post ID destinations</strong>: the post must still exist, not be in the trash, and be published. Media attachments count as published.', 'legacy-redirector' ) . '</li>' .
-			'<li>' . __( '<strong>Relative path destinations</strong>: the path is resolved to a post of any registered post type, including via dated permalinks, and that post must be published. A path whose post was trashed is recognised even though trashing renames the slug. A path that resolves to no post at all - an archive, a rewrite endpoint, a page served outside WordPress - is not reported, because only a live request can judge it.', 'legacy-redirector' ) . '</li>' .
-			'<li>' . __( '<strong>External URL destinations</strong>: the host must be in the <code>allowed_redirect_hosts</code> filter, or WordPress will refuse the redirect at request time and the visitor gets a 404.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . __( '<strong>Relative path destinations</strong>: the path is resolved to a post of any registered post type, including via dated permalinks, and that post must be published. A path whose post was trashed is recognized even though trashing renames the slug. A path that resolves to no post at all - an archive, a rewrite endpoint, a page served outside WordPress - is not reported, because only a live request can judge it.', 'legacy-redirector' ) . '</li>' .
+			'<li>' . sprintf(
+				/* translators: %s: the name of a WordPress filter, allowed_redirect_hosts; do not translate it. */
+				__( '<strong>External URL destinations</strong>: the host must be in the %s filter, or WordPress will refuse the redirect at request time and the visitor gets a 404.', 'legacy-redirector' ),
+				'<code>allowed_redirect_hosts</code>'
+			) . '</li>' .
 			'<li>' . __( '<strong>Possible loops</strong> (warning): a destination that is itself another redirect\'s source, with the hops leading back to where they started. A loop only runs while every source in it returns a 404 - any member serving real content keeps it dormant - so a person should judge it; break a cycle by re-pointing or disabling one member.', 'legacy-redirector' ) . '</li>' .
 			'</ul>' .
-			'<p>' . __( 'Whether a destination actually responds, and whether the redirect fires for a visitor, are live questions. The Test action answers both for the redirects you pick, as <code>wp legacy-redirector test</code> does from the command line.', 'legacy-redirector' ) . '</p>';
+			'<p>' . sprintf(
+				/* translators: %s: a WP-CLI command, wp legacy-redirector test; do not translate it. */
+				__( 'Whether a destination actually responds, and whether the redirect fires for a visitor, are live questions. The Test action answers both for the redirects you pick, as %s does from the command line.', 'legacy-redirector' ),
+				'<code>wp legacy-redirector test</code>'
+			) . '</p>';
 	}
 
 	/**

@@ -119,7 +119,8 @@ final class ValidateAllButton {
 		if ( $status['in_progress'] ) {
 			$title = $background
 				? __( 'Validation is already under way in the background. Continue it here to finish sooner; you can leave this page at any time.', 'legacy-redirector' )
-				: __( 'Validation is under way but the background check is turned off, so continue it here, or with wp legacy-redirector validate.', 'legacy-redirector' );
+				/* translators: %s: a WP-CLI command, wp legacy-redirector validate; do not translate it. */
+				: sprintf( __( 'Validation is under way but the background check is turned off, so continue it here, or with %s.', 'legacy-redirector' ), 'wp legacy-redirector validate' );
 		} else {
 			$title = $background
 				? __( 'Checks every redirect’s stored details for problems, without requesting any URLs. You can leave this page at any time: validation carries on in the background. Use the Test action on a row to check live behavior.', 'legacy-redirector' )
@@ -140,7 +141,7 @@ final class ValidateAllButton {
 			<progress max="1" value="0" hidden aria-label="<?php esc_attr_e( 'Validation progress', 'legacy-redirector' ); ?>"></progress>
 			<span role="status"><?php echo esc_html( $this->status_text( $status, $counts ) ); ?></span>
 			<?php if ( $show_flagged ) : ?>
-				<a href="<?php echo esc_url( $flagged_url ); ?>"><?php esc_html_e( 'Show them', 'legacy-redirector' ); ?></a>
+				<a href="<?php echo esc_url( $flagged_url ); ?>"><?php esc_html_e( 'Show flagged redirects', 'legacy-redirector' ); ?></a>
 			<?php endif; ?>
 		</div>
 		<?php
@@ -157,38 +158,45 @@ final class ValidateAllButton {
 		if ( $status['in_progress'] ) {
 			$text = self::progress_text( $status['checked'], $status['total'], $this->sweep->budget() > 0.0 );
 		} elseif ( null !== $status['checked_at'] ) {
-			$text = sprintf(
-				/* translators: 1: time since the last full check, e.g. "3 hours", 2: how many redirects have problems, e.g. "3 with problems", 3: how many have warnings, e.g. "1 with a warning" */
-				__( 'Every redirect was last checked %1$s ago: %2$s, %3$s.', 'legacy-redirector' ),
-				human_time_diff( $status['checked_at'] ),
-				sprintf(
+			$text = self::sentences(
+				self::sentences(
+					/* translators: %s: time since the last full check, e.g. "3 hours" */
+					sprintf( __( 'Every redirect was last checked %s ago.', 'legacy-redirector' ), human_time_diff( $status['checked_at'] ) ),
 					/* translators: %s: number of redirects with problems */
-					_n( '%s with a problem', '%s with problems', $counts['problem'], 'legacy-redirector' ),
-					number_format_i18n( $counts['problem'] )
+					sprintf( _n( '%s redirect has a problem.', '%s redirects have problems.', $counts['problem'], 'legacy-redirector' ), number_format_i18n( $counts['problem'] ) )
 				),
-				sprintf(
-					/* translators: %s: number of redirects with warnings */
-					_n( '%s with a warning', '%s with warnings', $counts['warning'], 'legacy-redirector' ),
-					number_format_i18n( $counts['warning'] )
-				)
+				/* translators: %s: number of redirects with warnings */
+				sprintf( _n( '%s redirect has a warning.', '%s redirects have warnings.', $counts['warning'], 'legacy-redirector' ), number_format_i18n( $counts['warning'] ) )
 			);
 		} else {
 			$text = __( 'Not every redirect has been checked yet.', 'legacy-redirector' );
 		}
 
 		if ( $this->sweep->budget() <= 0.0 ) {
-			return $text . ' ' . __( 'The background check is turned off.', 'legacy-redirector' );
+			return self::sentences( $text, __( 'The background check is turned off.', 'legacy-redirector' ) );
 		}
 
 		if ( null !== $status['estimate'] ) {
-			$text .= ' ' . sprintf(
+			$text = self::sentences(
+				$text,
 				/* translators: %s: estimated time for a full check, e.g. "2 days" */
-				__( 'A full check in the background takes about %s.', 'legacy-redirector' ),
-				human_time_diff( 0, $status['estimate'] )
+				sprintf( __( 'A full check in the background takes about %s.', 'legacy-redirector' ), human_time_diff( 0, $status['estimate'] ) )
 			);
 		}
 
 		return $text;
+	}
+
+	/**
+	 * Put one sentence after another, as the language spaces them.
+	 *
+	 * @param string $first  The first sentence.
+	 * @param string $second The sentence after it.
+	 * @return string
+	 */
+	private static function sentences( string $first, string $second ): string {
+		/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+		return sprintf( _x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ), $first, $second );
 	}
 
 	/**
