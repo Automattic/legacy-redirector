@@ -80,7 +80,7 @@ final class AuditFlagsTest extends TestCase {
 		wp_delete_post( $post_id, true );
 
 		$redirect = $this->repository()->find_by_id( $redirect_id );
-		$this->flags()->record_row( $redirect_id, $this->auditor()->audit( $redirect ) );
+		$this->flags()->record_rows( array( $redirect_id => $this->auditor()->audit( $redirect ) ) );
 
 		$this->assertSame( 'problem', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
@@ -93,7 +93,7 @@ final class AuditFlagsTest extends TestCase {
 		$redirect_id = $this->create_redirect( '/wp-admin/', $post_id );
 
 		$redirect = $this->repository()->find_by_id( $redirect_id );
-		$this->flags()->record_row( $redirect_id, $this->auditor()->audit( $redirect ) );
+		$this->flags()->record_rows( array( $redirect_id => $this->auditor()->audit( $redirect ) ) );
 
 		$this->assertSame( 'warning', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
@@ -108,9 +108,60 @@ final class AuditFlagsTest extends TestCase {
 		update_post_meta( $redirect_id, AuditFlags::META_KEY, 'problem' );
 
 		$redirect = $this->repository()->find_by_id( $redirect_id );
-		$this->flags()->record_row( $redirect_id, $this->auditor()->audit( $redirect ) );
+		$this->flags()->record_rows( array( $redirect_id => $this->auditor()->audit( $redirect ) ) );
 
 		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test recording reads the rows' flags in one query and writes only the
+	 * ones that change, including a change of severity.
+	 */
+	public function test_record_rows_writes_only_changed_flags(): void {
+		global $wpdb;
+
+		$post_id   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$deleted   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$unchanged = $this->create_redirect( '/flag-batch-unchanged', $deleted );
+		$severity  = $this->create_redirect( '/wp-admin/flag-batch', $post_id );
+		$cleared   = $this->create_redirect( '/flag-batch-cleared', $post_id );
+		wp_delete_post( $deleted, true );
+
+		update_post_meta( $unchanged, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $severity, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $cleared, AuditFlags::META_KEY, 'warning' );
+
+		// A sweep reads rows the meta cache has not seen.
+		foreach ( array( $unchanged, $severity, $cleared ) as $id ) {
+			wp_cache_delete( $id, 'post_meta' );
+		}
+
+		$findings = array(
+			$unchanged => $this->auditor()->audit( $this->repository()->find_by_id( $unchanged ) ),
+			$severity  => $this->auditor()->audit( $this->repository()->find_by_id( $severity ) ),
+			$cleared   => array(),
+		);
+
+		$queries = array();
+		$log     = static function ( string $query ) use ( &$queries, $wpdb ): string {
+			if ( str_contains( $query, $wpdb->postmeta ) ) {
+				$queries[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->flags()->record_rows( $findings );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 'problem', get_post_meta( $unchanged, AuditFlags::META_KEY, true ) );
+		$this->assertSame( 'warning', get_post_meta( $severity, AuditFlags::META_KEY, true ) );
+		$this->assertSame( '', get_post_meta( $cleared, AuditFlags::META_KEY, true ) );
+
+		foreach ( $queries as $query ) {
+			$this->assertDoesNotMatchRegularExpression( "/= {$unchanged}\\b/", $query, 'An unchanged flag must not be looked up or written on its own.' );
+		}
+		$this->assertStringContainsString( 'post_id IN (', $queries[0], 'The flags must be read for the whole batch first.' );
 	}
 
 	/**

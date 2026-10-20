@@ -287,6 +287,41 @@ final class AuditSweepTest extends TestCase {
 	}
 
 	/**
+	 * Test a pass over rows whose flags have not changed reads the flags in
+	 * one query and writes none.
+	 *
+	 * Recorded one row at a time, every clean row cost a meta lookup even
+	 * when there was nothing to clear: millions of queries a pass on a large
+	 * site. Counting queries are excluded, as they read the posts table.
+	 */
+	public function test_a_pass_over_unchanged_rows_reads_flags_once_and_writes_none(): void {
+		global $wpdb;
+
+		$broken = $this->create_broken_redirects( 3, 'sweep-steady' );
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$this->create_redirect( "/sweep-steady-clean-{$i}", 'https://example.com/fine' );
+		}
+
+		$sweep = $this->sweep();
+		$this->run_pass( $sweep );
+
+		$queries = array();
+		$log     = static function ( string $query ) use ( &$queries, $wpdb ): string {
+			if ( str_contains( $query, $wpdb->postmeta ) && ! str_contains( $query, "FROM {$wpdb->posts} " ) ) {
+				$queries[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->run_pass( $sweep );
+		remove_filter( 'query', $log );
+
+		$this->assertCount( 1, $queries, implode( "\n", $queries ) );
+		$this->assertSame( 'problem', get_post_meta( $broken[0], AuditFlags::META_KEY, true ) );
+	}
+
+	/**
 	 * Test a budget of zero turns the background sweep off.
 	 */
 	public function test_a_zero_budget_turns_the_sweep_off(): void {

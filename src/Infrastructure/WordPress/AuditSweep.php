@@ -323,11 +323,10 @@ final class AuditSweep {
 		$start     = microtime( true );
 		$redirects = $this->query_repository->find_after_id( $state['cursor'], self::BATCH_SIZE );
 
-		foreach ( $redirects as $redirect ) {
-			$id = (int) $redirect->id();
+		$this->audit_and_record( $redirects );
 
-			$this->flags->record_row( $id, $this->auditor->audit( $redirect ) );
-			$state['cursor'] = $id;
+		if ( array() !== $redirects ) {
+			$state['cursor'] = (int) end( $redirects )->id();
 		}
 
 		$audited           = count( $redirects );
@@ -364,17 +363,29 @@ final class AuditSweep {
 	 * @return AuditFinding[] Every finding, in the order the redirects were given.
 	 */
 	public function validate_redirects( array $redirects ): array {
-		$findings = array();
-
-		foreach ( $redirects as $redirect ) {
-			$found = $this->auditor->audit( $redirect );
-			$this->flags->record_row( (int) $redirect->id(), $found );
-			array_push( $findings, ...$found );
-		}
+		$findings = array_merge( ...$this->audit_and_record( $redirects ) );
 
 		if ( array() !== $redirects ) {
 			$this->flags->store_counts();
 		}
+
+		return $findings;
+	}
+
+	/**
+	 * Audit redirects together, then record every flag at once.
+	 *
+	 * Together so the flags can be compared in one query and only the
+	 * changed ones written.
+	 *
+	 * @param Redirect[] $redirects The redirects.
+	 * @return array<int, AuditFinding[]> Each redirect's findings, in the order given.
+	 */
+	private function audit_and_record( array $redirects ): array {
+		$findings = array_map( fn( Redirect $redirect ): array => $this->auditor->audit( $redirect ), $redirects );
+		$ids      = array_map( static fn( Redirect $redirect ): int => (int) $redirect->id(), $redirects );
+
+		$this->flags->record_rows( array_combine( $ids, $findings ) );
 
 		return $findings;
 	}
