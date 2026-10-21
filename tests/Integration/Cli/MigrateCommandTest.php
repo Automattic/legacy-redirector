@@ -11,6 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
+use Automattic\LegacyRedirector\Tests\Integration\UpgraderTestHelper;
 
 /**
  * Integration tests for MigrateCommand.
@@ -33,6 +34,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
  */
 final class MigrateCommandTest extends CliTestCase {
+
+	use UpgraderTestHelper;
 
 	/**
 	 * The command under test.
@@ -168,14 +171,9 @@ final class MigrateCommandTest extends CliTestCase {
 	 * Redirects the database refuses to write are listed, and the run fails.
 	 */
 	public function test_failed_writes_fail_the_run_then_are_retried(): void {
-		global $wpdb;
-
 		$post_id = $this->create_legacy_redirect( '/old-page/' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->invoke_command( $this->command, array(), array() );
-		remove_filter( 'query', $refuse );
+		$this->with_row_writes_refused( fn() => $this->invoke_command( $this->command, array(), array() ) );
 
 		$this->assert_warning_contains( '1 redirect could not be written' );
 		$this->assert_stdout_contains( '  #' . $post_id . ' (/old-page/): ' );
@@ -203,11 +201,8 @@ final class MigrateCommandTest extends CliTestCase {
 		global $wpdb;
 
 		$this->create_legacy_redirect( '/old-page' );
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->invoke_command( $this->command, array(), array() );
-		remove_filter( 'query', $refuse );
+		$this->with_queries_refused( "SELECT * FROM {$wpdb->posts} WHERE post_type", fn() => $this->invoke_command( $this->command, array(), array() ) );
 
 		$this->assert_error_contains( 'Stopped because the database could not read the redirects' );
 		$this->assert_error_contains( 'It is safe to run the same command again' );

@@ -41,6 +41,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  */
 final class UpgraderMultisiteTest extends TestCase {
 
+	use UpgraderTestHelper;
+
 	/**
 	 * The subsite ID.
 	 *
@@ -662,29 +664,6 @@ final class UpgraderMultisiteTest extends TestCase {
 		global $wpdb;
 
 		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = %s", '_legacy_redirector_upgrade_waits_for' ) );
-	}
-
-	/**
-	 * Run batches of the web size until the upgrade completes, adding up their totals.
-	 *
-	 * @return array<string, mixed> The totals.
-	 */
-	private function run_to_completion(): array {
-		$totals = array(
-			'processed' => 0,
-			'repathed'  => 0,
-			'conflicts' => array(),
-		);
-
-		do {
-			$batch = $this->upgrader->run_batch( Upgrader::BATCH_SIZE );
-
-			$totals['processed'] += $batch['processed'];
-			$totals['repathed']  += $batch['repathed'];
-			$totals['conflicts']  = array_merge( $totals['conflicts'], $batch['conflicts'] );
-		} while ( ! $batch['complete'] );
-
-		return $totals;
 	}
 
 	/**

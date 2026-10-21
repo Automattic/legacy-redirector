@@ -44,6 +44,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  */
 final class UpgraderTest extends TestCase {
 
+	use UpgraderTestHelper;
+
 	/**
 	 * The upgrade routine under test.
 	 *
@@ -138,9 +140,7 @@ final class UpgraderTest extends TestCase {
 
 		$disabled_id = $this->create_legacy_redirect( '/disabled-on-purpose' );
 
-		do {
-			$result = $this->upgrader->run_batch( 100 );
-		} while ( ! $result['complete'] );
+		$this->run_to_completion();
 
 		$this->assertSame( 'publish', get_post_status( $legacy_id ) );
 		$this->assertSame( 'draft', get_post_status( $disabled_id ) );
@@ -157,11 +157,8 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$this->create_legacy_redirect( '/old-page' );
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "SELECT ID FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->upgrader->stamp_fresh_install();
-		remove_filter( 'query', $refuse );
+		$this->with_queries_refused( "SELECT ID FROM {$wpdb->posts} WHERE post_type", fn() => $this->upgrader->stamp_fresh_install() );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_started_gmt' ) );
@@ -178,29 +175,15 @@ final class UpgraderTest extends TestCase {
 	 * @return void
 	 */
 	public function test_refused_ceiling_read_does_not_complete_the_upgrade() {
-		global $wpdb;
-
 		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, 'SELECT MAX(ID)' ) ? '' : $query;
 
-		$error = null;
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-		} catch ( \RuntimeException $e ) {
-			$error = $e;
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$error = $this->refusal_stops( 'SELECT MAX(ID)', fn() => $this->upgrader->run_batch( 100 ) );
 
-		$this->assertInstanceOf( \RuntimeException::class, $error, 'A refused ceiling read must stop the batch.' );
 		$this->assertStringContainsString( 'could not read', $error->getMessage() );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
 
-		do {
-			$result = $this->upgrader->run_batch( 100 );
-		} while ( ! $result['complete'] );
+		$this->run_to_completion();
 
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
 	}
@@ -212,17 +195,9 @@ final class UpgraderTest extends TestCase {
 	 * @return void
 	 */
 	public function test_refused_ceiling_read_does_not_anchor() {
-		global $wpdb;
-
 		$this->create_legacy_redirect( '/old-page' );
-		$refuse = static fn( string $query ): string => str_starts_with( $query, 'SELECT MAX(ID)' ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->stamp_fresh_install();
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$this->with_queries_refused( 'SELECT MAX(ID)', fn() => $this->upgrader->stamp_fresh_install() );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
@@ -448,9 +423,7 @@ final class UpgraderTest extends TestCase {
 		$this->assertFalse( $first['complete'] );
 		$this->assertSame( 2, $first['processed'] );
 
-		do {
-			$batch = $this->upgrader->run_batch( 2 );
-		} while ( ! $batch['complete'] );
+		$this->run_to_completion( 2 );
 
 		foreach ( $ids as $id ) {
 			$this->assertSame( 'publish', get_post_status( $id ), 'Redirect ' . $id . ' should have been published.' );
@@ -676,13 +649,7 @@ final class UpgraderTest extends TestCase {
 		$first_id  = $this->create_legacy_redirect( '/first/' );
 		$second_id = $this->create_legacy_redirect( '/second/' );
 
-		$this->with_row_writes_refused(
-			function (): void {
-				do {
-					$batch = $this->upgrader->run_batch( 1 );
-				} while ( ! $batch['complete'] );
-			}
-		);
+		$this->with_row_writes_refused( fn() => $this->run_to_completion( 1 ) );
 
 		$this->assertSame( 2, $this->upgrader->pending_retries() );
 
@@ -726,18 +693,10 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-			$this->fail( 'The batch should have stopped.' );
-		} catch ( \RuntimeException $e ) {
-			$this->assertStringContainsString( 'could not publish', $e->getMessage() );
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$error = $this->refusal_stops( "UPDATE {$wpdb->posts} SET post_status", fn() => $this->upgrader->run_batch( 100 ) );
 
+		$this->assertStringContainsString( 'could not publish', $error->getMessage() );
 		$this->assertSame( 0, (int) get_option( 'wpcom_legacy_redirector_upgrade_cursor', 0 ) );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 
@@ -844,17 +803,9 @@ final class UpgraderTest extends TestCase {
 	public function test_database_error_taking_the_lock_is_reported() {
 		global $wpdb;
 
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "INSERT IGNORE INTO {$wpdb->options}" ) ? '' : $query;
+		$error = $this->refusal_stops( "INSERT IGNORE INTO {$wpdb->options}", fn() => $this->upgrader->run_batch( 100 ) );
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-			$this->fail( 'The batch should not have run.' );
-		} catch ( \RuntimeException $e ) {
-			$this->assertStringContainsString( 'could not take the migration lock', $e->getMessage() );
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$this->assertStringContainsString( 'could not take the migration lock', $error->getMessage() );
 	}
 
 	/**
@@ -1038,11 +989,8 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->upgrader->maybe_upgrade();
-		remove_filter( 'query', $refuse );
+		$this->with_queries_refused( "SELECT * FROM {$wpdb->posts} WHERE post_type", fn() => $this->upgrader->maybe_upgrade() );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade(), 'A failed read must not complete the upgrade.' );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
@@ -1061,18 +1009,10 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$post_id = $this->create_legacy_redirect( '/old-page/' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-			$this->fail( 'The batch should have stopped.' );
-		} catch ( \RuntimeException $e ) {
-			$this->assertStringStartsWith( 'the database could not read the redirects', $e->getMessage() );
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$error = $this->refusal_stops( "SELECT ID, post_name, post_date FROM {$wpdb->posts}", fn() => $this->upgrader->run_batch( 100 ) );
 
+		$this->assertStringStartsWith( 'the database could not read the redirects', $error->getMessage() );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
 		$this->assertSame( '/old-page/', get_post( $post_id )->post_title );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
@@ -1113,28 +1053,6 @@ final class UpgraderTest extends TestCase {
 		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 
 		$this->assertSame( array(), $this->upgrader->duplicates() );
-	}
-
-	/**
-	 * Run a callback with every per-row redirect write refused.
-	 *
-	 * Blanks the UPDATE $wpdb->update() builds (its table name is quoted),
-	 * leaving the bulk publish, which is not, alone.
-	 *
-	 * @param callable $callback The code to run.
-	 * @return mixed What the callback returned.
-	 */
-	private function with_row_writes_refused( callable $callback ): mixed {
-		global $wpdb;
-
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
-
-		add_filter( 'query', $refuse );
-		try {
-			return $callback();
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
 	}
 
 	/**
@@ -1201,9 +1119,7 @@ final class UpgraderTest extends TestCase {
 
 		$created_id = $this->create_legacy_redirect( '/created-disabled' );
 
-		do {
-			$batch = $this->upgrader->run_batch( 1 );
-		} while ( ! $batch['complete'] );
+		$this->run_to_completion( 1 );
 
 		$this->assertSame( 'publish', get_post_status( $legacy_id ) );
 		$this->assertSame( 'draft', get_post_status( $created_id ) );
@@ -2200,16 +2116,9 @@ final class UpgraderTest extends TestCase {
 				return $changed;
 			};
 
-			$upgrader = new Upgrader();
-			$result   = array_fill_keys( $keys, 0 ) + array( 'conflicts' => array() );
+			$this->upgrader = new Upgrader();
 			add_filter( 'query', $tracking );
-			do {
-				$batch = $upgrader->run_batch( null === $filter ? 7 : 100 );
-				foreach ( $keys as $key ) {
-					$result[ $key ] += $batch[ $key ];
-				}
-				$result['conflicts'] = array_merge( $result['conflicts'], $batch['conflicts'] );
-			} while ( ! $batch['complete'] );
+			$result = $this->run_to_completion( null === $filter ? 7 : 100 );
 			remove_filter( 'query', $tracking );
 
 			if ( null !== $filter ) {

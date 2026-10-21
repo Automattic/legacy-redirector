@@ -44,6 +44,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  */
 final class UpgraderSubdirectoryTest extends TestCase {
 
+	use UpgraderTestHelper;
+
 	/**
 	 * The subdirectory the site is pretending to live in, without slashes.
 	 */
@@ -246,14 +248,9 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	 * @return void
 	 */
 	public function test_retry_strips_the_home_path(): void {
-		global $wpdb;
-
 		$post_id = $this->create_prefixed_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->upgrader->run_batch( 100 );
-		remove_filter( 'query', $refuse );
+		$this->with_row_writes_refused( fn() => $this->upgrader->run_batch( 100 ) );
 
 		$this->assertFalse( $this->upgrader->needs_upgrade() );
 		$this->assertSame( 1, $this->upgrader->pending_retries() );
