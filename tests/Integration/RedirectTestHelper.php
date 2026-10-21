@@ -121,7 +121,7 @@ trait RedirectTestHelper {
 	}
 
 	/**
-	 * Create a redirect using the new API.
+	 * Create a redirect through the manager, failing loudly if it is refused.
 	 *
 	 * @param string     $from     The source URL path.
 	 * @param string|int $to       The destination URL or post ID.
@@ -142,23 +142,6 @@ trait RedirectTestHelper {
 		}
 
 		return $result->redirect_id();
-	}
-
-	/**
-	 * Create a redirect and return boolean success (mimics legacy API).
-	 *
-	 * @param string     $from     The source URL path.
-	 * @param string|int $to       The destination URL or post ID.
-	 * @param bool       $validate Whether to validate the redirect (default false).
-	 * @return bool True on success.
-	 */
-	protected function create_redirect_bool( string $from, $to, bool $validate = false ): bool {
-		try {
-			$this->create_redirect( $from, $to, $validate );
-			return true;
-		} catch ( \RuntimeException $e ) {
-			return false;
-		}
 	}
 
 	/**
