@@ -10,7 +10,6 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
 
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\MigrateCommand;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
@@ -66,28 +65,6 @@ final class MigrateCommandTest extends CliTestCase {
 
 		$this->upgrader = new Upgrader();
 		$this->command  = new MigrateCommand( $this->upgrader );
-	}
-
-	/**
-	 * Create a redirect exactly as version 1.x would have stored it.
-	 *
-	 * 1.x called wp_insert_post() with no post_status, so WordPress defaulted
-	 * every redirect to 'draft'.
-	 *
-	 * @param string $source_path The source path as 1.x stored it.
-	 * @param string $destination The destination URL.
-	 * @return int The created post ID.
-	 */
-	private function create_legacy_redirect( string $source_path, string $destination = 'https://external.example.net/x' ): int {
-		return (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $source_path ),
-				'post_title'   => $source_path,
-				'post_excerpt' => $destination,
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
 	}
 
 	/**

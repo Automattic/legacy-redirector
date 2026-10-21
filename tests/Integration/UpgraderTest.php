@@ -72,30 +72,6 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * Create a redirect exactly as version 1.x would have stored it.
-	 *
-	 * 1.x called wp_insert_post() with no post_status, so WordPress defaulted
-	 * every redirect to 'draft'. A redirect to a post kept the post's ID in
-	 * post_parent and left post_excerpt empty.
-	 *
-	 * @param string     $source_path The source path as 1.x stored it.
-	 * @param string|int $destination The destination URL, or the ID of the post to redirect to.
-	 * @return int The created post ID.
-	 */
-	private function create_legacy_redirect( string $source_path, string|int $destination = 'https://example.com/new' ): int {
-		return (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $source_path ),
-				'post_title'   => $source_path,
-				'post_excerpt' => is_int( $destination ) ? '' : $destination,
-				'post_parent'  => is_int( $destination ) ? $destination : 0,
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
-	}
-
-	/**
 	 * A site with no redirects completes immediately.
 	 *
 	 * @return void
@@ -410,13 +386,10 @@ final class UpgraderTest extends TestCase {
 		// A redirect created and then disabled under 2.0: because it was
 		// published at some point, it carries a real post_modified_gmt, which
 		// is what distinguishes it from a 1.x redirect that never was.
-		$disabled_id = (int) wp_insert_post(
+		$disabled_id = $this->insert_redirect_post(
 			array(
-				'post_name'    => md5( '/disabled-under-2x' ),
-				'post_title'   => '/disabled-under-2x',
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'publish',
+				'post_name'  => md5( '/disabled-under-2x' ),
+				'post_title' => '/disabled-under-2x',
 			)
 		);
 

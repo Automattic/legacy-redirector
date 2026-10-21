@@ -212,6 +212,32 @@ trait RedirectTestHelper {
 	}
 
 	/**
+	 * Create a redirect exactly as version 1.x would have stored it.
+	 *
+	 * 1.x called wp_insert_post() with no post_status, so WordPress defaulted
+	 * every redirect to 'draft', and keyed it by the md5 of the source text as
+	 * stored. A redirect to a post kept the post's ID in post_parent and left
+	 * post_excerpt empty.
+	 *
+	 * @param string     $source_path The source path as 1.x stored it.
+	 * @param string|int $destination The destination URL, or the ID of the post to redirect to.
+	 * @return int The created post ID.
+	 *
+	 * @throws \RuntimeException If the insert fails, so a bad fixture cannot pass a test vacuously.
+	 */
+	protected function create_legacy_redirect( string $source_path, string|int $destination = 'https://example.com/new' ): int {
+		return $this->insert_redirect_post(
+			array(
+				'post_name'    => md5( $source_path ),
+				'post_title'   => $source_path,
+				'post_excerpt' => is_int( $destination ) ? '' : $destination,
+				'post_parent'  => is_int( $destination ) ? $destination : 0,
+				'post_status'  => 'draft',
+			)
+		);
+	}
+
+	/**
 	 * Drop the cached lookup entry for a source path.
 	 *
 	 * Goes through the repository's own key builder, because a key built by

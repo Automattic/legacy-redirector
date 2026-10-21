@@ -9,7 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
-use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
@@ -108,39 +107,12 @@ final class UpgraderMultisiteTest extends TestCase {
 	/**
 	 * Create a redirect exactly as 1.x stored it on a subdirectory subsite.
 	 *
-	 * @param string $path_within_subsite The path below the subsite, e.g. '/old-page'.
+	 * @param string     $path_within_subsite The path below the subsite, e.g. '/old-page'.
+	 * @param string|int $destination         The destination URL, or the ID of the post to redirect to.
 	 * @return int The created post ID.
 	 */
-	private function create_legacy_redirect( string $path_within_subsite ): int {
-		$network_absolute_path = '/' . $this->subsite . $path_within_subsite;
-
-		return (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $network_absolute_path ),
-				'post_title'   => $network_absolute_path,
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
-	}
-
-	/**
-	 * Create a redirect already stored in the subsite-relative 2.0 form.
-	 *
-	 * @param string $path The subsite-relative path.
-	 * @return int The created post ID.
-	 */
-	private function create_relative_redirect( string $path ): int {
-		return (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $path ),
-				'post_title'   => $path,
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
+	private function create_prefixed_redirect( string $path_within_subsite, string|int $destination = 'https://example.com/new' ): int {
+		return $this->create_legacy_redirect( '/' . $this->subsite . $path_within_subsite, $destination );
 	}
 
 	/**
@@ -149,7 +121,7 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_subsite_prefix_is_stripped_from_legacy_source() {
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$post_id = $this->create_prefixed_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -171,7 +143,7 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_migrated_redirect_is_reachable_by_lookup() {
-		$this->create_legacy_redirect( '/old-page' );
+		$this->create_prefixed_redirect( '/old-page' );
 
 		$this->upgrader->run_batch( 100 );
 
@@ -187,7 +159,7 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_already_relative_source_is_not_rewritten() {
-		$post_id = $this->create_relative_redirect( '/old-page' );
+		$post_id = $this->create_legacy_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -207,7 +179,7 @@ final class UpgraderMultisiteTest extends TestCase {
 	 */
 	public function test_prefixed_source_written_under_2_0_is_not_rewritten() {
 		update_option( Upgrader::VERSION_OPTION, 2 );
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$post_id = $this->create_prefixed_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -237,7 +209,7 @@ final class UpgraderMultisiteTest extends TestCase {
 		// being republished.
 		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2100-01-01 00:00:00' );
 
-		$post_id = $this->create_relative_redirect( '/old-page' );
+		$post_id = $this->create_legacy_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -256,8 +228,8 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_colliding_rewrite_of_the_same_destination_is_trashed() {
-		$prefixed_id = $this->create_legacy_redirect( '/old-page' );
-		$kept_id     = $this->create_relative_redirect( '/old-page' );
+		$prefixed_id = $this->create_prefixed_redirect( '/old-page' );
+		$kept_id     = $this->create_legacy_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -274,17 +246,9 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_colliding_rewrite_of_a_different_destination_is_drafted() {
-		$prefixed_id = $this->create_legacy_redirect( '/old-page' );
+		$prefixed_id = $this->create_prefixed_redirect( '/old-page' );
 
-		$kept_id = (int) wp_insert_post(
-			array(
-				'post_name'    => md5( '/old-page' ),
-				'post_title'   => '/old-page',
-				'post_excerpt' => 'https://example.com/somewhere-else',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
+		$kept_id = $this->create_legacy_redirect( '/old-page', 'https://example.com/somewhere-else' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -309,17 +273,9 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_unprefixed_duplicate_is_marked_as_never_fired() {
-		$prefixed_id = $this->create_legacy_redirect( '/old-page' );
+		$prefixed_id = $this->create_prefixed_redirect( '/old-page' );
 
-		$unprefixed_id = (int) wp_insert_post(
-			array(
-				'post_name'    => md5( '/old-page/' ),
-				'post_title'   => '/old-page/',
-				'post_excerpt' => 'https://example.com/somewhere-else',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
+		$unprefixed_id = $this->create_legacy_redirect( '/old-page/', 'https://example.com/somewhere-else' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -347,8 +303,8 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_row_takes_a_key_freed_earlier_in_the_batch() {
-		$first_id  = $this->create_legacy_redirect( '/x' );
-		$second_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$first_id  = $this->create_prefixed_redirect( '/x' );
+		$second_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 
 		$pending = $this->upgrader->count_pending();
 		$result  = $this->upgrader->run_batch( 100 );
@@ -378,11 +334,11 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_double_prefixed_source_created_first_takes_the_freed_key( int $between ) {
-		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$double_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 		for ( $i = 0; $i < $between; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$single_id = $this->create_legacy_redirect( '/x' );
+		$single_id = $this->create_prefixed_redirect( '/x' );
 
 		$pending = $this->upgrader->count_pending();
 
@@ -425,9 +381,9 @@ final class UpgraderMultisiteTest extends TestCase {
 	public function test_chain_of_waiting_sources_all_reach_their_keys() {
 		$prefix = '/' . $this->subsite;
 		$ids    = array(
-			$this->create_legacy_redirect( $prefix . $prefix . '/x' ),
-			$this->create_legacy_redirect( $prefix . '/x' ),
-			$this->create_legacy_redirect( '/x' ),
+			$this->create_prefixed_redirect( $prefix . $prefix . '/x' ),
+			$this->create_prefixed_redirect( $prefix . '/x' ),
+			$this->create_prefixed_redirect( '/x' ),
 		);
 
 		$pending = $this->upgrader->count_pending();
@@ -448,11 +404,11 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_row_waiting_for_a_deleted_redirect_is_migrated_at_the_end() {
-		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$double_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$single_id = $this->create_legacy_redirect( '/x' );
+		$single_id = $this->create_prefixed_redirect( '/x' );
 
 		$first = $this->upgrader->run_batch( Upgrader::BATCH_SIZE );
 		wp_delete_post( $single_id, true );
@@ -470,11 +426,11 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_dry_run_counts_a_row_waiting_for_a_deleted_redirect() {
-		$this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$single_id = $this->create_legacy_redirect( '/x' );
+		$single_id = $this->create_prefixed_redirect( '/x' );
 
 		$pending = $this->upgrader->count_pending(
 			static function () use ( $single_id ): void {
@@ -497,15 +453,15 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_waiting_row_collides_when_its_holder_cannot_move() {
-		$live_id = $this->create_relative_redirect( '/x' );
+		$live_id = $this->create_legacy_redirect( '/x' );
 		wp_update_post(
 			array(
 				'ID'           => $live_id,
 				'post_excerpt' => 'https://example.com/elsewhere',
 			)
 		);
-		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
-		$single_id = $this->create_legacy_redirect( '/x' );
+		$double_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
+		$single_id = $this->create_prefixed_redirect( '/x' );
 		wp_update_post(
 			array(
 				'ID'           => $single_id,
@@ -530,9 +486,9 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_first_of_two_rows_waiting_for_one_key_takes_it() {
-		$first_id  = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
-		$second_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x/' );
-		$this->create_legacy_redirect( '/x' );
+		$first_id  = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
+		$second_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x/' );
+		$this->create_prefixed_redirect( '/x' );
 
 		$pending = $this->upgrader->count_pending();
 		$result  = $this->upgrader->run_batch( 100 );
@@ -552,10 +508,10 @@ final class UpgraderMultisiteTest extends TestCase {
 	public function test_trashed_row_waits_like_any_other() {
 		global $wpdb;
 
-		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$double_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 		$wpdb->update( $wpdb->posts, array( 'post_status' => 'trash' ), array( 'ID' => $double_id ) );
 		clean_post_cache( $double_id );
-		$this->create_legacy_redirect( '/x' );
+		$this->create_prefixed_redirect( '/x' );
 
 		$pending = $this->upgrader->count_pending();
 		$result  = $this->upgrader->run_batch( 100 );
@@ -576,12 +532,12 @@ final class UpgraderMultisiteTest extends TestCase {
 	 */
 	public function test_chain_waiting_on_a_deleted_redirect_settles_at_the_end() {
 		$prefix = '/' . $this->subsite;
-		$third  = $this->create_legacy_redirect( $prefix . $prefix . '/x' );
-		$second = $this->create_legacy_redirect( $prefix . '/x' );
+		$third  = $this->create_prefixed_redirect( $prefix . $prefix . '/x' );
+		$second = $this->create_prefixed_redirect( $prefix . '/x' );
 		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$first = $this->create_legacy_redirect( '/x' );
+		$first = $this->create_prefixed_redirect( '/x' );
 
 		$this->upgrader->run_batch( Upgrader::BATCH_SIZE );
 		$this->assertSame( 2, $this->waiting_rows() );
@@ -606,13 +562,13 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_released_row_is_no_longer_recorded_as_waiting() {
-		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$double_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$this->create_legacy_redirect( '/x' );
+		$this->create_prefixed_redirect( '/x' );
 		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
-			$this->create_legacy_redirect( '/later-' . $i );
+			$this->create_prefixed_redirect( '/later-' . $i );
 		}
 
 		$this->upgrader->run_batch( Upgrader::BATCH_SIZE );
@@ -640,11 +596,11 @@ final class UpgraderMultisiteTest extends TestCase {
 	public function test_rows_planned_again_keep_the_keys_they_were_given( string $interruption ) {
 		global $wpdb;
 
-		$single_id = $this->create_legacy_redirect( '/x' );
-		$double_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
-		$plain_id  = $this->create_relative_redirect( '/plain' );
+		$single_id = $this->create_prefixed_redirect( '/x' );
+		$double_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
+		$plain_id  = $this->create_legacy_redirect( '/plain' );
 		for ( $i = 0; $i < 3; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
 
 		if ( 'overlap' === $interruption ) {
@@ -740,11 +696,11 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_dry_run_sees_a_key_freed_in_an_earlier_batch() {
-		$this->create_legacy_redirect( '/x' );
+		$this->create_prefixed_redirect( '/x' );
 		for ( $i = 0; $i < Upgrader::BATCH_SIZE; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 
 		$pending = $this->upgrader->count_pending();
 
@@ -766,12 +722,12 @@ final class UpgraderMultisiteTest extends TestCase {
 	 * @return void
 	 */
 	public function test_key_of_a_trashed_duplicate_is_free_for_a_later_row( int $between ) {
-		$this->create_relative_redirect( '/y' );
-		$trashed_id = $this->create_legacy_redirect( '/y' );
+		$this->create_legacy_redirect( '/y' );
+		$trashed_id = $this->create_prefixed_redirect( '/y' );
 		for ( $i = 0; $i < $between; $i++ ) {
-			$this->create_legacy_redirect( '/filler-' . $i );
+			$this->create_prefixed_redirect( '/filler-' . $i );
 		}
-		$taker_id = $this->create_legacy_redirect( '/' . $this->subsite . '/y' );
+		$taker_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/y' );
 
 		$pending = $this->upgrader->count_pending();
 		$result  = $this->upgrader->run_batch( 1000 );
@@ -810,8 +766,8 @@ final class UpgraderMultisiteTest extends TestCase {
 	public function test_auto_draft_drafted_as_a_duplicate_holds_its_key() {
 		global $wpdb;
 
-		$this->create_relative_redirect( '/x' );
-		$drafted_id = $this->create_legacy_redirect( '/x' );
+		$this->create_legacy_redirect( '/x' );
+		$drafted_id = $this->create_prefixed_redirect( '/x' );
 		$wpdb->update(
 			$wpdb->posts,
 			array(
@@ -820,7 +776,7 @@ final class UpgraderMultisiteTest extends TestCase {
 			),
 			array( 'ID' => $drafted_id )
 		);
-		$later_id = $this->create_legacy_redirect( '/' . $this->subsite . '/x' );
+		$later_id = $this->create_prefixed_redirect( '/' . $this->subsite . '/x' );
 		$wpdb->update( $wpdb->posts, array( 'post_excerpt' => 'https://example.com/third' ), array( 'ID' => $later_id ) );
 		clean_post_cache( $drafted_id );
 		clean_post_cache( $later_id );
@@ -849,15 +805,7 @@ final class UpgraderMultisiteTest extends TestCase {
 
 		switch_to_blog( get_main_site_id() );
 		delete_option( Upgrader::VERSION_OPTION );
-		$other_id = (int) wp_insert_post(
-			array(
-				'post_name'    => md5( '/old-page/' ),
-				'post_title'   => '/old-page/',
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
+		$other_id = $this->create_legacy_redirect( '/old-page/' );
 		$lock     = static fn(): ?string => $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", 'wpcom_legacy_redirector_upgrade_lock' ) );
 		$wpdb->insert(
 			$wpdb->options,
@@ -870,7 +818,7 @@ final class UpgraderMultisiteTest extends TestCase {
 		$held     = $lock();
 		restore_current_blog();
 
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$post_id = $this->create_prefixed_redirect( '/old-page' );
 		$result  = $this->upgrader->run_batch( 100 );
 
 		$this->assertTrue( $result['complete'] );

@@ -9,7 +9,6 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
-use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
@@ -100,21 +99,12 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	/**
 	 * Create a redirect exactly as 1.x stored it on a subdirectory install.
 	 *
-	 * @param string $path_within_site The path below the subdirectory, e.g. '/old-page'.
+	 * @param string     $path_within_site The path below the subdirectory, e.g. '/old-page'.
+	 * @param string|int $destination      The destination URL, or the ID of the post to redirect to.
 	 * @return int The created post ID.
 	 */
-	private function create_legacy_redirect( string $path_within_site ): int {
-		$prefixed_path = '/' . self::SUBDIR . $path_within_site;
-
-		return (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $prefixed_path ),
-				'post_title'   => $prefixed_path,
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
+	private function create_prefixed_redirect( string $path_within_site, string|int $destination = 'https://example.com/new' ): int {
+		return $this->create_legacy_redirect( '/' . self::SUBDIR . $path_within_site, $destination );
 	}
 
 	/**
@@ -123,7 +113,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	 * @return void
 	 */
 	public function test_home_path_is_stripped_from_legacy_source_on_single_site(): void {
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$post_id = $this->create_prefixed_redirect( '/old-page' );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -145,7 +135,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	 * @return void
 	 */
 	public function test_migrated_redirect_is_reachable_by_lookup(): void {
-		$this->create_legacy_redirect( '/old-page' );
+		$this->create_prefixed_redirect( '/old-page' );
 
 		$this->upgrader->run_batch( 100 );
 
@@ -168,7 +158,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	 */
 	public function test_unicode_legacy_source_is_repathed_and_reachable(): void {
 		$path    = '/привет-🎉';
-		$post_id = $this->create_legacy_redirect( $path );
+		$post_id = $this->create_prefixed_redirect( $path );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -195,15 +185,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	public function test_unicode_path_outside_the_home_prefix_is_not_repathed(): void {
 		$prefixed = '/' . self::SUBDIR . 'ging/привет';
 
-		$post_id = (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $prefixed ),
-				'post_title'   => $prefixed,
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
+		$post_id = $this->create_legacy_redirect( $prefixed );
 
 		$result = $this->upgrader->run_batch( 100 );
 
@@ -220,7 +202,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	 * @return void
 	 */
 	public function test_dry_run_counts_the_repath_on_single_site(): void {
-		$this->create_legacy_redirect( '/old-page' );
+		$this->create_prefixed_redirect( '/old-page' );
 
 		$pending = $this->upgrader->count_pending();
 
@@ -241,8 +223,8 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	 * @return void
 	 */
 	public function test_dry_run_frees_a_key_an_earlier_batch_would_leave(): void {
-		$this->create_legacy_redirect( '/old-page' );
-		$later = $this->create_legacy_redirect( '/blog/old-page' );
+		$this->create_prefixed_redirect( '/old-page' );
+		$later = $this->create_prefixed_redirect( '/blog/old-page' );
 
 		$pending = $this->upgrader->count_pending( null, 1 );
 		$result  = $this->upgrader->run_batch( 100 );
@@ -266,7 +248,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	public function test_retry_strips_the_home_path(): void {
 		global $wpdb;
 
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+		$post_id = $this->create_prefixed_redirect( '/old-page' );
 		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
 
 		add_filter( 'query', $refuse );
@@ -296,7 +278,7 @@ final class UpgraderSubdirectoryTest extends TestCase {
 	public function test_refused_version_write_does_not_strip_the_home_path_twice(): void {
 		global $wpdb;
 
-		$post_id = $this->create_legacy_redirect( '/blog/old-page' );
+		$post_id = $this->create_prefixed_redirect( '/blog/old-page' );
 		$refuse  = static fn( string $query ): string => str_contains( $query, Upgrader::VERSION_OPTION ) && ! str_starts_with( $query, 'SELECT' ) ? '' : $query;
 
 		add_filter( 'query', $refuse );
