@@ -10,14 +10,14 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 
 /**
  * AuditFindingTypeTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\AuditFindingType
  */
-final class AuditFindingTypeTest extends MonkeyStubs {
+final class AuditFindingTypeTest extends TestCase {
 
 	/**
 	 * Test only a failed request and a server error are inconclusive.

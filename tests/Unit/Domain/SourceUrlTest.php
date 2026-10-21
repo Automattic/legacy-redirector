@@ -11,7 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use InvalidArgumentException;
-use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
+use PHPUnit\Framework\TestCase;
 
 /**
  * SourceUrlTest class.
@@ -23,7 +23,7 @@ use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
-final class SourceUrlTest extends YoastTestCase {
+final class SourceUrlTest extends TestCase {
 
 	/**
 	 * Test from_string creates valid SourceUrl from path.

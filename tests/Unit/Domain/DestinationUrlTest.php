@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 use InvalidArgumentException;
 
 /**
@@ -20,7 +20,7 @@ use InvalidArgumentException;
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
-final class DestinationUrlTest extends MonkeyStubs {
+final class DestinationUrlTest extends TestCase {
 
 	/**
 	 * Test from_string creates valid DestinationUrl from absolute URL.

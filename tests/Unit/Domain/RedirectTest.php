@@ -13,7 +13,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 use DateTimeImmutable;
 use InvalidArgumentException;
 
@@ -26,7 +26,7 @@ use InvalidArgumentException;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
-final class RedirectTest extends MonkeyStubs {
+final class RedirectTest extends TestCase {
 
 	/**
 	 * Test create returns new redirect.

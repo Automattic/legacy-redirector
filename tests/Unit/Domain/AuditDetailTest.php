@@ -10,14 +10,14 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\AuditDetail;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 
 /**
  * AuditDetailTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\AuditDetail
  */
-final class AuditDetailTest extends MonkeyStubs {
+final class AuditDetailTest extends TestCase {
 
 	/**
 	 * Test each detail keeps the English the CLI has always shown.

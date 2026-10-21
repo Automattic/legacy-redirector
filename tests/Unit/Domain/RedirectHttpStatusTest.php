@@ -10,14 +10,14 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\RedirectHttpStatus;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 
 /**
  * RedirectHttpStatusTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  */
-final class RedirectHttpStatusTest extends MonkeyStubs {
+final class RedirectHttpStatusTest extends TestCase {
 
 	/**
 	 * Test get_default returns 301.
