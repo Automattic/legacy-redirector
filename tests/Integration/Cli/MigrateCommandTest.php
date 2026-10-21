@@ -16,7 +16,7 @@ use Automattic\LegacyRedirector\Tests\Integration\UpgraderTestHelper;
 /**
  * Integration tests for MigrateCommand.
  *
- * The Upgrader itself is covered by UpgraderTest and UpgraderMultisiteTest;
+ * The Upgrader itself is covered by the Upgrader*Test files;
  * these tests cover the CLI entry point wrapped around it: the dry-run flag,
  * the already-up-to-date short circuit, and the progress and summary output.
  *
