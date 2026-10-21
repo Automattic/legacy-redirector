@@ -354,6 +354,8 @@ installed below the domain root. See the README section on site-relative source 
 `ids`, or `count`, STDOUT carries the structured value and nothing else: an empty JSON
 result is `[]`, and an empty count is `0`. Headings, summaries, and "nothing found"
 sentences are for the table format; warnings and errors go to STDERR whatever the format.
+`get` shows one redirect the way `wp post get` shows one post: `--format=json` and `yaml`
+print a single object, not a list, and `table` and `csv` print `Field,Value` rows.
 
 **Imports are deliberately paced.** `import` and `import-from-meta` pause for a second
 every 100 rows and flush caches, to keep a large import from overwhelming the database.

@@ -12,6 +12,7 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
 use Automattic\LegacyRedirector\Application\AmbiguousSourceException;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use WP_CLI;
+use WP_CLI\Formatter;
 use WP_CLI_Command;
 
 /**
@@ -84,7 +85,6 @@ final class GetCommand extends WP_CLI_Command {
 	public function __invoke( array $args, array $assoc_args ): void {
 		$identifier = $args[0];
 		$field      = $assoc_args['field'] ?? null;
-		$format     = $assoc_args['format'] ?? 'table';
 
 		try {
 			$redirect = $this->fetcher->fetch( $identifier );
@@ -103,18 +103,13 @@ final class GetCommand extends WP_CLI_Command {
 
 		$data = $this->redirect_row( $redirect ) + array( 'hash' => $redirect->source()->hash() );
 
-		// Return single field if requested.
-		if ( null !== $field ) {
-			if ( ! isset( $data[ $field ] ) ) {
-				WP_CLI::error( sprintf( 'Invalid field: %s. Available fields: %s', $field, implode( ', ', array_keys( $data ) ) ) );
-				return;
-			}
-			WP_CLI::line( (string) $data[ $field ] );
+		if ( null !== $field && ! isset( $data[ $field ] ) ) {
+			WP_CLI::error( sprintf( 'Invalid field: %s. Available fields: %s', $field, implode( ', ', array_keys( $data ) ) ) );
 			return;
 		}
 
 		// Limit to requested fields.
-		if ( isset( $assoc_args['fields'] ) ) {
+		if ( null === $field && isset( $assoc_args['fields'] ) ) {
 			$requested = array_map( 'trim', explode( ',', $assoc_args['fields'] ) );
 			$invalid   = array_diff( $requested, array_keys( $data ) );
 			if ( ! empty( $invalid ) ) {
@@ -124,20 +119,9 @@ final class GetCommand extends WP_CLI_Command {
 			$data = array_intersect_key( $data, array_flip( $requested ) );
 		}
 
-		// Format as key-value pairs for table.
-		if ( 'table' === $format ) {
-			$items = array();
-			foreach ( $data as $key => $value ) {
-				$items[] = array(
-					'Field' => $key,
-					'Value' => $value,
-				);
-			}
-			\WP_CLI\Utils\format_items( 'table', $items, array( 'Field', 'Value' ) );
-			return;
-		}
-
-		// Other formats.
-		\WP_CLI\Utils\format_items( $format, array( $data ), array_keys( $data ) );
+		// One item, as `wp post get` renders it: Field/Value rows for table and
+		// csv, a single object for json and yaml, the bare value for --field.
+		$assoc_args['fields'] = array_keys( $data );
+		( new Formatter( $assoc_args ) )->display_item( $data );
 	}
 }

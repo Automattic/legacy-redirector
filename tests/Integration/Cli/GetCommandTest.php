@@ -102,7 +102,7 @@ final class GetCommandTest extends CliTestCase {
 		);
 
 		$this->assertFalse( $this->output->had_error() );
-		$fields = array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'Value', 'Field' );
+		$fields = $GLOBALS['wp_cli_display_item_calls'][0][1];
 		$this->assertSame( '/post-redirect', $fields['from'] );
 		$this->assertSame( $post_id, $fields['to'] );
 		$this->assertSame( 'post', $fields['type'] );
@@ -257,6 +257,10 @@ final class GetCommandTest extends CliTestCase {
 		$this->assertStringContainsString( '/fields-test', $stdout );
 		$this->assertStringContainsString( 'https://example.com/dest', $stdout );
 		$this->assertStringNotContainsString( 'hash', $stdout );
+		$this->assertSame(
+			array( 'from', 'to' ),
+			$GLOBALS['wp_cli_display_item_calls'][0][0]['fields']
+		);
 	}
 
 	/**
@@ -275,30 +279,52 @@ final class GetCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test a structured format prints the redirect as one record, not as field and value rows.
+	 * Test every format hands WP-CLI the redirect as one item, never a one-element list.
+	 *
+	 * @dataProvider data_formats
+	 *
+	 * @param string $format The --format value.
 	 */
-	public function test_get_json_prints_one_record(): void {
-		$redirect_id = $this->create_redirect( '/json-get', 'https://example.com/dest' );
+	public function test_get_displays_one_item( string $format ): void {
+		$redirect_id = $this->create_redirect( '/one-item', 'https://example.com/dest' );
 
-		$this->invoke_command( $this->command, array( '/json-get' ), array( 'format' => 'json' ) );
+		$this->invoke_command( $this->command, array( '/one-item' ), array( 'format' => $format ) );
 
 		$this->assertFalse( $this->output->had_error() );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'] );
 		$this->assertSame(
 			array(
-				'json',
 				array(
 					array(
+						'format' => $format,
+						'fields' => array( 'ID', 'from', 'to', 'type', 'status', 'hash' ),
+						'field'  => null,
+					),
+					array(
 						'ID'     => $redirect_id,
-						'from'   => '/json-get',
+						'from'   => '/one-item',
 						'to'     => 'https://example.com/dest',
 						'type'   => 'url',
 						'status' => 'enabled',
-						'hash'   => md5( '/json-get' ),
+						'hash'   => md5( '/one-item' ),
 					),
 				),
-				array( 'ID', 'from', 'to', 'type', 'status', 'hash' ),
 			),
-			$GLOBALS['wp_cli_format_items_calls'][0]
+			$GLOBALS['wp_cli_display_item_calls']
+		);
+	}
+
+	/**
+	 * Formats get accepts.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_formats(): array {
+		return array(
+			'table' => array( 'table' ),
+			'json'  => array( 'json' ),
+			'csv'   => array( 'csv' ),
+			'yaml'  => array( 'yaml' ),
 		);
 	}
 }
