@@ -59,9 +59,11 @@ final class ImportCommand extends WP_CLI_Command {
 	 * The optional status column can be 'enabled' or 'disabled'. If omitted,
 	 * new redirects are created enabled.
 	 *
-	 * A leading header row is skipped when its first column is `from`, so the
-	 * output of `wp legacy-redirector list --fields=from,to,status --format=csv`
-	 * can be imported unedited.
+	 * A first row that names a `from` or `to` column is a header instead, and
+	 * the columns are found by name: `from` and `to` are required, `status` is
+	 * optional, and any other column (such as `ID` or `type`) is ignored. So
+	 * the output of `wp legacy-redirector list --format=csv`, with any
+	 * `--fields`, imports unedited.
 	 *
 	 * ## OPTIONS
 	 *
@@ -111,6 +113,10 @@ final class ImportCommand extends WP_CLI_Command {
 	 *     # Import from STDIN.
 	 *     $ cat redirects.csv | wp legacy-redirector import -
 	 *
+	 *     # Restore a list export, header and all.
+	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
+	 *     $ wp legacy-redirector import redirects.csv --mode=upsert
+	 *
 	 * @when after_wp_load
 	 *
 	 * @param array $args       Positional arguments.
@@ -155,6 +161,11 @@ final class ImportCommand extends WP_CLI_Command {
 		$counts    = array();
 		$shown     = array();
 		$every_row = $verbose || $dry_run;
+		$columns   = array(
+			'from'   => 0,
+			'to'     => 1,
+			'status' => 2,
+		);
 
 		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- Standard CSV reading pattern.
 		while ( ( $data = fgetcsv( $handle, 0, ',', '"', '\\' ) ) !== false ) {
@@ -170,19 +181,31 @@ final class ImportCommand extends WP_CLI_Command {
 			}
 
 			++$row;
-			$redirect_from = trim( $data[0] ?? '' );
-			$redirect_to   = trim( $data[1] ?? '' );
-			$status        = $data[2] ?? null; // Optional: 'enabled' or 'disabled'.
 
-			if ( '' === $redirect_from ) {
-				continue;
+			// A header row, such as the one `list --format=csv` writes, says
+			// where the columns are; without one they are read by position.
+			if ( 1 === $row ) {
+				$header = $this->header_columns( $data );
+
+				if ( null !== $header ) {
+					if ( null === $header['from'] || null === $header['to'] ) {
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CLI command, WP_Filesystem not appropriate.
+						fclose( $handle );
+						WP_CLI::error( sprintf( 'The header row has no `%s` column. A header needs `from` and `to` columns, and may have `status`; other columns are ignored.', null === $header['from'] ? 'from' : 'to' ) );
+						return;
+					}
+
+					$columns = $header;
+					continue;
+				}
 			}
 
-			// Skip our own export header, so `list --format=csv` output can be
-			// re-imported unedited. Deliberately narrow: only an exact `from`
-			// in the first column of the first row, so a genuinely malformed
-			// first row is still reported as an error.
-			if ( 1 === $row && 0 === strcasecmp( $redirect_from, 'from' ) ) {
+			$redirect_from = trim( $data[ $columns['from'] ] ?? '' );
+			$redirect_to   = trim( $data[ $columns['to'] ] ?? '' );
+			// Optional: 'enabled' or 'disabled'.
+			$status = null === $columns['status'] ? null : ( $data[ $columns['status'] ] ?? null );
+
+			if ( '' === $redirect_from ) {
 				continue;
 			}
 
@@ -202,6 +225,34 @@ final class ImportCommand extends WP_CLI_Command {
 		fclose( $handle );
 
 		$this->display_results( $counts, $shown, $format, $dry_run, $every_row );
+	}
+
+	/**
+	 * Read the first row as a header, if it is one.
+	 *
+	 * A row is a header when any cell is `from` or `to` (ignoring case and
+	 * surrounding space), the names `list` writes. A bare `to` is not a valid
+	 * destination, and the only realistic redirect row it could catch is one
+	 * with a source of `to` or `from`, which then fails loudly as a header
+	 * missing a column rather than being misread.
+	 *
+	 * @param array $cells The first row's cells.
+	 * @return array{from: int|null, to: int|null, status: int|null}|null Column positions, or null if the row is not a header.
+	 */
+	private function header_columns( array $cells ): ?array {
+		$names   = array_map( static fn( $cell ): string => strtolower( trim( (string) $cell ) ), $cells );
+		$columns = array();
+
+		foreach ( array( 'from', 'to', 'status' ) as $field ) {
+			$position          = array_search( $field, $names, true );
+			$columns[ $field ] = false === $position ? null : $position;
+		}
+
+		if ( null === $columns['from'] && null === $columns['to'] ) {
+			return null;
+		}
+
+		return $columns;
 	}
 
 	/**

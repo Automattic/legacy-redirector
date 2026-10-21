@@ -199,7 +199,7 @@ final class ListCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector list --format=count
 	 *
 	 *     # Export all redirects to a CSV file that import can read back.
-	 *     $ wp legacy-redirector list --limit=100000 --fields=from,to,status --format=csv > redirects.csv
+	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
 	 *
 	 *     # List the redirects the background check found problems with.
 	 *     $ wp legacy-redirector list --has-issues=problem

@@ -132,8 +132,8 @@ See [UPGRADING.md](../UPGRADING.md) for what each of those passes changes and wh
 
 ### Bulk import from an old CMS export
 
-The CSV takes one redirect per row. A header row is skipped only when its first column is
-`from`, as in the export below; any other first row is read as a redirect:
+The CSV takes one redirect per row, with the source, the destination, and an optional
+status, in that order:
 
 ```csv
 /old/legacy/path,/shiny/new/path
@@ -146,6 +146,13 @@ The destination can be a path, an absolute URL, or the ID of a post on this site
 third column is optional and accepts `enabled` or `disabled`; omitted, new redirects are
 created enabled. Any other value is an error for that row, so a typo cannot quietly put a
 redirect live.
+
+A first row that has a `from` or a `to` cell is a header instead, and the columns are found
+by name rather than position: `from` and `to` are required, `status` is optional, and any
+other column is ignored. That is the shape `list --format=csv` writes, so an export imports
+back unedited whichever `--fields` it used, in any order (see
+[Export and back up](#export-and-back-up)). A header without `from` or without `to` stops
+the import before any row is read, naming the missing column.
 
 Preview first, then import. The preview validates each row as the import would, so a row
 the import will refuse is shown as an error rather than as one it would create:
@@ -272,8 +279,8 @@ deleted.
 ### Export and back up
 
 ```bash
-# Everything, in the same shape import expects.
-wp legacy-redirector list --limit=100000 --fields=from,to,status --format=csv > redirects.csv
+# Everything, with a header import reads its columns from.
+wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
 ```
 
 `--limit` defaults to 100, so an export without it gives you the first hundred rows.
@@ -282,7 +289,9 @@ not, so an export is the one place this bites. Pass a number larger than your re
 — `wp legacy-redirector list --format=count` tells you what that is, and reports the true
 total regardless of `--limit`.
 
-Restore it as is; `import` skips the header row:
+Restore it as is. `import` finds the `from`, `to`, and `status` columns by the header and
+ignores the rest, such as `ID` and `type`, so an export with other `--fields` works too as
+long as it includes `from` and `to`:
 
 ```bash
 wp legacy-redirector import redirects.csv --mode=upsert

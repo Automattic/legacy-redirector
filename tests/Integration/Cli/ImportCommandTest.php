@@ -159,10 +159,16 @@ final class ImportCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test our own CSV export header row is skipped.
+	 * Test a header row places the columns by name, so any `list --format=csv`
+	 * export imports back, while a headerless file is still read by position.
+	 *
+	 * @dataProvider data_column_layouts
+	 *
+	 * @param string $csv    The CSV content.
+	 * @param bool   $active Whether the imported redirect should be enabled.
 	 */
-	public function test_import_skips_export_header_row(): void {
-		$file = $this->create_csv( "from,to,status\n/import-header,https://example.com/a,enabled\n" );
+	public function test_import_reads_columns_by_header( string $csv, bool $active ): void {
+		$file = $this->create_csv( $csv );
 
 		$this->invoke_command(
 			$this->command,
@@ -171,7 +177,45 @@ final class ImportCommandTest extends CliTestCase {
 		);
 
 		$this->assert_success_contains( 'Processed 1 redirect.' );
-		$this->assertTrue( $this->redirect_exists( '/import-header' ) );
+
+		$repository = $this->repository();
+		$redirect   = $repository->find_by_id(
+			$repository->get_id_by_source( SourceUrl::from_string( '/import-header' ) )
+		);
+		$this->assertNotNull( $redirect );
+		$this->assertSame( 'https://example.com/a', $redirect->destination()->as_url()->value() );
+		$this->assertSame( $active, $redirect->is_active() );
+	}
+
+	/**
+	 * CSV layouts that all describe one redirect from /import-header.
+	 *
+	 * @return array<string, array{string, bool}>
+	 */
+	public static function data_column_layouts(): array {
+		return array(
+			'default list export'   => array( "ID,from,to,type,status\n12,/import-header,https://example.com/a,url,disabled\n", false ),
+			'reordered --fields'    => array( "status,to,from\ndisabled,https://example.com/a,/import-header\n", false ),
+			'unknown extra column'  => array( "notes,FROM,To\nkeep me,/import-header,https://example.com/a\n", true ),
+			'headerless positional' => array( "/import-header,https://example.com/a,disabled\n", false ),
+		);
+	}
+
+	/**
+	 * Test a header without a `to` column fails before importing anything,
+	 * in a dry run too, rather than reading the rows by position.
+	 *
+	 * @dataProvider data_dry_run_flag
+	 *
+	 * @param array<string, bool> $flags Extra command flags.
+	 */
+	public function test_import_rejects_header_missing_to( array $flags ): void {
+		$file = $this->create_csv( "from,status\n/import-header,https://example.com/a\n" );
+
+		$this->invoke_command( $this->command, array( $file ), $flags + array( 'skip-validation' => true ) );
+
+		$this->assert_error_contains( 'The header row has no `to` column.' );
+		$this->assertSame( 0, $this->count_redirect_posts( '/import-header' ) );
 	}
 
 	/**
