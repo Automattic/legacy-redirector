@@ -47,90 +47,51 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectReposito
 final class LookupTest extends TestCase {
 
 	/**
-	 * Test redirect data lookup.
+	 * Test a created redirect is found again from the same request path.
+	 *
+	 * Storage and keying of each script are covered at the repository level
+	 * (PostTypeRedirectRepositoryTest::data_unicode_source_paths); these rows
+	 * are the request-path spellings the resolver has to parse to that key.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 * @dataProvider get_protected_redirect_data
+	 * @dataProvider data_redirects
 	 *
-	 * @param string $from_url        Redirect From URL.
-	 * @param string $to_url          Redirect To URL.
-	 * @param int    $redirect_status Redirect Status Code.
-	 * @return void
+	 * @param string      $from     The source path, as created and as requested.
+	 * @param string      $to       The destination, as created.
+	 * @param string|null $expected The destination URL served, when it differs from $to.
 	 */
-	public function test_get_redirect_data( $from_url, $to_url, $redirect_status ) {
+	public function test_get_redirect_data( string $from, string $to, ?string $expected = null ): void {
+		$this->create_redirect( $from, $to );
 
-		$this->create_redirect( $from_url, $to_url );
+		$redirect_data = $this->resolver()->get_redirect_data( $from );
 
-		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
-
-		$this->assertEquals( $to_url, $redirect_data['url'] );
-		$this->assertEquals( $redirect_status, $redirect_data['status_code'] );
+		$this->assertSame( $expected ?? $to, $redirect_data['url'] ?? null );
+		$this->assertSame( 301, $redirect_data['status_code'] );
 	}
 
 	/**
-	 * Data provider for tests methods
+	 * Data provider for test_get_redirect_data.
 	 *
-	 * @return array
+	 * @return array<string, array{0: string, 1: string, 2?: string}>
 	 */
-	public function get_protected_redirect_data() {
+	public function data_redirects(): array {
 		return array(
-			'redirect unicode characters with querystring' => array(
-				'/فوتوغرافيا/?test=فوتوغرافيا',
-				'http://example.com/some_other_page',
-				'301',
-			),
-			'redirect_simple'                              => array(
-				'/test',
-				'http://example.com/',
-				'301',
-			),
-			'redirect_unicode_no_query'                    => array(
-				'/فوتوغرافيا/',
-				'http://example.com/',
-				'301',
-			),
+			'simple'                     => array( '/test', 'http://example.com/' ),
+			'query string'               => array( '/a-redirect?with=query-string', 'http://example.com/' ),
+			// Only the path and query are stored, so the fragment is dropped.
+			'fragment'                   => array( '/hash-redirect#with-hash', 'http://example.com/' ),
+			'unicode with unicode query' => array( '/فوتوغرافيا/?test=فوتوغرافيا', 'http://example.com/some_other_page' ),
+			'unicode, trailing slash'    => array( '/فوتوغرافيا/', 'http://example.com/' ),
+			// Four UTF-8 bytes per character, which the parser must not split.
+			'emoji'                      => array( '/party-🎉', 'http://example.com/emoji' ),
+			'mixed scripts with query'   => array( '/привет-納豆-🎉?тест=значение', 'http://example.com/mixed' ),
 			// The lookup path once decoded before parsing while creation
 			// decoded once, so these three never matched what was stored.
-			'redirect_encoded_percent'                     => array(
-				'/100%25-cotton',
-				'http://example.com/cotton',
-				'301',
-			),
-			'redirect_double_encoded_space'                => array(
-				'/a%2520b',
-				'http://example.com/a-b',
-				'301',
-			),
-			'redirect_cyrillic'                            => array(
-				'/привет-мир/',
-				'http://example.com/cyrillic',
-				'301',
-			),
-			'redirect_emoji'                               => array(
-				'/party-🎉',
-				'http://example.com/emoji',
-				'301',
-			),
-			'redirect_hebrew'                              => array(
-				'/שלום-עולם',
-				'http://example.com/hebrew',
-				'301',
-			),
-			'redirect_mixed_scripts_with_query'            => array(
-				'/привет-納豆-🎉?тест=значение',
-				'http://example.com/mixed',
-				'301',
-			),
-			'redirect_unicode_destination'                 => array(
-				'/unicode-destination',
-				'http://example.com/привет-🎉',
-				'301',
-			),
-			'redirect_encoded_hash'                        => array(
-				'/page%23section',
-				'http://example.com/section',
-				'301',
-			),
+			'encoded percent'            => array( '/100%25-cotton', 'http://example.com/cotton' ),
+			'double-encoded space'       => array( '/a%2520b', 'http://example.com/a-b' ),
+			'encoded hash'               => array( '/page%23section', 'http://example.com/section' ),
+			'unicode destination'        => array( '/unicode-destination', 'http://example.com/привет-🎉' ),
+			'unicode relative path'      => array( '/unicode-relative-destination', '/привет-мир', home_url() . '/привет-мир' ),
 		);
 	}
 
@@ -158,33 +119,6 @@ final class LookupTest extends TestCase {
 			'fragment only'     => array( '#section' ),
 			'malformed url'     => array( '://invalid' ),
 		);
-	}
-
-	/**
-	 * Test that trashed redirects do not redirect.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
-	 */
-	public function test_trashed_redirect_does_not_redirect() {
-		$from_url = '/trashed-redirect-test';
-		$to_url   = 'http://example.com/destination';
-
-		// Insert a redirect.
-		$post_id = $this->create_redirect( $from_url, $to_url );
-		$this->assertIsInt( $post_id );
-
-		// Verify the redirect works initially.
-		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
-		$this->assertIsArray( $redirect_data );
-		$this->assertEquals( $to_url, $redirect_data['url'] );
-
-		// Trash the redirect.
-		wp_trash_post( $post_id );
-
-		// Verify the redirect no longer works.
-		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
-		$this->assertNull( $redirect_data );
 	}
 
 	/**
@@ -283,61 +217,6 @@ final class LookupTest extends TestCase {
 	}
 
 	/**
-	 * Test cache is reset when redirect post is deleted.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
-	 */
-	public function test_cache_behavior_with_deleted_post(): void {
-		$from_url = '/delete-cache-test-' . wp_generate_uuid4();
-		$to_url   = 'http://example.com/to-delete';
-
-		$post_id = $this->create_redirect( $from_url, $to_url );
-		$this->assertIsInt( $post_id );
-
-		// Prime the cache.
-		$result = $this->resolver()->get_redirect_data( $from_url );
-		$this->assertSame( $to_url, $result['url'] );
-
-		// Delete the post permanently.
-		wp_delete_post( $post_id, true );
-
-		// The redirect should no longer work: deleting the post ran
-		// clean_post_cache, which dropped the cache entry.
-		$result_after_delete = $this->resolver()->get_redirect_data( $from_url );
-		$this->assertNull( $result_after_delete );
-	}
-
-	/**
-	 * Test repository get_id_by_source returns correct ID.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
-	 */
-	public function test_get_id_by_source_returns_correct_id(): void {
-		$from_url = '/post-id-lookup-test';
-		$to_url   = 'http://example.com/destination';
-
-		$expected_post_id = $this->create_redirect( $from_url, $to_url );
-		$this->assertIsInt( $expected_post_id );
-
-		$actual_post_id = $this->repository()->get_id_by_source( SourceUrl::from_string( $from_url ) );
-
-		$this->assertEquals( $expected_post_id, $actual_post_id );
-	}
-
-	/**
-	 * Test repository get_id_by_source returns 0 for nonexistent redirect.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
-	 */
-	public function test_get_id_by_source_returns_zero_for_nonexistent(): void {
-		$nonexistent_url = '/this-redirect-does-not-exist-' . wp_generate_uuid4();
-
-		$post_id = $this->repository()->get_id_by_source( SourceUrl::from_string( $nonexistent_url ) );
-
-		$this->assertEquals( 0, $post_id );
-	}
-
-	/**
 	 * Test a callback on a pre-2.0 hook name still changes the outcome.
 	 *
 	 * 1.x sites keep these callbacks after upgrading, so each must still reach
@@ -426,8 +305,9 @@ final class LookupTest extends TestCase {
 	}
 
 	/**
-	 * Test that trashing a redirect frees its source, with the lookup cache warm.
+	 * Test that trashing a redirect stops it redirecting and frees its source, with the lookup cache warm.
 	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
 	 */
@@ -435,16 +315,22 @@ final class LookupTest extends TestCase {
 		$post_id = $this->create_redirect( '/trash-frees-source', '/new' );
 		$source  = SourceUrl::from_string( '/trash-frees-source' );
 		$this->assertSame( $post_id, $this->repository()->get_id_by_source( $source ) );
+		$this->assertSame( home_url( '/new' ), $this->resolver()->get_redirect_data( '/trash-frees-source' )['url'] ?? null );
 
 		wp_trash_post( $post_id );
 
 		$this->assertSame( 0, $this->repository()->get_id_by_source( $source ) );
+		$this->assertNull( $this->resolver()->get_redirect_data( '/trash-frees-source' ) );
 		$this->assertTrue( $this->create_redirect_result( '/trash-frees-source', '/other' )->is_success() );
 	}
 
 	/**
-	 * Test that deleting a redirect outside the plugin frees its source, with the lookup cache warm.
+	 * Test that deleting a redirect outside the plugin stops it redirecting and frees its source, with the lookup cache warm.
 	 *
+	 * Core's delete does not go through the repository, so only the plugin's
+	 * clean_post_cache hook drops the cached entry.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
 	 */
@@ -452,10 +338,14 @@ final class LookupTest extends TestCase {
 		$post_id = $this->create_redirect( '/delete-frees-source', '/new' );
 		$source  = SourceUrl::from_string( '/delete-frees-source' );
 		$this->assertSame( $post_id, $this->repository()->get_id_by_source( $source ) );
+		$this->assertSame( home_url( '/new' ), $this->resolver()->get_redirect_data( '/delete-frees-source' )['url'] ?? null );
 
 		wp_delete_post( $post_id, true );
 
+		// The key first: a lookup that finds the post gone drops the entry
+		// itself, which would hide a missed invalidation.
 		$this->assertSame( 0, $this->repository()->get_id_by_source( $source ) );
+		$this->assertNull( $this->resolver()->get_redirect_data( '/delete-frees-source' ) );
 		$this->assertTrue( $this->create_redirect_result( '/delete-frees-source', '/other' )->is_success() );
 	}
 

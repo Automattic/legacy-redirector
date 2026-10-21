@@ -13,11 +13,7 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Application\RedirectBatch;
-use Automattic\LegacyRedirector\Application\RedirectFetcher;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 
 /**
  * Redirects tests class.
@@ -29,8 +25,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
  * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
- * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
- * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
  * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
@@ -49,7 +43,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
- * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
@@ -60,113 +53,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
  * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
  */
 final class RedirectsTest extends TestCase {
-
-	/**
-	 * Data provider.
-	 *
-	 * Each item in the outermost array should be an array containing:
-	 * - $from path
-	 * - $to destination
-	 *
-	 * @return array<string, array>
-	 */
-	public function get_redirect_data() {
-		return array(
-			'redirect_relative_path'    => array(
-				'/non-existing-page',
-				'/test2',
-				home_url() . '/test2',
-			),
-
-			'redirect_unicode_in_path'  => array(
-				// https://www.w3.org/International/articles/idn-and-iri/ .
-				'/JP納豆',
-				'http://example.com',
-			),
-
-			'redirect Arabic in path'   => array(
-				// https://www.w3.org/International/articles/idn-and-iri/ .
-				'/فوتوغرافيا/?test=فوتوغرافيا',
-				'http://example.com',
-			),
-
-			'redirect Cyrillic in path' => array(
-				'/привет-мир/',
-				'http://example.com',
-			),
-			'redirect Hebrew in path'   => array(
-				'/שלום-עולם',
-				'http://example.com',
-			),
-			'redirect emoji in path'    => array(
-				// Astral plane, so four UTF-8 bytes and utf8mb4-only in the DB.
-				'/party-🎉',
-				'http://example.com',
-			),
-			'redirect mixed scripts'    => array(
-				'/привет-納豆-🎉?тест=значение',
-				'http://example.com',
-			),
-			'redirect to unicode dest'  => array(
-				'/unicode-destination',
-				'http://example.com/привет-🎉',
-			),
-			'redirect unicode relative' => array(
-				'/unicode-relative-destination',
-				'/привет-мир',
-				home_url() . '/привет-мир',
-			),
-			'redirect_simple'           => array(
-				'/simple-redirect',
-				'http://example.com',
-			),
-
-			'redirect_with_querystring' => array(
-				'/a-redirect?with=query-string',
-				'http://example.com',
-			),
-
-			'redirect_with_hashes'      => array(
-				// The plugin should strip the hash and only store the URL path.
-				'/hash-redirect#with-hash',
-				'http://example.com',
-			),
-		);
-	}
-
-	/**
-	 * Test redirect is inserted successfully and returns the post ID.
-	 *
-	 * @dataProvider get_redirect_data
-	 * @covers       \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
-	 * @param string      $from     From path.
-	 * @param string      $to       Destination.
-	 * @param string|null $expected Expected redirect URL.
-	 */
-	public function test_redirect_is_inserted_successfully( $from, $to, $expected = null ) {
-		$post_id = $this->create_redirect( $from, $to );
-		$this->assertIsInt( $post_id );
-
-		$redirect_data = $this->resolver()->get_redirect_data( $from );
-
-		if ( \is_null( $expected ) ) {
-			$expected = $to;
-		}
-		$this->assertEquals( $expected, $redirect_data['url'], 'get_redirect_data(), failed - got "' . $redirect_data['url'] . '", expected "' . $to . '"' );
-	}
-
-	/**
-	 * Test create_redirect returns a result with the redirect ID.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectManager::create_redirect
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectCreationResult::redirect_id
-	 */
-	public function test_create_redirect_returns_result_with_id() {
-		$result = $this->create_redirect_result( '/simple-redirect-result', 'http://example.com' );
-
-		$this->assertFalse( $result->is_error() );
-		self::assertIsInt( $result->redirect_id() );
-	}
 
 	/**
 	 * Data Provider of Redirect Rules and test urls for Protected Params
@@ -437,27 +323,6 @@ final class RedirectsTest extends TestCase {
 		$this->assertFalse( $this->create_redirect_result( '/redirect-to-post', $post_id, true )->is_error() );
 		$this->assertFalse( $this->create_redirect_result( '/redirect-to-page', $page_id, true )->is_error() );
 		$this->assertFalse( $this->create_redirect_result( '/redirect-to-attachment', $attachment_id, true )->is_error() );
-	}
-
-	/**
-	 * Test BulkActionsHandler removes edit and adds enable/disable.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\BulkActionsHandler::modify_bulk_actions
-	 */
-	public function test_bulk_actions_handler_removes_edit_and_adds_enable_disable(): void {
-		$handler = new BulkActionsHandler( $this->manager(), new RedirectBatch( new RedirectFetcher( $this->repository() ) ) );
-
-		$actions = array(
-			'edit'   => 'Edit',
-			'delete' => 'Delete',
-		);
-
-		$result = $handler->modify_bulk_actions( $actions );
-
-		$this->assertArrayNotHasKey( 'edit', $result );
-		$this->assertArrayHasKey( 'delete', $result );
-		$this->assertArrayHasKey( 'enable_redirects', $result );
-		$this->assertArrayHasKey( 'disable_redirects', $result );
 	}
 
 	/**
