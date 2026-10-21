@@ -79,19 +79,6 @@ final class ValidateCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Clean up the sweep's state and the badge.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		foreach ( array( AuditSweep::STATE_OPTION, AuditSweep::LOCK_OPTION, AuditFlags::CHECKED_AT_OPTION, AuditFlags::COUNTS_OPTION ) as $option ) {
-			delete_option( $option );
-		}
-
-		parent::tear_down();
-	}
-
-	/**
 	 * Test validating a single valid redirect by source.
 	 */
 	public function test_validate_single_valid_redirect(): void {

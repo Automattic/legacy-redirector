@@ -64,18 +64,6 @@ final class AmpersandEscapingTest extends TestCase {
 	}
 
 	/**
-	 * Log out, which takes kses off again.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		wp_set_current_user( 0 );
-		kses_remove_filters();
-
-		parent::tear_down();
-	}
-
-	/**
 	 * Test a source and destination with ampersands survive saving, editing, trashing and restoring.
 	 */
 	public function test_ampersands_survive_every_save(): void {

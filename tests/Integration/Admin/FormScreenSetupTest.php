@@ -20,13 +20,12 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 final class FormScreenSetupTest extends TestCase {
 
 	/**
-	 * Clean up the request and title.
+	 * Clear the admin page title, which the framework leaves set.
 	 *
 	 * @return void
 	 */
 	public function tear_down(): void {
 		unset( $GLOBALS['title'] );
-		$_GET = array();
 
 		parent::tear_down();
 	}

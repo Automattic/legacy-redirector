@@ -50,17 +50,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher;
 final class DestinationPostWatcherTest extends TestCase {
 
 	/**
-	 * Clean up the stored badge counts.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		delete_option( AuditFlags::COUNTS_OPTION );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * The flag stored on a redirect.
 	 *
 	 * @param int $redirect_id The redirect ID.
