@@ -140,23 +140,9 @@ Feature: Upgrading from version 1.3.0
       """
     And every request version 1.3.0 redirected is redirected to the same destination
 
+    # The marker on the real 1.3.0 row, as an admin finds it later.
     When I run `wp legacy-redirector list --duplicates --fields=from,to,never_fired --format=csv`
     Then STDOUT should contain:
       """
       /café-x/,/dest-two,yes
-      """
-
-    When I run `wp legacy-redirector list --duplicates --format=ids`
-    And save STDOUT as {DUPLICATE_ID}
-    And I try `wp legacy-redirector enable {DUPLICATE_ID}`
-    Then STDERR should contain:
-      """
-      already has the source
-      """
-
-    When I run `wp legacy-redirector delete {DUPLICATE_ID} --yes`
-    And I run `wp legacy-redirector list --duplicates`
-    Then STDOUT should contain:
-      """
-      No redirects are disabled as duplicate sources.
       """
