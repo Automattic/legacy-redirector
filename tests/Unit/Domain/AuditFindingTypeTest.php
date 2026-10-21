@@ -50,7 +50,7 @@ final class AuditFindingTypeTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditFindingType, bool}>
 	 */
-	public function conclusiveness_provider(): array {
+	public static function conclusiveness_provider(): array {
 		return array(
 			'post trashed'               => array( AuditFindingType::POST_TRASHED, true ),
 			'post deleted'               => array( AuditFindingType::POST_DELETED, true ),
@@ -122,7 +122,7 @@ final class AuditFindingTypeTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditFindingType, bool}>
 	 */
-	public function warning_provider(): array {
+	public static function warning_provider(): array {
 		return array(
 			'post trashed'               => array( AuditFindingType::POST_TRASHED, false ),
 			'post deleted'               => array( AuditFindingType::POST_DELETED, false ),

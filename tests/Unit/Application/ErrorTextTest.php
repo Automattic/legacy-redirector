@@ -58,7 +58,7 @@ final class ErrorTextTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{\Throwable}>
 	 */
-	public function exception_provider(): array {
+	public static function exception_provider(): array {
 		$reasons = ( new \ReflectionClass( InvalidRedirectValue::class ) )->getConstants();
 		$cases   = array();
 

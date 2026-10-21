@@ -49,7 +49,7 @@ final class AuditFindingTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditFindingType, string}>
 	 */
-	public function severity_provider(): array {
+	public static function severity_provider(): array {
 		return array(
 			'problem'      => array( AuditFindingType::POST_DELETED, 'problem' ),
 			'warning'      => array( AuditFindingType::RESERVED_SOURCE, 'warning' ),

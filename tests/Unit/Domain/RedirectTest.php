@@ -219,7 +219,7 @@ final class RedirectTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{string}>
 	 */
-	public function data_known_statuses(): array {
+	public static function data_known_statuses(): array {
 		return array(
 			'publish' => array( 'publish' ),
 			'draft'   => array( 'draft' ),

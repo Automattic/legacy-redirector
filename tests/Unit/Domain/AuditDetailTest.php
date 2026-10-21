@@ -36,7 +36,7 @@ final class AuditDetailTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditDetail, string}>
 	 */
-	public function english_provider(): array {
+	public static function english_provider(): array {
 		return array(
 			'post status'        => array( AuditDetail::post_status( 'draft' ), 'status: draft' ),
 			'post type'          => array( AuditDetail::post_type( 'wp_template' ), 'post type: wp_template' ),
