@@ -358,12 +358,19 @@ final class AuditSweep {
 	 * does not move the cursor; it only rewrites these rows' flags, so
 	 * re-checking one redirect after fixing something no event announces
 	 * (a host allowed in code, a page published at a path) clears its flag.
+	 * Taken a batch at a time, so a long list of IDs from the CLI never
+	 * becomes one query with an IN() list of every one.
 	 *
 	 * @param Redirect[] $redirects The redirects to validate.
 	 * @return AuditFinding[] Every finding, in the order the redirects were given.
 	 */
 	public function validate_redirects( array $redirects ): array {
-		$findings = array_merge( ...$this->audit_and_record( $redirects ) );
+		$per_redirect = array();
+		foreach ( array_chunk( $redirects, self::BATCH_SIZE ) as $batch ) {
+			$per_redirect = array_merge( $per_redirect, $this->audit_and_record( $batch ) );
+		}
+
+		$findings = array_merge( ...$per_redirect );
 
 		if ( array() !== $redirects ) {
 			$this->flags->store_counts();

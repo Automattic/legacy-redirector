@@ -265,6 +265,32 @@ final class AuditSweepTest extends TestCase {
 	}
 
 	/**
+	 * Test named redirects are validated a batch at a time, so a long list
+	 * never becomes one query naming every row, and each is still flagged.
+	 */
+	public function test_named_redirects_are_validated_a_batch_at_a_time(): void {
+		global $wpdb;
+
+		$ids       = $this->create_broken_redirects( AuditSweep::BATCH_SIZE + 1, 'sweep-named' );
+		$redirects = array_map( fn( int $id ): Redirect => $this->repository()->find_by_id( $id ), $ids );
+
+		$reads = array();
+		$log   = static function ( string $query ) use ( &$reads, $wpdb ): string {
+			if ( str_starts_with( $query, "SELECT post_id, meta_value FROM {$wpdb->postmeta}" ) ) {
+				$reads[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->sweep()->validate_redirects( $redirects );
+		remove_filter( 'query', $log );
+
+		$this->assertCount( 2, $reads, 'One flag read per batch.' );
+		$this->assertSame( AuditSweep::BATCH_SIZE + 1, ( new AuditFlags() )->problem_count() );
+	}
+
+	/**
 	 * Test the total counts enabled and disabled redirects, not the Trash,
 	 * and a batch's flag writes leave it cached.
 	 */
