@@ -124,121 +124,84 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data returns redirect data for valid URL.
+	 * Expect one lookup: no query parameters preserved, and the repository
+	 * asked once.
+	 *
+	 * @param Redirect|null $redirect What the repository returns.
+	 * @param string|null   $source   The source the lookup must be for, as an
+	 *                                admin would have saved it; null for any.
+	 * @return void
+	 */
+	private function expect_lookup( ?Redirect $redirect, ?string $source = null ): void {
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
+			->once()
+			->andReturn( array() );
+
+		$lookup = $this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->andReturn( $redirect );
+
+		if ( null !== $source ) {
+			$expected = SourceUrl::from_string( $source );
+			$lookup->with( Mockery::on( fn( SourceUrl $s ) => $s->hash() === $expected->hash() ) );
+		}
+	}
+
+	/**
+	 * Test a found redirect resolves to its destination with the default status.
+	 *
+	 * @dataProvider data_destinations
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 *
+	 * @param string     $request     The requested URL, for the source /old-page.
+	 * @param string|int $destination The stored destination: a URL or a post ID.
+	 * @param string     $expected    The URL redirected to.
 	 */
-	public function test_get_redirect_data_returns_redirect_data_for_valid_url(): void {
+	public function test_get_redirect_data_resolves_destination( string $request, $destination, string $expected ): void {
 		$this->stub_home_url();
-		$redirect = $this->create_redirect( '/old-page', '/new-page' );
 
-		// Mock apply_filters for request_path filter (returns path unchanged).
+		if ( is_int( $destination ) ) {
+			Functions\expect( 'get_permalink' )->once()->with( $destination )->andReturn( $expected );
+			$destination = $this->create_post_id_destination( $destination );
+		} else {
+			$destination = $this->create_url_destination( $destination );
+		}
+
 		Filters\expectApplied( 'legacy_redirector_request_path' )
 			->once()
 			->with( '/old-page' )
 			->andReturnFirstArg();
 
-		// Mock apply_filters for preserve_query_params filter (no params to preserve).
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->with( array(), '/old-page' )
-			->andReturn( array() );
+		$this->expect_lookup( Redirect::reconstitute( 123, $this->create_source(), $destination, 'publish' ), '/old-page' );
 
-		// Mock the repository to return the redirect.
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->with( Mockery::on( fn( $s ) => $s->path() === '/old-page' ) )
-			->andReturn( $redirect );
-
-		// Mock apply_filters for redirect_status filter.
 		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
-			->with( 301, '/old-page' )
-			->andReturn( 301 );
+			->with( 301, $request )
+			->andReturnFirstArg();
 
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertIsArray( $result );
-		$this->assertSame( 'https://example.com/new-page', $result['url'] );
-		$this->assertSame( 301, $result['status_code'] );
-	}
-
-	/**
-	 * Test get_redirect_data returns redirect data with post ID destination.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_returns_redirect_data_for_post_id_destination(): void {
-		$this->stub_home_url();
-		$redirect = Redirect::reconstitute(
-			123,
-			$this->create_source( '/old-page' ),
-			$this->create_post_id_destination( 456 ),
-			'publish'
+		$this->assertSame(
+			array(
+				'url'         => $expected,
+				'status_code' => 301,
+			),
+			$this->resolver->get_redirect_data( $request )
 		);
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
-
-		// Mock get_permalink for post ID destination.
-		Functions\expect( 'get_permalink' )
-			->once()
-			->with( 456 )
-			->andReturn( 'https://example.com/destination-post' );
-
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->andReturn( 301 );
-
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertIsArray( $result );
-		$this->assertSame( 'https://example.com/destination-post', $result['url'] );
-		$this->assertSame( 301, $result['status_code'] );
 	}
 
 	/**
-	 * Test get_redirect_data with full URL input extracts path correctly.
+	 * Requests for /old-page, its stored destination, and the URL redirected to.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 * @return array<string, array{string, string|int, string}>
 	 */
-	public function test_get_redirect_data_extracts_path_from_full_url(): void {
-		$this->stub_home_url();
-		$redirect = $this->create_redirect( '/old-page', '/new-page' );
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->with( '/old-page' )
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
-
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->andReturn( 301 );
-
-		$result = $this->resolver->get_redirect_data( 'https://example.com/old-page' );
-
-		$this->assertIsArray( $result );
-		$this->assertSame( 'https://example.com/new-page', $result['url'] );
+	public static function data_destinations(): array {
+		return array(
+			'relative destination' => array( '/old-page', '/new-page', 'https://example.com/new-page' ),
+			'full request URL'     => array( 'https://example.com/old-page', '/new-page', 'https://example.com/new-page' ),
+			'absolute destination' => array( '/old-page', 'https://external.com/page', 'https://external.com/page' ),
+			'post ID destination'  => array( '/old-page', 456, 'https://example.com/destination-post' ),
+		);
 	}
 
 	/**
@@ -256,24 +219,10 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( '/original-path' )
 			->andReturn( '/modified-path' );
 
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
 		// Repository receives the modified path.
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->with( Mockery::on( fn( $s ) => $s->path() === '/modified-path' ) )
-			->andReturn( $redirect );
+		$this->expect_lookup( $redirect, '/modified-path' );
 
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->andReturn( 301 );
-
-		$result = $this->resolver->get_redirect_data( '/original-path' );
-
-		$this->assertIsArray( $result );
+		$this->assertIsArray( $this->resolver->get_redirect_data( '/original-path' ) );
 	}
 
 	/**
@@ -359,71 +308,38 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data applies legacy_redirector_redirect_status filter.
+	 * Test the redirect_status filter sets the status, and an invalid code
+	 * falls back to the default.
+	 *
+	 * @dataProvider data_filtered_status_codes
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 *
+	 * @param int $filtered The code the filter returns.
+	 * @param int $expected The status code redirected with.
 	 */
-	public function test_get_redirect_data_applies_redirect_status_filter(): void {
+	public function test_get_redirect_data_applies_redirect_status_filter( int $filtered, int $expected ): void {
 		$this->stub_home_url();
-		$redirect = $this->create_redirect( '/old-page', '/new-page' );
+		$this->expect_lookup( $this->create_redirect() );
 
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
-
-		// Filter changes status to 302.
 		Filters\expectApplied( 'legacy_redirector_redirect_status' )
 			->once()
 			->with( 301, '/old-page' )
-			->andReturn( 302 );
+			->andReturn( $filtered );
 
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertIsArray( $result );
-		$this->assertSame( 302, $result['status_code'] );
+		$this->assertSame( $expected, $this->resolver->get_redirect_data( '/old-page' )['status_code'] ?? null );
 	}
 
 	/**
-	 * Test get_redirect_data normalizes an invalid filtered status code to the default.
+	 * Status codes a filter might return, and the code redirected with.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
+	 * @return array<string, array{int, int}>
 	 */
-	public function test_get_redirect_data_normalizes_invalid_status_code(): void {
-		$this->stub_home_url();
-		$redirect = $this->create_redirect( '/old-page', '/new-page' );
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
-
-		// Filter returns a non-redirect status code.
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->with( 301, '/old-page' )
-			->andReturn( 200 );
-
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertIsArray( $result );
-		$this->assertSame( 301, $result['status_code'] );
+	public static function data_filtered_status_codes(): array {
+		return array(
+			'redirect code'       => array( 302, 302 ),
+			'not a redirect code' => array( 200, 301 ),
+		);
 	}
 
 	/**
@@ -441,24 +357,13 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( '/old-page/amp' )
 			->andReturn( '/old-page' );
 
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
+		$this->expect_lookup( $redirect, '/old-page' );
 
 		// The destination filter receives the resolved URL, filtered path, and original URL.
 		Filters\expectApplied( 'legacy_redirector_destination_url' )
 			->once()
 			->with( 'https://example.com/new-page', '/old-page', '/old-page/amp' )
 			->andReturn( 'https://example.com/new-page/amp' );
-
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->andReturn( 301 );
 
 		$result = $this->resolver->get_redirect_data( '/old-page/amp' );
 
@@ -473,28 +378,13 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 */
 	public function test_get_redirect_data_returns_null_when_destination_filter_empties_url(): void {
 		$this->stub_home_url();
-		$redirect = $this->create_redirect( '/old-page', '/new-page' );
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
+		$this->expect_lookup( $this->create_redirect() );
 
 		Filters\expectApplied( 'legacy_redirector_destination_url' )
 			->once()
 			->andReturn( '' );
 
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertNull( $result );
+		$this->assertNull( $this->resolver->get_redirect_data( '/old-page' ) );
 	}
 
 	/**
@@ -516,47 +406,15 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data returns null when filter empties path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_returns_null_when_filter_empties_path(): void {
-		$this->stub_home_url();
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->with( '/some-path' )
-			->andReturn( '' );
-
-		$result = $this->resolver->get_redirect_data( '/some-path' );
-
-		$this->assertNull( $result );
-	}
-
-	/**
 	 * Test get_redirect_data returns null when redirect not found.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
 	public function test_get_redirect_data_returns_null_when_redirect_not_found(): void {
 		$this->stub_home_url();
+		$this->expect_lookup( null );
 
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( null );
-
-		$result = $this->resolver->get_redirect_data( '/nonexistent-page' );
-
-		$this->assertNull( $result );
+		$this->assertNull( $this->resolver->get_redirect_data( '/nonexistent-page' ) );
 	}
 
 	/**
@@ -608,18 +466,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			'publish'
 		);
 
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
+		$this->expect_lookup( $redirect );
 
 		// get_permalink returns false (post doesn't exist or can't get permalink).
 		Functions\expect( 'get_permalink' )
@@ -627,43 +474,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( 456 )
 			->andReturn( false );
 
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertNull( $result );
-	}
-
-	/**
-	 * Test get_redirect_data handles URL-encoded characters.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_handles_encoded_characters(): void {
-		$this->stub_home_url();
-		$redirect = $this->create_redirect( '/hello world', '/new-page' );
-
-		// The path reaches the filter still encoded; SourceUrl owns decoding.
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->with( '/hello%20world' )
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->with( Mockery::on( fn( $s ) => $s->path() === '/hello world' ) )
-			->andReturn( $redirect );
-
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->andReturn( 301 );
-
-		$result = $this->resolver->get_redirect_data( '/hello%20world' );
-
-		$this->assertIsArray( $result );
+		$this->assertNull( $this->resolver->get_redirect_data( '/old-page' ) );
 	}
 
 	/**
@@ -683,19 +494,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 */
 	public function test_lookup_hash_matches_creation_hash( string $request_path, string $stored_source ): void {
 		$this->stub_home_url();
-
-		$expected = SourceUrl::from_string( $stored_source );
-		$redirect = Redirect::reconstitute( 123, $expected, $this->create_url_destination(), 'publish' );
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )->once()->andReturnFirstArg();
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )->once()->andReturn( 301 );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->with( Mockery::on( fn( SourceUrl $s ) => $s->hash() === $expected->hash() ) )
-			->andReturn( $redirect );
+		$this->expect_lookup( $this->create_redirect( $stored_source ), $stored_source );
 
 		$this->assertIsArray( $this->resolver->get_redirect_data( $request_path ) );
 	}
@@ -731,53 +530,27 @@ final class RedirectResolverTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_redirect_data handles absolute destination URLs.
+	 * Test a request is looked up relative to the home path, query kept.
+	 *
+	 * The request reaches the filter still percent-encoded, as the browser
+	 * sent it, while home_url() returns the home path decoded; the lookup must
+	 * strip it anyway, then put the query back. Which paths count as under
+	 * home is HomePath's to decide, and HomePathTest::data_make_relative()
+	 * holds those cases; this test and the next prove the resolver asks it.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
-	public function test_get_redirect_data_handles_absolute_destination_url(): void {
-		$this->stub_home_url();
-		$redirect = Redirect::reconstitute(
-			123,
-			$this->create_source( '/old-page' ),
-			Destination::from_url( DestinationUrl::from_string( 'https://external.com/page' ) ),
-			'publish'
+	public function test_get_redirect_data_strips_home_path_and_keeps_query(): void {
+		$this->assert_lookup_path(
+			'https://example.com/日本',
+			'https://example.com/%E6%97%A5%E6%9C%AC/page?q=%D1%82%D0%B5%D1%81%D1%82',
+			'/page?q=%D1%82%D0%B5%D1%81%D1%82',
+			'/page?q=тест'
 		);
-
-		Filters\expectApplied( 'legacy_redirector_request_path' )
-			->once()
-			->andReturnFirstArg();
-
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->andReturn( $redirect );
-
-		Filters\expectApplied( 'legacy_redirector_redirect_status' )
-			->once()
-			->andReturn( 301 );
-
-		$result = $this->resolver->get_redirect_data( '/old-page' );
-
-		$this->assertIsArray( $result );
-		$this->assertSame( 'https://external.com/page', $result['url'] );
 	}
 
 	/**
-	 * Test the subsite prefix is stripped from a request inside the subsite.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_strips_subsite_prefix(): void {
-		$this->assert_lookup_path( 'https://example.com/blog', '/blog/old-page', '/old-page' );
-	}
-
-	/**
-	 * Test a path that merely shares the prefix's characters is left intact.
+	 * Test a path not under the home path is looked up exactly as it arrived.
 	 *
 	 * Without a segment boundary, '/blogging-tips' would be stripped to
 	 * '/ging-tips': its own redirect could never fire, and an unrelated
@@ -785,135 +558,8 @@ final class RedirectResolverTest extends MonkeyStubs {
 	 *
 	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
 	 */
-	public function test_get_redirect_data_does_not_strip_partial_segment_match(): void {
+	public function test_get_redirect_data_leaves_path_outside_home_intact(): void {
 		$this->assert_lookup_path( 'https://example.com/blog', '/blogging-tips', '/blogging-tips' );
-	}
-
-	/**
-	 * Test a request for the subsite home itself looks up the root path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_maps_subsite_home_to_root(): void {
-		$this->assert_lookup_path( 'https://example.com/blog', '/blog', '/' );
-	}
-
-	/**
-	 * Test a unicode path under an ASCII subsite prefix is looked up correctly.
-	 *
-	 * Requests are asserted percent-encoded throughout this section because
-	 * that is what a browser sends. The raw-UTF-8 case has its own test,
-	 * test_raw_multibyte_request_matches_the_stored_source().
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_strips_ascii_prefix_from_encoded_unicode_path(): void {
-		$this->assert_lookup_path(
-			'https://example.com/blog',
-			'https://example.com/blog/%E6%97%A5%E6%9C%AC%E8%AA%9E',
-			'/%E6%97%A5%E6%9C%AC%E8%AA%9E',
-			'/日本語'
-		);
-	}
-
-	/**
-	 * Test an emoji path under a subsite prefix survives to the lookup.
-	 *
-	 * Astral-plane characters percent-encode to four bytes rather than two or
-	 * three, so they exercise a different slice of the decode path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_strips_subsite_prefix_from_emoji_path(): void {
-		$this->assert_lookup_path(
-			'https://example.com/blog',
-			'https://example.com/blog/%F0%9F%8E%89',
-			'/%F0%9F%8E%89',
-			'/🎉'
-		);
-	}
-
-	/**
-	 * Test a unicode path outside the subsite prefix is left intact.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_leaves_unicode_path_outside_prefix_intact(): void {
-		$this->assert_lookup_path(
-			'https://example.com/blog',
-			'https://example.com/%E6%97%A5%E6%9C%AC%E8%AA%9E',
-			'/%E6%97%A5%E6%9C%AC%E8%AA%9E',
-			'/日本語'
-		);
-	}
-
-	/**
-	 * Test a unicode query string survives subsite prefix stripping.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_keeps_unicode_query_after_stripping_prefix(): void {
-		$this->assert_lookup_path(
-			'https://example.com/blog',
-			'https://example.com/blog/page?q=%D1%82%D0%B5%D1%81%D1%82',
-			'/page?q=%D1%82%D0%B5%D1%81%D1%82',
-			'/page?q=тест'
-		);
-	}
-
-	/**
-	 * Test a percent-encoded request is stripped of a unicode home path.
-	 *
-	 * The two sides reach this comparison in different encodings: extract_path()
-	 * deliberately leaves the request percent-encoded, because SourceUrl is the
-	 * single owner of decoding, while home_url() returns the home path decoded.
-	 * For an ASCII home path the two forms are identical and a byte comparison
-	 * holds; for '/日本' they are not. HomePath::make_relative() compares
-	 * segments decoded, so the two forms meet.
-	 *
-	 * Until they did, the prefix survived into the lookup and the source was
-	 * searched for under '/日本/ページ'. Creation strips it either way, because
-	 * SourceUrl decodes before stripping (see
-	 * SourceUrlTest::test_from_string_strips_unicode_home_path), so the two
-	 * halves disagreed and every redirect stored from a full URL on such a
-	 * site was unreachable.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_strips_unicode_home_path_from_encoded_request(): void {
-		$this->assert_lookup_path(
-			'https://example.com/日本',
-			'https://example.com/%E6%97%A5%E6%9C%AC/%E3%83%9A%E3%83%BC%E3%82%B8',
-			'/%E3%83%9A%E3%83%BC%E3%82%B8',
-			'/ページ'
-		);
-	}
-
-	/**
-	 * Test an encoded request for a unicode subsite home maps to the root.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_maps_encoded_unicode_subsite_home_to_root(): void {
-		$this->assert_lookup_path( 'https://example.com/日本', 'https://example.com/%E6%97%A5%E6%9C%AC', '/' );
-	}
-
-	/**
-	 * Test a unicode path outside a unicode home path is left intact.
-	 *
-	 * '/日本語' is not inside '/日本'. Comparing whole segments is what holds
-	 * that boundary; a byte-prefix match would cut it down to '語' and fire an
-	 * unrelated redirect in its place.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Application\RedirectResolver::get_redirect_data
-	 */
-	public function test_get_redirect_data_does_not_strip_partial_unicode_segment_match(): void {
-		$this->assert_lookup_path(
-			'https://example.com/日本',
-			'https://example.com/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%9A%E3%83%BC%E3%82%B8',
-			'/%E6%97%A5%E6%9C%AC%E8%AA%9E/%E3%83%9A%E3%83%BC%E3%82%B8',
-			'/日本語/ページ'
-		);
 	}
 
 	/**
@@ -942,19 +588,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 
 		try {
 			$this->stub_home_url();
-
-			$expected = SourceUrl::from_string( '/日本' );
-			$redirect = Redirect::reconstitute( 123, $expected, $this->create_url_destination(), 'publish' );
-
-			Filters\expectApplied( 'legacy_redirector_request_path' )->once()->andReturnFirstArg();
-			Filters\expectApplied( 'legacy_redirector_preserve_query_params' )->once()->andReturn( array() );
-			Filters\expectApplied( 'legacy_redirector_redirect_status' )->once()->andReturn( 301 );
-
-			$this->repository
-				->shouldReceive( 'find_by_source' )
-				->once()
-				->with( Mockery::on( fn( SourceUrl $s ) => $s->hash() === $expected->hash() ) )
-				->andReturn( $redirect );
+			$this->expect_lookup( $this->create_redirect( '/日本' ), '/日本' );
 
 			$this->assertIsArray( $this->resolver->get_redirect_data( 'https://example.com/日本' ) );
 		} finally {
@@ -984,15 +618,7 @@ final class RedirectResolverTest extends MonkeyStubs {
 			->with( $extracted )
 			->andReturnFirstArg();
 
-		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
-			->once()
-			->andReturn( array() );
-
-		$this->repository
-			->shouldReceive( 'find_by_source' )
-			->once()
-			->with( Mockery::on( fn( $s ) => $s->path() === $source_path ) )
-			->andReturn( null );
+		$this->expect_lookup( null, $source_path );
 
 		$this->assertNull( $this->resolver->get_redirect_data( $request_url ) );
 	}
