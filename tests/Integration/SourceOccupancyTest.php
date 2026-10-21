@@ -164,4 +164,101 @@ final class SourceOccupancyTest extends TestCase {
 		$this->assertNull( $this->occupant( '/' ) );
 		$this->assertNull( $this->occupant( '/wp-admin/legacy' ) );
 	}
+
+	/**
+	 * Test primed sources are answered without a slug query each, and a
+	 * post published since priming is still found.
+	 */
+	public function test_primed_sources_need_no_slug_query_each(): void {
+		global $wpdb;
+
+		$page      = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'primed-page',
+			)
+		);
+		$paths     = array( '/primed-page/', '/primed-nothing', '/wp-admin/primed', '/' );
+		$sources   = array_map( array( SourceUrl::class, 'from_string' ), $paths );
+		$occupancy = new SourceOccupancy();
+
+		$occupancy->prime( $sources );
+
+		$probes = array();
+		$log    = static function ( string $query ) use ( &$probes, $wpdb ): string {
+			if ( str_contains( $query, "FROM {$wpdb->posts} WHERE post_name = " ) ) {
+				$probes[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$found = array_map( static fn( SourceUrl $source ): ?int => $occupancy->occupying_post( $source )?->ID, $sources );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( array( $page, null, null, null ), $found );
+		$this->assertSame( array(), $probes );
+
+		$later = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'primed-nothing',
+			)
+		);
+
+		$this->assertSame( $later, $occupancy->occupying_post( $sources[1] )?->ID );
+	}
+
+	/**
+	 * Test a refused priming read is not taken as "nothing here": each
+	 * source is probed on its own instead.
+	 */
+	public function test_a_refused_priming_read_falls_back_to_each_probe(): void {
+		$page      = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'refused-page',
+			)
+		);
+		$source    = SourceUrl::from_string( '/refused-page/' );
+		$occupancy = new SourceOccupancy();
+
+		// An emptied query is refused before wpdb clears its last error.
+		$refuse = static fn( string $query ): string => str_contains( $query, 'SELECT DISTINCT post_name' ) ? '' : $query;
+		add_filter( 'query', $refuse );
+		$occupancy->prime( array( $source ) );
+		remove_filter( 'query', $refuse );
+
+		$this->assertSame( $page, $occupancy->occupying_post( $source )?->ID );
+	}
+
+	/**
+	 * Test a stored name the collation matches but its lowercase spelling
+	 * does not (here a trailing space, from a write outside WordPress) is
+	 * still found, by leaving the batch to the per-row probe.
+	 */
+	public function test_a_collation_only_match_falls_back_to_each_probe(): void {
+		global $wpdb;
+
+		$this->set_permalink_structure( '/%postname%/' );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => 'padded-post',
+			)
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- A write WordPress would never make, which is the point.
+		$wpdb->update( $wpdb->posts, array( 'post_name' => 'padded-post ' ), array( 'ID' => $post_id ) );
+		clean_post_cache( $post_id );
+
+		$source    = SourceUrl::from_string( '/padded-post' );
+		$occupancy = new SourceOccupancy();
+		$occupancy->prime( array( $source ) );
+
+		$this->assertSame( $post_id, $occupancy->occupying_post( $source )?->ID );
+	}
 }
