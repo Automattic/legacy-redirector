@@ -114,22 +114,24 @@ final class AuditFlags {
 
 		$ids = array_keys( $findings );
 
+		// A refused read says nothing about the stored flags, so every row is
+		// then written, as each would be on its own. query()'s return value
+		// says so; last_error may still hold an earlier query's error, or none.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- One read for the batch, where the meta cache would load every key of every row; the interpolated fragment is only %d placeholders.
-		$current = $wpdb->get_results(
+		$known = false !== $wpdb->query(
 			$wpdb->prepare(
 				"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')',
 				self::META_KEY,
 				...$ids
-			),
-			ARRAY_A
+			)
 		);
 		// phpcs:enable
-		$current = array_column( $current, 'meta_value', 'post_id' );
+		$current = $known ? array_column( $wpdb->last_result, 'meta_value', 'post_id' ) : array();
 
 		foreach ( $findings as $post_id => $found ) {
 			$severity = self::severity( $found );
 
-			if ( ( $current[ $post_id ] ?? null ) === $severity ) {
+			if ( $known && ( $current[ $post_id ] ?? null ) === $severity ) {
 				continue;
 			}
 

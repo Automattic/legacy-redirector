@@ -158,10 +158,29 @@ final class AuditFlagsTest extends TestCase {
 		$this->assertSame( 'warning', get_post_meta( $severity, AuditFlags::META_KEY, true ) );
 		$this->assertSame( '', get_post_meta( $cleared, AuditFlags::META_KEY, true ) );
 
+		// The meta cache loads a row as `post_id IN (ID)`, and a lookup or
+		// write of one row's key as `post_id = ID`.
 		foreach ( $queries as $query ) {
-			$this->assertDoesNotMatchRegularExpression( "/= {$unchanged}\\b/", $query, 'An unchanged flag must not be looked up or written on its own.' );
+			$this->assertDoesNotMatchRegularExpression( "/= {$unchanged}\\b|IN \\({$unchanged}\\)/", $query, 'An unchanged flag must not be looked up or written on its own.' );
 		}
 		$this->assertStringContainsString( 'post_id IN (', $queries[0], 'The flags must be read for the whole batch first.' );
+	}
+
+	/**
+	 * Test a refused read of the batch's flags is not taken as "no flags":
+	 * every row is written instead, so a stale flag is still cleared.
+	 */
+	public function test_record_rows_writes_every_row_when_the_read_is_refused(): void {
+		$redirect_id = $this->create_redirect( '/flag-batch-refused', 'https://example.com/fine' );
+		update_post_meta( $redirect_id, AuditFlags::META_KEY, 'problem' );
+
+		// An emptied query is refused before wpdb clears its last error.
+		$refuse = static fn( string $query ): string => str_contains( $query, 'SELECT post_id, meta_value' ) ? '' : $query;
+		add_filter( 'query', $refuse );
+		$this->flags()->record_rows( array( $redirect_id => array() ) );
+		remove_filter( 'query', $refuse );
+
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
 	}
 
 	/**

@@ -84,23 +84,40 @@ class SourceOccupancy {
 			return;
 		}
 
+		// A refused read is not an empty answer, and nothing is primed: each
+		// source is then probed on its own. query()'s return value says so;
+		// last_error may still hold an earlier query's error, or none.
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- One existence probe for the batch; the interpolated fragment is only %s placeholders.
-		$found = $wpdb->get_col(
+		if ( false === $wpdb->query(
 			$wpdb->prepare(
 				"SELECT DISTINCT post_name FROM {$wpdb->posts} WHERE post_name IN (" . implode( ',', array_fill( 0, count( $names ), '%s' ) ) . ')',
 				...$names
 			)
-		);
+		) ) {
+			return;
+		}
 		// phpcs:enable
 
-		$this->primed    = array_fill_keys( $names, false );
-		$this->primed_on = self::posts_state();
+		$primed = array_fill_keys( $names, false );
 
-		// The names asked for are lowercase, and the database matches them
-		// case-insensitively, so a stored name may come back in another case.
-		foreach ( $found as $name ) {
-			$this->primed[ strtolower( (string) $name ) ] = true;
+		foreach ( $wpdb->last_result as $row ) {
+			// The names asked for are lowercase, and the database matches
+			// them case-insensitively, so a stored name may come back in
+			// another case. The collation also folds accents and ignores
+			// trailing spaces; a name that matched only that way (one written
+			// outside WordPress) cannot be told apart here, so the batch is
+			// left to the per-row probe, which asks the database directly.
+			$name = strtolower( (string) $row->post_name );
+
+			if ( ! isset( $primed[ $name ] ) ) {
+				return;
+			}
+
+			$primed[ $name ] = true;
 		}
+
+		$this->primed    = $primed;
+		$this->primed_on = self::posts_state();
 	}
 
 	/**
