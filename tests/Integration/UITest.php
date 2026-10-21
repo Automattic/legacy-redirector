@@ -75,19 +75,6 @@ final class UITest extends TestCase {
 	}
 
 	/**
-	 * Tear down test fixtures.
-	 */
-	public function tear_down(): void {
-		// Clean up superglobals.
-		$_POST = array();
-		$_GET  = array();
-
-		wp_set_current_user( 0 );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * Test add_removable_args adds expected query args.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::add_removable_args

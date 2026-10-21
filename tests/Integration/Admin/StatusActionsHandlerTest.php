@@ -73,21 +73,6 @@ final class StatusActionsHandlerTest extends TestCase {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$user    = wp_set_current_user( $user_id );
 		$user->add_cap( Capability::MANAGE_REDIRECTS_CAPABILITY );
-
-		$_GET = array();
-	}
-
-	/**
-	 * Clean up request superglobals and the current user.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		$_GET = array();
-
-		wp_set_current_user( 0 );
-
-		parent::tear_down();
 	}
 
 	/**

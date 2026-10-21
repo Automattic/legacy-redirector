@@ -299,9 +299,6 @@ final class LookupTest extends TestCase {
 		$redirect_data = $this->resolver()->get_redirect_data( $from_url );
 
 		$this->assertSame( 308, $redirect_data['status_code'] );
-
-		remove_all_filters( 'wpcom_legacy_redirector_redirect_status' );
-		remove_all_filters( 'legacy_redirector_redirect_status' );
 	}
 
 	/**

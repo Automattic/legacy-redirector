@@ -70,13 +70,6 @@ final class RedirectFormPageTest extends TestCase {
 	private RedirectFormPage $page;
 
 	/**
-	 * Default HTTP mock marking every destination reachable.
-	 *
-	 * @var callable
-	 */
-	private $http_ok;
-
-	/**
 	 * Set up test fixtures.
 	 *
 	 * @return void
@@ -96,26 +89,21 @@ final class RedirectFormPageTest extends TestCase {
 		// tests database and 404s everything. Default to reachable; tests
 		// exercising rejection add their own 404 filter, which runs later
 		// and wins.
-		$this->http_ok = static function () {
-			return array(
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
 				'response' => array( 'code' => 200 ),
 				'body'     => '',
-			);
-		};
-		add_filter( 'pre_http_request', $this->http_ok );
-
-		$_POST = array();
+			)
+		);
 	}
 
 	/**
-	 * Clean up request superglobals.
+	 * Drop the scripts registry a test enqueued into, which the framework leaves set.
 	 *
 	 * @return void
 	 */
 	public function tear_down(): void {
-		remove_filter( 'pre_http_request', $this->http_ok );
-		$_POST = array();
-		$_GET  = array();
 		unset( $GLOBALS['wp_scripts'] );
 
 		parent::tear_down();

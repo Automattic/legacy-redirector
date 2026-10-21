@@ -88,23 +88,9 @@ final class DuplicateSourcesAdminTest extends TestCase {
 
 		( new Capability() )->register();
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		$_GET = array();
 
 		$this->live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
 		$this->duplicate_id = $this->insert_disabled_duplicate( '/clash/', $this->live_id, marked: true );
-	}
-
-	/**
-	 * Clean up the request and the current user.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		$_GET = array();
-		wp_set_current_user( 0 );
-		set_current_screen( 'front' );
-
-		parent::tear_down();
 	}
 
 	/**
