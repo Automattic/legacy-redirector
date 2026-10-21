@@ -556,14 +556,7 @@ final class RedirectsTest extends TestCase {
 	 */
 	public function test_enabling_a_duplicate_source_is_refused(): void {
 		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
-		$duplicate_id = $this->insert_redirect_post(
-			array(
-				'post_title'   => '/clash/',
-				'post_name'    => md5( '/clash/' ),
-				'post_excerpt' => 'https://example.com/two',
-				'post_status'  => 'draft',
-			)
-		);
+		$duplicate_id = $this->insert_disabled_duplicate( '/clash/', $live_id, marked: false );
 
 		$result = $this->manager()->change_status( $duplicate_id, 'publish' );
 
