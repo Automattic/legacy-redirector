@@ -10,14 +10,14 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\AuditDetail;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 
 /**
  * AuditDetailTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\AuditDetail
  */
-final class AuditDetailTest extends MonkeyStubs {
+final class AuditDetailTest extends TestCase {
 
 	/**
 	 * Test each detail keeps the English the CLI has always shown.
@@ -36,7 +36,7 @@ final class AuditDetailTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditDetail, string}>
 	 */
-	public function english_provider(): array {
+	public static function english_provider(): array {
 		return array(
 			'post status'        => array( AuditDetail::post_status( 'draft' ), 'status: draft' ),
 			'post type'          => array( AuditDetail::post_type( 'wp_template' ), 'post type: wp_template' ),

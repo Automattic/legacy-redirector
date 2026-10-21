@@ -146,17 +146,4 @@ final class RedirectCreationResult {
 	public function error_message(): ?string {
 		return $this->error_message;
 	}
-
-	/**
-	 * Convert to WP_Error if this is an error result.
-	 *
-	 * @return \WP_Error|null WP_Error instance, or null if successful.
-	 */
-	public function to_wp_error(): ?\WP_Error {
-		if ( $this->is_success() ) {
-			return null;
-		}
-
-		return new \WP_Error( $this->error_code, $this->error_message );
-	}
 }

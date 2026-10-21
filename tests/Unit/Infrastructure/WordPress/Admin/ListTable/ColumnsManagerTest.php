@@ -79,7 +79,7 @@ final class ColumnsManagerTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{0: string, 1: bool, 2: string}>
 	 */
-	public function data_subdirectory_installs(): array {
+	public static function data_subdirectory_installs(): array {
 		return array(
 			'subdirectory multisite subsite' => array( 'https://example.com/subsite1/', true, 'https://example.com/subsite1' ),
 			'subdirectory single site'       => array( 'https://example.com/blog/', false, 'https://example.com/blog' ),
@@ -91,7 +91,7 @@ final class ColumnsManagerTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{0: string, 1: bool}>
 	 */
-	public function data_root_installs(): array {
+	public static function data_root_installs(): array {
 		return array(
 			'root single site'    => array( 'https://example.com/', false ),
 			'subdomain multisite' => array( 'https://site1.example.com/', true ),

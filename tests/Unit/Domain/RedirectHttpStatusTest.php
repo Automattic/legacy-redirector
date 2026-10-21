@@ -10,14 +10,14 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\RedirectHttpStatus;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 
 /**
  * RedirectHttpStatusTest class.
  *
  * @covers \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
  */
-final class RedirectHttpStatusTest extends MonkeyStubs {
+final class RedirectHttpStatusTest extends TestCase {
 
 	/**
 	 * Test get_default returns 301.
@@ -48,7 +48,7 @@ final class RedirectHttpStatusTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{RedirectHttpStatus}>
 	 */
-	public function permanent_status_provider(): array {
+	public static function permanent_status_provider(): array {
 		return array(
 			'301' => array( RedirectHttpStatus::MOVED_PERMANENTLY ),
 			'308' => array( RedirectHttpStatus::PERMANENT_REDIRECT ),
@@ -72,7 +72,7 @@ final class RedirectHttpStatusTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{RedirectHttpStatus}>
 	 */
-	public function temporary_status_provider(): array {
+	public static function temporary_status_provider(): array {
 		return array(
 			'302' => array( RedirectHttpStatus::FOUND ),
 			'303' => array( RedirectHttpStatus::SEE_OTHER ),

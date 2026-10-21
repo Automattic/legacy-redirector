@@ -731,7 +731,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{int}>
 	 */
-	public function unreachable_status_provider(): array {
+	public static function unreachable_status_provider(): array {
 		return array(
 			'server error'        => array( 500 ),
 			'service unavailable' => array( 503 ),
@@ -762,7 +762,7 @@ final class RedirectAuditorTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{array{status: string, location?: string}, AuditFindingType|null}>
 	 */
-	public function probe_finding_provider(): array {
+	public static function probe_finding_provider(): array {
 		return array(
 			'confirmed'   => array(
 				array(

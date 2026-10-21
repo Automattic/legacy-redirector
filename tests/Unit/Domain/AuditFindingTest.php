@@ -14,7 +14,7 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 
 /**
  * AuditFindingTest class.
@@ -27,7 +27,7 @@ use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
-final class AuditFindingTest extends MonkeyStubs {
+final class AuditFindingTest extends TestCase {
 
 	/**
 	 * Test the severity the CLI and the abilities both report.
@@ -49,7 +49,7 @@ final class AuditFindingTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditFindingType, string}>
 	 */
-	public function severity_provider(): array {
+	public static function severity_provider(): array {
 		return array(
 			'problem'      => array( AuditFindingType::POST_DELETED, 'problem' ),
 			'warning'      => array( AuditFindingType::RESERVED_SOURCE, 'warning' ),
