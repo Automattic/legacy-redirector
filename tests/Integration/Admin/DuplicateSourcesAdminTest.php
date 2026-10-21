@@ -91,15 +91,7 @@ final class DuplicateSourcesAdminTest extends TestCase {
 		$_GET = array();
 
 		$this->live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
-		$this->duplicate_id = $this->insert_redirect_post(
-			array(
-				'post_title'   => '/clash/',
-				'post_name'    => md5( '/clash/' ),
-				'post_excerpt' => 'https://example.com/two',
-				'post_status'  => 'draft',
-			)
-		);
-		update_post_meta( $this->duplicate_id, Upgrader::DUPLICATE_META_KEY, $this->live_id );
+		$this->duplicate_id = $this->insert_disabled_duplicate( '/clash/', $this->live_id, marked: true );
 	}
 
 	/**

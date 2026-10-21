@@ -467,14 +467,7 @@ final class LookupTest extends TestCase {
 	 */
 	public function test_deleting_a_duplicate_keeps_the_live_redirect(): void {
 		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
-		$duplicate_id = $this->insert_redirect_post(
-			array(
-				'post_title'   => '/clash/',
-				'post_name'    => md5( '/clash/' ),
-				'post_excerpt' => 'https://example.com/two',
-				'post_status'  => 'draft',
-			)
-		);
+		$duplicate_id = $this->insert_disabled_duplicate( '/clash/', $live_id, marked: false );
 		$source       = SourceUrl::from_string( '/clash' );
 		$this->assertSame( $live_id, $this->repository()->find_by_source( $source )?->id() );
 

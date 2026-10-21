@@ -13,7 +13,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\DeleteCommand;
 use Automattic\LegacyRedirector\Application\RedirectBatch;
 use Automattic\LegacyRedirector\Application\RedirectFetcher;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
-use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Integration tests for DeleteCommand.
@@ -282,17 +281,8 @@ final class DeleteCommandTest extends CliTestCase {
 	 * @return array{0: int, 1: int} The live and duplicate IDs.
 	 */
 	private function create_duplicate_pair(): array {
-		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
-		$duplicate_id = $this->insert_redirect_post(
-			array(
-				'post_title'   => '/clash/',
-				'post_name'    => md5( '/clash/' ),
-				'post_excerpt' => 'https://example.com/two',
-				'post_status'  => 'draft',
-			)
-		);
-		update_post_meta( $duplicate_id, Upgrader::DUPLICATE_META_KEY, $live_id );
+		$live_id = $this->create_redirect( '/clash', 'https://example.com/one' );
 
-		return array( $live_id, $duplicate_id );
+		return array( $live_id, $this->insert_disabled_duplicate( '/clash/', $live_id, marked: true ) );
 	}
 }
