@@ -61,18 +61,16 @@ final class AuditSweepTest extends TestCase {
 	private array $audited = array();
 
 	/**
-	 * Clean up the sweep's state, the badge and the schedule.
+	 * Clear the admin menu a badge test builds, which the framework leaves set.
+	 *
+	 * Options, the schedule and filters need no clearing: the options and
+	 * the schedule roll back with the test's transaction, and the framework
+	 * restores the hooks.
 	 *
 	 * @return void
 	 */
 	public function tear_down(): void {
-		foreach ( array( AuditSweep::STATE_OPTION, AuditSweep::LOCK_OPTION, AuditFlags::CHECKED_AT_OPTION, AuditFlags::COUNTS_OPTION ) as $option ) {
-			delete_option( $option );
-		}
-
-		remove_all_filters( AuditSweep::BUDGET_FILTER );
 		unset( $GLOBALS['menu'] );
-		AuditSweep::unschedule();
 
 		parent::tear_down();
 	}

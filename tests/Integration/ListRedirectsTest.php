@@ -762,8 +762,6 @@ final class ListRedirectsTest extends TestCase {
 		$actions = $this->row_actions_manager->modify_row_actions( $default_actions, $post );
 
 		$this->assertSame( $default_actions, $actions );
-
-		unset( $_GET['post_status'] );
 	}
 
 	/**

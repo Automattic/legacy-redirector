@@ -73,25 +73,6 @@ final class CoreEditGuardTest extends TestCase {
 			)
 		);
 		$this->post_id     = self::factory()->post->create();
-
-		$_GET     = array();
-		$_POST    = array();
-		$_REQUEST = array();
-	}
-
-	/**
-	 * Clean up request superglobals and the current user.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		$_GET     = array();
-		$_POST    = array();
-		$_REQUEST = array();
-
-		wp_set_current_user( 0 );
-
-		parent::tear_down();
 	}
 
 	/**

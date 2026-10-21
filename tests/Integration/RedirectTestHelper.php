@@ -23,6 +23,7 @@ use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Trait providing helper methods for redirect operations in tests.
@@ -120,7 +121,7 @@ trait RedirectTestHelper {
 	}
 
 	/**
-	 * Create a redirect using the new API.
+	 * Create a redirect through the manager, failing loudly if it is refused.
 	 *
 	 * @param string     $from     The source URL path.
 	 * @param string|int $to       The destination URL or post ID.
@@ -141,23 +142,6 @@ trait RedirectTestHelper {
 		}
 
 		return $result->redirect_id();
-	}
-
-	/**
-	 * Create a redirect and return boolean success (mimics legacy API).
-	 *
-	 * @param string     $from     The source URL path.
-	 * @param string|int $to       The destination URL or post ID.
-	 * @param bool       $validate Whether to validate the redirect (default false).
-	 * @return bool True on success.
-	 */
-	protected function create_redirect_bool( string $from, $to, bool $validate = false ): bool {
-		try {
-			$this->create_redirect( $from, $to, $validate );
-			return true;
-		} catch ( \RuntimeException $e ) {
-			return false;
-		}
 	}
 
 	/**
@@ -209,6 +193,35 @@ trait RedirectTestHelper {
 		}
 
 		return $post_id;
+	}
+
+	/**
+	 * Insert a disabled duplicate of a live redirect, as the 2.0 upgrade leaves one.
+	 *
+	 * The row keeps the key its own spelling of the source hashed to, such as
+	 * '/clash/' beside a live '/clash', so it collides with the live redirect
+	 * only once a save re-derives the key from the canonical source.
+	 *
+	 * @param string $source  The duplicate's source, as stored.
+	 * @param int    $live_id The live redirect it duplicates.
+	 * @param bool   $marked  Whether the upgrade marked it as a duplicate of the live redirect.
+	 * @return int The duplicate's post ID.
+	 */
+	protected function insert_disabled_duplicate( string $source, int $live_id, bool $marked = true ): int {
+		$duplicate_id = $this->insert_redirect_post(
+			array(
+				'post_title'   => $source,
+				'post_name'    => md5( $source ),
+				'post_excerpt' => 'https://example.com/duplicate',
+				'post_status'  => 'draft',
+			)
+		);
+
+		if ( $marked ) {
+			update_post_meta( $duplicate_id, Upgrader::DUPLICATE_META_KEY, $live_id );
+		}
+
+		return $duplicate_id;
 	}
 
 	/**

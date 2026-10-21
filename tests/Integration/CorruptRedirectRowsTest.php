@@ -26,7 +26,6 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
  *
  * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @covers \Automattic\LegacyRedirector\Application\RedirectManager
- * @covers \Automattic\LegacyRedirector\Domain\Redirect
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
@@ -34,7 +33,6 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
  * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
  * @uses \Automattic\LegacyRedirector\Application\LoopDetector
- * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
  * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
  * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
@@ -43,11 +41,10 @@ use Automattic\LegacyRedirector\Domain\AuditFindingType;
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
  * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
  * @uses \Automattic\LegacyRedirector\Domain\RedirectPersistenceException
  * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
- * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
- * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
  * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
@@ -106,14 +103,16 @@ final class CorruptRedirectRowsTest extends TestCase {
 	}
 
 	/**
-	 * A row with no stored destination is not served, but stays visible and reported.
+	 * A row with no stored destination is not served.
 	 *
 	 * 1.x served no redirect for such a row. Reading it as a redirect to '/'
-	 * sent its visitors to the homepage, and nothing flagged it.
+	 * sent its visitors to the homepage. That find_by_id() still returns it,
+	 * as corrupt, is PostTypeRedirectRepositoryTest::test_row_with_no_destination_is_corrupt();
+	 * that the auditor reports any corrupt row is test_auditor_reports_corrupt_row().
 	 */
-	public function test_row_with_no_destination_is_not_served_but_stays_visible(): void {
-		$source  = SourceUrl::from_string( '/no-destination-row' );
-		$post_id = $this->insert_redirect_post(
+	public function test_row_with_no_destination_is_not_served(): void {
+		$source = SourceUrl::from_string( '/no-destination-row' );
+		$this->insert_redirect_post(
 			array(
 				'post_name'    => $source->hash(),
 				'post_title'   => $source->path(),
@@ -123,10 +122,6 @@ final class CorruptRedirectRowsTest extends TestCase {
 
 		$this->assertNull( $this->repository()->find_by_source( $source ) );
 		$this->assertNull( $this->resolver()->get_redirect_data( '/no-destination-row' ) );
-
-		$redirect = $this->repository()->find_by_id( $post_id );
-		$this->assertTrue( $redirect->is_corrupt() );
-		$this->assertSame( AuditFindingType::CORRUPT_DATA, ( new RedirectAuditor() )->audit_destination( $redirect )->type() );
 	}
 
 	/**

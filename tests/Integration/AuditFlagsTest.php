@@ -51,18 +51,6 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 final class AuditFlagsTest extends TestCase {
 
 	/**
-	 * Clean up the run timestamp and request state.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		delete_option( AuditFlags::CHECKED_AT_OPTION );
-		unset( $_GET['audit_flagged'] );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * The flags store under test.
 	 *
 	 * @return AuditFlags

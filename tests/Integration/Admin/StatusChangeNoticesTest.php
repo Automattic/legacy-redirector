@@ -32,18 +32,6 @@ final class StatusChangeNoticesTest extends TestCase {
 	}
 
 	/**
-	 * Clean up request superglobals and the screen.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		$_GET = array();
-		set_current_screen( 'front' );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * Test an encoded source is named as stored.
 	 *
 	 * The source arrives already decoded once by PHP. Decoding it again turned

@@ -60,13 +60,6 @@ use Automattic\LegacyRedirector\Tests\Integration\TestCase;
 final class ChecksControllerTest extends TestCase {
 
 	/**
-	 * Default HTTP mock marking every destination reachable.
-	 *
-	 * @var callable
-	 */
-	private $http_ok;
-
-	/**
 	 * Spin up a REST server and mock outbound HTTP.
 	 *
 	 * @return void
@@ -83,27 +76,23 @@ final class ChecksControllerTest extends TestCase {
 		// The reachability check and the live probe would otherwise make real
 		// requests. Default to reachable; tests that need something else add
 		// their own filter, which runs later and wins.
-		$this->http_ok = static function () {
-			return array(
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
 				'response' => array( 'code' => 200 ),
 				'body'     => '',
-			);
-		};
-		add_filter( 'pre_http_request', $this->http_ok );
+			)
+		);
 	}
 
 	/**
-	 * Clean up the REST server, HTTP mock, and current user.
+	 * Drop the REST server, which the framework leaves set.
 	 *
 	 * @return void
 	 */
 	public function tear_down(): void {
-		remove_filter( 'pre_http_request', $this->http_ok );
-
 		global $wp_rest_server;
 		$wp_rest_server = null;
-
-		wp_set_current_user( 0 );
 
 		parent::tear_down();
 	}

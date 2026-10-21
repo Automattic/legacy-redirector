@@ -243,11 +243,15 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test --skip-dupes matches an existing redirect on path and query.
+	 * Test --skip-dupes skips a row whose source a redirect already has, and leaves that redirect untouched.
+	 *
+	 * @dataProvider data_existing_sources
+	 *
+	 * @param string $source The source the existing redirect and the meta row share.
 	 */
-	public function test_skip_dupes_matches_on_query(): void {
-		$this->create_redirect( '/article.php?id=7', '/original-destination' );
-		$this->create_post_with_legacy_url( '/article.php?id=7' );
+	public function test_skip_dupes_preserves_existing_redirect( string $source ): void {
+		$this->create_redirect( $source, '/original-destination' );
+		$this->create_post_with_legacy_url( $source );
 
 		$this->invoke_command(
 			$this->command,
@@ -261,7 +265,24 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		);
 
 		$this->assert_stdout_contains( 'Skipped - Redirect for this from URL already exists' );
-		$this->assertSame( '/original-destination', $this->find_redirect( '/article.php?id=7' )->destination()->as_url()->value() );
+
+		$redirect = $this->find_redirect( $source );
+		$this->assertNotNull( $redirect );
+		$this->assertTrue( $redirect->destination()->is_url() );
+		$this->assertSame( '/original-destination', $redirect->destination()->as_url()->value() );
+	}
+
+	/**
+	 * Sources an existing redirect can share with a meta row.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_existing_sources(): array {
+		return array(
+			'path'           => array( '/already-mapped' ),
+			// The match is on path and query, not the path alone.
+			'path and query' => array( '/article.php?id=7' ),
+		);
 	}
 
 	/**
@@ -345,54 +366,7 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test --skip-dupes leaves an existing redirect untouched.
-	 */
-	public function test_skip_dupes_preserves_existing_redirect(): void {
-		$this->create_redirect( '/already-mapped', '/original-destination' );
-		$this->create_post_with_legacy_url( '/already-mapped' );
-
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array(
-				'meta-key'   => $this->meta_key,
-				'format'     => 'csv',
-				'skip-dupes' => true,
-				'verbose'    => true,
-			)
-		);
-
-		$this->assert_stdout_contains( 'Skipped - Redirect for this from URL already exists' );
-
-		$redirect = $this->find_redirect( '/already-mapped' );
-		$this->assertNotNull( $redirect );
-		$this->assertTrue( $redirect->destination()->is_url() );
-		$this->assertSame( '/original-destination', $redirect->destination()->as_url()->value() );
-	}
-
-	/**
-	 * Test a destination post that is not published is reported.
-	 */
-	public function test_reports_unpublished_destination(): void {
-		$post_id = self::factory()->post->create( array( 'post_status' => 'draft' ) );
-		add_post_meta( $post_id, $this->meta_key, '/draft-destination' );
-
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array(
-				'meta-key' => $this->meta_key,
-				'format'   => 'csv',
-			)
-		);
-
-		$this->assertNull( $this->find_redirect( '/draft-destination' ) );
-		$this->assertStringNotContainsString( 'All of your redirects have been imported', $this->get_output() );
-		$this->assertStringContainsString( '/draft-destination', $this->get_output() );
-	}
-
-	/**
-	 * Test a live run with failed rows ends in an error naming the count.
+	 * Test a live run reports a row whose destination post is unpublished, and ends in an error naming the count.
 	 */
 	public function test_failed_rows_are_an_error(): void {
 		$this->create_post_with_legacy_url( '/meta-good' );
@@ -409,6 +383,8 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		);
 
 		$this->assertNotNull( $this->find_redirect( '/meta-good' ) );
+		$this->assertNull( $this->find_redirect( '/meta-bad' ) );
+		$this->assertStringContainsString( '/meta-bad', $this->get_output() );
 		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
 		$this->assert_error_contains( 'Processed 1 of 2 rows: 1 failed.' );
 	}
@@ -432,26 +408,6 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 		$this->assert_stdout_contains( sprintf( 'Redirect #%d already has the source', $existing->id() ) );
 		$this->assert_error_contains( 'Processed 0 of 1 row: 1 failed.' );
 		$this->assertSame( $existing->id(), $this->find_redirect( '/meta-rerun' )->id() );
-	}
-
-	/**
-	 * Test a dry run does not fail on rows only a live run would refuse.
-	 */
-	public function test_dry_run_with_invalid_row_is_not_an_error(): void {
-		$this->create_post_with_legacy_url( 'https://example.com' );
-
-		$this->invoke_command(
-			$this->command,
-			array(),
-			array(
-				'meta-key' => $this->meta_key,
-				'format'   => 'csv',
-				'dry-run'  => true,
-			)
-		);
-
-		$this->assert_stdout_contains( 'Invalid source URL - no path found' );
-		$this->assertFalse( $this->output->had_error() );
 	}
 
 	/**
@@ -484,9 +440,13 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 	}
 
 	/**
-	 * Test a dry run reports a row the live run would refuse, without failing.
+	 * Test a dry run reports each row the live run would refuse, without failing.
+	 *
+	 * One row for each way a row fails: no path, a source already taken, and
+	 * an unpublished destination.
 	 */
 	public function test_dry_run_reports_what_the_live_run_would_refuse(): void {
+		$this->create_post_with_legacy_url( 'https://example.com' );
 		$existing = $this->create_redirect( '/dry-run-taken', '/original-destination' );
 		$this->create_post_with_legacy_url( '/dry-run-taken' );
 		$draft = self::factory()->post->create( array( 'post_status' => 'draft' ) );
@@ -501,9 +461,10 @@ final class ImportFromMetaCommandTest extends CliTestCase {
 			)
 		);
 
+		$this->assert_stdout_contains( 'Invalid source URL - no path found' );
 		$this->assert_stdout_contains( sprintf( 'Redirect #%d already has the source "/dry-run-taken"', $existing ) );
 		$this->assert_stdout_contains( 'not published' );
-		$this->assert_warning_contains( 'Dry run: 2 rows would fail. Nothing was changed.' );
+		$this->assert_warning_contains( 'Dry run: 3 rows would fail. Nothing was changed.' );
 		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
 		$this->assertFalse( $this->output->had_error() );
 		$this->assertNull( $this->find_redirect( '/dry-run-draft' ) );

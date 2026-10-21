@@ -75,19 +75,13 @@ final class ValidateAllControllerTest extends TestCase {
 	}
 
 	/**
-	 * Clean up the REST server, recorded run state, and current user.
+	 * Drop the REST server, which the framework leaves set.
 	 *
 	 * @return void
 	 */
 	public function tear_down(): void {
 		global $wp_rest_server;
 		$wp_rest_server = null;
-
-		foreach ( array( AuditSweep::STATE_OPTION, AuditSweep::LOCK_OPTION, AuditFlags::CHECKED_AT_OPTION, AuditFlags::COUNTS_OPTION ) as $option ) {
-			delete_option( $option );
-		}
-
-		wp_set_current_user( 0 );
 
 		parent::tear_down();
 	}

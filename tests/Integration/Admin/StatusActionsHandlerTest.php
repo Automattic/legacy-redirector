@@ -73,21 +73,6 @@ final class StatusActionsHandlerTest extends TestCase {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$user    = wp_set_current_user( $user_id );
 		$user->add_cap( Capability::MANAGE_REDIRECTS_CAPABILITY );
-
-		$_GET = array();
-	}
-
-	/**
-	 * Clean up request superglobals and the current user.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		$_GET = array();
-
-		wp_set_current_user( 0 );
-
-		parent::tear_down();
 	}
 
 	/**
@@ -282,14 +267,7 @@ final class StatusActionsHandlerTest extends TestCase {
 	 */
 	public function test_enabling_a_duplicate_source_dies_with_the_reason(): void {
 		$live_id      = $this->create_redirect( '/clash', 'https://example.com/one' );
-		$duplicate_id = $this->insert_redirect_post(
-			array(
-				'post_title'   => '/clash/',
-				'post_name'    => md5( '/clash/' ),
-				'post_excerpt' => 'https://example.com/two',
-				'post_status'  => 'draft',
-			)
-		);
+		$duplicate_id = $this->insert_disabled_duplicate( '/clash/', $live_id, marked: false );
 		$this->request( 'enable_redirect', $duplicate_id );
 
 		$this->assert_dies_with(
