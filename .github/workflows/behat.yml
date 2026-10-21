@@ -66,8 +66,10 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install Node.js dependencies
-        run: npm ci
+      # package.json also holds the E2E toolchain for e2e.yml; this job only
+      # needs wp-env, at the version the lockfile pins.
+      - name: Install wp-env
+        run: npm install -g "@wordpress/env@$(jq -r '.packages["node_modules/@wordpress/env"].version' package-lock.json)"
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
