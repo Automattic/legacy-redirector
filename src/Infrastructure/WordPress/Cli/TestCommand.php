@@ -95,7 +95,7 @@ final class TestCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector test /old-page
 	 *
 	 *     # Check whether every external destination still responds.
-	 *     $ wp legacy-redirector list --destination-type=url --limit=100000 --format=ids | xargs wp legacy-redirector test --only=destination
+	 *     $ wp legacy-redirector list --destination-type=url --limit=100000 --format=ids | xargs -r wp legacy-redirector test --only=destination
 	 *
 	 * @when after_wp_load
 	 *
