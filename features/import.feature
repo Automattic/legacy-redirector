@@ -49,8 +49,9 @@ Feature: Import redirects from CSV
     When I run `wp legacy-redirector get /round-trip --fields=to,status --format=csv`
     Then STDOUT should be:
       """
-      to,status
-      /destination-post,disabled
+      Field,Value
+      to,/destination-post
+      status,disabled
       """
 
   # Contract test: one refused row fails the run, so a script cannot mistake a

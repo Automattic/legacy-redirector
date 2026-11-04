@@ -25,6 +25,21 @@ Feature: Get a redirect
       enabled
       """
 
+  # Contract test: get renders one item as `wp post get` does, so json is a
+  # single object (not a one-element list) and csv is Field,Value rows.
+  Scenario: Get a redirect as JSON and as CSV
+    Given there is a published post with a slug of "get-destination"
+    And there is a redirect from "/get-source" to "/get-destination"
+
+    When I run `wp legacy-redirector get /get-source --format=json`
+    Then STDOUT should be JSON containing:
+      """
+      {"from": "/get-source", "to": "/get-destination", "type": "url", "status": "enabled"}
+      """
+
+    When I run `wp legacy-redirector get /get-source --format=csv`
+    Then STDOUT should match #^Field,Value\nID,\d+\nfrom,/get-source\nto,/get-destination\ntype,url\nstatus,enabled\nhash,[0-9a-f]{32}$#
+
   # Contract test: a missing redirect is an error, not empty output.
   Scenario: Get a redirect that does not exist
     When I try `wp legacy-redirector get /no-such-redirect`
