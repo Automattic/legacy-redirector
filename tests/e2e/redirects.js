@@ -24,6 +24,21 @@ async function createRedirect( requestUtils, from, to ) {
 }
 
 /**
+ * Disable a redirect.
+ *
+ * @param {import('@wordpress/e2e-test-utils-playwright').RequestUtils} requestUtils Request utils fixture.
+ * @param {string}                                                      source       Source path.
+ * @return {Promise<void>}
+ */
+async function disableRedirect( requestUtils, source ) {
+	await requestUtils.rest( {
+		method: 'POST',
+		path: `${ ABILITIES }/set-redirect-status/run`,
+		data: { input: { redirects: [ source ], status: 'disabled' } },
+	} );
+}
+
+/**
  * Delete redirects by source path. A source with no redirect is skipped, so
  * this also clears what an earlier, interrupted run left behind.
  *
@@ -44,4 +59,4 @@ async function deleteRedirects( requestUtils, sources ) {
 	} );
 }
 
-module.exports = { createRedirect, deleteRedirects };
+module.exports = { createRedirect, deleteRedirects, disableRedirect };

@@ -148,13 +148,15 @@ final class ValidationNotices {
 
 		// Name the redirect in the notice. The repository returns null for
 		// IDs of other post types, so no foreign title leaks.
-		$source = '';
+		$source   = '';
+		$disabled = false;
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 		if ( isset( $_GET['ids'] ) ) {
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display after redirect.
 			$redirect = $this->repository->find_by_id( absint( $_GET['ids'] ) );
 			if ( null !== $redirect ) {
-				$source = '<code>' . esc_html( $redirect->source()->path() ) . '</code>';
+				$source   = '<code>' . esc_html( $redirect->source()->path() ) . '</code>';
+				$disabled = ! $redirect->is_active();
 			}
 		}
 
@@ -163,6 +165,9 @@ final class ValidationNotices {
 				? esc_html__( 'Redirect is valid.', 'legacy-redirector' )
 				/* translators: %s: source URL path */
 				: sprintf( esc_html__( 'Redirect from %s is valid.', 'legacy-redirector' ), $source );
+			if ( $disabled ) {
+				$message .= ' ' . esc_html__( 'Source not requested: the redirect is disabled.', 'legacy-redirector' );
+			}
 			wp_admin_notice( wp_kses_post( $message ), self::SUCCESS_NOTICE_ARGS );
 			$this->display_warning_notices( $source );
 			return;
@@ -192,7 +197,7 @@ final class ValidationNotices {
 	/**
 	 * Display a notice per warning carried on the request.
 	 *
-	 * Only warning-severity finding types render: the query arg is
+	 * Only the finding types that ride along render: the query arg is
 	 * uncontrolled, and a crafted URL must not be able to present a problem
 	 * finding under warning styling.
 	 *
@@ -211,7 +216,7 @@ final class ValidationNotices {
 		foreach ( $types as $type_value ) {
 			$type = AuditFindingType::tryFrom( $type_value );
 
-			if ( null === $type || ! $type->is_warning() ) {
+			if ( null === $type || ! self::rides_along( $type ) ) {
 				continue;
 			}
 
@@ -224,6 +229,19 @@ final class ValidationNotices {
 				self::WARNING_NOTICE_ARGS
 			);
 		}
+	}
+
+	/**
+	 * Whether a finding is shown beside the result rather than failing it.
+	 *
+	 * A warning does not fail the redirect: it works, but a person should look.
+	 * Nor does a source that could not be checked, which is no verdict on it.
+	 *
+	 * @param AuditFindingType $type The finding type.
+	 * @return bool
+	 */
+	private static function rides_along( AuditFindingType $type ): bool {
+		return $type->is_warning() || AuditFindingType::SOURCE_REQUEST_FAILED === $type;
 	}
 
 	/**
@@ -263,20 +281,17 @@ final class ValidationNotices {
 			return;
 		}
 
-		$findings = $this->auditor->audit( $redirect, true );
 		$problems = array();
 		$warnings = array();
 
-		foreach ( $findings as $finding ) {
-			if ( $finding->is_warning() ) {
+		foreach ( $this->auditor->test( $redirect )['findings'] as $finding ) {
+			if ( self::rides_along( $finding->type() ) ) {
 				$warnings[] = $finding->type()->value;
 			} else {
 				$problems[] = $finding;
 			}
 		}
 
-		// A warning does not fail the redirect - it works, but a person should
-		// look - so it rides along rather than turning the result red.
 		$result = array() !== $problems
 			? reset( $problems )->type()->value
 			: self::RESULT_VALID;

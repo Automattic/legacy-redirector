@@ -494,6 +494,100 @@ final class ChecksControllerTest extends TestCase {
 	}
 
 	/**
+	 * Run the Test route on a redirect, noting every URL it requests.
+	 *
+	 * @param int $redirect_id The redirect to test.
+	 * @return array{0: array<string, mixed>, 1: string[]} The response data and the URLs requested.
+	 */
+	private function test_and_record_requests( int $redirect_id ): array {
+		$requested = array();
+		$record    = static function ( $preempt, $args, $url ) use ( &$requested ) {
+			$requested[] = (string) $url;
+
+			return $preempt;
+		};
+		add_filter( 'pre_http_request', $record, 5, 3 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $record, 5 );
+		}
+
+		return array( $response->get_data(), $requested );
+	}
+
+	/**
+	 * Test a disabled redirect's source is not requested, as the CLI and the ability do not.
+	 *
+	 * It is not meant to fire, so a 404 there says nothing about it.
+	 */
+	public function test_disabled_redirect_is_not_probed(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_legacy_redirect( '/probe-disabled', 'https://example.com/destination' );
+
+		[ $data, $requested ] = $this->test_and_record_requests( $redirect_id );
+
+		$this->assertSame(
+			array(
+				'valid'    => true,
+				'status'   => 'valid',
+				'message'  => 'Redirect is valid. Source not requested: the redirect is disabled.',
+				'warnings' => array(),
+				'probe'    => null,
+			),
+			$data
+		);
+		$this->assertSame( array( 'https://example.com/destination' ), $requested );
+	}
+
+	/**
+	 * Test a disabled redirect still reports what is wrong with its destination.
+	 */
+	public function test_disabled_redirect_still_reports_its_destination(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_legacy_redirect( '/probe-disabled-broken', 'https://not-allowed.example.net/page' );
+
+		[ $data ] = $this->test_and_record_requests( $redirect_id );
+
+		$this->assertFalse( $data['valid'] );
+		$this->assertSame( 'external_host_not_allowed', $data['status'] );
+		$this->assertNull( $data['probe'] );
+	}
+
+	/**
+	 * Test a duplicate the upgrade disabled is not reported as diverted by its live twin.
+	 */
+	public function test_disabled_duplicate_is_not_probed(): void {
+		$this->login_as_redirect_manager();
+		$live_id      = $this->create_redirect( '/probe-clash', 'https://example.com/live' );
+		$duplicate_id = $this->insert_disabled_duplicate( '/probe-clash/', $live_id );
+
+		[ $data, $requested ] = $this->test_and_record_requests( $duplicate_id );
+
+		$this->assertTrue( $data['valid'] );
+		$this->assertNull( $data['probe'] );
+		$this->assertSame( array( 'https://example.com/duplicate' ), $requested );
+	}
+
+	/**
+	 * Test a corrupt row's finding is the whole answer, with nothing requested.
+	 */
+	public function test_corrupt_row_is_not_probed(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+
+		[ $data, $requested ] = $this->test_and_record_requests( $redirect_id );
+
+		$this->assertFalse( $data['valid'] );
+		$this->assertSame( 'corrupt_data', $data['status'] );
+		$this->assertStringContainsString( 'Invalid source:', $data['message'] );
+		$this->assertSame( 'Delete it, or edit it with a full new source and destination.', $data['remedy'] );
+		$this->assertNull( $data['probe'] );
+		$this->assertSame( array(), $requested );
+	}
+
+	/**
 	 * Test a valid redirect with a reserved source reports success with the
 	 * warning riding along, instead of hiding it behind a clean pass.
 	 */

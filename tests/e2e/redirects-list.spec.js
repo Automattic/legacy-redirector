@@ -8,11 +8,16 @@
  * needs no network: every destination here is a page on this site.
  */
 const { test, expect } = require( '@wordpress/e2e-test-utils-playwright' );
-const { createRedirect, deleteRedirects } = require( './redirects' );
+const {
+	createRedirect,
+	deleteRedirects,
+	disableRedirect,
+} = require( './redirects' );
 
 const ROW = '/old-e2e-list-row';
+const DISABLED_ROW = '/old-e2e-list-disabled';
 const BULK = [ '/old-e2e-list-bulk-a', '/old-e2e-list-bulk-b' ];
-const SOURCES = [ ROW, ...BULK ];
+const SOURCES = [ ROW, DISABLED_ROW, ...BULK ];
 const LIST_QUERY = 'post_type=vip-legacy-redirect&s=old-e2e-list';
 
 test.describe( 'Redirects list', () => {
@@ -27,6 +32,7 @@ test.describe( 'Redirects list', () => {
 		for ( const source of SOURCES ) {
 			await createRedirect( requestUtils, source, landing.id );
 		}
+		await disableRedirect( requestUtils, DISABLED_ROW );
 	} );
 
 	test.afterAll( async ( { requestUtils } ) => {
@@ -58,6 +64,27 @@ test.describe( 'Redirects list', () => {
 		await expect( action ).toHaveText( 'Test' );
 		await expect( page.locator( '#a11y-speak-polite' ) ).toContainText(
 			`Tested ${ ROW }: Confirmed live`
+		);
+	} );
+
+	test( 'the Test row action leaves a disabled redirect’s source alone and says so', async ( {
+		admin,
+		page,
+	} ) => {
+		await admin.visitAdminPage( 'edit.php', LIST_QUERY );
+
+		const action = page.getByRole( 'link', {
+			name: `Test redirect from “${ DISABLED_ROW }”`,
+		} );
+		const row = page.getByRole( 'row' ).filter( { has: action } );
+		await row.hover();
+		await action.click();
+
+		await expect( row.locator( 'td.health' ) ).toHaveText(
+			'Redirect is valid. Source not requested: the redirect is disabled.'
+		);
+		await expect( page.locator( '#a11y-speak-polite' ) ).toContainText(
+			`Tested ${ DISABLED_ROW }: Redirect is valid.`
 		);
 	} );
 
