@@ -49,7 +49,7 @@
 		"coverage-ci": "@php ./vendor/bin/phpunit --coverage-text=/dev/null",
 		"cs": "@php ./vendor/bin/phpcs -q",
 		"cs-fix": "@php ./vendor/bin/phpcbf -q",
-		"i18n": "@php wp i18n make-pot . ./languages/legacy-redirector.pot",
+		"i18n": "wp i18n make-pot . ./languages/legacy-redirector.pot",
 		"lint": "@php ./vendor/php-parallel-lint/php-parallel-lint/parallel-lint . -e php --exclude vendor --exclude .git",
 		"seed": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") wp eval-file bin/seed-dev-data.php",
 		"lint-ci": "@php ./vendor/php-parallel-lint/php-parallel-lint/parallel-lint . -e php --exclude vendor --exclude .git --checkstyle",
