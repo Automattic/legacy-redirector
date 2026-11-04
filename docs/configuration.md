@@ -115,7 +115,7 @@ current name wins. [UPGRADING.md](../UPGRADING.md) has the full mapping.
 | `legacy_redirector_destination_url` | Alter the resolved destination before redirecting |
 | `legacy_redirector_redirect_status` | Change the HTTP status code |
 | `legacy_redirector_redirect_max_age` | Change the `Cache-Control` lifetime |
-| `legacy_redirector_preserve_query_params` | Keep named query parameters during lookup |
+| `legacy_redirector_preserve_query_params` | Carry named query parameters through to the destination |
 | `legacy_redirector_allow_insert` | Allow creation from a context with no capable user |
 | `legacy_redirector_check_destination_reachability` | Skip the admin form's HTTP check |
 | `legacy_redirector_background_audit_seconds` | Tune or turn off the background check |
@@ -145,8 +145,9 @@ add_filter( 'legacy_redirector_background_audit_seconds', function( $seconds ) {
 
 ### Preserve query parameters
 
-Query parameters are stripped during lookup, so `/old-page?utm_source=news` matches the
-stored `/old-page`. To carry named parameters through to the destination:
+A query string is part of the lookup, so by default `/old-page?utm_source=news` does not
+match the stored `/old-page`. To take named parameters out of the lookup and carry them
+through to the destination:
 
 ```php
 add_filter( 'legacy_redirector_preserve_query_params', function( $params, $url ) {

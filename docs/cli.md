@@ -205,7 +205,7 @@ one domain means exporting and filtering:
 wp legacy-redirector list --limit=100000 --fields=ID,to --format=csv \
   | grep 'old-brand\.example\.com' \
   | cut -d, -f1 \
-  | xargs wp legacy-redirector update --to=/new-home
+  | xargs -r wp legacy-redirector update --to=/new-home
 ```
 
 Remember that an external destination only works if its host is allowed via the
@@ -244,8 +244,11 @@ host allowed in code, takes it off the list:
 
 ```bash
 wp legacy-redirector validate /old-page 123
-wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs wp legacy-redirector validate
+wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs -r wp legacy-redirector validate
 ```
+
+The `-r` matters here: with nothing flagged, GNU `xargs` would otherwise run a bare
+`validate`, which checks every redirect.
 
 `test` checks named redirects live: it requests the destination where only a request can
 judge it (a URL, or a path that resolves to no post), and requests the source to see
@@ -255,7 +258,7 @@ responds:
 
 ```bash
 wp legacy-redirector test /old-page
-wp legacy-redirector list --destination-type=url --limit=100000 --format=ids | xargs wp legacy-redirector test --only=destination
+wp legacy-redirector list --destination-type=url --limit=100000 --format=ids | xargs -r wp legacy-redirector test --only=destination
 ```
 
 A request that cannot get an answer (a timeout, a refused connection), or gets a server
@@ -270,7 +273,7 @@ so each finding says what to do instead. To switch off the redirects with proble
 explicitly:
 
 ```bash
-wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs wp legacy-redirector disable
+wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs -r wp legacy-redirector disable
 ```
 
 A disabled redirect is still checked, so it stays on the list until it is repaired or
@@ -305,11 +308,11 @@ export, pass a `--limit` larger than the set, or only the first hundred are acte
 ```bash
 # Delete every disabled redirect.
 wp legacy-redirector list --status=disabled --limit=100000 --format=ids \
-  | xargs wp legacy-redirector delete --yes
+  | xargs -r wp legacy-redirector delete --yes
 
 # Disable everything pointing at a post rather than a URL.
 wp legacy-redirector list --destination-type=post --limit=100000 --format=ids \
-  | xargs wp legacy-redirector disable
+  | xargs -r wp legacy-redirector disable
 ```
 
 ### Create redirects from a post meta field

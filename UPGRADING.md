@@ -14,18 +14,20 @@ The rename itself touches no stored redirect data, and you do not need to reinst
 |------|-----|-----|
 | Plugin name | WPCOM Legacy Redirector | Legacy Redirector |
 | Main file | `wpcom-legacy-redirector.php` | unchanged, so the plugin stays active across the upgrade |
-| WP-CLI namespace | `wp wpcom-legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias for the pre-2.0 commands |
+| WP-CLI namespace | `wp wpcom-legacy-redirector` | `wp legacy-redirector`, with the old namespace kept as a deprecated alias for `find-domains` and `import-from-meta` |
 | Filter prefix | `wpcom_legacy_redirector_*` | `legacy_redirector_*`, with the old names kept as deprecated aliases |
-| Text domain | `wpcom-legacy-redirector` | `legacy-redirector` |
+| Text domain | none | `legacy-redirector` |
 | Composer package | `automattic/wpcom-legacy-redirector` | unchanged, so your `require` entry keeps working |
-| Admin menu | Redirects Manager | Redirects |
-| `X-Redirect-By` header | `WPCOM Legacy Redirector` | `Legacy Redirector` |
+| Admin menu | none | Redirects |
+| Redirect header | `X-legacy-redirect: HIT` | `X-Redirect-By: Legacy Redirector` |
 | Post type | `vip-legacy-redirect` | unchanged |
-| Upgrade options | `wpcom_legacy_redirector_db_version` and friends | unchanged |
+| Upgrade options | none in 1.3.0; `wpcom_legacy_redirector_db_version` and friends on a `develop` snapshot | `wpcom_legacy_redirector_db_version` and friends |
 
 ### What you need to change
 
-**Nothing, immediately.** The Composer package name, the old WP-CLI namespace, and the old filter names all still work, so `composer.json` files, deploy scripts, runbooks, and `mu-plugins` keep working untouched. The CLI namespace and the filters warn when used, and will be removed in a future major version, so migrate those when convenient.
+**For the rename itself, nothing immediately.** The Composer package name and the old filter names still work, and the old WP-CLI namespace still reaches `find-domains` and `import-from-meta`, so `composer.json` files and `mu-plugins` that only attach to those filters keep working untouched. The CLI namespace and the filters warn when used, and will be removed in a future major version, so migrate those when convenient.
+
+**The 2.0 redesign does break some scripts and `mu-plugins`, whatever the name.** `insert-redirect` and `import-from-csv` now exit 1 with an error naming the replacement, `import-from-meta` needs `--meta-key` rather than `--meta_key`, code calling the `WPCOM_Legacy_Redirector` class fails because the class is gone, and anything watching for the `X-legacy-redirect: HIT` header needs to look for `X-Redirect-By` instead. See "Breaking Changes" below.
 
 The Composer package stays `automattic/wpcom-legacy-redirector` permanently. Packagist cannot rename a package, so moving would mean publishing a new one and abandoning this one, and every consumer would have to edit their own `require` line to keep receiving updates. That is a real cost for a string that only ever appears inside a `composer.json`, so the name stays where it is.
 
@@ -44,7 +46,7 @@ The four filters that shipped in 1.3.0 are aliased. Attaching to the old name st
 
 If a callback is attached to both names, the 2.0 name wins: the deprecated filter runs first and its result is passed into the current one, so a caller that has migrated is never overridden by a callback someone forgot to remove.
 
-Filters introduced in 2.0 (`legacy_redirector_destination_url`, `legacy_redirector_redirect_max_age`, `legacy_redirector_check_destination_reachability`) never shipped under a `wpcom_` name and have no alias.
+Filters introduced in 2.0 (`legacy_redirector_destination_url`, `legacy_redirector_redirect_max_age`, `legacy_redirector_check_destination_reachability`, `legacy_redirector_background_audit_seconds`) never shipped under a `wpcom_` name and have no alias.
 
 ## Your Existing Redirects Are Migrated Automatically
 
@@ -239,7 +241,7 @@ Version 1.3.0 shipped three commands. All three change:
 |-------------|-----------------|
 | `insert-redirect <from> <to>` | `create <from> <to>` — validates the destination by default, so pass `--skip-validation` for the 1.x behavior, and `--porcelain` to capture the new ID |
 | `import-from-csv --csv=<file>` | `import <file>` — `-` reads from STDIN, and `--mode=upsert` updates redirects that already exist |
-| `import-from-meta --skip_dupes=1 --dry_run` | `import-from-meta --skip-dupes --dry-run` — flags are now kebab-case, and `--skip_dupes=<bool>` is now the plain flag `--skip-dupes`. `--start` and `--end` now count rows in the order they were added, not by post ID, so finish a sliced run on the version you started it on |
+| `import-from-meta --meta_key=<key> --skip_dupes=1 --dry_run` | `import-from-meta --meta-key=<key> --skip-dupes --dry-run` — flags are now kebab-case, and `--skip_dupes=<bool>` is now the plain flag `--skip-dupes`. `--start` and `--end` now count rows in the order they were added, not by post ID, so finish a sliced run on the version you started it on |
 
 #### Upgrading from a `develop` snapshot
 
@@ -247,13 +249,13 @@ If you have been running the plugin from the `develop` branch rather than the 1.
 
 | `develop` command | 2.0 replacement |
 |-------------------|-----------------|
-| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>`, or `list --has-issues --format=csv > <file>` to export only the redirects with problems or warnings |
+| `export-to-csv --csv=<file>` | `list --limit=<n> --format=csv > <file>`, or `list --has-issues --limit=<n> --format=csv > <file>` to export only the redirects with problems or warnings |
 
 `find-domains` keeps its name and gains a `--format` flag, including a `count` format.
 
 Other behavior changes to be aware of:
 
-- `delete`, `enable`, `disable`, `update`, `validate`, and `test` accept multiple redirects in one call, e.g. `wp legacy-redirector delete /a /b /c --yes`. Every command takes either a redirect ID or a source path and works out which it has been given.
+- `delete`, `enable`, `disable`, `update`, `validate`, and `test` accept multiple redirects in one call, e.g. `wp legacy-redirector delete /a /b /c --yes`. Each of them, and `get`, takes either a redirect ID or a source path and works out which it has been given.
 - External destinations still require the host to be allowed via the `allowed_redirect_hosts` filter, as in 1.x, but you now find out at creation time instead of discovering it in production. 1.x accepted any destination and then handed it to `wp_safe_redirect()`, which sent visitors to its fallback of `admin_url()` when the host was not allowed. Creating or updating a redirect to a host the site does not allow is now an error naming the domain, and a stored redirect whose host is not allowed leaves the original 404 in place rather than bouncing visitors to the admin. Run `wp legacy-redirector find-domains` to list the domains your existing redirects point at, and allow the ones you intend to keep.
 
 ### Destination Validation Uses Safe HTTP Requests
@@ -263,7 +265,7 @@ Live destination checks (the admin Test action and `wp legacy-redirector test`) 
 **What this means for you:**
 
 - External destinations and same-site destinations validate as before, including in local development environments.
-- Destinations on other internal hosts (intranet/staging networks) will report as failed unless you allow the host via WordPress core's `http_request_host_is_external` filter (see README).
+- Destinations on other internal hosts (intranet/staging networks) will report as failed unless you allow the host via WordPress core's `http_request_host_is_external` filter (see [docs/configuration.md](docs/configuration.md#testing-destinations-on-internal-hosts)).
 - Destinations on non-standard ports will report as failed in validation. The redirects themselves are unaffected — this only changes validation reporting.
 
 ## No Changes Required
@@ -272,8 +274,8 @@ The following behavior remains unchanged:
 
 - The request path, redirect status, and preserve-query-params filters all still work under their 1.x names, and still do the same thing. Only the names are deprecated (see "The Plugin Has Been Renamed" above)
 - The allow-insert filter still works under its 1.x name, and creating redirects from code with no capable user (e.g. unauthenticated front-end code) is still blocked unless it returns true; in 2.0 the gate lives in `RedirectManager::create_redirect()`. Note the gate itself has changed: any user with the `manage_redirects` capability may now create redirects from any context without the filter, where 1.x keyed on being in the admin instead of on the capability (see CHANGELOG)
-- The `vip-legacy-redirect` post type and its stored data format (no migration needed)
-- The `wpcom_legacy_redirector_db_version` option and the other upgrade-tracking options, which keep their names because they hold live state in your database
+- The `vip-legacy-redirect` post type, and which post fields hold a redirect's source and destination. The values in those fields are migrated: see "Your Existing Redirects Are Migrated Automatically" above
+- On a `develop` snapshot, the `wpcom_legacy_redirector_db_version` option and the other upgrade-tracking options, which keep their names because they hold live state in your database. 1.3.0 had no such options
 
 ## Using the Container
 
@@ -287,7 +289,6 @@ $resolver = Container::instance()->resolver();
 
 // Get the repository (for direct database access)
 $repository = Container::instance()->repository(); // With caching
-$repository = Container::instance()->repository();
 
 // Get the validator
 $validator = Container::instance()->validator();
