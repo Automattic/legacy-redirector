@@ -185,6 +185,10 @@ final class ImportCommand extends WP_CLI_Command {
 			// A header row, such as the one `list --format=csv` writes, says
 			// where the columns are; without one they are read by position.
 			if ( 1 === $row ) {
+				// Excel's "CSV UTF-8" starts the file with a byte order mark, which
+				// fgetcsv() keeps, and which stops it removing the first cell's quotes.
+				$data[0] = preg_replace( '/^\xEF\xBB\xBF"?(.*?)"?$/s', '$1', (string) $data[0] );
+
 				$header = $this->header_columns( $data );
 
 				if ( null !== $header ) {

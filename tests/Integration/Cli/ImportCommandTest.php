@@ -198,6 +198,9 @@ final class ImportCommandTest extends CliTestCase {
 			'reordered --fields'    => array( "status,to,from\ndisabled,https://example.com/a,/import-header\n", false ),
 			'unknown extra column'  => array( "notes,FROM,To\nkeep me,/import-header,https://example.com/a\n", true ),
 			'headerless positional' => array( "/import-header,https://example.com/a,disabled\n", false ),
+			'BOM, header'           => array( "\xEF\xBB\xBFfrom,to,status\n/import-header,https://example.com/a,disabled\n", false ),
+			'BOM, quoted header'    => array( "\xEF\xBB\xBF\"from\",to,status\n/import-header,https://example.com/a,disabled\n", false ),
+			'BOM, headerless'       => array( "\xEF\xBB\xBF/import-header,https://example.com/a,disabled\n", false ),
 		);
 	}
 
