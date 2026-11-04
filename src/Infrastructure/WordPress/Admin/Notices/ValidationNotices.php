@@ -125,6 +125,14 @@ final class ValidationNotices {
 		$args[] = 'validate';
 		$args[] = 'ids';
 		$args[] = 'warnings';
+		$args[] = 'redirect_enabled';
+		$args[] = 'redirect_disabled';
+		$args[] = 'redirect_source';
+		$args[] = 'bulk_redirects_enabled';
+		$args[] = 'bulk_redirects_disabled';
+		$args[] = 'bulk_redirects_failed';
+		$args[] = 'bulk_redirects_reason';
+		$args[] = 'bulk_test_needs_js';
 		return $args;
 	}
 

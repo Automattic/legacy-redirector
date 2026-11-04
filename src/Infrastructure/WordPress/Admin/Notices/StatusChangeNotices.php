@@ -96,6 +96,12 @@ final class StatusChangeNotices {
 			$this->display_bulk_disabled_notice( $count, $failed, $reason );
 		}
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		// A notice shows once. Core takes removable arguments out of the address
+		// bar and the pagination links, but builds the sort links and the bulk
+		// form's referer from the request URI, so a sort or a bulk action would
+		// repeat the notice. Core's edit.php does this for its own arguments.
+		$_SERVER['REQUEST_URI'] = remove_query_arg( wp_removable_query_args() );
 	}
 
 	/**

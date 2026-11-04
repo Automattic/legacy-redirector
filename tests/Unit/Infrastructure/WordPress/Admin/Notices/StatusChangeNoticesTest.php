@@ -36,10 +36,12 @@ final class StatusChangeNoticesTest extends MonkeyStubs {
 		Monkey\Functions\stubs(
 			array(
 				'wp_kses',
-				'absint'             => static fn( $value ): int => abs( (int) $value ),
-				'admin_url'          => static fn( $path = '' ): string => 'https://example.com/wp-admin/' . $path,
-				'add_query_arg'      => static fn( $key, $value, $url ): string => $url . '&' . $key . '=' . $value,
-				'get_current_screen' => (object) array( 'id' => 'edit-' . PostType::POST_TYPE ),
+				'absint'                  => static fn( $value ): int => abs( (int) $value ),
+				'admin_url'               => static fn( $path = '' ): string => 'https://example.com/wp-admin/' . $path,
+				'add_query_arg'           => static fn( $key, $value, $url ): string => $url . '&' . $key . '=' . $value,
+				'get_current_screen'      => (object) array( 'id' => 'edit-' . PostType::POST_TYPE ),
+				'remove_query_arg'        => '',
+				'wp_removable_query_args' => array(),
 			)
 		);
 	}
