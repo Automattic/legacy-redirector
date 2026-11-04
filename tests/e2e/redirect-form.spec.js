@@ -112,4 +112,82 @@ test.describe( 'Add Redirect form', () => {
 			`Redirect Landing Page (ID: ${ landing.id })`
 		);
 	} );
+
+	test.describe( 'after leaving the destination field', () => {
+		// The response is stubbed, so a search that gets through would always
+		// have something to show.
+		const SEARCH = /wp(\/|%2F)v2(\/|%2F)search/;
+		const RESULTS = {
+			json: [ { id: 1, title: 'Stubbed Result', subtype: 'page' } ],
+		};
+
+		async function expectNoSuggestions( page ) {
+			await expect(
+				page.getByRole( 'option', { name: /Stubbed Result/ } )
+			).toBeHidden();
+			await expect(
+				page.getByRole( 'combobox', { name: /Redirect To/ } )
+			).toHaveAttribute( 'aria-expanded', 'false' );
+			await expect( page.locator( '#a11y-speak-polite' ) ).toBeEmpty();
+		}
+
+		test( 'does not suggest for what was typed just before', async ( {
+			admin,
+			page,
+		} ) => {
+			await page.route( SEARCH, ( route ) => route.fulfill( RESULTS ) );
+			await admin.visitAdminPage(
+				'edit.php',
+				'post_type=vip-legacy-redirect&page=add-redirect'
+			);
+
+			const destination = page.getByRole( 'combobox', {
+				name: /Redirect To/,
+			} );
+			await destination.fill( 'foo' );
+			await destination.press( 'Tab' );
+
+			// Longer than the search's 300ms debounce, on the page's own clock.
+			await page.evaluate(
+				() => new Promise( ( done ) => setTimeout( done, 600 ) )
+			);
+
+			await expectNoSuggestions( page );
+		} );
+
+		test( 'ignores the answer to a search already on its way', async ( {
+			admin,
+			page,
+		} ) => {
+			let answer;
+			const answered = new Promise( ( resolve ) => {
+				answer = resolve;
+			} );
+			await page.route( SEARCH, async ( route ) => {
+				await answered;
+				await route.fulfill( RESULTS );
+			} );
+			await admin.visitAdminPage(
+				'edit.php',
+				'post_type=vip-legacy-redirect&page=add-redirect'
+			);
+
+			const destination = page.getByRole( 'combobox', {
+				name: /Redirect To/,
+			} );
+			const searched = page.waitForRequest( SEARCH );
+			await destination.fill( 'foo' );
+			await searched;
+			await destination.press( 'Tab' );
+
+			const response = page.waitForResponse( SEARCH );
+			answer();
+			await response;
+			await page.evaluate(
+				() => new Promise( ( done ) => setTimeout( done, 100 ) )
+			);
+
+			await expectNoSuggestions( page );
+		} );
+	} );
 } );

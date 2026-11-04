@@ -37,6 +37,7 @@ jQuery( document ).ready( function ( $ ) {
 	const originalFrom = $( '#redirect_from' ).val();
 	const postId = parseInt( settings.postId, 10 ) || 0;
 	let searchTimeout;
+	let searchId = 0;
 	let selectedIndex = -1;
 	const entityDecoder = document.createElement( 'textarea' );
 	const $display = $( '#redirect_to_display' );
@@ -103,7 +104,15 @@ jQuery( document ).ready( function ( $ ) {
 		$display.attr( 'aria-expanded', 'true' );
 	}
 
+	// Stop a search that has not run yet, and have its answer ignored if it has.
+	function cancelSearch() {
+		clearTimeout( searchTimeout );
+		searchId++;
+	}
+
+	// Closing cancels the search too, whose answer would open the list again.
 	function hideSuggestions() {
+		cancelSearch();
 		$suggestions.hide();
 		$display
 			.attr( 'aria-expanded', 'false' )
@@ -301,7 +310,7 @@ jQuery( document ).ready( function ( $ ) {
 		selectedIndex = -1; // Reset selection on new input.
 
 		// Only search if it looks like text (not a URL or path or number).
-		clearTimeout( searchTimeout );
+		cancelSearch();
 		if (
 			val.length < 2 ||
 			/^[\/0-9]/.test( val ) ||
@@ -311,6 +320,7 @@ jQuery( document ).ready( function ( $ ) {
 			return;
 		}
 
+		const id = searchId;
 		searchTimeout = setTimeout( function () {
 			wp.apiFetch( {
 				path:
@@ -318,8 +328,16 @@ jQuery( document ).ready( function ( $ ) {
 					encodeURIComponent( val ) +
 					'&subtype=post,page&per_page=10',
 			} )
-				.then( renderSuggestions )
-				.catch( hideSuggestions );
+				.then( function ( posts ) {
+					if ( id === searchId ) {
+						renderSuggestions( posts );
+					}
+				} )
+				.catch( function () {
+					if ( id === searchId ) {
+						hideSuggestions();
+					}
+				} );
 		}, 300 );
 	} );
 
