@@ -130,7 +130,7 @@ The Add/Edit Redirect screen shows the site's home URL next to the source field 
 A source is stored without its trailing slash, and incoming requests are canonicalized the same way, so `/old-page` and `/old-page/` are one redirect:
 
 ```bash
-# Both of these create - or update - the same redirect
+# Both of these name the same redirect
 wp legacy-redirector create /old-page /new-page
 wp legacy-redirector create /old-page/ /new-page   # rejected as a duplicate
 ```

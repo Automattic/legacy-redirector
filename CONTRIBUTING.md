@@ -187,7 +187,7 @@ Services are wired through the DI container (`src/Infrastructure/DI/Container.ph
 ## Getting Help
 
 - **GitHub Issues**: For bug reports and feature requests
-- **Wiki**: [Documentation](https://github.com/Automattic/legacy-redirector/wiki)
+- **Documentation**: The [README](./README.md) and [docs/](./docs/)
 - **WordPress VIP Support**: For WPVIP customers
 
 ## Recognition

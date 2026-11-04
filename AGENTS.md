@@ -34,17 +34,19 @@ legacy-redirector/
 │   ├── Domain/             # Value objects, entities, repository interfaces
 │   │   ├── Redirect.php, SourceUrl.php, DestinationUrl.php
 │   │   ├── RedirectHttpStatus.php, RedirectCriteria.php
-│   │   └── ValidationIssue.php
+│   │   └── AuditFinding.php, AuditFindingType.php
 │   ├── Application/        # Use cases and services
 │   │   ├── RedirectManager.php     # Create, update, delete redirects
 │   │   ├── RedirectResolver.php    # Runtime redirect resolution
-│   │   └── RedirectValidator.php   # Validate redirect rules
+│   │   ├── RedirectAuditor.php     # What is wrong with a redirect (findings, warnings)
+│   │   └── RedirectValidator.php   # Write gate: may this redirect be stored?
 │   └── Infrastructure/     # WordPress integration, persistence
-│       ├── PostType/       # Custom post type for redirect storage
-│       ├── Repository/     # PostTypeRedirectRepository, CachingRedirectRepository
-│       ├── Abilities/      # Abilities API registrations (WordPress 6.9+)
-│       ├── Admin/          # Admin UI (BulkActions, RowActions, ListTable, Ajax)
-│       └── CLI/            # WP-CLI commands (Create, List, Validate, Import, FindDomains, etc.)
+│       ├── DI/             # Service container
+│       └── WordPress/      # PostType, PostTypeRedirectRepository, CachingRedirectRepository, Upgrader, AuditSweep
+│           ├── Abilities/  # Abilities API registrations (WordPress 6.9+)
+│           ├── Admin/      # Admin UI (BulkActionsHandler, ListTable/, Notices/, Pages/)
+│           ├── Cli/        # WP-CLI commands (Create, List, Validate, Import, FindDomains, etc.)
+│           └── Rest/       # REST controllers behind the admin UI's checks (ChecksController, ValidateAllController)
 ├── tests/
 │   ├── Unit/               # Unit tests (Brain Monkey)
 │   ├── Integration/        # Integration tests (wp-env, separate phpunit config)
@@ -59,8 +61,8 @@ legacy-redirector/
 
 ### Key Classes
 
-- **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectHttpStatus`, `RedirectCriteria`; `ValidationIssue`; repository interfaces
-- **Application**: `RedirectManager` (CRUD), `RedirectResolver` (runtime resolution), `RedirectValidator` (rule validation), `ValidationResult`
+- **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectHttpStatus`, `RedirectCriteria`; `AuditFinding`, `AuditFindingType`; repository interfaces
+- **Application**: `RedirectManager` (CRUD), `RedirectResolver` (runtime resolution), `RedirectAuditor` (findings and warnings), `RedirectValidator` (write gate), `ValidationResult`
 - **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, `RedirectRequestHandler` (performs the HTTP redirect), admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.), `AbilitiesRegistrar` and the `*Ability` classes behind it
 
 ### Dependencies
@@ -123,7 +125,7 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 - **Value objects are immutable**: Never add setters to `SourceUrl`, `DestinationUrl`, `Redirect`, or other domain value objects. Create new instances instead.
 - **Performance is critical**: The `RedirectResolver` runs on every 404 to check for redirects. Any performance regression here affects every request on the site. Always profile changes to the redirect resolution path.
 - Do not bypass the caching layer. Always access redirects through the repository interface, which includes caching.
-- **Redirect loops**: When adding or modifying redirects, validate that the change does not create redirect loops (A→B→A). The `RedirectValidator` handles this — use it.
+- **Redirect loops**: `RedirectValidator` refuses only a redirect to itself. A longer loop (A→B→A) is not refused: `RedirectAuditor::warnings()` reports it, and a new write path should print those warnings as the existing ones do.
 - Behat tests are slow (~2 seconds per scenario, against real WordPress in Docker). Do not write Behat tests for edge cases — use integration tests instead.
 - The plugin has two PHPUnit config files. Make sure you run the correct one: `composer test:unit` uses `phpunit.xml.dist`, `composer test:integration` uses `phpunit-integration.xml.dist`.
 - In production code, wire services through the DI container rather than scattering `new` calls; the test suite deliberately constructs services directly (see tests/Integration/RedirectTestHelper.php).
