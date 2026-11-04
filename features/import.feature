@@ -27,14 +27,15 @@ Feature: Import redirects from CSV
       /destination-post
       """
 
-  # Contract test: the export `list` documents imports unedited, header and
-  # status included, piped in on STDIN.
+  # Contract test: a default `list --format=csv` export imports unedited, its
+  # header placing the columns (ID and type ignored, status kept), piped in on
+  # STDIN.
   Scenario: A list export imports back from STDIN
     Given there is a published post with a slug of "destination-post"
     And there is a redirect from "/round-trip" to "/destination-post"
 
     When I run `wp legacy-redirector disable /round-trip`
-    And I run `wp legacy-redirector list --fields=from,to,status --format=csv`
+    And I run `wp legacy-redirector list --format=csv`
     And save STDOUT as {EXPORT}
     And I run `wp legacy-redirector delete /round-trip --yes`
     And I run `wp legacy-redirector import -` with STDIN:
