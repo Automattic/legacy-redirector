@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Tests\Integration;
 
+use Automattic\LegacyRedirector\Application\LoopDetector;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
@@ -32,7 +33,10 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
  * @uses \Automattic\LegacyRedirector\Application\HomePath
  * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
  * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
  * @uses \Automattic\LegacyRedirector\Domain\Destination
  * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
  * @uses \Automattic\LegacyRedirector\Domain\Redirect
@@ -847,5 +851,475 @@ final class UpgraderSubdirectoryTest extends TestCase {
 		$this->assertSame( $drafted_id, $this->upgrader->duplicates()[ $later_id ]['of'] );
 		$this->assertCount( 2, $result['conflicts'] );
 		$this->assertCount( 2, $pending['conflicts'] );
+	}
+
+	/**
+	 * A 1.x relative destination still sends visitors where 1.x sent them.
+	 *
+	 * 1.x handed the stored destination to wp_safe_redirect() as it was, so it
+	 * was relative to the domain. 2.0 prepends home_url(), so it is relative to
+	 * home. Left alone, a 1.x '/blog/new' would send visitors to /blog/blog/new
+	 * and a 1.x '/new' to /blog/new.
+	 *
+	 * @dataProvider data_1x_destinations
+	 *
+	 * @param string $stored   The destination as 1.x stored it, with {origin} for the scheme and host.
+	 * @param string $migrated The destination the migration should leave.
+	 * @param string $location Where the redirect should send a visitor.
+	 * @return void
+	 */
+	public function test_1x_destination_keeps_where_1x_sent_visitors( string $stored, string $migrated, string $location ): void {
+		$post_id = $this->create_prefixed_redirect( '/old', $this->with_origin( $stored ) );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( $this->with_origin( $migrated ), get_post( $post_id )->post_excerpt );
+		$this->assertSame( $result['normalized'], $pending['normalized'], 'The dry run should predict the rewrite.' );
+		$this->assertSame( $result['changed'], $pending['changed'], 'The dry run should predict the change.' );
+		$this->assertSame( $this->with_origin( $location ), $this->resolver()->get_redirect_data( '/' . self::SUBDIR . '/old' )['url'] );
+	}
+
+	/**
+	 * Data provider: destinations as 1.x stored them.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string}> Stored, migrated, location.
+	 */
+	public static function data_1x_destinations(): array {
+		return array(
+			'inside home'             => array( '/blog/new', '/new', '{origin}/blog/new' ),
+			'home itself'             => array( '/blog', '/', '{origin}/blog/' ),
+			'outside home'            => array( '/new', '{origin}/new', '{origin}/new' ),
+			'domain root'             => array( '/', '{origin}/', '{origin}/' ),
+			'shares home prefix only' => array( '/blogging', '{origin}/blogging', '{origin}/blogging' ),
+			'double prefix'           => array( '/blog/blog/x', '/blog/x', '{origin}/blog/blog/x' ),
+			'query inside home'       => array( '/blog/new?a=1&b=2#top', '/new?a=1&b=2#top', '{origin}/blog/new?a=1&b=2#top' ),
+			'query outside home'      => array( '/new?a=1#top', '{origin}/new?a=1#top', '{origin}/new?a=1#top' ),
+			'query on the root'       => array( '/?a=1', '{origin}/?a=1', '{origin}/?a=1' ),
+			'escaped inside home'     => array( '/blog/new?a=1&amp;b=2', '/new?a=1&b=2', '{origin}/blog/new?a=1&b=2' ),
+			'escaped outside home'    => array( '/new?a=1&amp;b=2', '{origin}/new?a=1&b=2', '{origin}/new?a=1&b=2' ),
+			'encoded outside home'    => array( '/caf%C3%A9', '{origin}/café', '{origin}/café' ),
+			'absolute inside home'    => array( '{origin}/blog/new', '/new', '{origin}/blog/new' ),
+			'absolute outside home'   => array( '{origin}/new', '{origin}/new', '{origin}/new' ),
+			'another host'            => array( 'https://elsewhere.example/blog/new', 'https://elsewhere.example/blog/new', 'https://elsewhere.example/blog/new' ),
+		);
+	}
+
+	/**
+	 * A scheme-relative destination names another host, so it is not rebased.
+	 *
+	 * @return void
+	 */
+	public function test_scheme_relative_destination_is_not_rebased(): void {
+		$post_id = $this->create_prefixed_redirect( '/old', '//elsewhere.example/new' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '//elsewhere.example/new', get_post( $post_id )->post_excerpt );
+	}
+
+	/**
+	 * Rebasing goes by the home URL's own host and port, and a unicode home path in either encoding.
+	 *
+	 * @dataProvider data_unicode_home_destinations
+	 *
+	 * @param string $stored   The destination as 1.x stored it.
+	 * @param string $migrated The destination the migration should leave.
+	 * @return void
+	 */
+	public function test_1x_destination_under_a_unicode_home_with_a_port( string $stored, string $migrated ): void {
+		$post_id = $this->create_legacy_redirect( '/old', $stored );
+		$home    = static fn(): string => 'https://example.com:8443/日本';
+
+		add_filter( 'home_url', $home, 20 );
+		try {
+			$this->upgrader->run_batch( 100 );
+		} finally {
+			remove_filter( 'home_url', $home, 20 );
+		}
+
+		$this->assertSame( $migrated, get_post( $post_id )->post_excerpt );
+	}
+
+	/**
+	 * Data provider: destinations on a site at https://example.com:8443/日本.
+	 *
+	 * @return array<string, array{0: string, 1: string}> Stored, migrated.
+	 */
+	public static function data_unicode_home_destinations(): array {
+		return array(
+			'raw, inside home'     => array( '/日本/new', '/new' ),
+			'encoded, inside home' => array( '/%E6%97%A5%E6%9C%AC/new', '/new' ),
+			'outside home'         => array( '/new', 'https://example.com:8443/new' ),
+			'absolute, same port'  => array( 'https://example.com:8443/日本/new', '/new' ),
+			'absolute, other port' => array( 'https://example.com/日本/new', 'https://example.com/日本/new' ),
+		);
+	}
+
+	/**
+	 * A batch that stopped part-way is planned again without rewriting what it wrote.
+	 *
+	 * The cursor only moves once a batch is done, so the rerun plans rows it has
+	 * already written, and a migrated '/new' looks exactly like a 1.x '/new'.
+	 * The bulk publish runs last, so refusing it stops the batch after the rows
+	 * with a destination to rewrite have landed.
+	 *
+	 * @return void
+	 */
+	public function test_batch_replanned_after_stopping_keeps_what_it_wrote(): void {
+		global $wpdb;
+
+		$rows = array(
+			$this->create_prefixed_redirect( '/inside', '/blog/new' ),
+			$this->create_prefixed_redirect( '/double', '/blog/blog/x' ),
+			$this->create_prefixed_redirect( '/outside', '/new' ),
+			$this->create_prefixed_redirect( '/absolute', $this->origin() . '/blog/abs' ),
+		);
+		$this->create_legacy_redirect( '/publish-only' );
+
+		$expected = array( '/new', '/blog/x', $this->origin() . '/new', '/abs' );
+		$stored   = static fn(): array => array_map( static fn( int $id ): string => get_post( $id )->post_excerpt, $rows );
+
+		$this->refusal_stops( "UPDATE {$wpdb->posts} SET post_status", fn() => $this->upgrader->run_batch( 100 ) );
+
+		$this->assertSame( $expected, $stored(), 'The stopped batch should have written its rows.' );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_cursor' ), 'The cursor should not have moved.' );
+		$this->assertSame( 0, $this->upgrader->count_pending()['normalized'], 'A dry run should not count them again.' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( $expected, $stored(), 'The rerun should leave them alone.' );
+		$this->assertFalse( $this->upgrader->needs_upgrade() );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rebased' ) );
+	}
+
+	/**
+	 * A refused cursor write keeps the record, as the batch is planned again.
+	 *
+	 * @return void
+	 */
+	public function test_refused_cursor_write_keeps_the_rebased_record(): void {
+		$post_id = $this->create_prefixed_redirect( '/inside', '/blog/new' );
+		$this->create_prefixed_redirect( '/later' );
+
+		$refuse = static fn( string $query ): string => str_contains( $query, 'upgrade_cursor' ) && ! str_starts_with( $query, 'SELECT' ) ? '' : $query;
+
+		add_filter( 'query', $refuse );
+		try {
+			$this->upgrader->run_batch( 1 );
+		} finally {
+			remove_filter( 'query', $refuse );
+		}
+
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_cursor' ) );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( '/new', get_post( $post_id )->post_excerpt );
+	}
+
+	/**
+	 * The record of rebased rows does not grow with the walk.
+	 *
+	 * Most rows on such a site can have a relative destination, so rewriting a
+	 * growing option every batch would be quadratic. An entry is only needed
+	 * until the cursor passes its row.
+	 *
+	 * @return void
+	 */
+	public function test_rebased_record_is_cleared_as_the_cursor_moves(): void {
+		$first = $this->create_prefixed_redirect( '/a', '/blog/to-a' );
+		$this->create_prefixed_redirect( '/b', '/blog/to-b' );
+		$last = $this->create_prefixed_redirect( '/c', '/blog/to-c' );
+
+		$saved = array();
+		$spy   = static function ( string $option, mixed $value ) use ( &$saved ): void {
+			if ( 'wpcom_legacy_redirector_upgrade_rebased' === $option ) {
+				$saved[] = count( $value );
+			}
+		};
+
+		add_action( 'added_option', $spy, 10, 2 );
+		for ( $batch = 0; $batch < 3; $batch++ ) {
+			$this->upgrader->run_batch( 1 );
+			$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rebased' ), 'A finished batch should leave no record.' );
+		}
+		remove_action( 'added_option', $spy, 10 );
+
+		$this->assertSame( array( 1, 1, 1 ), $saved, 'Each batch should record only its own rows.' );
+		$this->assertSame( '/to-a', get_post( $first )->post_excerpt );
+		$this->assertSame( '/to-c', get_post( $last )->post_excerpt );
+	}
+
+	/**
+	 * A failed write leaves the row in its 1.x form, so a retry still rebases it.
+	 *
+	 * The record is saved before the write, so it names a destination the row
+	 * never came to hold, and the retry comes once the walk has finished.
+	 *
+	 * @return void
+	 */
+	public function test_retry_rebases_a_destination_whose_write_failed(): void {
+		$inside  = $this->create_prefixed_redirect( '/inside', '/blog/new' );
+		$outside = $this->create_prefixed_redirect( '/outside', '/new' );
+
+		$this->with_row_writes_refused( fn() => $this->upgrader->run_batch( 100 ) );
+
+		$this->assertSame( '/blog/new', get_post( $inside )->post_excerpt );
+		$this->assertSame( 2, $this->upgrader->pending_retries() );
+
+		$this->upgrader->retry_failed();
+
+		$this->assertSame( '/new', get_post( $inside )->post_excerpt );
+		$this->assertSame( $this->origin() . '/new', get_post( $outside )->post_excerpt );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rebased' ) );
+	}
+
+	/**
+	 * A retry once the walk has finished takes every row outside its set as migrated.
+	 *
+	 * The cursor has gone by then, but the live row is no less migrated.
+	 *
+	 * @return void
+	 */
+	public function test_retry_after_the_walk_compares_a_duplicate_with_the_migrated_row(): void {
+		$this->create_prefixed_redirect( '/clash', '/blog/new' );
+		$this->upgrader->run_batch( 100 );
+
+		$failed = $this->create_prefixed_redirect( '/clash/', '/blog/new' );
+		update_option(
+			'wpcom_legacy_redirector_upgrade_retry',
+			array(
+				gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ) => array(
+					'publish' => true,
+					'ids'     => array( $failed ),
+				),
+			),
+			false
+		);
+
+		$this->upgrader->retry_failed();
+
+		$this->assertSame( 'trash', get_post_status( $failed ) );
+	}
+
+	/**
+	 * A row a stopped retry wrote keeps its record until the retry has run again.
+	 *
+	 * It stays in the retry set, so it is planned again, even when the walk has
+	 * moved its cursor in between. The publish-only row is put in the set by
+	 * hand, as refusing its bulk publish is what stops the retry part-way.
+	 *
+	 * @return void
+	 */
+	public function test_retry_replanned_after_stopping_keeps_what_it_wrote(): void {
+		global $wpdb;
+
+		$written      = $this->create_prefixed_redirect( '/written', '/blog/new' );
+		$publish_only = $this->create_legacy_redirect( '/publish-only' );
+		$this->create_prefixed_redirect( '/later' );
+		$this->create_prefixed_redirect( '/last' );
+
+		$this->with_row_writes_refused( fn() => $this->upgrader->run_batch( 2 ) );
+
+		$wpdb->update( $wpdb->posts, array( 'post_status' => 'draft' ), array( 'ID' => $publish_only ) );
+		clean_post_cache( $publish_only );
+
+		$sets = get_option( 'wpcom_legacy_redirector_upgrade_retry' );
+		foreach ( array_keys( $sets ) as $started ) {
+			$sets[ $started ]['ids'][] = $publish_only;
+		}
+		update_option( 'wpcom_legacy_redirector_upgrade_retry', $sets, false );
+
+		$this->refusal_stops( "UPDATE {$wpdb->posts} SET post_status", fn() => $this->upgrader->retry_failed() );
+		$this->assertSame( '/new', get_post( $written )->post_excerpt );
+
+		$this->upgrader->run_batch( 1 );
+		$this->upgrader->retry_failed();
+
+		$this->assertSame( '/new', get_post( $written )->post_excerpt );
+	}
+
+	/**
+	 * Two rows converging on one source are compared by where each really sends visitors.
+	 *
+	 * With a batch of one the earlier row has been migrated and its record
+	 * cleared by the time the later one finds it, so the same stored text can
+	 * mean something different on each.
+	 *
+	 * @dataProvider data_duplicate_pairs
+	 *
+	 * @param string $first      The destination of the row that keeps the key.
+	 * @param string $second     The destination of the row that collides.
+	 * @param string $status     The status the later row should end up with.
+	 * @param int    $batch_size The batch size.
+	 * @return void
+	 */
+	public function test_duplicate_pair_compares_where_each_row_lands( string $first, string $second, string $status, int $batch_size ): void {
+		$live  = $this->create_prefixed_redirect( '/clash', $this->with_origin( $first ) );
+		$later = $this->create_prefixed_redirect( '/clash/', $this->with_origin( $second ) );
+
+		$pending = $this->upgrader->count_pending( null, $batch_size );
+		$result  = $this->run_to_completion( $batch_size );
+
+		$this->assertSame( 'publish', get_post_status( $live ) );
+		$this->assertSame( $status, get_post_status( $later ) );
+		$this->assertSame( (int) ( 'trash' === $status ), $result['deduped'] );
+		$this->assertCount( (int) ( 'draft' === $status ), $result['conflicts'] );
+		$this->assertSame( $result['deduped'], $pending['deduped'], 'The dry run should agree about a duplicate.' );
+		$this->assertSame( $result['conflicts'], $pending['conflicts'], 'The dry run should report the same conflict.' );
+	}
+
+	/**
+	 * Data provider: pairs of destinations on rows converging on one source.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string, 3: int}> First, second, later row's status, batch size.
+	 */
+	public static function data_duplicate_pairs(): array {
+		$pairs = array(
+			'same, inside home'           => array( '/blog/new', '/blog/new', 'trash' ),
+			'same, outside home'          => array( '/new', '/new', 'trash' ),
+			'same, relative and absolute' => array( '/blog/new', '{origin}/blog/new', 'trash' ),
+			'same, absolute and relative' => array( '{origin}/new', '/new', 'trash' ),
+			'different, one looks home'   => array( '/blog/new', '/new', 'draft' ),
+			'different, inside home'      => array( '/blog/a', '/blog/b', 'draft' ),
+		);
+
+		$cases = array();
+		foreach ( $pairs as $name => $pair ) {
+			$cases[ $name . ', one batch' ]   = array( ...$pair, 100 );
+			$cases[ $name . ', two batches' ] = array( ...$pair, 1 );
+		}
+
+		return $cases;
+	}
+
+	/**
+	 * A row a user edited since the upgrade began already holds a 2.0 destination.
+	 *
+	 * So a 1.x row converging on its source compares against it as it stands.
+	 *
+	 * @return void
+	 */
+	public function test_duplicate_of_an_edited_row_compares_its_destination_as_it_stands(): void {
+		global $wpdb;
+
+		$later  = $this->create_prefixed_redirect( '/clash/', '/blog/new' );
+		$edited = $this->insert_redirect_post(
+			array(
+				'post_title'   => '/clash',
+				'post_name'    => md5( '/clash' ),
+				'post_excerpt' => '/new',
+			)
+		);
+
+		$wpdb->update( $wpdb->posts, array( 'post_modified_gmt' => gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ) ), array( 'ID' => $edited ) );
+		clean_post_cache( $edited );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/new', get_post( $edited )->post_excerpt );
+		$this->assertSame( 'trash', get_post_status( $later ) );
+	}
+
+	/**
+	 * A dry run after a partly finished walk does not take migrated rows for 1.x ones.
+	 *
+	 * It walks from ID 0, over rows the walk has already passed.
+	 *
+	 * @return void
+	 */
+	public function test_dry_run_after_a_partly_finished_walk(): void {
+		$this->create_prefixed_redirect( '/a', '/blog/a' );
+		$this->create_prefixed_redirect( '/b', '/b' );
+		$this->create_prefixed_redirect( '/c', '/blog/c' );
+		$this->create_prefixed_redirect( '/d', '/d' );
+
+		$this->upgrader->run_batch( 2 );
+
+		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 2, $result['normalized'] );
+		$this->assertSame( 2, $pending['normalized'], 'The rows already passed should not be counted.' );
+		$this->assertSame( 2, $pending['unchanged'], 'The rows already passed should count as done.' );
+	}
+
+	/**
+	 * A row waiting for a holder has not been migrated, though the cursor has passed it.
+	 *
+	 * @return void
+	 */
+	public function test_waiting_row_is_rebased_when_a_later_batch_releases_it(): void {
+		$waiting = $this->create_prefixed_redirect( '/' . self::SUBDIR . '/x', '/blog/new' );
+		$this->create_prefixed_redirect( '/x', 'https://elsewhere.example/x' );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( '/blog/new', get_post( $waiting )->post_excerpt, 'A waiting row is not written.' );
+		$this->assertSame( 1, $this->upgrader->count_pending()['normalized'], 'A dry run should still count it.' );
+
+		$this->upgrader->run_batch( 1 );
+
+		$this->assertSame( '/new', get_post( $waiting )->post_excerpt );
+	}
+
+	/**
+	 * A walk over 2.0 data leaves relative destinations alone: they already mean home.
+	 *
+	 * @return void
+	 */
+	public function test_walk_over_2_0_data_does_not_rebase_destinations(): void {
+		$inside  = $this->create_prefixed_redirect( '/inside', '/blog/new' );
+		$outside = $this->create_prefixed_redirect( '/outside', '/new' );
+
+		update_option( Upgrader::VERSION_OPTION, Upgrader::DB_VERSION - 1 );
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/blog/new', get_post( $inside )->post_excerpt );
+		$this->assertSame( '/new', get_post( $outside )->post_excerpt );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rebased' ) );
+	}
+
+	/**
+	 * The loop detector and the audit read migrated destinations correctly.
+	 *
+	 * A 1.x loop stays a loop, and an absolute destination outside home is
+	 * neither a hop on this site nor a host WordPress would refuse.
+	 *
+	 * @return void
+	 */
+	public function test_audit_reads_migrated_destinations(): void {
+		$looping = $this->create_prefixed_redirect( '/loop-a', '/blog/loop-b' );
+		$this->create_prefixed_redirect( '/loop-b', '/blog/loop-a' );
+		$outside = $this->create_prefixed_redirect( '/outside', '/loop-a' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$detector = new LoopDetector( $this->repository() );
+		$redirect = $this->repository()->find_by_id( $outside );
+
+		$this->assertSame( array( '/loop-a', '/loop-b', '/loop-a' ), $detector->find_cycle( $this->repository()->find_by_id( $looping ) ), 'The 1.x loop should still be found.' );
+		$this->assertSame( array(), $detector->find_cycle( $redirect ), 'Outside home is no hop on this site.' );
+		$this->assertSame( array(), $this->auditor()->destination_checks( $redirect->destination() ), 'WordPress should accept the site\'s own host.' );
+	}
+
+	/**
+	 * The scheme, host and port of the site, which a destination outside home is written with.
+	 *
+	 * @return string The home option, which the home_url filter does not touch.
+	 */
+	private function origin(): string {
+		return untrailingslashit( (string) get_option( 'home' ) );
+	}
+
+	/**
+	 * Fill in the origin in a destination from a data provider, which runs too early to know it.
+	 *
+	 * @param string $destination The destination, with {origin} for the scheme and host.
+	 * @return string The destination.
+	 */
+	private function with_origin( string $destination ): string {
+		return str_replace( '{origin}', $this->origin(), $destination );
 	}
 }

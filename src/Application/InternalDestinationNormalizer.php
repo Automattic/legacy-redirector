@@ -21,7 +21,7 @@ use Automattic\LegacyRedirector\Domain\Url;
  * inconsistent, defeats duplicate detection, and forces every consumer that
  * distinguishes internal from external destinations to guess from the stored
  * string. Normalizing to the relative form on save means anything stored
- * absolute is external by construction.
+ * absolute is outside this site.
  *
  * Encoding is canonicalized as well, because '/café' and '/caf%C3%A9' are two
  * spellings of one target and used to be stored as whichever was typed. The

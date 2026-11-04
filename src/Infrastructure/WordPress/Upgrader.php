@@ -47,10 +47,12 @@ use WP_Query;
  *
  * 3. Destinations are canonicalized. An absolute destination pointing at this
  *    site ('https://example.com/foo') is rewritten to the relative form
- *    ('/foo'), so anything left absolute is external by construction, and a
- *    relative destination stored as whichever of '/café' or '/caf%C3%A9' was
- *    typed is rewritten to the form the normalizer now produces on save
- *    (path and fragment decoded, query kept percent-encoded).
+ *    ('/foo'), so anything left absolute is outside this site, and a relative
+ *    destination stored as whichever of '/café' or '/caf%C3%A9' was typed is
+ *    rewritten to the form the normalizer now produces on save (path and
+ *    fragment decoded, query kept percent-encoded). On 1.x data where home is
+ *    not the domain root, a relative destination is also rebased, as 1.x read
+ *    it from the domain and 2.0 reads it from home; see REBASED_OPTION.
  *
  * 4. Sources are re-keyed to the form SourceUrl gives them, which is the form
  *    a request is looked up by. 1.x hashed each source as esc_url_raw()
@@ -186,6 +188,28 @@ final class Upgrader {
 	 * holding it already is not stripped again. Maps ID => key.
 	 */
 	private const string REKEYED_OPTION = 'wpcom_legacy_redirector_upgrade_rekeyed';
+
+	/**
+	 * Option recording the destinations the walk is giving rows it must not rebase twice.
+	 *
+	 * 1.x sent a stored relative destination to wp_safe_redirect() as it was,
+	 * so it meant a path on the domain. 2.0 prepends home_url(), so on a site
+	 * at /sub the walk rebases it: inside home the 1.x '/sub/new' becomes
+	 * '/new', and outside home the 1.x '/new' becomes 'https://example.com/new'.
+	 * Rebasing is not safe to repeat. The migrated '/new' looks exactly like a
+	 * 1.x '/new', and a batch is planned again whenever it stops part-way, as
+	 * the cursor only moves once a batch is done. So before a row is written
+	 * with a relative destination, the destination is recorded here, and a row
+	 * found holding it already is not rebased. An absolute one plans the same
+	 * way twice. Maps ID => md5 of the destination.
+	 *
+	 * Unlike REKEYED_OPTION this cannot keep every entry for the whole walk:
+	 * most rows on such a site can have one, and rewriting a growing option
+	 * every batch would be quadratic. Behind the cursor it is not needed; see
+	 * is_settled(). So it holds only the batch under way, and whatever a stopped
+	 * retry may have written; see forget_rebases().
+	 */
+	private const string REBASED_OPTION = 'wpcom_legacy_redirector_upgrade_rebased';
 
 	/**
 	 * Option holding redirects whose migration write failed, for a later run to retry.
@@ -327,6 +351,48 @@ final class Upgrader {
 	 * @var array<int, string>
 	 */
 	private array $rekeyed = array();
+
+	/**
+	 * The destinations recorded as given, as md5 hashes; see REBASED_OPTION.
+	 *
+	 * @var array<int, string>
+	 */
+	private array $rebased = array();
+
+	/**
+	 * Whether $rebased holds destinations not yet saved; see save_rekeys().
+	 *
+	 * @var bool
+	 */
+	private bool $rebases_unsaved = false;
+
+	/**
+	 * Whether the walk under way rebases relative destinations; see REBASED_OPTION.
+	 *
+	 * @var bool
+	 */
+	private bool $rebases = false;
+
+	/**
+	 * The start time of the walk under way; see is_settled().
+	 *
+	 * @var string
+	 */
+	private string $walk_started = '';
+
+	/**
+	 * The ID up to which the database shows the walk's work, the unsettled rows aside; see is_settled().
+	 *
+	 * @var int
+	 */
+	private int $settled_to = 0;
+
+	/**
+	 * Redirects behind $settled_to the walk has not written, by ID: those waiting, and those whose write failed.
+	 *
+	 * @var array<int, true>
+	 */
+	private array $unsettled = array();
 
 	/**
 	 * Whether $rekeyed holds keys not yet saved; see save_rekeys().
@@ -574,6 +640,8 @@ final class Upgrader {
 		$this->reached      = $cursor;
 		$this->walk_ceiling = $ceiling;
 
+		$this->load_settled( $cursor, $stored );
+
 		$posts = $this->query_batch( $cursor, $ceiling, $size );
 		$last  = count( $posts ) < $size;
 
@@ -595,7 +663,12 @@ final class Upgrader {
 		$this->remember_failures( $started, $publish );
 
 		$this->store_waits( $stored );
-		update_option( self::CURSOR_OPTION, $cursor, false );
+
+		// Only a cursor that has really moved covers what the record does.
+		if ( update_option( self::CURSOR_OPTION, $cursor, false ) ) {
+			$this->forget_rebases();
+		}
+
 		$this->reached = PHP_INT_MAX;
 
 		// Fewer rows than asked for means the walk has reached the end. The
@@ -641,6 +714,9 @@ final class Upgrader {
 			$this->reached = PHP_INT_MAX;
 			$this->rekeyed = $this->stored_rekeys();
 
+			// With the walk finished its cursor is gone, and every other row is done.
+			$this->load_settled( $this->still_upgrading() ? (int) get_option( self::CURSOR_OPTION, 0 ) : PHP_INT_MAX, $this->stored_waits() );
+
 			foreach ( $this->retry_sets() as $started => $set ) {
 				$home_path = $set['publish'] ? $this->home_path() : '';
 
@@ -656,6 +732,7 @@ final class Upgrader {
 			// written.
 			if ( ! $this->still_upgrading() ) {
 				delete_option( self::REKEYED_OPTION );
+				$this->forget_rebases();
 			}
 
 			$result['complete'] = true;
@@ -746,7 +823,7 @@ final class Upgrader {
 	 * @throws RuntimeException When the database refuses the key map's read, the bulk publish or a read back.
 	 */
 	private function process( array $posts, string $started, string $home_path, bool $publish, array &$result ): void {
-		$this->from_1x = $publish;
+		$this->begin_passes( $started, $home_path, $publish );
 
 		// The key map is what the plans are made against. Without it the
 		// batch stops, as a dry run does, and the next run redoes it.
@@ -803,6 +880,7 @@ final class Upgrader {
 			$rows[]   = array( 'write', $post, $plan, null );
 
 			$this->record_rekey( $post, $update, $home_path );
+			$this->record_rebase( $post, $update );
 
 			if ( ! $this->fits_in_bulk( $update ) ) {
 				// The database would refuse it, and it must be refused
@@ -984,7 +1062,7 @@ final class Upgrader {
 		}
 		// phpcs:enable
 
-		foreach ( array( 'notoptions', self::STARTED_OPTION, self::CURSOR_OPTION, self::CEILING_OPTION, self::RETRY_OPTION, self::REKEYED_OPTION ) as $option ) {
+		foreach ( array( 'notoptions', self::STARTED_OPTION, self::CURSOR_OPTION, self::CEILING_OPTION, self::RETRY_OPTION, self::REKEYED_OPTION, self::REBASED_OPTION ) as $option ) {
 			wp_cache_delete( $option, 'options' );
 		}
 	}
@@ -1097,7 +1175,23 @@ final class Upgrader {
 	}
 
 	/**
-	 * Save the keys noted by record_rekey(), ahead of the write that gives them.
+	 * Note the destination a row is about to get, if planning it again would rebase it; see REBASED_OPTION.
+	 *
+	 * @param WP_Post               $post   The redirect as read.
+	 * @param array<string, string> $update The fields about to be written.
+	 * @return void
+	 */
+	private function record_rebase( WP_Post $post, array $update ): void {
+		if ( ! $this->rebases || ! isset( $update['post_excerpt'] ) || ! str_starts_with( $update['post_excerpt'], '/' ) ) {
+			return;
+		}
+
+		$this->rebased[ $post->ID ] = md5( $update['post_excerpt'] );
+		$this->rebases_unsaved      = true;
+	}
+
+	/**
+	 * Save the keys and destinations noted by record_rekey() and record_rebase(), ahead of the write that gives them.
 	 *
 	 * Called by write() and write_all(), which every planned write goes
 	 * through, so the record is always saved first however the batch stops.
@@ -1109,6 +1203,68 @@ final class Upgrader {
 			update_option( self::REKEYED_OPTION, $this->rekeyed, false );
 			$this->rekeys_unsaved = false;
 		}
+
+		if ( $this->rebases_unsaved ) {
+			update_option( self::REBASED_OPTION, $this->rebased, false );
+			$this->rebases_unsaved = false;
+		}
+	}
+
+	/**
+	 * Drop the destinations the record no longer has to guard; see REBASED_OPTION.
+	 *
+	 * For once the cursor has passed the rows they belong to. Only a row in a
+	 * retry set can be planned again after that, and one a stopped retry wrote
+	 * still needs its entry. A retry set is normally empty, so this is too.
+	 *
+	 * @return void
+	 */
+	private function forget_rebases(): void {
+		if ( array() === $this->rebased ) {
+			return;
+		}
+
+		$this->rebased = array_intersect_key( $this->rebased, array_flip( $this->retry_ids() ) );
+
+		if ( array() === $this->rebased ) {
+			delete_option( self::REBASED_OPTION );
+		} else {
+			update_option( self::REBASED_OPTION, $this->rebased, false );
+		}
+	}
+
+	/**
+	 * Read what says which rows the walk has rewritten, for a run or a dry run about to plan some.
+	 *
+	 * @param int                                  $settled_to The ID up to which the walk's work is done.
+	 * @param array<int, array{0: int, 1: string}> $waits      The waits recorded; see WAITING_META_KEY.
+	 * @return void
+	 */
+	private function load_settled( int $settled_to, array $waits ): void {
+		$rebased = get_option( self::REBASED_OPTION, array() );
+
+		$this->rebased    = is_array( $rebased ) ? $rebased : array();
+		$this->settled_to = $settled_to;
+		$this->unsettled  = array_fill_keys( array_merge( array_keys( $waits ), $this->retry_ids() ), true );
+	}
+
+	/**
+	 * Whether a row's stored destination has already been through the walk, or never needed to.
+	 *
+	 * Decides what its text means, as a migrated '/new' looks exactly like a 1.x
+	 * '/new'. True for a row holding what the record says it was given; for one
+	 * behind the cursor, which only moves once a batch is done, unless it
+	 * waited or failed; and for one a user has saved since the upgrade began,
+	 * which the walk leaves alone. All of it goes by the database, so a dry run
+	 * reads a row it would rewrite as 1.x, and one the walk has passed as done.
+	 *
+	 * @param WP_Post $post The redirect.
+	 * @return bool True when its destination must not be rebased.
+	 */
+	private function is_settled( WP_Post $post ): bool {
+		return $post->post_modified_gmt > $this->walk_started
+			|| ( $this->rebased[ $post->ID ] ?? null ) === md5( $post->post_excerpt )
+			|| ( $post->ID <= $this->settled_to && ! isset( $this->unsettled[ $post->ID ] ) );
 	}
 
 	/**
@@ -1202,6 +1358,15 @@ final class Upgrader {
 	}
 
 	/**
+	 * The IDs of every redirect recorded for a retry.
+	 *
+	 * @return int[] The IDs.
+	 */
+	private function retry_ids(): array {
+		return array_merge( ...array_column( $this->retry_sets(), 'ids' ) );
+	}
+
+	/**
 	 * Add this batch's failed redirects to those awaiting a retry.
 	 *
 	 * @param string $started The GMT timestamp at which the walk began.
@@ -1272,7 +1437,7 @@ final class Upgrader {
 		$claimed   = array();
 		$left      = str_repeat( "\0", intdiv( $ceiling, 8 ) + 1 );
 
-		$this->from_1x = $publish;
+		$this->begin_passes( $started, $home_path, $publish );
 
 		$pending = array(
 			'total'      => 0,
@@ -1291,6 +1456,8 @@ final class Upgrader {
 		$this->reached      = 0;
 		$this->walk_ceiling = $ceiling;
 		$this->rekeyed      = $this->stored_rekeys();
+
+		$this->load_settled( (int) get_option( self::CURSOR_OPTION, 0 ), $this->stored_waits() );
 
 		do {
 			$posts   = $this->query_batch( $after_id, $ceiling, $size );
@@ -1801,6 +1968,20 @@ final class Upgrader {
 	}
 
 	/**
+	 * Set which passes the rows about to be planned get.
+	 *
+	 * @param string $started   The GMT timestamp at which the walk began.
+	 * @param string $home_path The home path to strip, or ''.
+	 * @param bool   $publish   Whether the walk is correcting 1.x data.
+	 * @return void
+	 */
+	private function begin_passes( string $started, string $home_path, bool $publish ): void {
+		$this->from_1x      = $publish;
+		$this->rebases      = '' !== $home_path;
+		$this->walk_started = $started;
+	}
+
+	/**
 	 * Work out what the migration changes about a single redirect.
 	 *
 	 * The one place that decides, so a dry run cannot report something other
@@ -1906,7 +2087,7 @@ final class Upgrader {
 			$update['post_status'] = 'publish';
 		}
 
-		$normalized = $this->normalized_excerpt( $post->post_excerpt );
+		$normalized = $this->planned_excerpt( $post );
 		if ( null !== $normalized ) {
 			$update['post_excerpt'] = $normalized;
 		}
@@ -2373,8 +2554,8 @@ final class Upgrader {
 			return $a->post_parent === $b->post_parent;
 		}
 
-		return ( $this->normalized_excerpt( $a->post_excerpt ) ?? $a->post_excerpt )
-			=== ( $this->normalized_excerpt( $b->post_excerpt ) ?? $b->post_excerpt );
+		return ( $this->planned_excerpt( $a ) ?? $a->post_excerpt )
+			=== ( $this->planned_excerpt( $b ) ?? $b->post_excerpt );
 	}
 
 	/**
@@ -2387,7 +2568,7 @@ final class Upgrader {
 	 * @return string The destination URL, or the post it points at.
 	 */
 	private function destination_label( WP_Post $post ): string {
-		return $post->post_parent > 0 ? 'post #' . $post->post_parent : ( $this->normalized_excerpt( $post->post_excerpt ) ?? $post->post_excerpt );
+		return $post->post_parent > 0 ? 'post #' . $post->post_parent : ( $this->planned_excerpt( $post ) ?? $post->post_excerpt );
 	}
 
 	/**
@@ -2430,6 +2611,19 @@ final class Upgrader {
 	}
 
 	/**
+	 * What the walk does to a redirect's destination, or null when no rewrite is due.
+	 *
+	 * Null for a row already through the walk, whose text is not the 1.x kind;
+	 * see is_settled().
+	 *
+	 * @param WP_Post $post The redirect.
+	 * @return string|null The normalized destination, or null when already canonical.
+	 */
+	private function planned_excerpt( WP_Post $post ): ?string {
+		return $this->rebases && $this->is_settled( $post ) ? null : $this->normalized_excerpt( $post->post_excerpt );
+	}
+
+	/**
 	 * The relative form of an internal absolute destination, or null when no rewrite is due.
 	 *
 	 * A destination 1.x saved in a web request by a user without
@@ -2438,6 +2632,9 @@ final class Upgrader {
 	 * first, like the publish pass, only then: 2.0 saves keep the '&', and a
 	 * deliberate '&amp;' - or one canonicalizing decoded from '%26amp%3B' - must
 	 * survive a later walk.
+	 *
+	 * A relative destination is canonicalized, and on 1.x data below the domain
+	 * root rebased as well; see REBASED_OPTION.
 	 *
 	 * @param string $excerpt The stored destination.
 	 * @return string|null The normalized destination, or null when already canonical.
@@ -2451,7 +2648,8 @@ final class Upgrader {
 			// A relative destination may have been stored in whichever encoding
 			// it was entered in; version 4 canonicalizes it the same way saving
 			// does now.
-			$normalized = $this->normalizer->canonicalize( $unescaped ) ?? $unescaped;
+			$canonical  = $this->normalizer->canonicalize( $unescaped );
+			$normalized = null !== $canonical && $this->rebases ? $this->rebased_from_domain( $canonical ) : ( $canonical ?? $unescaped );
 		} else {
 			$normalized = $unescaped;
 		}
@@ -2459,6 +2657,27 @@ final class Upgrader {
 		// Null when nothing changes, so an already-canonical row is neither
 		// rewritten nor counted.
 		return $normalized === $excerpt ? null : $normalized;
+	}
+
+	/**
+	 * What a path relative to the domain, as 1.x read it, is on a site below the domain root.
+	 *
+	 * The same form saving that URL would give it: home-relative inside home,
+	 * and absolute outside it, as to_internal_path() leaves a URL there.
+	 *
+	 * @param string $path The canonical destination, relative to the domain.
+	 * @return string The destination as 2.0 reads it.
+	 */
+	private function rebased_from_domain( string $path ): string {
+		$home = wp_parse_url( home_url() );
+
+		if ( ! is_array( $home ) || ! isset( $home['scheme'], $home['host'] ) ) {
+			return $path;
+		}
+
+		$absolute = $home['scheme'] . '://' . $home['host'] . ( isset( $home['port'] ) ? ':' . $home['port'] : '' ) . $path;
+
+		return $this->normalizer->to_internal_path( $absolute ) ?? $absolute;
 	}
 
 	/**
@@ -2572,6 +2791,7 @@ final class Upgrader {
 		delete_option( self::CEILING_OPTION );
 		delete_post_meta_by_key( self::WAITING_META_KEY );
 		delete_option( self::REKEYED_OPTION );
+		$this->forget_rebases();
 		delete_transient( self::CLI_LOCK );
 	}
 }

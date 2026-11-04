@@ -838,6 +838,24 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * Where home is the domain root, 1.x and 2.0 read a relative destination alike.
+	 *
+	 * So the walk has nothing to rebase, and keeps no record of it.
+	 *
+	 * @return void
+	 */
+	public function test_relative_destination_keeps_its_meaning_at_the_domain_root() {
+		$relative = $this->create_legacy_redirect( '/relative', '/blog/new?a=1#top' );
+		$encoded  = $this->create_legacy_redirect( '/encoded', '/caf%C3%A9' );
+
+		$this->upgrader->run_batch( 100 );
+
+		$this->assertSame( '/blog/new?a=1#top', get_post( $relative )->post_excerpt );
+		$this->assertSame( '/café', get_post( $encoded )->post_excerpt );
+		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_rebased' ) );
+	}
+
+	/**
 	 * A database error taking the lock is reported as one, not as another batch running.
 	 *
 	 * @return void

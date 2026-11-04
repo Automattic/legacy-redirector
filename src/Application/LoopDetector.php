@@ -150,7 +150,7 @@ class LoopDetector {
 	 *
 	 * Post IDs and absolute URLs end the walk: a post ID destination serves
 	 * that post's permalink, and internal absolute URLs are normalized to
-	 * relative on save, so an absolute destination is on another host.
+	 * relative on save, so an absolute destination is outside this site.
 	 *
 	 * @param Redirect $redirect The redirect whose destination to convert.
 	 * @return SourceUrl|null The destination as a source, or null when the walk ends.
