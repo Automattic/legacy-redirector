@@ -14,7 +14,7 @@ Handles large volumes of redirects for a site's legacy URLs.
 | **Filter prefix** | `legacy_redirector_` |
 | **Post type** | `vip-legacy-redirect` |
 | **Source directory** | `src/` |
-| **Version** | 2.0.0-alpha |
+| **Version** | 2.0.0 |
 | **Requires PHP** | 8.3+ |
 | **Requires WP** | 6.8+ |
 

@@ -3,7 +3,7 @@
  * Plugin Name: Legacy Redirector
  * Plugin URI: https://github.com/Automattic/legacy-redirector
  * Description: Simple plugin for handling legacy redirects in a scalable manner.
- * Version: 2.0.0-alpha
+ * Version: 2.0.0
  * Requires at least: 6.8
  * Requires PHP: 8.3
  * Author: Automattic / WordPress VIP
@@ -38,7 +38,7 @@ if ( \defined( __NAMESPACE__ . '\\PLUGIN_FILE' ) ) {
 
 // Namespaced constants.
 const PLUGIN_FILE = __FILE__;
-const VERSION     = '2.0.0-alpha';
+const VERSION     = '2.0.0';
 
 // Global constants for backwards compatibility.
 \define( 'WPCOM_LEGACY_REDIRECTOR_FILE', __FILE__ );
