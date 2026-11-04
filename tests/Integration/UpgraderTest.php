@@ -44,6 +44,8 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
  */
 final class UpgraderTest extends TestCase {
 
+	use UpgraderTestHelper;
+
 	/**
 	 * The upgrade routine under test.
 	 *
@@ -69,30 +71,6 @@ final class UpgraderTest extends TestCase {
 		delete_option( 'wpcom_legacy_redirector_upgrade_rekeyed' );
 
 		$this->upgrader = new Upgrader();
-	}
-
-	/**
-	 * Create a redirect exactly as version 1.x would have stored it.
-	 *
-	 * 1.x called wp_insert_post() with no post_status, so WordPress defaulted
-	 * every redirect to 'draft'. A redirect to a post kept the post's ID in
-	 * post_parent and left post_excerpt empty.
-	 *
-	 * @param string     $source_path The source path as 1.x stored it.
-	 * @param string|int $destination The destination URL, or the ID of the post to redirect to.
-	 * @return int The created post ID.
-	 */
-	private function create_legacy_redirect( string $source_path, string|int $destination = 'https://example.com/new' ): int {
-		return (int) wp_insert_post(
-			array(
-				'post_name'    => md5( $source_path ),
-				'post_title'   => $source_path,
-				'post_excerpt' => is_int( $destination ) ? '' : $destination,
-				'post_parent'  => is_int( $destination ) ? $destination : 0,
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'draft',
-			)
-		);
 	}
 
 	/**
@@ -162,9 +140,7 @@ final class UpgraderTest extends TestCase {
 
 		$disabled_id = $this->create_legacy_redirect( '/disabled-on-purpose' );
 
-		do {
-			$result = $this->upgrader->run_batch( 100 );
-		} while ( ! $result['complete'] );
+		$this->run_to_completion();
 
 		$this->assertSame( 'publish', get_post_status( $legacy_id ) );
 		$this->assertSame( 'draft', get_post_status( $disabled_id ) );
@@ -181,11 +157,8 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$this->create_legacy_redirect( '/old-page' );
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "SELECT ID FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->upgrader->stamp_fresh_install();
-		remove_filter( 'query', $refuse );
+		$this->with_queries_refused( "SELECT ID FROM {$wpdb->posts} WHERE post_type", fn() => $this->upgrader->stamp_fresh_install() );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_started_gmt' ) );
@@ -202,29 +175,15 @@ final class UpgraderTest extends TestCase {
 	 * @return void
 	 */
 	public function test_refused_ceiling_read_does_not_complete_the_upgrade() {
-		global $wpdb;
-
 		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, 'SELECT MAX(ID)' ) ? '' : $query;
 
-		$error = null;
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-		} catch ( \RuntimeException $e ) {
-			$error = $e;
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$error = $this->refusal_stops( 'SELECT MAX(ID)', fn() => $this->upgrader->run_batch( 100 ) );
 
-		$this->assertInstanceOf( \RuntimeException::class, $error, 'A refused ceiling read must stop the batch.' );
 		$this->assertStringContainsString( 'could not read', $error->getMessage() );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
 
-		do {
-			$result = $this->upgrader->run_batch( 100 );
-		} while ( ! $result['complete'] );
+		$this->run_to_completion();
 
 		$this->assertSame( 'publish', get_post_status( $post_id ) );
 	}
@@ -236,17 +195,9 @@ final class UpgraderTest extends TestCase {
 	 * @return void
 	 */
 	public function test_refused_ceiling_read_does_not_anchor() {
-		global $wpdb;
-
 		$this->create_legacy_redirect( '/old-page' );
-		$refuse = static fn( string $query ): string => str_starts_with( $query, 'SELECT MAX(ID)' ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->stamp_fresh_install();
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$this->with_queries_refused( 'SELECT MAX(ID)', fn() => $this->upgrader->stamp_fresh_install() );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 		$this->assertFalse( get_option( 'wpcom_legacy_redirector_upgrade_ceiling' ) );
@@ -396,6 +347,32 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
+	 * Re-walking the set does not republish a redirect someone disabled.
+	 *
+	 * From 2.0 on, 'draft' means "deliberately disabled". The publish pass is
+	 * for 1.x data only, so a later version bump must leave those alone even
+	 * though it re-walks every redirect.
+	 *
+	 * @return void
+	 */
+	public function test_deliberately_disabled_redirect_survives_a_later_upgrade() {
+		update_option( Upgrader::VERSION_OPTION, 3 );
+
+		// Dated so that no redirect can be older than the run: the separate
+		// "touched since the upgrade began" guard is taken out of play, leaving
+		// the version gate as the only thing standing between this redirect and
+		// being republished.
+		update_option( 'wpcom_legacy_redirector_upgrade_started_gmt', '2100-01-01 00:00:00' );
+
+		$post_id = $this->create_legacy_redirect( '/old-page' );
+
+		$result = $this->upgrader->run_batch( 100 );
+
+		$this->assertSame( 'draft', get_post( $post_id )->post_status, 'A disabled redirect should stay disabled.' );
+		$this->assertSame( 0, $result['published'] );
+	}
+
+	/**
 	 * A redirect disabled since the upgrade began is not republished.
 	 *
 	 * This is the ambiguity the migration has to resolve: under 2.0 'draft'
@@ -410,13 +387,10 @@ final class UpgraderTest extends TestCase {
 		// A redirect created and then disabled under 2.0: because it was
 		// published at some point, it carries a real post_modified_gmt, which
 		// is what distinguishes it from a 1.x redirect that never was.
-		$disabled_id = (int) wp_insert_post(
+		$disabled_id = $this->insert_redirect_post(
 			array(
-				'post_name'    => md5( '/disabled-under-2x' ),
-				'post_title'   => '/disabled-under-2x',
-				'post_excerpt' => 'https://example.com/new',
-				'post_type'    => PostType::POST_TYPE,
-				'post_status'  => 'publish',
+				'post_name'  => md5( '/disabled-under-2x' ),
+				'post_title' => '/disabled-under-2x',
 			)
 		);
 
@@ -475,9 +449,7 @@ final class UpgraderTest extends TestCase {
 		$this->assertFalse( $first['complete'] );
 		$this->assertSame( 2, $first['processed'] );
 
-		do {
-			$batch = $this->upgrader->run_batch( 2 );
-		} while ( ! $batch['complete'] );
+		$this->run_to_completion( 2 );
 
 		foreach ( $ids as $id ) {
 			$this->assertSame( 'publish', get_post_status( $id ), 'Redirect ' . $id . ' should have been published.' );
@@ -623,8 +595,21 @@ final class UpgraderTest extends TestCase {
 			)
 		);
 
+		$stored  = static fn(): array => array(
+			$wpdb->get_results(
+				$wpdb->prepare( "SELECT p.*, ( SELECT COUNT(*) FROM {$wpdb->postmeta} m WHERE m.post_id = p.ID ) AS meta FROM {$wpdb->posts} p WHERE p.post_type = %s ORDER BY p.ID", PostType::POST_TYPE ),
+				ARRAY_A
+			),
+			$wpdb->get_results( "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE 'wpcom\\_legacy\\_redirector\\_%' ORDER BY option_name", ARRAY_A ),
+		);
+		$before  = $stored();
 		$pending = $this->upgrader->count_pending();
-		$result  = $this->upgrader->run_batch( 100 );
+
+		// The dry run writes nothing: no row, no marker, no upgrade state.
+		$this->assertSame( $before, $stored() );
+		$this->assertTrue( $this->upgrader->needs_upgrade() );
+
+		$result = $this->upgrader->run_batch( 100 );
 
 		// '/dupe/' is trashed and '/clash/' and '/converge//' drafted, so none
 		// of them is published.
@@ -633,6 +618,9 @@ final class UpgraderTest extends TestCase {
 		// drafting them as conflicts writes nothing.
 		$this->assertSame( 3, $pending['unchanged'] );
 		$this->assertSame( 1, $pending['skipped'] );
+		$this->assertSame( 1, $pending['deduped'] );
+		$this->assertCount( 2, $pending['conflicts'] );
+		$this->assertSame( 1, $pending['normalized'] );
 
 		$keys = array( 'changed', 'unchanged', 'skipped', 'published', 'repathed', 'deduped', 'normalized' );
 		$this->assertSame( wp_array_slice_assoc( $pending, $keys ), wp_array_slice_assoc( $result, $keys ) );
@@ -703,13 +691,7 @@ final class UpgraderTest extends TestCase {
 		$first_id  = $this->create_legacy_redirect( '/first/' );
 		$second_id = $this->create_legacy_redirect( '/second/' );
 
-		$this->with_row_writes_refused(
-			function (): void {
-				do {
-					$batch = $this->upgrader->run_batch( 1 );
-				} while ( ! $batch['complete'] );
-			}
-		);
+		$this->with_row_writes_refused( fn() => $this->run_to_completion( 1 ) );
 
 		$this->assertSame( 2, $this->upgrader->pending_retries() );
 
@@ -753,18 +735,10 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "UPDATE {$wpdb->posts} SET post_status" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-			$this->fail( 'The batch should have stopped.' );
-		} catch ( \RuntimeException $e ) {
-			$this->assertStringContainsString( 'could not publish', $e->getMessage() );
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$error = $this->refusal_stops( "UPDATE {$wpdb->posts} SET post_status", fn() => $this->upgrader->run_batch( 100 ) );
 
+		$this->assertStringContainsString( 'could not publish', $error->getMessage() );
 		$this->assertSame( 0, (int) get_option( 'wpcom_legacy_redirector_upgrade_cursor', 0 ) );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
 
@@ -871,17 +845,9 @@ final class UpgraderTest extends TestCase {
 	public function test_database_error_taking_the_lock_is_reported() {
 		global $wpdb;
 
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "INSERT IGNORE INTO {$wpdb->options}" ) ? '' : $query;
+		$error = $this->refusal_stops( "INSERT IGNORE INTO {$wpdb->options}", fn() => $this->upgrader->run_batch( 100 ) );
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-			$this->fail( 'The batch should not have run.' );
-		} catch ( \RuntimeException $e ) {
-			$this->assertStringContainsString( 'could not take the migration lock', $e->getMessage() );
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$this->assertStringContainsString( 'could not take the migration lock', $error->getMessage() );
 	}
 
 	/**
@@ -1065,11 +1031,8 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$post_id = $this->create_legacy_redirect( '/old-page' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT * FROM {$wpdb->posts} WHERE post_type" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		$this->upgrader->maybe_upgrade();
-		remove_filter( 'query', $refuse );
+		$this->with_queries_refused( "SELECT * FROM {$wpdb->posts} WHERE post_type", fn() => $this->upgrader->maybe_upgrade() );
 
 		$this->assertTrue( $this->upgrader->needs_upgrade(), 'A failed read must not complete the upgrade.' );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
@@ -1088,18 +1051,10 @@ final class UpgraderTest extends TestCase {
 		global $wpdb;
 
 		$post_id = $this->create_legacy_redirect( '/old-page/' );
-		$refuse  = static fn( string $query ): string => str_starts_with( $query, "SELECT ID, post_name, post_date FROM {$wpdb->posts}" ) ? '' : $query;
 
-		add_filter( 'query', $refuse );
-		try {
-			$this->upgrader->run_batch( 100 );
-			$this->fail( 'The batch should have stopped.' );
-		} catch ( \RuntimeException $e ) {
-			$this->assertStringStartsWith( 'the database could not read the redirects', $e->getMessage() );
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
+		$error = $this->refusal_stops( "SELECT ID, post_name, post_date FROM {$wpdb->posts}", fn() => $this->upgrader->run_batch( 100 ) );
 
+		$this->assertStringStartsWith( 'the database could not read the redirects', $error->getMessage() );
 		$this->assertSame( 'draft', get_post_status( $post_id ) );
 		$this->assertSame( '/old-page/', get_post( $post_id )->post_title );
 		$this->assertTrue( $this->upgrader->needs_upgrade() );
@@ -1107,61 +1062,6 @@ final class UpgraderTest extends TestCase {
 		$this->upgrader->run_batch( 100 );
 
 		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
-	}
-
-	/**
-	 * A redirect disabled as a duplicate source can be listed later, until someone saves it.
-	 *
-	 * @return void
-	 */
-	public function test_duplicates_are_listed_until_saved() {
-		$kept_id  = $this->create_legacy_redirect( '/clash', 'https://example.com/one' );
-		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
-
-		$this->upgrader->run_batch( 100 );
-
-		$this->assertSame(
-			array(
-				$loser_id => array(
-					'of'          => $kept_id,
-					'never_fired' => false,
-				),
-			),
-			$this->upgrader->duplicates()
-		);
-
-		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
-		wp_update_post(
-			array(
-				'ID'           => $loser_id,
-				'post_excerpt' => 'https://example.com/one',
-			)
-		);
-		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
-
-		$this->assertSame( array(), $this->upgrader->duplicates() );
-	}
-
-	/**
-	 * Run a callback with every per-row redirect write refused.
-	 *
-	 * Blanks the UPDATE $wpdb->update() builds (its table name is quoted),
-	 * leaving the bulk publish, which is not, alone.
-	 *
-	 * @param callable $callback The code to run.
-	 * @return mixed What the callback returned.
-	 */
-	private function with_row_writes_refused( callable $callback ): mixed {
-		global $wpdb;
-
-		$refuse = static fn( string $query ): string => str_starts_with( $query, "UPDATE `{$wpdb->posts}`" ) ? '' : $query;
-
-		add_filter( 'query', $refuse );
-		try {
-			return $callback();
-		} finally {
-			remove_filter( 'query', $refuse );
-		}
 	}
 
 	/**
@@ -1228,9 +1128,7 @@ final class UpgraderTest extends TestCase {
 
 		$created_id = $this->create_legacy_redirect( '/created-disabled' );
 
-		do {
-			$batch = $this->upgrader->run_batch( 1 );
-		} while ( ! $batch['complete'] );
+		$this->run_to_completion( 1 );
 
 		$this->assertSame( 'publish', get_post_status( $legacy_id ) );
 		$this->assertSame( 'draft', get_post_status( $created_id ) );
@@ -1372,186 +1270,101 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A dry run reports the work without performing it.
+	 * The destination pass rewrites what needs it, and leaves the rest exactly as stored.
 	 *
+	 * The pass runs on every future version walk, so a rewrite that fired on
+	 * an already-canonical row would report work forever. The dry run must
+	 * count each rewrite as the run makes it, and whatever is written relative
+	 * must survive the round trip back through the domain layer, or the
+	 * redirect silently stops resolving.
+	 *
+	 * @dataProvider data_destination_pass
+	 *
+	 * @param string $stored     The destination as stored, with {home} for the home URL.
+	 * @param string $expected   The destination after the pass, likewise.
+	 * @param int    $normalized How many rows the pass should count as rewritten.
 	 * @return void
 	 */
-	public function test_count_pending_does_not_change_anything() {
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+	public function test_destination_pass( string $stored, string $expected, int $normalized ) {
+		$home     = untrailingslashit( home_url() );
+		$expected = str_replace( '{home}', $home, $expected );
+		$post_id  = $this->create_legacy_redirect( '/old-page', str_replace( '{home}', $home, $stored ) );
 
 		$pending = $this->upgrader->count_pending();
+		$result  = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 1, $pending['total'] );
-		$this->assertSame( 1, $pending['published'] );
-		$this->assertSame( 'draft', get_post_status( $post_id ) );
-		$this->assertTrue( $this->upgrader->needs_upgrade() );
+		$this->assertSame( $normalized, $result['normalized'] );
+		$this->assertSame( $normalized, $pending['normalized'] );
+		$this->assertSame( $expected, get_post( $post_id )->post_excerpt );
+		if ( str_starts_with( $expected, '/' ) ) {
+			$this->assertTrue( DestinationUrl::from_string( $expected )->is_relative() );
+		}
 	}
 
 	/**
-	 * An absolute destination pointing at this site is rewritten to its relative form.
+	 * Destinations as stored, what the destination pass leaves, and whether it counts a rewrite.
 	 *
-	 * @return void
+	 * The double-slash case is built by concatenation, because home_url( '//foo' )
+	 * would collapse the double slash it exists to preserve: the domain layer
+	 * would reject '//foo' as scheme-relative, so it must be left as stored
+	 * rather than corrupted.
+	 *
+	 * @return array<string, array{string, string, int}>
 	 */
-	public function test_internal_absolute_destination_is_normalized() {
-		$post_id = $this->create_legacy_redirect( '/old-page', home_url( '/new-page?a=1' ) );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 1, $result['normalized'] );
-		$this->assertSame( '/new-page?a=1', get_post( $post_id )->post_excerpt );
-
-		// The written value must survive the round trip back through the
-		// domain layer, or the redirect silently stops resolving.
-		$destination = DestinationUrl::from_string( get_post( $post_id )->post_excerpt );
-		$this->assertTrue( $destination->is_relative() );
+	public static function data_destination_pass(): array {
+		return array(
+			// Before version 4, whichever encoding was typed was what got
+			// stored. The path decodes; the query keeps its encoding, because
+			// its values have sub-structure a decode would corrupt.
+			'encoded relative'      => array( '/caf%C3%A9?q=a%26b', '/café?q=a%26b', 1 ),
+			'canonical relative'    => array( '/café', '/café', 0 ),
+			'internal absolute'     => array( '{home}/new-page?a=1', '/new-page?a=1', 1 ),
+			'internal double slash' => array( '{home}//foo', '{home}//foo', 0 ),
+			'external'              => array( 'https://external.example.net/x', 'https://external.example.net/x', 0 ),
+			// 1.x sent visitors to the kses-escaped URL, whose query has a
+			// parameter named 'amp;b' where 'b' was meant.
+			'kses-escaped relative' => array( '/new?a=1&amp;b=2', '/new?a=1&b=2', 1 ),
+			'kses-escaped absolute' => array( 'https://example.com/new?a=1&amp;b=2', 'https://example.com/new?a=1&b=2', 1 ),
+		);
 	}
 
 	/**
-	 * A double-slash path would be rejected as scheme-relative by the domain
-	 * layer, so it must be left as stored rather than corrupted.
-	 *
-	 * @return void
-	 */
-	public function test_double_slash_destination_is_not_normalized() {
-		// Built by concatenation: home_url( '//foo' ) would collapse the
-		// double slash this test exists to preserve.
-		$destination = untrailingslashit( home_url() ) . '//foo';
-		$post_id     = $this->create_legacy_redirect( '/old-page', $destination );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 0, $result['normalized'] );
-		$this->assertSame( $destination, get_post( $post_id )->post_excerpt );
-	}
-
-	/**
-	 * An external destination is left exactly as stored.
-	 *
-	 * @return void
-	 */
-	public function test_external_destination_is_not_normalized() {
-		$post_id = $this->create_legacy_redirect( '/old-page', 'https://external.example.net/x' );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 0, $result['normalized'] );
-		$this->assertSame( 'https://external.example.net/x', get_post( $post_id )->post_excerpt );
-	}
-
-	/**
-	 * A relative destination stored percent-encoded is canonicalized.
-	 *
-	 * Before version 4, whichever encoding was typed was what got stored, so
-	 * one target could be two different strings. Existing rows converge on
-	 * the decoded form the normalizer now produces on save.
-	 *
-	 * @return void
-	 */
-	public function test_encoded_relative_destination_is_canonicalized() {
-		$post_id = $this->create_legacy_redirect( '/old-page', '/caf%C3%A9?q=a%26b' );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 1, $result['normalized'] );
-		// The path decodes; the query keeps its encoding, because its values
-		// have sub-structure a decode would corrupt.
-		$this->assertSame( '/café?q=a%26b', get_post( $post_id )->post_excerpt );
-
-		$destination = DestinationUrl::from_string( get_post( $post_id )->post_excerpt );
-		$this->assertTrue( $destination->is_relative() );
-	}
-
-	/**
-	 * A relative destination already in canonical form is left uncounted.
-	 *
-	 * The destination pass runs on every future version walk, so a rewrite
-	 * that fired on already-canonical rows would report work forever.
-	 *
-	 * @return void
-	 */
-	public function test_canonical_relative_destination_is_not_recounted() {
-		$post_id = $this->create_legacy_redirect( '/old-page', '/café' );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 0, $result['normalized'] );
-		$this->assertSame( '/café', get_post( $post_id )->post_excerpt );
-	}
-
-	/**
-	 * A dry run reports destinations due to be made relative.
-	 *
-	 * @return void
-	 */
-	public function test_count_pending_reports_normalization() {
-		$this->create_legacy_redirect( '/old-page', home_url( '/new-page' ) );
-
-		$pending = $this->upgrader->count_pending();
-
-		$this->assertSame( 1, $pending['normalized'] );
-	}
-
-	/**
-	 * A stored source with a trailing slash is re-keyed without one.
-	 *
-	 * @return void
-	 */
-	public function test_trailing_slash_source_is_canonicalized() {
-		$post_id = $this->create_legacy_redirect( '/old-page/' );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 1, $result['repathed'] );
-
-		$post = get_post( $post_id );
-		$this->assertSame( '/old-page', $post->post_title );
-		$this->assertSame( md5( '/old-page' ), $post->post_name );
-	}
-
-	/**
-	 * The trailing slash comes off the path, not off the query string.
-	 *
-	 * @return void
-	 */
-	public function test_trailing_slash_is_stripped_from_the_path_only() {
-		$post_id = $this->create_legacy_redirect( '/old-page/?ref=a/' );
-
-		$this->upgrader->run_batch( 100 );
-
-		$this->assertSame( '/old-page?ref=a/', get_post( $post_id )->post_title );
-	}
-
-	/**
-	 * A source already without a trailing slash is left uncounted.
+	 * The source pass strips a trailing slash from the path, and leaves canonical sources uncounted.
 	 *
 	 * The pass runs on every future version walk, so rewriting rows that are
 	 * already canonical would report work forever.
 	 *
+	 * @dataProvider data_source_pass
+	 *
+	 * @param string $stored   The source as 1.x stored it.
+	 * @param string $expected The source after the pass.
+	 * @param int    $repathed How many rows the pass should count as re-keyed.
 	 * @return void
 	 */
-	public function test_canonical_source_is_not_recounted() {
-		$post_id = $this->create_legacy_redirect( '/old-page' );
+	public function test_source_pass( string $stored, string $expected, int $repathed ) {
+		$post_id = $this->create_legacy_redirect( $stored );
 
 		$result = $this->upgrader->run_batch( 100 );
 
-		$this->assertSame( 0, $result['repathed'] );
-		$this->assertSame( '/old-page', get_post( $post_id )->post_title );
+		$this->assertSame( $repathed, $result['repathed'] );
+		$this->assertSame( $expected, get_post( $post_id )->post_title );
+		$this->assertSame( md5( $expected ), get_post( $post_id )->post_name );
 	}
 
 	/**
-	 * The site root keeps its slash rather than being emptied.
+	 * Sources as 1.x stored them, what the source pass leaves, and whether it counts a re-key.
 	 *
-	 * @return void
+	 * @return array<string, array{string, string, int}>
 	 */
-	public function test_root_source_survives_canonicalization() {
-		$post_id = $this->create_legacy_redirect( '/' );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 0, $result['repathed'] );
-		$this->assertSame( '/', get_post( $post_id )->post_title );
+	public static function data_source_pass(): array {
+		return array(
+			'trailing slash'     => array( '/old-page/', '/old-page', 1 ),
+			'slash in the query' => array( '/old-page/?ref=a/', '/old-page?ref=a/', 1 ),
+			'already canonical'  => array( '/old-page', '/old-page', 0 ),
+			// The site root keeps its slash rather than being emptied.
+			'the site root'      => array( '/', '/', 0 ),
+		);
 	}
-
 	/**
 	 * Both halves of the old two-row workaround converge, and the copy is trashed.
 	 *
@@ -1602,10 +1415,17 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A collision between different destinations drafts the loser and reports it.
+	 * A collision between different destinations drafts the loser on its own key, reports it, and lists it until saved.
 	 *
 	 * Only a human can decide which destination was meant, so the survivor is
 	 * left firing and the other is disabled rather than silently discarded.
+	 * The loser keeps its own slug: two rows sharing a post_name would go
+	 * through wp_unique_post_slug() and be silently suffixed, leaving the
+	 * redirect findable under neither its old key nor its new one. Browsers
+	 * did request its spelling, so its visitors now reach the live redirect's
+	 * destination, and it is not marked as never having fired: it needs a
+	 * decision rather than a delete. The save that settles it goes through
+	 * the plugin's own save_post hook.
 	 *
 	 * @return void
 	 */
@@ -1616,11 +1436,34 @@ final class UpgraderTest extends TestCase {
 		$result = $this->upgrader->run_batch( 100 );
 
 		$this->assertSame( 0, $result['deduped'] );
+		$this->assertSame( 0, $result['unfired'] );
 		$this->assertCount( 1, $result['conflicts'] );
 		$this->assertStringContainsString( 'has the same source as', $result['conflicts'][0] );
+		$this->assertStringEndsNotWith( '(never fired under 1.x)', $result['conflicts'][0] );
 
 		$this->assertSame( 'draft', get_post( $loser_id )->post_status );
 		$this->assertSame( 'publish', get_post( $kept )->post_status );
+		$this->assertSame( md5( '/old-page' ), get_post( $kept )->post_name );
+		$this->assertSame( md5( '/old-page/' ), get_post( $loser_id )->post_name );
+
+		$this->assertSame(
+			array(
+				$loser_id => array(
+					'of'          => $kept,
+					'never_fired' => false,
+				),
+			),
+			$this->upgrader->duplicates()
+		);
+
+		wp_update_post(
+			array(
+				'ID'           => $loser_id,
+				'post_excerpt' => 'https://example.com/one',
+			)
+		);
+
+		$this->assertSame( array(), $this->upgrader->duplicates() );
 	}
 
 	/**
@@ -1679,70 +1522,6 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * The losing row keeps its own slug rather than contending for the winner's.
-	 *
-	 * Two rows sharing a post_name would go through wp_unique_post_slug() and
-	 * be silently suffixed, leaving the redirect findable under neither its old
-	 * key nor its new one.
-	 *
-	 * @return void
-	 */
-	public function test_colliding_row_does_not_take_the_winners_slug() {
-		$kept     = $this->create_legacy_redirect( '/old-page', 'https://example.com/one' );
-		$loser_id = $this->create_legacy_redirect( '/old-page/', 'https://example.com/two' );
-
-		$this->upgrader->run_batch( 100 );
-
-		$this->assertSame( md5( '/old-page' ), get_post( $kept )->post_name );
-		$this->assertSame( md5( '/old-page/' ), get_post( $loser_id )->post_name );
-	}
-
-	/**
-	 * A dry run reports duplicates and conflicts without writing anything.
-	 *
-	 * @return void
-	 */
-	public function test_count_pending_reports_duplicates_and_conflicts() {
-		$this->create_legacy_redirect( '/dupe', 'https://example.com/same' );
-		$dupe_id = $this->create_legacy_redirect( '/dupe/', 'https://example.com/same' );
-		$this->create_legacy_redirect( '/clash', 'https://example.com/one' );
-		$this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
-
-		$pending = $this->upgrader->count_pending();
-
-		$this->assertSame( 1, $pending['deduped'] );
-		$this->assertCount( 1, $pending['conflicts'] );
-
-		// Nothing was written.
-		$this->assertSame( 'draft', get_post( $dupe_id )->post_status );
-		$this->assertTrue( $this->upgrader->needs_upgrade() );
-	}
-
-	/**
-	 * A canonicalized source is reachable by a request in either spelling.
-	 *
-	 * The point of the migration: the stored row moves to the canonical key,
-	 * and lookups canonicalize the request the same way, so both forms land.
-	 *
-	 * @return void
-	 */
-	public function test_canonicalized_source_is_reachable_by_either_spelling() {
-		$this->create_legacy_redirect( '/old-page/' );
-
-		$this->upgrader->run_batch( 100 );
-
-		$repository = new PostTypeRedirectRepository();
-
-		foreach ( array( '/old-page', '/old-page/' ) as $request ) {
-			$this->assertInstanceOf(
-				Redirect::class,
-				$repository->find_by_source( SourceUrl::from_string( $request ) ),
-				$request . ' should resolve after migration'
-			);
-		}
-	}
-
-	/**
 	 * A 1.x source in any encoding is reachable by the requests that reached it under 1.x.
 	 *
 	 * 1.x keyed each source by the md5 of the text exactly as stored, while
@@ -1786,6 +1565,7 @@ final class UpgraderTest extends TestCase {
 			'raw space'                  => array( '/a b', array( '/a%20b' ) ),
 			'plus in the query'          => array( '/p?q=a+b', array( '/p?q=a+b', '/p?q=a%20b' ) ),
 			'encoded plus in query'      => array( '/p?q=c%2B%2B', array( '/p?q=c%2B%2B' ) ),
+			'trailing slash'             => array( '/old-page/', array( '/old-page', '/old-page/' ) ),
 			'encoded and slashed'        => array( '/trail%C3%A9/', array( '/trail%C3%A9', '/trail%C3%A9/' ) ),
 			'encoded percent'            => array( '/100%25', array( '/100%25' ) ),
 			'encoded percent twice'      => array( '/a%2541', array( '/a%2541' ) ),
@@ -2094,27 +1874,6 @@ final class UpgraderTest extends TestCase {
 	}
 
 	/**
-	 * A kses-escaped destination is un-escaped, relative or absolute.
-	 *
-	 * 1.x sent visitors to the escaped URL, whose query has a parameter named
-	 * 'amp;b' where 'b' was meant.
-	 *
-	 * @return void
-	 */
-	public function test_kses_escaped_destination_is_unescaped() {
-		$relative_id = $this->create_legacy_redirect( '/relative', '/new?a=1&amp;b=2' );
-		$absolute_id = $this->create_legacy_redirect( '/absolute', 'https://example.com/new?a=1&amp;b=2' );
-
-		$this->assertSame( 2, $this->upgrader->count_pending()['normalized'] );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 2, $result['normalized'] );
-		$this->assertSame( '/new?a=1&b=2', get_post( $relative_id )->post_excerpt );
-		$this->assertSame( 'https://example.com/new?a=1&b=2', get_post( $absolute_id )->post_excerpt );
-	}
-
-	/**
 	 * A disabled duplicate stored with raw non-ASCII is marked as never having fired.
 	 *
 	 * Browsers send non-ASCII percent-encoded, and 1.x compared the request
@@ -2134,31 +1893,11 @@ final class UpgraderTest extends TestCase {
 		$this->assertSame( 'draft', get_post_status( $raw_id ) );
 		$this->assertTrue( $this->upgrader->duplicates()[ $raw_id ]['never_fired'] );
 
-		add_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 		wp_trash_post( $raw_id );
-		remove_action( 'save_post_' . PostType::POST_TYPE, array( Upgrader::class, 'forget_duplicate' ) );
 
 		$this->assertSame( '', get_post_meta( $raw_id, Upgrader::NEVER_FIRED_META_KEY, true ) );
 	}
 
-	/**
-	 * A disabled duplicate whose spelling browsers did request is not marked.
-	 *
-	 * Its visitors now reach the live redirect's destination, so it needs a
-	 * decision rather than a delete.
-	 *
-	 * @return void
-	 */
-	public function test_reachable_duplicate_is_not_marked_as_never_fired() {
-		$this->create_legacy_redirect( '/clash', 'https://example.com/one' );
-		$loser_id = $this->create_legacy_redirect( '/clash/', 'https://example.com/two' );
-
-		$result = $this->upgrader->run_batch( 100 );
-
-		$this->assertSame( 0, $result['unfired'] );
-		$this->assertStringEndsNotWith( '(never fired under 1.x)', $result['conflicts'][0] );
-		$this->assertFalse( $this->upgrader->duplicates()[ $loser_id ]['never_fired'] );
-	}
 	/**
 	 * Writing a batch in bulk gives exactly what writing each row alone gives.
 	 *
@@ -2227,16 +1966,9 @@ final class UpgraderTest extends TestCase {
 				return $changed;
 			};
 
-			$upgrader = new Upgrader();
-			$result   = array_fill_keys( $keys, 0 ) + array( 'conflicts' => array() );
+			$this->upgrader = new Upgrader();
 			add_filter( 'query', $tracking );
-			do {
-				$batch = $upgrader->run_batch( null === $filter ? 7 : 100 );
-				foreach ( $keys as $key ) {
-					$result[ $key ] += $batch[ $key ];
-				}
-				$result['conflicts'] = array_merge( $result['conflicts'], $batch['conflicts'] );
-			} while ( ! $batch['complete'] );
+			$result = $this->run_to_completion( null === $filter ? 7 : 100 );
 			remove_filter( 'query', $tracking );
 
 			if ( null !== $filter ) {
