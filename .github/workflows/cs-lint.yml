@@ -1,0 +1,98 @@
+name: CS & Lint
+
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.phpcs.xml.dist'
+      - '.github/workflows/cs-lint.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.phpcs.xml.dist'
+      - '.github/workflows/cs-lint.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: PHP Lint and Coding Standards
+    runs-on: ubuntu-latest
+
+    env:
+      XMLLINT_INDENT: "	"
+
+    steps:
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2.40.0
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: cs2pr
+
+      # Show PHP lint violations inline in the file diff.
+      # @link https://github.com/marketplace/actions/xmllint-problem-matcher
+      - name: Register PHP lint violations to appear as file diff comments
+        uses: korelstar/phplint-problem-matcher@cb2b753750ec7bf13a7cde0a476df8c5605bdfb1 # v1.2.0
+
+      # Show XML violations inline in the file diff.
+      # @link https://github.com/marketplace/actions/xmllint-problem-matcher
+      - name: Register XML violations to appear as file diff comments
+        uses: korelstar/xmllint-problem-matcher@dd2ad21bd8a2de0187cb621419537f345e7e509c # v1.3.0
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Validate the composer.json file.
+      # @link https://getcomposer.org/doc/03-cli.md#validate
+      - name: Validate Composer installation
+        run: composer validate --no-check-all
+
+      # Install dependencies and handle caching in one go.
+      # @link https://github.com/marketplace/actions/install-php-dependencies-with-composer
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+
+      - name: Lint PHP against parse errors
+        run: composer lint-ci | cs2pr
+
+      # Lint XML configuration files.
+      # @link https://github.com/marketplace/actions/xml-lint
+      - name: Lint phpunit.xml.dist
+        uses: ChristophWurst/xmllint-action@7c54ff113fc0f6d4588a15cb4dfe31b6ecca5212 # v1.2.1
+        with:
+          xml-file: ./phpunit.xml.dist
+          xml-schema-file: ./vendor/phpunit/phpunit/phpunit.xsd
+
+      - name: Lint phpunit-integration.xml.dist
+        uses: ChristophWurst/xmllint-action@7c54ff113fc0f6d4588a15cb4dfe31b6ecca5212 # v1.2.1
+        with:
+          xml-file: ./phpunit-integration.xml.dist
+          xml-schema-file: ./vendor/phpunit/phpunit/phpunit.xsd
+
+      - name: Lint .phpcs.xml.dist
+        uses: ChristophWurst/xmllint-action@7c54ff113fc0f6d4588a15cb4dfe31b6ecca5212 # v1.2.1
+        with:
+          xml-file: ./.phpcs.xml.dist
+          xml-schema-file: ./vendor/squizlabs/php_codesniffer/phpcs.xsd
+
+      # Check the code-style consistency of the PHP files.
+      - name: Check PHP code style
+        run: composer cs -- --report-full --report-checkstyle=./phpcs-report.xml
+
+      - name: Show PHPCS results in PR
+        if: ${{ always() }}
+        run: cs2pr ./phpcs-report.xml

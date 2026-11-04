@@ -1,0 +1,267 @@
+name: Create GitHub Release
+
+# Runs on any pushed tag, wherever that tag lives. A tag on a release branch is
+# as valid as one on main, so an internal pre-release can be cut from
+# release/2.0.0-RC1 without merging anything first. A tag containing a hyphen
+# (2.0.0-alpha, 2.1.0-rc.1) is published as a GitHub pre-release.
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+concurrency:
+  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    name: Build ZIP and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the tag matches the plugin version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+
+          VERSION="${TAG#v}"
+
+          HEADER="$(sed -n 's/^[[:space:]]*\*[[:space:]]*Version:[[:space:]]*//p' wpcom-legacy-redirector.php | head -n1 | tr -d '[:space:]')"
+          # WPCOM_LEGACY_REDIRECTOR_VERSION is defined from this namespaced
+          # constant, so checking the literal here covers both.
+          CONSTANT="$(sed -n "s/^const VERSION[[:space:]]*=[[:space:]]*'\([^']*\)'.*/\1/p" wpcom-legacy-redirector.php | head -n1)"
+          # This plugin is distributed from GitHub, not WordPress.org, so
+          # nothing downstream re-checks Stable tag. Check it here or it rots.
+          STABLE="$(sed -n 's/^Stable tag:[[:space:]]*//p' README.md | head -n1 | tr -d '[:space:]')"
+
+          FAILED=0
+          for pair in "plugin header:${HEADER}" "VERSION constant:${CONSTANT}" "README.md Stable tag:${STABLE}"; do
+            if [ "${pair#*:}" != "$VERSION" ]; then
+              echo "::error::${pair%%:*} is '${pair#*:}' but the tag is '${VERSION}'"
+              FAILED=1
+            fi
+          done
+
+          # Shipping a ZIP whose internal version disagrees with its tag makes
+          # every later "which build is this?" question unanswerable.
+          [ "$FAILED" -eq 0 ]
+
+      - name: Check the plugin has no runtime Composer dependencies
+        run: |
+          set -eu
+
+          # The ZIP ships no vendor/ directory: src/ classes load through the
+          # fallback autoloader in the main plugin file, which only knows how
+          # to find this plugin's own namespace. Add a dependency that is
+          # needed at runtime and the ZIP still installs and activates, then
+          # fatals on a missing class in production. composer/installers is
+          # exempt because it only ever runs at install time.
+          UNEXPECTED="$(jq -r '(.require // {}) | keys[] | select(. != "php" and . != "composer/installers")' composer.json)"
+
+          if [ -n "$UNEXPECTED" ]; then
+            echo "::error::composer.json requires packages that the ZIP will not ship: $(echo "$UNEXPECTED" | tr '\n' ' ')"
+            echo "Either drop the dependency, or stop excluding /vendor/ in .distignore and install it here with 'composer install --no-dev'."
+            exit 1
+          fi
+
+      - name: Build the distributable ZIP
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+
+          VERSION="${TAG#v}"
+          # The plugin folder, not the repository name. WordPress identifies a
+          # plugin by folder plus main file, and 1.x sites and Composer installs
+          # have it in wpcom-legacy-redirector/. A ZIP with any other root
+          # installs a second copy beside 1.x instead of replacing it.
+          SLUG=wpcom-legacy-redirector
+
+          # Staged outside the checkout: a destination inside the source would
+          # have rsync copy the staging directory into itself.
+          # The ZIP must contain a single top-level directory named after the
+          # plugin folder, or WordPress unpacks the files loose into
+          # wp-content/plugins/ and the install is unusable.
+          mkdir -p "$RUNNER_TEMP/dist/$SLUG"
+          rsync -a --exclude-from=.distignore ./ "$RUNNER_TEMP/dist/$SLUG/"
+
+          ZIP_PATH="$RUNNER_TEMP/${SLUG}-${VERSION}.zip"
+          ( cd "$RUNNER_TEMP/dist" && zip -rq "$ZIP_PATH" "$SLUG" )
+
+          # Checked, not just printed for a human to squint at: a .distignore
+          # pattern that swallowed src/ would publish a ZIP that fatals on
+          # activation, and every other check in this workflow would pass.
+          unzip -Z1 "$ZIP_PATH" > "$RUNNER_TEMP/zip.list"
+
+          echo "ZIP contents:"
+          cat "$RUNNER_TEMP/zip.list"
+
+          MISSING=0
+          for path in \
+            'wpcom-legacy-redirector.php' \
+            'src/Infrastructure/DI/Container.php' \
+            'src/Infrastructure/WordPress/PluginBootstrapper.php' \
+            'js/admin-redirect-form.js' \
+            'uninstall.php'
+          do
+            if ! grep -qxF "${SLUG}/${path}" "$RUNNER_TEMP/zip.list"; then
+              echo "::error::The ZIP is missing ${path}"
+              MISSING=1
+            fi
+          done
+
+          # The first three are what the plugin file loads and instantiates
+          # the moment WordPress includes it, so their absence is a dead
+          # install. Without the form script, the Add/Edit Redirect screens
+          # still work but silently lose their live warnings.
+          [ "$MISSING" -eq 0 ]
+
+          echo "SLUG=${SLUG}" >> "$GITHUB_ENV"
+          echo "ZIP_PATH=${ZIP_PATH}" >> "$GITHUB_ENV"
+
+      - name: Check .distignore and .gitattributes agree
+        run: |
+          set -eu
+
+          # Two exclude lists with one job between them: .distignore shapes the
+          # release ZIP, .gitattributes export-ignore shapes the source archive
+          # that Composer installs from. Nothing keeps them in step, and the
+          # drift stays invisible until someone inspects an installed copy.
+          # Diffing the two file lists needs no third list to maintain.
+          git archive --format=tar HEAD | tar -t | grep -v '/$' | sort \
+            > "$RUNNER_TEMP/archive.list"
+          grep -v '/$' "$RUNNER_TEMP/zip.list" | sed "s|^${SLUG}/||" | sort \
+            > "$RUNNER_TEMP/dist.list"
+
+          ONLY_ARCHIVE="$(comm -23 "$RUNNER_TEMP/archive.list" "$RUNNER_TEMP/dist.list")"
+          ONLY_DIST="$(comm -13 "$RUNNER_TEMP/archive.list" "$RUNNER_TEMP/dist.list")"
+
+          # Extra dev files in one install path is bloat, not breakage, so this
+          # warns rather than fails: a release fixing a fatal should not be
+          # blocked by a stray AGENTS.md, and a hard failure here costs a
+          # re-tag. Swap the warnings for ::error:: and an exit 1 to enforce.
+          if [ -n "$ONLY_ARCHIVE" ]; then
+            echo "::warning::In the source archive but not the ZIP - missing export-ignore in .gitattributes: $(echo "$ONLY_ARCHIVE" | tr '\n' ' ')"
+          fi
+
+          if [ -n "$ONLY_DIST" ]; then
+            echo "::warning::In the ZIP but not the source archive - missing from .distignore: $(echo "$ONLY_DIST" | tr '\n' ' ')"
+          fi
+
+      # No npm cache: a cache shared with other workflows could feed a
+      # poisoned dependency into the job that publishes the release.
+      - name: Set up Node.js for wp-env
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install wp-env
+        run: npm ci
+
+      - name: Check the ZIP activates and works without vendor/
+        run: |
+          set -eu
+
+          # The ZIP ships no vendor/, so an install from it loads classes
+          # through the fallback autoloader in the main plugin file, while
+          # every test run has Composer's. Run the unzipped plugin in a fresh
+          # WordPress and put a redirect through it, so a class the fallback
+          # cannot load fails the release here rather than on a site.
+          SMOKE="$RUNNER_TEMP/smoke"
+          mkdir -p "$SMOKE"
+          unzip -q "$ZIP_PATH" -d "$SMOKE"
+          test ! -e "$SMOKE/$SLUG/vendor"
+
+          # Mount the unzipped copy in place of the checkout.
+          printf '{ "plugins": [ "%s" ] }\n' "$SMOKE/$SLUG" > .wp-env.override.json
+          npx wp-env start
+
+          wp() { npx wp-env run cli wp "$@"; }
+          wp plugin activate "$SLUG"
+          wp legacy-redirector create /release-smoke https://example.com/release-smoke --skip-validation
+          wp legacy-redirector get /release-smoke --field=to | grep -qF 'https://example.com/release-smoke'
+          wp legacy-redirector list --format=count | grep -qx '1'
+          wp legacy-redirector delete /release-smoke --yes
+
+      - name: Prepare release title and notes
+        id: prep
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+
+          VERSION="${TAG#v}"
+
+          # Title carries the plugin name so the release reads with context
+          # wherever it surfaces (Slack, email) rather than as a bare version.
+          PLUGIN_NAME="$(sed -n 's/^[[:space:]]*\*[[:space:]]*Plugin Name:[[:space:]]*//p' wpcom-legacy-redirector.php | head -n1 | sed 's/[[:space:]]*$//')"
+          echo "title=${PLUGIN_NAME} ${VERSION}" >> "$GITHUB_OUTPUT"
+
+          # A hyphen marks a pre-release: 2.0.0-alpha, 2.1.0-rc.1.
+          case "$VERSION" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          # Notes come from the CHANGELOG entry for this version: the curated,
+          # categorised list beats an auto-generated dump of merged PRs. The
+          # "## [x.y.z] - date" heading is dropped (the title says it already)
+          # and "###" subsections are promoted so they render as top level.
+          awk -v ver="$VERSION" '
+            BEGIN { gsub(/\./, "\\.", ver) }
+            $0 ~ ("^## \\[?" ver "(\\]|[[:space:]]|$)") { found = 1; next }
+            found && /^## / { exit }
+            # The link-reference definitions at the foot of the file follow the
+            # last version section with no heading to stop on.
+            found && /^\[[^]]+\]:[[:space:]]/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed -E 's/^### /## /' > "$RUNNER_TEMP/notes.raw"
+
+          # Trim leading and trailing blank lines.
+          awk 'NF { seen = 1 } seen' "$RUNNER_TEMP/notes.raw" \
+            | tac | awk 'NF { seen = 1 } seen' | tac > "$RUNNER_TEMP/notes.md"
+
+          if [ -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "have_notes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_notes=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No CHANGELOG entry found for ${VERSION}; falling back to auto-generated notes."
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          TITLE: ${{ steps.prep.outputs.title }}
+          HAVE_NOTES: ${{ steps.prep.outputs.have_notes }}
+          PRERELEASE: ${{ steps.prep.outputs.prerelease }}
+        run: |
+          set -eu
+
+          # An array, not a string: the title contains spaces and would
+          # otherwise word-split into several arguments.
+          args=( --title "$TITLE" )
+
+          if [ "$HAVE_NOTES" = 'true' ]; then
+            args+=( --notes-file "$RUNNER_TEMP/notes.md" )
+          else
+            args+=( --generate-notes )
+          fi
+
+          if [ "$PRERELEASE" = 'true' ]; then
+            args+=( --prerelease )
+          fi
+
+          # The gh CLI is preinstalled on the runner, so this needs no
+          # third-party action to pin, review, or allow-list.
+          gh release create "$TAG" "$ZIP_PATH" "${args[@]}"

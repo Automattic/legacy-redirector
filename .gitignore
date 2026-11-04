@@ -1,0 +1,16 @@
+/coverage/
+/vendor/
+/composer.lock
+/.phpcs.xml
+/phpcs.xml
+/phpunit.xml
+/.phpunit.result.cache
+
+# Node.js
+/node_modules/
+
+# Playwright output
+/artifacts/
+
+# wp-env local overrides
+/.wp-env.override.json

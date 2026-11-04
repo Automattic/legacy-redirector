@@ -1,0 +1,502 @@
+<?php
+/**
+ * Import redirects CLI command.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Cli;
+
+use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use WP_CLI;
+use WP_CLI_Command;
+
+/**
+ * Bulk import redirects from a CSV file.
+ */
+final class ImportCommand extends WP_CLI_Command {
+
+	use CountsInWords;
+
+	/**
+	 * The redirect manager.
+	 *
+	 * @var RedirectManager
+	 */
+	private RedirectManager $manager;
+
+	/**
+	 * The redirect auditor, which owns the source warning rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectManager $manager The redirect manager.
+	 * @param RedirectAuditor $auditor The redirect auditor.
+	 */
+	public function __construct( RedirectManager $manager, RedirectAuditor $auditor ) {
+		$this->manager = $manager;
+		$this->auditor = $auditor;
+	}
+
+	/**
+	 * Bulk import redirects from a CSV file.
+	 *
+	 * The CSV must match the following structure, one redirect per row:
+	 *   redirect_from_path,(redirect_to_post_id|redirect_to_path|redirect_to_url)[,status]
+	 *
+	 * The optional status column can be 'enabled' or 'disabled'. If omitted,
+	 * new redirects are created enabled.
+	 *
+	 * A first row that names a `from` or `to` column is a header instead, and
+	 * the columns are found by name: `from` and `to` are required, `status` is
+	 * optional, and any other column (such as `ID` or `type`) is ignored. So
+	 * the output of `wp legacy-redirector list --format=csv`, with any
+	 * `--fields`, imports unedited.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <file>
+	 * : Path to the CSV file. Pass - to read from STDIN.
+	 *
+	 * [--mode=<mode>]
+	 * : What to do with rows whose source already has a redirect.
+	 * ---
+	 * default: create
+	 * options:
+	 *   - create
+	 *   - upsert
+	 * ---
+	 *
+	 * [--skip-validation]
+	 * : Skip validation of from and to values.
+	 *
+	 * [--dry-run]
+	 * : Preview what would happen without making changes.
+	 *
+	 * [--verbose]
+	 * : Report every row, not just errors.
+	 *
+	 * [--format=<format>]
+	 * : Render per-row results in a particular format.
+	 * ---
+	 * default: table
+	 * options:
+	 *   - table
+	 *   - csv
+	 *   - json
+	 *   - yaml
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     # Import new redirects from a CSV file.
+	 *     $ wp legacy-redirector import redirects.csv
+	 *
+	 *     # Update existing redirects, creating any that are missing.
+	 *     $ wp legacy-redirector import redirects.csv --mode=upsert
+	 *
+	 *     # Preview an import without making changes.
+	 *     $ wp legacy-redirector import redirects.csv --dry-run
+	 *
+	 *     # Import from STDIN.
+	 *     $ cat redirects.csv | wp legacy-redirector import -
+	 *
+	 *     # Restore a list export, header and all.
+	 *     $ wp legacy-redirector list --limit=100000 --format=csv > redirects.csv
+	 *     $ wp legacy-redirector import redirects.csv --mode=upsert
+	 *
+	 * @when after_wp_load
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Key-value associative arguments.
+	 */
+	public function __invoke( array $args, array $assoc_args ): void {
+		if ( ! defined( 'WP_IMPORTING' ) ) {
+			define( 'WP_IMPORTING', true );
+		}
+
+		$file     = $args[0];
+		$mode     = $assoc_args['mode'] ?? 'create';
+		$format   = $assoc_args['format'] ?? 'table';
+		$verbose  = isset( $assoc_args['verbose'] );
+		$validate = ! isset( $assoc_args['skip-validation'] );
+		$dry_run  = isset( $assoc_args['dry-run'] );
+		$is_table = 'table' === $format;
+
+		if ( '-' === $file ) {
+			$file = 'php://stdin';
+		} elseif ( ! file_exists( $file ) ) {
+			WP_CLI::error( sprintf( 'File not found: %s', $file ) );
+			return;
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- CLI command, WP_Filesystem not appropriate.
+		$handle = fopen( $file, 'r' );
+
+		if ( false === $handle ) {
+			WP_CLI::error( sprintf( 'Could not open file: %s', $file ) );
+			return;
+		}
+
+		if ( $dry_run && $is_table ) {
+			WP_CLI::warning( 'Dry run mode - no changes will be made.' );
+		}
+
+		// Counts by action, plus only the rows the report will print: every
+		// row when asked (or when previewing), otherwise just the errors, so a
+		// large live import does not hold a result for every row.
+		$row       = 0;
+		$counts    = array();
+		$shown     = array();
+		$every_row = $verbose || $dry_run;
+		$columns   = array(
+			'from'   => 0,
+			'to'     => 1,
+			'status' => 2,
+		);
+
+		// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- Standard CSV reading pattern.
+		while ( ( $data = fgetcsv( $handle, 0, ',', '"', '\\' ) ) !== false ) {
+			// Before the line, not after it, so the blank and header lines
+			// skipped below count towards the pause too. The object cache
+			// otherwise holds every post and lookup the run touched. Only a
+			// live run writes, so only a live run pauses.
+			if ( $row > 0 && 0 === $row % 100 ) {
+				\WP_CLI\Utils\wp_clear_object_cache();
+				if ( ! $dry_run ) {
+					sleep( 1 );
+				}
+			}
+
+			++$row;
+
+			// A header row, such as the one `list --format=csv` writes, says
+			// where the columns are; without one they are read by position.
+			if ( 1 === $row ) {
+				// Excel's "CSV UTF-8" starts the file with a byte order mark, which
+				// fgetcsv() keeps, and which stops it removing the first cell's quotes.
+				$data[0] = preg_replace( '/^\xEF\xBB\xBF"?(.*?)"?$/s', '$1', (string) $data[0] );
+
+				$header = $this->header_columns( $data );
+
+				if ( null !== $header ) {
+					if ( null === $header['from'] || null === $header['to'] ) {
+						// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CLI command, WP_Filesystem not appropriate.
+						fclose( $handle );
+						WP_CLI::error( sprintf( 'The header row has no `%s` column. A header needs `from` and `to` columns, and may have `status`; other columns are ignored.', null === $header['from'] ? 'from' : 'to' ) );
+						return;
+					}
+
+					$columns = $header;
+					continue;
+				}
+			}
+
+			$redirect_from = trim( $data[ $columns['from'] ] ?? '' );
+			$redirect_to   = trim( $data[ $columns['to'] ] ?? '' );
+			// Optional: 'enabled' or 'disabled'.
+			$status = null === $columns['status'] ? null : ( $data[ $columns['status'] ] ?? null );
+
+			if ( '' === $redirect_from ) {
+				continue;
+			}
+
+			if ( $is_table && 0 === $row % 100 ) {
+				WP_CLI::line( "Processing row $row" );
+			}
+
+			$result = $this->process_row( $redirect_from, $redirect_to, $status, $mode, $validate, $dry_run );
+
+			$counts[ $result['action'] ] = ( $counts[ $result['action'] ] ?? 0 ) + 1;
+			if ( $every_row || 'error' === $result['action'] ) {
+				$shown[] = $result;
+			}
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- CLI command, WP_Filesystem not appropriate.
+		fclose( $handle );
+
+		$this->display_results( $counts, $shown, $format, $dry_run, $every_row );
+	}
+
+	/**
+	 * Read the first row as a header, if it is one.
+	 *
+	 * A row is a header when any cell is `from` or `to` (ignoring case and
+	 * surrounding space), the names `list` writes. A bare `to` is not a valid
+	 * destination, and the only realistic redirect row it could catch is one
+	 * with a source of `to` or `from`, which then fails loudly as a header
+	 * missing a column rather than being misread.
+	 *
+	 * @param array $cells The first row's cells.
+	 * @return array{from: int|null, to: int|null, status: int|null}|null Column positions, or null if the row is not a header.
+	 */
+	private function header_columns( array $cells ): ?array {
+		$names   = array_map( static fn( $cell ): string => strtolower( trim( (string) $cell ) ), $cells );
+		$columns = array();
+
+		foreach ( array( 'from', 'to', 'status' ) as $field ) {
+			$position          = array_search( $field, $names, true );
+			$columns[ $field ] = false === $position ? null : $position;
+		}
+
+		if ( null === $columns['from'] && null === $columns['to'] ) {
+			return null;
+		}
+
+		return $columns;
+	}
+
+	/**
+	 * Process a single CSV row.
+	 *
+	 * @param string      $redirect_from The source path.
+	 * @param string      $redirect_to   The destination.
+	 * @param string|null $status        Optional status ('enabled' or 'disabled').
+	 * @param string      $mode          The operation mode ('create' or 'upsert').
+	 * @param bool        $validate      Whether to validate.
+	 * @param bool        $dry_run       Whether this is a dry run.
+	 * @return array{source: string, dest: string, action: string, message: string} Result row.
+	 */
+	private function process_row( string $redirect_from, string $redirect_to, ?string $status, string $mode, bool $validate, bool $dry_run ): array {
+		try {
+			$source = SourceUrl::from_string( $redirect_from, HomePath::current() );
+		} catch ( \InvalidArgumentException $e ) {
+			return $this->result_row( $redirect_from, $redirect_to, 'error', 'Invalid source: ' . $e->getMessage() );
+		}
+
+		if ( '' === $redirect_to ) {
+			return $this->result_row( $redirect_from, $redirect_to, 'error', 'Missing destination' );
+		}
+
+		try {
+			$destination = Destination::from_mixed( $redirect_to );
+		} catch ( \InvalidArgumentException $e ) {
+			return $this->result_row( $redirect_from, $redirect_to, 'error', 'Invalid destination: ' . $e->getMessage() );
+		}
+
+		try {
+			$post_status = $this->resolve_status( $status );
+		} catch ( \InvalidArgumentException $e ) {
+			return $this->result_row( $redirect_from, $redirect_to, 'error', $e->getMessage() );
+		}
+
+		// Re-running an unchanged CSV is a no-op, not a failure. A source
+		// that already redirects somewhere else is still an error, so a
+		// corrected CSV re-imported without upsert does not silently fail
+		// to apply.
+		if ( 'create' === $mode && $this->manager->exists_unchanged( $source, $destination, $post_status ) ) {
+			return $this->result_row( $redirect_from, $redirect_to, $dry_run ? 'would skip' : 'skipped', 'Already exists with this destination and status' );
+		}
+
+		if ( $dry_run ) {
+			// Ask the same questions the live write would, so the preview
+			// does not promise rows the import will refuse.
+			if ( $validate ) {
+				$check = $this->manager->check( $source, $destination, 'upsert' === $mode );
+
+				if ( $check->is_invalid() ) {
+					return $this->refused_row( $redirect_from, $redirect_to, $mode, $check->error_code(), $check->error_message() ?? 'Would not be imported' );
+				}
+			}
+
+			$action = 'upsert' === $mode ? 'would update/create' : 'would create';
+			return $this->accepted_row( $source, $destination, $redirect_from, $redirect_to, $action, 'Dry run - no change made' );
+		}
+
+		// In upsert mode, try updating an existing redirect first. Only a
+		// not-found error falls through to the create path; any other failure
+		// (validation, save) is reported against the update.
+		if ( 'upsert' === $mode ) {
+			$update = $this->manager->update_by_source( $source, $destination, $post_status, $validate );
+
+			if ( $update->is_success() ) {
+				return $this->accepted_row( $source, $destination, $redirect_from, $redirect_to, 'updated', 'Updated existing redirect' );
+			}
+
+			if ( 'not-found' !== $update->error_code() ) {
+				return $this->result_row( $redirect_from, $redirect_to, 'error', $update->error_message() ?? 'Could not update redirect' );
+			}
+		}
+
+		$result = $this->manager->create_redirect( $source, $destination, $validate, $post_status );
+
+		if ( $result->is_error() ) {
+			return $this->refused_row( $redirect_from, $redirect_to, $mode, $result->error_code(), $result->error_message() ?? 'Could not create redirect' );
+		}
+
+		return $this->accepted_row( $source, $destination, $redirect_from, $redirect_to, 'created', 'Successfully imported' );
+	}
+
+	/**
+	 * Build the error row for a refused write, pointing a create-mode
+	 * duplicate at upsert.
+	 *
+	 * @param string      $source  The source path.
+	 * @param string      $dest    The destination.
+	 * @param string      $mode    The operation mode ('create' or 'upsert').
+	 * @param string|null $code    The error code.
+	 * @param string      $message The error message.
+	 * @return array{source: string, dest: string, action: string, message: string}
+	 */
+	private function refused_row( string $source, string $dest, string $mode, ?string $code, string $message ): array {
+		if ( 'create' === $mode && 'duplicate-redirect-uri' === $code ) {
+			$message = 'A redirect for this source already exists with a different destination or status. Use --mode=upsert to update it.';
+		}
+
+		return $this->result_row( $source, $dest, 'error', $message );
+	}
+
+
+	/**
+	 * Build the result row for an accepted redirect, reporting the auditor's
+	 * warnings for it: a source WordPress itself serves, or a redirect that
+	 * closes a loop.
+	 *
+	 * @param SourceUrl   $source_url  The parsed source.
+	 * @param Destination $destination The parsed destination.
+	 * @param string      $source      The source path.
+	 * @param string      $dest        The destination.
+	 * @param string      $action      The action taken.
+	 * @param string      $message     The result message.
+	 * @return array{source: string, dest: string, action: string, message: string}
+	 */
+	private function accepted_row( SourceUrl $source_url, Destination $destination, string $source, string $dest, string $action, string $message ): array {
+		foreach ( $this->auditor->warnings( Redirect::create( $source_url, $destination ) ) as $warning ) {
+			WP_CLI::warning( $source . ': ' . $warning->description() . '. ' . $warning->remedy() . '.' );
+		}
+
+		return $this->result_row( $source, $dest, $action, $message );
+	}
+
+	/**
+	 * Build a result row.
+	 *
+	 * @param string $source  The source path.
+	 * @param string $dest    The destination.
+	 * @param string $action  The action taken.
+	 * @param string $message The result message.
+	 * @return array{source: string, dest: string, action: string, message: string}
+	 */
+	private function result_row( string $source, string $dest, string $action, string $message ): array {
+		return array(
+			'source'  => $source,
+			'dest'    => $dest,
+			'action'  => $action,
+			'message' => $message,
+		);
+	}
+
+	/**
+	 * Display the results summary.
+	 *
+	 * @param array<string, int> $counts    How many rows ended in each action, in first-seen order.
+	 * @param array              $shown     The rows to print.
+	 * @param string             $format    The output format.
+	 * @param bool               $dry_run   Whether this was a dry run.
+	 * @param bool               $every_row Whether $shown holds every row, not just the errors.
+	 */
+	private function display_results( array $counts, array $shown, string $format, bool $dry_run, bool $every_row ): void {
+		$is_table = 'table' === $format;
+		$fields   = $every_row ? array( 'source', 'dest', 'action', 'message' ) : array( 'source', 'dest', 'message' );
+
+		// Only a table gets the summary, headings and closing sentence; the
+		// other formats print the rows alone, so an empty JSON result is `[]`.
+		if ( ! $is_table ) {
+			\WP_CLI\Utils\format_items( $format, $shown, $fields );
+		}
+
+		$total = array_sum( $counts );
+
+		if ( 0 === $total ) {
+			WP_CLI::warning( 'No rows processed.' );
+			return;
+		}
+
+		// Summarize by action for table output.
+		if ( $is_table ) {
+			WP_CLI::line( '' );
+			WP_CLI::line( 'Summary:' );
+			foreach ( $counts as $action => $count ) {
+				WP_CLI::line( sprintf( '  %s: %d', ucfirst( $action ), $count ) );
+			}
+			WP_CLI::line( '' );
+		}
+
+		if ( $is_table && ! empty( $shown ) ) {
+			if ( ! $every_row ) {
+				WP_CLI::warning( 'Errors:' );
+			}
+			\WP_CLI\Utils\format_items( $format, $shown, $fields );
+		}
+
+		$failed = $counts['error'] ?? 0;
+
+		if ( $failed === $total ) {
+			WP_CLI::error( 1 === $total ? 'The only row failed.' : sprintf( 'All %s failed.', self::count_of( $total, 'row', 'rows' ) ) );
+			return;
+		}
+
+		if ( $dry_run ) {
+			return;
+		}
+
+		// Any failed row fails the run, so scripts do not mistake a partial
+		// import for a clean one.
+		if ( $failed > 0 ) {
+			WP_CLI::error( sprintf( 'Processed %d of %d rows: %d failed.', $total - $failed, $total, $failed ) );
+			return;
+		}
+
+		if ( ! $is_table ) {
+			return;
+		}
+
+		$skipped = $counts['skipped'] ?? 0;
+		$message = 'Processed ' . self::count_of( $total - $skipped, 'redirect', 'redirects' );
+		if ( $skipped > 0 ) {
+			$message .= sprintf( ', skipped %d unchanged', $skipped );
+		}
+		WP_CLI::success( $message . '.' );
+	}
+
+	/**
+	 * Resolve status string to post status.
+	 *
+	 * @param string|null $status The status from CSV ('enabled', 'disabled', or null).
+	 * @return string|null Post status ('publish', 'draft') or null if not specified.
+	 *
+	 * @throws \InvalidArgumentException If the status is not one this command recognizes.
+	 */
+	private function resolve_status( ?string $status ): ?string {
+		if ( null === $status || '' === trim( $status ) ) {
+			return null;
+		}
+
+		$normalized = strtolower( trim( $status ) );
+
+		if ( 'enabled' === $normalized || 'publish' === $normalized ) {
+			return 'publish';
+		}
+
+		if ( 'disabled' === $normalized || 'draft' === $normalized ) {
+			return 'draft';
+		}
+
+		// A typo such as "disbled" must not quietly create a live redirect.
+		// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Plain-text message for WP-CLI.
+		throw new \InvalidArgumentException( sprintf( "Unknown status '%s'; use enabled or disabled", trim( $status ) ) );
+	}
+}

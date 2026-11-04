@@ -1,0 +1,9 @@
+default:
+  suites:
+    default:
+      contexts:
+        - Automattic\LegacyRedirector\Tests\Behat\FeatureContext
+      paths:
+        - features
+      filters:
+        tags: "~@broken&&~@broken-wpenv"

@@ -1,0 +1,354 @@
+<?php
+/**
+ * Multisite integration tests.
+ *
+ * Tests that redirects are properly isolated between sites in multisite.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration;
+
+use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+
+/**
+ * Tests for multisite redirect isolation.
+ *
+ * @group multisite
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ */
+final class MultisiteTest extends TestCase {
+
+	/**
+	 * The second test site ID.
+	 *
+	 * @var int
+	 */
+	private int $site_2_id;
+
+	/**
+	 * Sets up test fixtures.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		if ( ! is_multisite() ) {
+			$this->markTestSkipped( 'Multisite required' );
+		}
+
+		$this->site_2_id = self::factory()->blog->create();
+	}
+
+	/**
+	 * Tears down test fixtures.
+	 */
+	public function tear_down(): void {
+		restore_current_blog();
+		wp_delete_site( $this->site_2_id );
+		parent::tear_down();
+	}
+
+	/**
+	 * Test that redirects on one site are not visible on another site.
+	 */
+	public function test_cache_isolation_between_sites(): void {
+		// Create redirect on main site.
+		$this->create_redirect( '/shared-path', '/destination-1' );
+
+		// Verify it exists.
+		$data = $this->resolver()->get_redirect_data( '/shared-path' );
+		$this->assertNotNull( $data );
+		$this->assertStringContainsString( 'destination-1', $data['url'] );
+
+		// Switch to site 2.
+		switch_to_blog( $this->site_2_id );
+
+		// Should NOT see site 1's redirect.
+		$data_site_2 = $this->resolver()->get_redirect_data( '/shared-path' );
+		$this->assertNull( $data_site_2 );
+
+		// Create different redirect on site 2.
+		$this->create_redirect( '/shared-path', '/destination-2' );
+
+		$data_site_2_after = $this->resolver()->get_redirect_data( '/shared-path' );
+		$this->assertNotNull( $data_site_2_after );
+		$this->assertStringContainsString( 'destination-2', $data_site_2_after['url'] );
+
+		// Switch back to main site.
+		restore_current_blog();
+
+		// Main site should still have its original redirect.
+		$data_main = $this->resolver()->get_redirect_data( '/shared-path' );
+		$this->assertNotNull( $data_main );
+		$this->assertStringContainsString( 'destination-1', $data_main['url'] );
+	}
+
+	/**
+	 * Test that the subsite prefix is only stripped on a path-segment boundary.
+	 *
+	 * A subsite at '/blog' must not have that prefix taken off '/blogging-tips':
+	 * the redirect stored for '/blogging-tips' would never fire, and one stored
+	 * for '/ging-tips' would fire on the wrong URL in its place.
+	 */
+	public function test_subsite_prefix_is_stripped_only_on_a_path_boundary(): void {
+		// The site is rolled back with WP_UnitTestCase's per-test transaction,
+		// so the unique suffix is not needed for isolation.
+		$prefix  = 'blog' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $prefix . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$home_path     = rtrim( (string) wp_parse_url( home_url(), PHP_URL_PATH ), '/' );
+		$expected_home = '/' . $prefix;
+
+		if ( $expected_home !== $home_path ) {
+			restore_current_blog();
+			wp_delete_site( $site_id );
+			$this->markTestSkipped( 'Subdirectory multisite required' );
+		}
+
+		$this->create_redirect( '/' . $prefix . 'ging-tips', '/right-destination' );
+		$this->create_redirect( '/ging-tips', '/wrong-destination' );
+		$this->create_redirect( '/old-page', '/stripped-destination' );
+
+		// Shares the prefix's characters, but not on a segment boundary.
+		$partial = $this->resolver()->get_redirect_data( '/' . $prefix . 'ging-tips' );
+
+		// A genuine in-subsite request, where the prefix should be stripped.
+		$in_subsite = $this->resolver()->get_redirect_data( '/' . $prefix . '/old-page' );
+
+		restore_current_blog();
+		wp_delete_site( $site_id );
+
+		$this->assertNotNull( $partial );
+		$this->assertStringContainsString( 'right-destination', $partial['url'] );
+
+		$this->assertNotNull( $in_subsite );
+		$this->assertStringContainsString( 'stripped-destination', $in_subsite['url'] );
+	}
+
+	/**
+	 * On a subdirectory subsite, the source's own full URL is refused as a
+	 * self-redirect, while the same path at the network root is not one.
+	 *
+	 * Without rebasing, '/old' to 'example.org/sub/old' would be saved as
+	 * '/old' to '/old', and every request for it would loop.
+	 *
+	 * @return void
+	 */
+	public function test_own_full_url_is_refused_as_a_destination_on_subsite(): void {
+		$path    = 'selfloop' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $path . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$own_url  = $this->create_redirect_result( '/old', home_url( '/old' ), true );
+		$root_url = $this->create_redirect_result( '/old', network_home_url( '/old' ), true );
+
+		restore_current_blog();
+		wp_delete_site( $site_id );
+
+		$this->assertSame( 'invalid-values', $own_url->error_code() );
+		$this->assertTrue( $root_url->is_success(), (string) $root_url->error_message() );
+	}
+
+	/**
+	 * A source given as a full URL is stored relative to the site it is saved on.
+	 *
+	 * Sources are stored relative to the site's own home URL, and the resolver
+	 * strips the subsite prefix from every incoming request before looking one
+	 * up. A full URL that kept its subsite prefix would therefore be saved
+	 * under a key no request can produce, and the redirect would never fire.
+	 *
+	 * @return void
+	 */
+	public function test_full_url_source_on_subsite_resolves_for_its_own_request(): void {
+		$path    = 'subdir' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $path . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$full_url = home_url( '/old-page' );
+		$this->create_redirect( $full_url, '/new-page' );
+
+		$this->assertSame(
+			'/old-page',
+			SourceUrl::from_string( $full_url, HomePath::current() )->path(),
+			'The site home path should not survive into the stored source.'
+		);
+
+		// The path a visitor hitting that same URL actually requests. On a
+		// subdirectory subsite it still carries the prefix; the resolver is
+		// what takes it back off.
+		$request_path = (string) wp_parse_url( $full_url, PHP_URL_PATH );
+
+		$data = $this->resolver()->get_redirect_data( $request_path );
+
+		$this->assertNotNull( $data, 'A full-URL source should resolve for the URL it was given as.' );
+		$this->assertStringContainsString( '/new-page', $data['url'] );
+
+		restore_current_blog();
+	}
+
+	/**
+	 * A unicode source on a subsite resolves for the request a browser sends.
+	 *
+	 * Combines the two things tested separately elsewhere: subsite-relative
+	 * storage, and percent-encoded lookup of a non-ASCII path. The subsite
+	 * prefix itself stays ASCII because multisite will not accept anything
+	 * else as a site path.
+	 *
+	 * @return void
+	 */
+	public function test_unicode_source_on_subsite_resolves_for_its_own_request(): void {
+		$path    = 'subdir' . substr( md5( (string) microtime( true ) ), 0, 6 );
+		$site_id = (int) self::factory()->blog->create( array( 'path' => '/' . $path . '/' ) );
+
+		switch_to_blog( $site_id );
+
+		$full_url = home_url( '/привет-🎉' );
+		$this->create_redirect( $full_url, '/new-page' );
+
+		$this->assertSame(
+			'/привет-🎉',
+			SourceUrl::from_string( $full_url, HomePath::current() )->path(),
+			'The site home path should not survive into the stored unicode source.'
+		);
+
+		// What a browser actually sends: the prefix in ASCII, the rest
+		// percent-encoded.
+		$request_path = '/' . $path . '/' . rawurlencode( 'привет-🎉' );
+
+		$data = $this->resolver()->get_redirect_data( $request_path );
+
+		restore_current_blog();
+
+		$this->assertNotNull( $data, 'A unicode source on a subsite should resolve for the encoded request.' );
+		$this->assertStringContainsString( '/new-page', $data['url'] );
+	}
+
+	/**
+	 * Test unicode sources stay isolated between sites.
+	 *
+	 * The lookup key is an md5 of the path, so a charset problem that
+	 * flattened non-ASCII bytes would make two different subsites' unicode
+	 * redirects collide.
+	 *
+	 * @return void
+	 */
+	public function test_unicode_redirects_are_independent_per_site(): void {
+		$source = SourceUrl::from_string( '/привет-мир' );
+		$this->create_redirect( '/привет-мир', '/site-1-destination' );
+
+		switch_to_blog( $this->site_2_id );
+		$this->assertNull( $this->repository()->find_by_source( $source ) );
+
+		$this->create_redirect( '/привет-мир', '/site-2-destination' );
+		$site_2 = $this->repository()->find_by_source( $source );
+
+		restore_current_blog();
+		$site_1 = $this->repository()->find_by_source( $source );
+
+		$this->assertNotNull( $site_1 );
+		$this->assertNotNull( $site_2 );
+		$this->assertSame( '/site-1-destination', $site_1->destination()->as_url()->value() );
+		$this->assertSame( '/site-2-destination', $site_2->destination()->as_url()->value() );
+	}
+
+	/**
+	 * Test that repository exists() method respects blog context.
+	 */
+	public function test_repository_exists_respects_blog_context(): void {
+		$source = SourceUrl::from_string( '/test-path' );
+		$this->create_redirect( '/test-path', '/dest' );
+
+		$this->assertTrue( $this->repository()->exists( $source ) );
+
+		switch_to_blog( $this->site_2_id );
+		$this->assertFalse( $this->repository()->exists( $source ) );
+	}
+
+	/**
+	 * Test that repository find_by_source() method respects blog context.
+	 */
+	public function test_repository_find_by_source_respects_blog_context(): void {
+		$source = SourceUrl::from_string( '/find-test' );
+		$this->create_redirect( '/find-test', '/dest' );
+
+		$redirect = $this->repository()->find_by_source( $source );
+		$this->assertNotNull( $redirect );
+
+		switch_to_blog( $this->site_2_id );
+		$redirect_site_2 = $this->repository()->find_by_source( $source );
+		$this->assertNull( $redirect_site_2 );
+	}
+
+	/**
+	 * Test that the same source path can have different destinations per site.
+	 */
+	public function test_independent_redirects_per_site(): void {
+		// Create redirect on main site to post ID 100.
+		$post_id_main = self::factory()->post->create();
+		$this->create_redirect( '/same-source', $post_id_main );
+
+		// Verify on main site.
+		$redirect_main = $this->repository()->find_by_source(
+			SourceUrl::from_string( '/same-source' )
+		);
+		$this->assertNotNull( $redirect_main );
+		$this->assertSame( $post_id_main, $redirect_main->destination()->as_post_id()->value() );
+
+		// Switch to site 2 and create redirect with different destination.
+		switch_to_blog( $this->site_2_id );
+
+		$post_id_site_2 = self::factory()->post->create();
+		$this->create_redirect( '/same-source', $post_id_site_2 );
+
+		// Verify on site 2.
+		$redirect_site_2 = $this->repository()->find_by_source(
+			SourceUrl::from_string( '/same-source' )
+		);
+		$this->assertNotNull( $redirect_site_2 );
+		$this->assertSame( $post_id_site_2, $redirect_site_2->destination()->as_post_id()->value() );
+
+		// Verify post IDs are different.
+		$this->assertNotSame( $post_id_main, $post_id_site_2 );
+
+		// Switch back and verify main site still correct.
+		restore_current_blog();
+
+		$redirect_main_after = $this->repository()->find_by_source(
+			SourceUrl::from_string( '/same-source' )
+		);
+		$this->assertNotNull( $redirect_main_after );
+		$this->assertSame( $post_id_main, $redirect_main_after->destination()->as_post_id()->value() );
+	}
+}

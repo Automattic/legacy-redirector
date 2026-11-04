@@ -1,0 +1,1310 @@
+<?php
+/**
+ * RedirectAuditor service unit tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Unit\Application
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Unit\Application;
+
+// phpcs:disable Generic.Files.OneObjectStructurePerFile.MultipleFound -- Test file includes testable subclass.
+
+use Automattic\LegacyRedirector\Application\LoopDetector;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\SourceOccupancy;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\DestinationPostId;
+use Automattic\LegacyRedirector\Domain\DestinationUrl;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use Brain\Monkey\Functions;
+use WP_Post;
+
+/**
+ * RedirectAuditorTest class.
+ *
+ * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ */
+final class RedirectAuditorTest extends MonkeyStubs {
+
+	/**
+	 * The auditor under test.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
+	 * Sets up test fixtures.
+	 *
+	 * @return void
+	 */
+	protected function set_up(): void {
+		parent::set_up();
+
+		$this->auditor = new RedirectAuditor();
+
+		Functions\stubs(
+			array(
+				'is_wp_error'                      => static fn( $thing ) => $thing instanceof \WP_Error,
+				'wp_remote_retrieve_response_code' => static fn( $response ) => $response['response']['code'] ?? 0,
+				'wp_remote_retrieve_header'        => static fn( $response, $header ) => $response['headers'][ $header ] ?? '',
+				'untrailingslashit'                => static fn( $value ) => rtrim( (string) $value, '/' ),
+			)
+		);
+	}
+
+	/**
+	 * Creates a redirect to a URL destination.
+	 *
+	 * @param string $source The source path.
+	 * @param string $url    The destination URL.
+	 * @return Redirect
+	 */
+	private function create_redirect( string $source = '/old-page', string $url = '/new-page' ): Redirect {
+		return Redirect::create(
+			SourceUrl::from_string( $source ),
+			Destination::from_url( DestinationUrl::from_string( $url ) )
+		);
+	}
+
+	/**
+	 * Creates a redirect to a post ID destination.
+	 *
+	 * @param int $post_id The destination post ID.
+	 * @return Redirect
+	 */
+	private function create_post_id_redirect( int $post_id = 123 ): Redirect {
+		return Redirect::create(
+			SourceUrl::from_string( '/old-page' ),
+			Destination::from_post_id( DestinationPostId::from_int( $post_id ) )
+		);
+	}
+
+	/**
+	 * Creates a mock WP_Post object.
+	 *
+	 * @param string $status The post status.
+	 * @return WP_Post
+	 */
+	private function create_mock_post( string $status = 'publish' ): WP_Post {
+		return new WP_Post( $status );
+	}
+
+	/**
+	 * Test audit_destination reports a deleted destination post.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_deleted_post(): void {
+		Functions\expect( 'get_post' )
+			->once()
+			->with( 999 )
+			->andReturn( null );
+
+		$finding = $this->auditor->audit_destination( $this->create_post_id_redirect( 999 ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::POST_DELETED, $finding->type() );
+	}
+
+	/**
+	 * Test audit_destination reports a trashed destination post.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_trashed_post(): void {
+		Functions\expect( 'get_post' )
+			->once()
+			->with( 123 )
+			->andReturn( $this->create_mock_post( 'trash' ) );
+
+		$finding = $this->auditor->audit_destination( $this->create_post_id_redirect( 123 ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::POST_TRASHED, $finding->type() );
+	}
+
+	/**
+	 * Test audit_destination reports an unpublished destination post with its status.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_an_unpublished_post(): void {
+		Functions\expect( 'get_post' )
+			->once()
+			->with( 123 )
+			->andReturn( $this->create_mock_post( 'draft' ) );
+
+		$finding = $this->auditor->audit_destination( $this->create_post_id_redirect( 123 ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $finding->type() );
+		$this->assertSame( 'status: draft', $finding->extra_info() );
+	}
+
+	/**
+	 * Test audit_destination accepts a published destination post.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_a_published_post(): void {
+		Functions\expect( 'get_post' )
+			->once()
+			->with( 123 )
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_post_id_redirect( 123 ) ) );
+	}
+
+	/**
+	 * Test audit_destination resolves relative paths across every post type.
+	 *
+	 * A redirect to a custom post type item must be judged by that post's
+	 * status, not treated as unresolvable because only posts and pages were
+	 * searched.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_resolves_custom_post_types(): void {
+		Functions\expect( 'get_post_types' )
+			->once()
+			->andReturn( array( 'post', 'page', 'book' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->with( 'some-book', OBJECT, array( 'post', 'page', 'book' ) )
+			->andReturn( $this->create_mock_post( 'draft' ) );
+
+		$finding = $this->auditor->audit_destination( $this->create_redirect( '/old', '/some-book' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $finding->type() );
+	}
+
+	/**
+	 * Test audit_destination falls back to url_to_postid for permalink structures.
+	 *
+	 * A dated permalink cannot be walked as a hierarchical slug, so without
+	 * this fallback an unpublished post behind one is never noticed.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_resolves_dated_permalinks(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 42 );
+
+		Functions\expect( 'get_post' )
+			->once()
+			->with( 42 )
+			->andReturn( $this->create_mock_post( 'draft' ) );
+
+		$finding = $this->auditor->audit_destination( $this->create_redirect( '/old', '/2020/01/01/some-post/' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $finding->type() );
+	}
+
+	/**
+	 * Test audit_destination finds a trashed post behind its renamed slug.
+	 *
+	 * Trashing renames post_name with a __trashed suffix, so the direct
+	 * lookup misses it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_trashed_slug(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->with( 'gone-page', OBJECT, array( 'post', 'page' ) )
+			->andReturn( null );
+
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->with( 'gone-page__trashed', OBJECT, array( 'post', 'page' ) )
+			->andReturn( $this->create_mock_post( 'trash' ) );
+
+		$finding = $this->auditor->audit_destination( $this->create_redirect( '/old', '/gone-page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::POST_TRASHED, $finding->type() );
+	}
+
+	/**
+	 * Test audit_destination strips query strings before the slug lookup.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_ignores_query_string_for_lookup(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->with( 'some-page', OBJECT, array( 'post', 'page' ) )
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', '/some-page?utm_source=x' ) ) );
+	}
+
+	/**
+	 * Test audit_destination treats a path with no post as indeterminate.
+	 *
+	 * Archives and rewrite endpoints have no post to find; only the optional
+	 * HTTP check can say anything about them.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_a_path_with_no_post(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->twice()
+			->andReturn( null );
+
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', '/category/news/' ) ) );
+	}
+
+	/**
+	 * Test audit_destination never looks up the home page by slug.
+	 *
+	 * A lookup with an empty slug matches any post with an empty post_name, so
+	 * the home page must never be looked up by slug.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_home_without_lookup(): void {
+		Functions\expect( 'get_page_by_path' )->never();
+		Functions\expect( 'url_to_postid' )->never();
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', '/' ) ) );
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', '/?utm_source=x' ) ) );
+	}
+
+	/**
+	 * Test audit_destination reports an absolute URL on a disallowed host.
+	 *
+	 * At request time wp_safe_redirect() quietly sends the visitor elsewhere,
+	 * so the redirect is broken whether stored or proposed - and no HTTP
+	 * request is needed to know it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_disallowed_host(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->with( 'https://external.com/page', '' )
+			->andReturn( '' );
+
+		$finding = $this->auditor->audit_destination( $this->create_redirect( '/old', 'https://external.com/page' ) );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED, $finding->type() );
+		$this->assertSame( 'host: external.com', $finding->extra_info() );
+	}
+
+	/**
+	 * Test audit_destination accepts an allowed absolute URL without HTTP checks.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_an_allowed_host_without_http(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->andReturnFirstArg();
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/page' ) ) );
+	}
+
+	/**
+	 * Test the HTTP check reports a 404 destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_404_url(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+
+		$auditor = new TestableRedirectAuditor( 404 );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/gone' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
+	}
+
+	/**
+	 * Test the HTTP check reports a server error with its status.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_server_error(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+
+		$auditor = new TestableRedirectAuditor( 503 );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/down' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_SERVER_ERROR, $finding->type() );
+		$this->assertSame( 'status: 503', $finding->extra_info() );
+	}
+
+	/**
+	 * Test the HTTP check accepts a responding destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_a_responding_url(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+
+		$auditor = new TestableRedirectAuditor( 200 );
+
+		$this->assertNull( $auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/page' ), true ) );
+	}
+
+	/**
+	 * Test a response without a status code is a failed request, not a pass.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_reports_a_missing_status_as_a_failed_request(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+
+		$auditor = new TestableRedirectAuditor( 0 );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/page' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_REQUEST_FAILED, $finding->type() );
+		$this->assertFalse( $finding->is_conclusive() );
+	}
+
+	/**
+	 * Allow only allowed.com as a redirect host, as wp_validate_redirect() would.
+	 *
+	 * @return void
+	 */
+	private function allow_only_allowed_com(): void {
+		Functions\when( 'wp_validate_redirect' )->alias(
+			static fn( $location, $fallback ) => 'allowed.com' === wp_parse_url( $location, PHP_URL_HOST ) ? $location : $fallback
+		);
+	}
+
+	/**
+	 * A redirect response.
+	 *
+	 * @param string $location The Location header.
+	 * @return array The response.
+	 */
+	private static function redirect_to( string $location ): array {
+		return array(
+			'response' => array( 'code' => 301 ),
+			'headers'  => array( 'location' => $location ),
+		);
+	}
+
+	/**
+	 * Test a hop to an allowed host is followed, so a chain ending in a 404 fails.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_follows_a_hop_to_an_allowed_host(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 404, array( 'https://allowed.com/old' => self::redirect_to( 'https://allowed.com/new' ) ) );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
+		$this->assertSame( array( 'https://allowed.com/old', 'https://allowed.com/new' ), $auditor->requested );
+	}
+
+	/**
+	 * Test a hop to a host that is not allowed is never requested, and passes.
+	 *
+	 * The destination answered; only where it forwards to is out of bounds.
+	 * Failing it would flag every ordinary canonical redirect to another host.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_does_not_follow_a_hop_to_another_host(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 404, array( 'https://allowed.com/old' => self::redirect_to( 'http://169.254.169.254/latest/' ) ) );
+
+		$this->assertNull( $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true ) );
+		$this->assertSame( array( 'https://allowed.com/old' ), $auditor->requested );
+	}
+
+	/**
+	 * Test a chain longer than five hops is a failed request, as the HTTP API reported it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_gives_up_after_five_hops(): void {
+		$this->allow_only_allowed_com();
+
+		$responses = array();
+		for ( $hop = 0; $hop <= 5; $hop++ ) {
+			$responses[ 'https://allowed.com/' . $hop ] = self::redirect_to( 'https://allowed.com/' . ( $hop + 1 ) );
+		}
+
+		$auditor = new TestableRedirectAuditor( 200, $responses );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/0' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_REQUEST_FAILED, $finding->type() );
+		$this->assertSame( 'Too many redirects', $finding->extra_info() );
+		$this->assertCount( 6, $auditor->requested );
+	}
+
+	/**
+	 * Test a five-hop chain is followed to its end.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_follows_five_hops(): void {
+		$this->allow_only_allowed_com();
+
+		$responses = array();
+		for ( $hop = 0; $hop < 5; $hop++ ) {
+			$responses[ 'https://allowed.com/' . $hop ] = self::redirect_to( 'https://allowed.com/' . ( $hop + 1 ) );
+		}
+
+		$auditor = new TestableRedirectAuditor( 404, $responses );
+		$finding = $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/0' ), true );
+
+		$this->assertNotNull( $finding );
+		$this->assertSame( AuditFindingType::URL_NOT_FOUND, $finding->type() );
+		$this->assertSame( 'https://allowed.com/5', end( $auditor->requested ) );
+	}
+
+	/**
+	 * Test a redirect with no Location is taken as the final answer.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_accepts_a_redirect_without_a_location(): void {
+		$this->allow_only_allowed_com();
+
+		$auditor = new TestableRedirectAuditor( 302 );
+
+		$this->assertNull( $auditor->audit_destination( $this->create_redirect( '/source', 'https://allowed.com/old' ), true ) );
+		$this->assertCount( 1, $auditor->requested );
+	}
+
+	/**
+	 * Test the probe confirms a source that redirects to its destination.
+	 *
+	 * A trailing-slash difference in the Location header is not a divergence.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_confirms_a_matching_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/target/' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status'   => 'confirmed',
+				'location' => 'https://example.com/target/',
+			),
+			$auditor->probe_source( $this->create_redirect( '/old', '/target' ) )
+		);
+	}
+
+	/**
+	 * Test the probe reports a redirect that goes somewhere else.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_a_diverted_redirect(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 302 ),
+				'headers'  => array( 'location' => 'https://example.com/elsewhere' ),
+			)
+		);
+
+		$probe = $auditor->probe_source( $this->create_redirect( '/old', '/target' ) );
+
+		$this->assertSame( 'diverted', $probe['status'] );
+		$this->assertSame( 'https://example.com/elsewhere', $probe['location'] );
+	}
+
+	/**
+	 * Test a hop back to the source itself is dormant, not diverted.
+	 *
+	 * Apache directory redirects and trailing-slash canonicals send the
+	 * visitor to the same path: the path is served, so the redirect never
+	 * fires - but nothing was diverted anywhere.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_treats_a_self_hop_as_dormant(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => 'https://example.com/old/' ),
+			)
+		);
+
+		$this->assertSame( array( 'status' => 'dormant' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the probe reports a source that serves content and one that 404s.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_dormant_and_not_firing_sources(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$serving = new ProbeStubAuditor( array( 'response' => array( 'code' => 200 ) ) );
+		$this->assertSame( array( 'status' => 'dormant' ), $serving->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+
+		$missing = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+		$this->assertSame( array( 'status' => 'not-firing' ), $missing->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the probe degrades gracefully when the site cannot reach itself.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_an_unreachable_site(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( new \WP_Error() );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the HTTP check caps the response body it downloads.
+	 *
+	 * Only the status code is read, so a destination serving a large file
+	 * must not be pulled into memory in full.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_destination
+	 */
+	public function test_audit_destination_limits_the_response_size(): void {
+		Functions\expect( 'wp_validate_redirect' )->once()->andReturnFirstArg();
+		Functions\expect( 'wp_safe_remote_get' )
+			->once()
+			->with(
+				'https://allowed.com/large.pdf',
+				\Mockery::on(
+					static fn( array $args ): bool => 5 === $args['timeout']
+						&& 0 === $args['redirection']
+						&& ( $args['limit_response_size'] ?? 0 ) > 0
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertNull( $this->auditor->audit_destination( $this->create_redirect( '/old', 'https://allowed.com/large.pdf' ), true ) );
+	}
+
+	/**
+	 * Test the probe caps the response body it downloads.
+	 *
+	 * Only the status and Location header are read, so a source serving a
+	 * large file must not be pulled into memory in full.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_limits_the_response_size(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\expect( 'wp_safe_remote_get' )
+			->once()
+			->with(
+				'https://example.com/old',
+				\Mockery::on(
+					static fn( array $args ): bool => 5 === $args['timeout']
+						&& 0 === $args['redirection']
+						&& ( $args['limit_response_size'] ?? 0 ) > 0
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertSame( array( 'status' => 'dormant' ), $this->auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test the probe uses VIP's request helper where it exists, without following redirects.
+	 *
+	 * On VIP this is the branch that runs, and following a redirect would
+	 * report the destination's answer as the source's. Run in its own process:
+	 * once a test defines vip_safe_wp_remote_get(), it exists for every later
+	 * test, which would then take this branch too.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_uses_the_vip_request_helper_where_there_is_one(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\expect( 'wp_safe_remote_get' )->never();
+		Functions\expect( 'vip_safe_wp_remote_get' )
+			->once()
+			->with(
+				'https://example.com/old',
+				'',
+				\Mockery::type( 'int' ),
+				\Mockery::type( 'int' ),
+				\Mockery::type( 'int' ),
+				\Mockery::on(
+					static fn( array $args ): bool => 0 === $args['redirection']
+						&& true === $args['reject_unsafe_urls']
+						&& ( $args['limit_response_size'] ?? 0 ) > 0
+				)
+			)
+			->andReturn( array( 'response' => array( 'code' => 200 ) ) );
+
+		$this->assertSame( array( 'status' => 'dormant' ), $this->auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test a source answering with an error is unreachable, not dormant.
+	 *
+	 * A server error, a 429 from a site rate-limiting requests to itself, a
+	 * 401 or 403 from basic auth or a firewall, or no status at all is the
+	 * probe being turned away. None of them means content is winning over the
+	 * redirect.
+	 *
+	 * @dataProvider unreachable_status_provider
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 *
+	 * @param int $code The status the source answers with.
+	 */
+	public function test_probe_source_reports_an_erroring_site_as_unreachable( int $code ): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => $code ) ) );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Statuses that mean the site failed to answer.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public static function unreachable_status_provider(): array {
+		return array(
+			'server error'        => array( 500 ),
+			'service unavailable' => array( 503 ),
+			'too many requests'   => array( 429 ),
+			'unauthorized'        => array( 401 ),
+			'forbidden'           => array( 403 ),
+			'no status'           => array( 0 ),
+		);
+	}
+
+	/**
+	 * Test each probe outcome maps to its finding, and a confirmed redirect to none.
+	 *
+	 * @dataProvider probe_finding_provider
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 *
+	 * @param array{status: string, location?: string} $probe    The probe outcome.
+	 * @param AuditFindingType|null                    $expected The finding type, or null for none.
+	 */
+	public function test_finding_for_probe( array $probe, ?AuditFindingType $expected ): void {
+		$finding = $this->auditor->finding_for_probe( $this->create_redirect( '/old', '/target' ), $probe );
+
+		$this->assertSame( $expected, $finding?->type() );
+	}
+
+	/**
+	 * Probe outcomes and the findings they become.
+	 *
+	 * @return array<string, array{array{status: string, location?: string}, AuditFindingType|null}>
+	 */
+	public static function probe_finding_provider(): array {
+		return array(
+			'confirmed'   => array(
+				array(
+					'status'   => 'confirmed',
+					'location' => 'https://example.com/target',
+				),
+				null,
+			),
+			'diverted'    => array(
+				array(
+					'status'   => 'diverted',
+					'location' => 'https://example.com/elsewhere',
+				),
+				AuditFindingType::SOURCE_REDIRECTS_ELSEWHERE,
+			),
+			'not firing'  => array( array( 'status' => 'not-firing' ), AuditFindingType::SOURCE_NOT_FIRING ),
+			'dormant'     => array( array( 'status' => 'dormant' ), AuditFindingType::SOURCE_SERVES_CONTENT ),
+			'unreachable' => array( array( 'status' => 'unreachable' ), AuditFindingType::SOURCE_REQUEST_FAILED ),
+		);
+	}
+
+	/**
+	 * Test a diverted source names where it went.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 */
+	public function test_finding_for_probe_names_the_diverted_location(): void {
+		$finding = $this->auditor->finding_for_probe(
+			$this->create_redirect( '/old', '/target' ),
+			array(
+				'status'   => 'diverted',
+				'location' => 'https://example.com/elsewhere',
+			)
+		);
+
+		$this->assertSame( 'to: https://example.com/elsewhere', $finding?->extra_info() );
+	}
+
+	/**
+	 * Test a disabled redirect's probe says nothing about it: it is not meant to fire.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::finding_for_probe
+	 */
+	public function test_finding_for_probe_ignores_a_disabled_redirect(): void {
+		$disabled = $this->create_redirect( '/old', '/target' )->with_status( 'draft' );
+
+		$this->assertNull( $this->auditor->finding_for_probe( $disabled, array( 'status' => 'not-firing' ) ) );
+	}
+
+	/**
+	 * Test audit_source probes the source and reports the outcome as a finding.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit_source
+	 */
+	public function test_audit_source_reports_a_source_that_does_not_fire(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 404 ) ) );
+
+		$this->assertSame( AuditFindingType::SOURCE_NOT_FIRING, $auditor->audit_source( $this->create_redirect( '/old', '/target' ) )?->type() );
+	}
+
+	/**
+	 * Test a 410 means the redirect did not fire, like a 404.
+	 *
+	 * Redirects only answer a 404, so a server or plugin answering "gone"
+	 * first means this one never got the chance.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_treats_a_gone_source_as_not_firing(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 410 ) ) );
+
+		$this->assertSame( array( 'status' => 'not-firing' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test a root-relative Location is resolved against the source before comparing.
+	 *
+	 * With nginx's absolute_redirect off, or a proxy rewriting the header,
+	 * the response says "/target": the same place as the absolute destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_resolves_a_relative_location(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor(
+			array(
+				'response' => array( 'code' => 301 ),
+				'headers'  => array( 'location' => '/target' ),
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'status'   => 'confirmed',
+				'location' => 'https://example.com/target',
+			),
+			$auditor->probe_source( $this->create_redirect( '/old', '/target' ) )
+		);
+	}
+
+	/**
+	 * Test a redirect with no Location is inconclusive, not diverted.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::probe_source
+	 */
+	public function test_probe_source_reports_a_redirect_without_a_location_as_unreachable(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+
+		$auditor = new ProbeStubAuditor( array( 'response' => array( 'code' => 302 ) ) );
+
+		$this->assertSame( array( 'status' => 'unreachable' ), $auditor->probe_source( $this->create_redirect( '/old', '/target' ) ) );
+	}
+
+	/**
+	 * Test source_warnings flags a reserved source.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
+	 */
+	public function test_source_warnings_flags_a_reserved_source(): void {
+		$this->assertSame(
+			array( AuditFindingType::RESERVED_SOURCE ),
+			$this->auditor->source_warnings( SourceUrl::from_string( '/wp-admin' ) )
+		);
+	}
+
+	/**
+	 * Test a source that published content occupies is a warning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_source_warnings_flags_a_source_with_content(): void {
+		$occupancy = \Mockery::mock( SourceOccupancy::class );
+		$occupancy->shouldReceive( 'occupying_post' )->andReturn( $this->create_mock_post() );
+		$auditor = new RedirectAuditor( null, $occupancy );
+
+		$this->assertSame( array( AuditFindingType::SOURCE_SERVES_CONTENT ), $auditor->source_warnings( SourceUrl::from_string( '/about' ) ) );
+
+		$warnings = $auditor->warnings( $this->create_redirect( '/about', '/target' ) );
+		$this->assertCount( 1, $warnings );
+		$this->assertSame( 'warning', $warnings[0]->severity() );
+	}
+
+	/**
+	 * Test a reserved source is reported as reserved, without a content lookup.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
+	 */
+	public function test_source_warnings_reports_a_reserved_source_without_looking_it_up(): void {
+		$occupancy = \Mockery::mock( SourceOccupancy::class );
+		$occupancy->shouldNotReceive( 'occupying_post' );
+
+		$this->assertSame(
+			array( AuditFindingType::RESERVED_SOURCE ),
+			( new RedirectAuditor( null, $occupancy ) )->source_warnings( SourceUrl::from_string( '/wp-admin' ) )
+		);
+	}
+
+	/**
+	 * Test the live probe finding content at the source does not report it a second time.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::test
+	 */
+	public function test_live_test_reports_content_at_the_source_once(): void {
+		Functions\when( 'home_url' )->alias( static fn( $path = '' ) => 'https://example.com' . $path );
+		Functions\when( 'wp_validate_redirect' )->returnArg();
+
+		$occupancy = \Mockery::mock( SourceOccupancy::class );
+		$occupancy->shouldReceive( 'occupying_post' )->andReturn( $this->create_mock_post() );
+
+		$auditor = new class( $occupancy ) extends RedirectAuditor {
+
+			/**
+			 * Constructor.
+			 *
+			 * @param SourceOccupancy $occupancy The source occupancy check.
+			 */
+			public function __construct( SourceOccupancy $occupancy ) {
+				parent::__construct( null, $occupancy );
+			}
+
+			/**
+			 * Every request, source and destination, is answered with content.
+			 *
+			 * @param string $url The URL (ignored).
+			 * @return array The response.
+			 */
+			protected function remote_get_without_redirects( string $url ) {
+				return array( 'response' => array( 'code' => 200 ) );
+			}
+
+		};
+
+		$result = $auditor->test( $this->create_redirect( '/about', 'https://example.com/target' ) );
+		$types  = array_map( static fn( AuditFinding $finding ) => $finding->type(), $result['findings'] );
+
+		$this->assertSame( array( AuditFindingType::SOURCE_SERVES_CONTENT ), $types );
+	}
+
+	/**
+	 * Test source_warnings is empty for an ordinary source.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::source_warnings
+	 */
+	public function test_source_warnings_is_empty_for_an_ordinary_source(): void {
+		$this->assertSame( array(), $this->auditor->source_warnings( SourceUrl::from_string( '/old-page' ) ) );
+	}
+
+	/**
+	 * Test destination_checks flags an absolute URL on a disallowed host.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_checks
+	 */
+	public function test_destination_checks_flags_a_disallowed_host(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->with( 'https://external.com/page', '' )
+			->andReturn( '' );
+
+		$this->assertSame(
+			array( AuditFindingType::EXTERNAL_HOST_NOT_ALLOWED ),
+			$this->auditor->destination_checks( $this->create_redirect( '/old', 'https://external.com/page' )->destination() )
+		);
+	}
+
+	/**
+	 * Test destination_checks passes an allowed host, and skips hostless forms.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_checks
+	 */
+	public function test_destination_checks_passes_allowed_and_hostless_destinations(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->andReturnFirstArg();
+
+		$this->assertSame( array(), $this->auditor->destination_checks( $this->create_redirect( '/old', 'https://allowed.com/page' )->destination() ) );
+		$this->assertSame( array(), $this->auditor->destination_checks( $this->create_redirect( '/old', '/relative-page' )->destination() ) );
+		$this->assertSame( array(), $this->auditor->destination_checks( $this->create_post_id_redirect( 123 )->destination() ) );
+	}
+
+	/**
+	 * Test destination_needs_http distinguishes conclusive from indeterminate.
+	 *
+	 * A clean audit of a post ID or a resolved path really means "fine"; for
+	 * an absolute URL, the home page, or a path with no post behind it, only
+	 * an HTTP request can judge, and a display must not claim otherwise.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_flags_only_http_judgeable_destinations(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_post_id_redirect( 123 ) ) );
+		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', 'https://allowed.com/page' ) ) );
+		// The front controller never 404s the home path, so '/' is conclusive.
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/' ) ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+		$this->assertFalse( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/resolved-page' ) ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+		$this->assertTrue( $this->auditor->destination_needs_http( $this->create_redirect( '/old', '/unresolved-page' ) ) );
+	}
+
+	/**
+	 * Test a chain landing on published content is conclusive without HTTP.
+	 *
+	 * A destination with no post behind it may be another redirect's source;
+	 * following the hops to a published end answers the question the same as
+	 * pointing at that content directly.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_follows_chains_to_content(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$start = $this->create_redirect( '/start', '/hop' );
+		$end   = $this->create_redirect( '/hop', '/landing-page' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector->shouldReceive( 'follow' )->with( $start )->andReturn( $end );
+
+		$auditor = new RedirectAuditor( $detector );
+
+		// /start's destination resolves to no post; /landing-page (the chain
+		// end) resolves to a published one.
+		Functions\expect( 'get_page_by_path' )
+			->twice()
+			->andReturn( null, $this->create_mock_post( 'publish' ) );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertFalse( $auditor->destination_needs_http( $start ) );
+	}
+
+	/**
+	 * Test a chain meeting a cycle stays inconclusive.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::destination_needs_http
+	 */
+	public function test_destination_needs_http_stays_true_when_the_chain_cycles(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		$start = $this->create_redirect( '/start', '/hop' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector->shouldReceive( 'follow' )->with( $start )->andReturn( null );
+
+		$auditor = new RedirectAuditor( $detector );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( null );
+		Functions\expect( 'url_to_postid' )
+			->once()
+			->andReturn( 0 );
+
+		$this->assertTrue( $auditor->destination_needs_http( $start ) );
+	}
+
+	/**
+	 * Test audit reports a possible loop from the detector as a warning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_audit_reports_a_possible_loop(): void {
+		$redirect = $this->create_redirect( '/loop-a', '/loop-b' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector
+			->shouldReceive( 'find_cycle' )
+			->once()
+			->with( $redirect )
+			->andReturn( array( '/loop-a', '/loop-b', '/loop-a' ) );
+
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$findings = ( new RedirectAuditor( $detector ) )->audit( $redirect );
+
+		$this->assertCount( 1, $findings );
+		$this->assertSame( AuditFindingType::POSSIBLE_LOOP, $findings[0]->type() );
+		$this->assertTrue( $findings[0]->is_warning() );
+		$this->assertSame( '/loop-a -> /loop-b -> /loop-a', $findings[0]->extra_info() );
+	}
+
+	/**
+	 * Test audits without a detector carry no loop findings.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_audit_without_a_detector_skips_loop_checks(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$this->assertSame( array(), $this->auditor->audit( $this->create_redirect( '/loop-a', '/loop-b' ) ) );
+	}
+
+	/**
+	 * Test warnings combines the reserved-source and loop rules.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::warnings
+	 */
+	public function test_warnings_combines_reserved_source_and_loop(): void {
+		$redirect = $this->create_redirect( '/wp-admin', '/wp-admin' );
+
+		$detector = \Mockery::mock( LoopDetector::class );
+		$detector
+			->shouldReceive( 'find_cycle' )
+			->once()
+			->andReturn( array( '/wp-admin', '/wp-admin' ) );
+
+		$warnings = ( new RedirectAuditor( $detector ) )->warnings( $redirect );
+
+		$this->assertCount( 2, $warnings );
+		$this->assertSame( AuditFindingType::RESERVED_SOURCE, $warnings[0]->type() );
+		$this->assertSame( AuditFindingType::POSSIBLE_LOOP, $warnings[1]->type() );
+	}
+
+	/**
+	 * Test audit combines destination problems and source warnings.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 */
+	public function test_audit_combines_destination_and_source_findings(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'draft' ) );
+
+		$findings = $this->auditor->audit( $this->create_redirect( '/wp-admin', '/draft-page' ) );
+
+		$this->assertCount( 2, $findings );
+		$this->assertSame( AuditFindingType::POST_UNPUBLISHED, $findings[0]->type() );
+		$this->assertSame( AuditFindingType::RESERVED_SOURCE, $findings[1]->type() );
+		$this->assertTrue( $findings[1]->is_warning() );
+	}
+
+	/**
+	 * Test audit returns nothing for a healthy redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 */
+	public function test_audit_returns_nothing_for_a_healthy_redirect(): void {
+		Functions\when( 'get_post_types' )->justReturn( array( 'post', 'page' ) );
+
+		Functions\expect( 'get_page_by_path' )
+			->once()
+			->andReturn( $this->create_mock_post( 'publish' ) );
+
+		$this->assertSame( array(), $this->auditor->audit( $this->create_redirect() ) );
+	}
+
+	/**
+	 * Test audit reports only the corruption for a corrupt row.
+	 *
+	 * A corrupt row carries placeholder values; checking them would report
+	 * nonsense.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Application\RedirectAuditor::audit
+	 */
+	public function test_audit_reports_only_the_corruption_for_a_corrupt_row(): void {
+		$corrupt = Redirect::reconstitute(
+			123,
+			SourceUrl::from_string( '/corrupt-123' ),
+			Destination::from_url( DestinationUrl::from_string( '/' ) ),
+			'publish',
+			null,
+			'Stored source is not a valid path'
+		);
+
+		$findings = $this->auditor->audit( $corrupt, true );
+
+		$this->assertCount( 1, $findings );
+		$this->assertSame( AuditFindingType::CORRUPT_DATA, $findings[0]->type() );
+		$this->assertSame( 'Stored source is not a valid path', $findings[0]->extra_info() );
+	}
+}
+
+/**
+ * Testable subclass that allows controlling HTTP responses.
+ *
+ * Overriding remote_get_without_redirects() lets tests drive the HTTP check
+ * without mocking WordPress HTTP functions.
+ */
+class TestableRedirectAuditor extends RedirectAuditor {
+
+	/**
+	 * The URLs requested, in order.
+	 *
+	 * @var string[]
+	 */
+	public array $requested = array();
+
+	/**
+	 * The response code for any URL without a canned response.
+	 *
+	 * @var int
+	 */
+	private int $response_code;
+
+	/**
+	 * Canned responses, by URL.
+	 *
+	 * @var array<string, array>
+	 */
+	private array $responses;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param int                  $response_code The response code for any URL without a canned response.
+	 * @param array<string, array> $responses     Canned responses, by URL.
+	 */
+	public function __construct( int $response_code, array $responses = array() ) {
+		$this->response_code = $response_code;
+		$this->responses     = $responses;
+	}
+
+	/**
+	 * Override to record the request and return its canned response.
+	 *
+	 * @param string $url The URL to request.
+	 * @return array The canned response.
+	 */
+	protected function remote_get_without_redirects( string $url ) {
+		$this->requested[] = $url;
+
+		return $this->responses[ $url ] ?? array( 'response' => array( 'code' => $this->response_code ) );
+	}
+}
+
+/**
+ * Testable subclass returning a canned probe response.
+ */
+class ProbeStubAuditor extends RedirectAuditor {
+
+	/**
+	 * The canned response.
+	 *
+	 * @var array|\WP_Error
+	 */
+	private $response;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param array|\WP_Error $response The response to return.
+	 */
+	public function __construct( $response ) {
+		$this->response = $response;
+	}
+
+	/**
+	 * Override to return the canned response.
+	 *
+	 * @param string $url The URL to request (ignored).
+	 * @return array|\WP_Error The canned response.
+	 */
+	protected function remote_get_without_redirects( string $url ) {
+		return $this->response;
+	}
+}

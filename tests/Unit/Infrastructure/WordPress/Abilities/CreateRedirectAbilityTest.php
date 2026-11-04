@@ -1,0 +1,284 @@
+<?php
+/**
+ * CreateRedirectAbility unit tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress\Abilities;
+
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Application\RedirectCreationResult;
+use Automattic\LegacyRedirector\Application\RedirectManager;
+use Automattic\LegacyRedirector\Domain\AuditDetail;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
+use Automattic\LegacyRedirector\Domain\AuditFindingType;
+use Automattic\LegacyRedirector\Domain\Destination;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility;
+use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use Brain\Monkey\Functions;
+use Mockery;
+use WP_Error;
+
+/**
+ * CreateRedirectAbilityTest class.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_schema
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility::finding_to_array
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ */
+final class CreateRedirectAbilityTest extends MonkeyStubs {
+
+	/**
+	 * The mock manager.
+	 *
+	 * @var RedirectManager&Mockery\MockInterface
+	 */
+	private $manager;
+
+	/**
+	 * The mock auditor.
+	 *
+	 * @var RedirectAuditor&Mockery\MockInterface
+	 */
+	private $auditor;
+
+	/**
+	 * The ability under test.
+	 *
+	 * @var CreateRedirectAbility
+	 */
+	private CreateRedirectAbility $ability;
+
+	/**
+	 * Sets up test fixtures.
+	 *
+	 * @return void
+	 */
+	protected function set_up(): void {
+		parent::set_up();
+
+		Functions\when( '__' )->returnArg( 1 );
+		Functions\when( '_x' )->returnArg( 1 );
+
+		$this->manager = Mockery::mock( RedirectManager::class );
+		$this->auditor = Mockery::mock( RedirectAuditor::class );
+		$this->auditor->shouldReceive( 'warnings' )->andReturn( array() )->byDefault();
+		$this->ability = new CreateRedirectAbility( $this->manager, $this->auditor );
+	}
+
+	/**
+	 * Test a created redirect is returned in the shape the output schema describes.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_returns_the_created_redirect(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )
+			->once()
+			->with( Mockery::any(), Mockery::any(), true, 'publish' )
+			->andReturnUsing( $this->saved_as( 42 ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => '/new-page',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'id'       => 42,
+				'from'     => '/old-page',
+				'to'       => '/new-page',
+				'type'     => 'url',
+				'status'   => 'enabled',
+				'warnings' => array(),
+			),
+			$result
+		);
+	}
+
+	/**
+	 * Test the warnings CLI create prints come back with the created redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_returns_warnings_about_the_saved_redirect(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )->once()->andReturnUsing( $this->saved_as( 42 ) );
+		$this->auditor->shouldReceive( 'warnings' )
+			->once()
+			->with( Mockery::on( static fn ( Redirect $redirect ): bool => 42 === $redirect->id() ) )
+			->andReturnUsing( static fn ( Redirect $redirect ): array => array( new AuditFinding( $redirect, AuditFindingType::POSSIBLE_LOOP, AuditDetail::loop( array( '/new-page', '/old-page' ) ) ) ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => '/new-page',
+			)
+		);
+
+		$this->assertCount( 1, $result['warnings'] );
+		$this->assertSame( 42, $result['warnings'][0]['id'] );
+		$this->assertSame( 'warning', $result['warnings'][0]['severity'] );
+		$this->assertSame( 'Possible redirect loop', $result['warnings'][0]['issue'] );
+		$this->assertSame( 'Point one redirect in the loop elsewhere, or disable it.', $result['warnings'][0]['remedy'] );
+	}
+
+	/**
+	 * Test a disabled redirect is created as a draft.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_creates_a_disabled_redirect_as_a_draft(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )
+			->once()
+			->with( Mockery::any(), Mockery::any(), true, 'draft' )
+			->andReturnUsing( $this->saved_as( 7 ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from'   => '/old-page',
+				'to'     => 123,
+				'status' => 'disabled',
+			)
+		);
+
+		$this->assertSame( 'disabled', $result['status'] );
+		$this->assertSame( 'post', $result['type'] );
+		$this->assertSame( 123, $result['to'] );
+	}
+
+	/**
+	 * Test a string of digits still names a post, as the CLI's positional
+	 * argument always arrives as a string.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_treats_a_digits_string_as_a_post_id(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )->once()->andReturnUsing( $this->saved_as( 7 ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => '123',
+			)
+		);
+
+		$this->assertSame( 'post', $result['type'] );
+		$this->assertSame( 123, $result['to'] );
+	}
+
+	/**
+	 * Test a numeric string that is not all digits is refused, not saved as
+	 * the post (int) would cast it to.
+	 *
+	 * @dataProvider data_numeric_but_not_digits
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 *
+	 * @param string $to The destination.
+	 */
+	public function test_execute_rejects_a_numeric_destination_that_is_not_all_digits( string $to ): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldNotReceive( 'create_redirect' );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => $to,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'legacy_redirector_invalid_redirect', $result->get_error_code() );
+		$this->assertStringContainsString( 'Post ID must contain only digits.', $result->get_error_message() );
+	}
+
+	/**
+	 * Strings is_numeric() accepts that are not a post ID.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_numeric_but_not_digits(): array {
+		return array(
+			'decimal'  => array( '12.7' ),
+			'exponent' => array( '1e3' ),
+		);
+	}
+
+	/**
+	 * Test a creation failure becomes a namespaced error.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_returns_an_error_when_creation_fails(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldReceive( 'create_redirect' )
+			->once()
+			->andReturn( RedirectCreationResult::error( 'duplicate-redirect', 'Already exists.' ) );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => '/new-page',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'legacy_redirector_duplicate_redirect', $result->get_error_code() );
+	}
+
+	/**
+	 * Test an unusable source path is rejected before the manager is called.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility::execute
+	 */
+	public function test_execute_rejects_an_invalid_source(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+		$this->manager->shouldNotReceive( 'create_redirect' );
+
+		$result = $this->ability->execute(
+			array(
+				'from' => 'http://example.com',
+				'to'   => '/new-page',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'legacy_redirector_invalid_redirect', $result->get_error_code() );
+	}
+
+	/**
+	 * A manager response that saves what it was given under an ID.
+	 *
+	 * @param int $id The ID the redirect is saved under.
+	 * @return callable The response, taking the create_redirect() arguments.
+	 */
+	private function saved_as( int $id ): callable {
+		return static fn ( SourceUrl $source, Destination $destination, bool $validate, string $status ): RedirectCreationResult => RedirectCreationResult::success(
+			Redirect::reconstitute( $id, $source, $destination, $status )
+		);
+	}
+}

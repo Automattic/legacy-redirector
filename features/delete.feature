@@ -1,0 +1,31 @@
+Feature: Delete a redirect
+  As a site administrator
+  I want to delete a redirect
+  So that obsolete redirects stop firing
+
+  Background:
+    Given a WP installation with the Legacy Redirector plugin
+
+  # Contract test: delete removes the redirect entirely.
+  Scenario: Delete a redirect by its source path
+    Given there is a published post with a slug of "delete-destination"
+    And there is a redirect from "/delete-source" to "/delete-destination"
+
+    When I run `wp legacy-redirector delete /delete-source --yes`
+    Then STDOUT should contain:
+      """
+      Success: Deleted redirect: /delete-source
+      """
+
+    When I try `wp legacy-redirector get /delete-source`
+    Then the return code should not be 0
+
+  # Contract test: nothing is asked about when nothing would be deleted.
+  Scenario: Deleting a redirect that does not exist fails without prompting
+    When I try `wp legacy-redirector delete /delete-never-existed`
+    Then the return code should be 1
+    And STDERR should contain:
+      """
+      Redirect not found: /delete-never-existed
+      """
+    And STDOUT should not match /Are you sure/

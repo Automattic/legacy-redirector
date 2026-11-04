@@ -1,0 +1,30 @@
+# Directories
+/.claude/
+/.context/
+/.git
+/.github/
+/bin/
+/features/
+/node_modules/
+/tests/
+/vendor/
+
+# Files
+.distignore
+.editorconfig
+.gitattributes
+.gitignore
+.phpcs.xml.dist
+.wp-env.json
+.wp-env.override.json
+AGENTS.md
+behat.yml
+CHANGELOG.md
+composer.json
+composer.lock
+CONTRIBUTING.md
+package.json
+package-lock.json
+phpunit-integration.xml.dist
+phpunit.xml.dist
+playwright.config.js

@@ -1,0 +1,330 @@
+<?php
+/**
+ * GetCommand CLI integration tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Integration\Cli
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\GetCommand;
+use Automattic\LegacyRedirector\Application\RedirectFetcher;
+
+/**
+ * Integration tests for GetCommand.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\GetCommand
+ * @covers \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
+ */
+final class GetCommandTest extends CliTestCase {
+
+	/**
+	 * The command under test.
+	 *
+	 * @var GetCommand
+	 */
+	private GetCommand $command;
+
+	/**
+	 * Set up test fixtures.
+	 *
+	 * @return void
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		$this->command = new GetCommand(
+			new RedirectFetcher( $this->repository() )
+		);
+	}
+
+	/**
+	 * Test getting a redirect by source path.
+	 */
+	public function test_get_by_source_with_url_destination(): void {
+		$this->create_redirect( '/old-page', 'https://example.com/new-page' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/old-page' ),
+			array()
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( '/old-page' );
+		$this->assert_stdout_contains( 'https://example.com/new-page' );
+		$this->assert_stdout_contains( 'url' );
+		$this->assert_stdout_contains( 'enabled' );
+	}
+
+	/**
+	 * Test getting a redirect with post ID destination.
+	 */
+	public function test_get_by_source_with_post_destination(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/post-redirect', $post_id );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/post-redirect' ),
+			array()
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$fields = $GLOBALS['wp_cli_display_item_calls'][0][1];
+		$this->assertSame( '/post-redirect', $fields['from'] );
+		$this->assertSame( $post_id, $fields['to'] );
+		$this->assertSame( 'post', $fields['type'] );
+	}
+
+	/**
+	 * Test getting a disabled redirect.
+	 */
+	public function test_get_disabled_redirect(): void {
+		$redirect_id = $this->create_redirect( '/disabled-page', 'https://example.com/dest' );
+
+		// Disable the redirect.
+		wp_update_post(
+			array(
+				'ID'          => $redirect_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array( '/disabled-page' ),
+			array()
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( 'disabled' );
+	}
+
+	/**
+	 * Test a trashed redirect is reported as trashed, not disabled.
+	 */
+	public function test_get_trashed_redirect(): void {
+		$redirect_id = $this->create_redirect( '/trashed-page', 'https://example.com/dest' );
+		wp_trash_post( $redirect_id );
+
+		$this->invoke_command(
+			$this->command,
+			array( (string) $redirect_id ),
+			array( 'field' => 'status' )
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertSame( 'trashed', trim( $this->get_stdout() ) );
+	}
+
+	/**
+	 * Test error when redirect not found by source.
+	 */
+	public function test_get_by_source_not_found(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '/nonexistent-page' ),
+			array()
+		);
+
+		$this->assert_error_contains( 'not found' );
+	}
+
+	/**
+	 * Test error for invalid source path.
+	 */
+	public function test_get_invalid_source_path(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '' ),
+			array()
+		);
+
+		$this->assert_error_contains( 'Invalid source path' );
+	}
+
+	/**
+	 * Test getting a redirect by ID.
+	 */
+	public function test_get_by_id(): void {
+		$redirect_id = $this->create_redirect( '/by-id-test', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( (string) $redirect_id ),
+			array()
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( '/by-id-test' );
+		$this->assert_stdout_contains( (string) $redirect_id );
+	}
+
+	/**
+	 * Test error when redirect not found by ID.
+	 */
+	public function test_get_by_id_not_found(): void {
+		$this->invoke_command(
+			$this->command,
+			array( '999999' ),
+			array()
+		);
+
+		$this->assert_error_contains( 'not found' );
+	}
+
+	/**
+	 * Test getting a single field value.
+	 */
+	public function test_get_single_field(): void {
+		$this->create_redirect( '/field-test', 'https://example.com/destination' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/field-test' ),
+			array( 'field' => 'to' )
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$stdout = $this->get_stdout();
+		$this->assertStringContainsString( 'https://example.com/destination', $stdout );
+		// Should not contain field labels in single-field mode.
+		$this->assertStringNotContainsString( 'from', $stdout );
+	}
+
+	/**
+	 * Test error for invalid field name.
+	 */
+	public function test_get_invalid_field(): void {
+		$this->create_redirect( '/field-test-invalid', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/field-test-invalid' ),
+			array( 'field' => 'nonexistent' )
+		);
+
+		$this->assert_error_contains( 'Invalid field' );
+		$this->assert_stderr_contains( 'Available fields' );
+	}
+
+	/**
+	 * Test limiting output to selected fields.
+	 */
+	public function test_get_limited_fields(): void {
+		$this->create_redirect( '/fields-test', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/fields-test' ),
+			array( 'fields' => 'from,to' )
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$stdout = $this->get_stdout();
+		$this->assertStringContainsString( '/fields-test', $stdout );
+		$this->assertStringContainsString( 'https://example.com/dest', $stdout );
+		$this->assertStringNotContainsString( 'hash', $stdout );
+		$this->assertSame(
+			array( 'from', 'to' ),
+			$GLOBALS['wp_cli_display_item_calls'][0][0]['fields']
+		);
+	}
+
+	/**
+	 * Test error for invalid --fields value.
+	 */
+	public function test_get_invalid_fields(): void {
+		$this->create_redirect( '/fields-invalid', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array( '/fields-invalid' ),
+			array( 'fields' => 'from,bogus' )
+		);
+
+		$this->assert_error_contains( 'Invalid fields' );
+	}
+
+	/**
+	 * Test every format hands WP-CLI the redirect as one item, never a one-element list.
+	 *
+	 * @dataProvider data_formats
+	 *
+	 * @param string $format The --format value.
+	 */
+	public function test_get_displays_one_item( string $format ): void {
+		$redirect_id = $this->create_redirect( '/one-item', 'https://example.com/dest' );
+
+		$this->invoke_command( $this->command, array( '/one-item' ), array( 'format' => $format ) );
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'] );
+		$this->assertSame(
+			array(
+				array(
+					array(
+						'format' => $format,
+						'fields' => array( 'ID', 'from', 'to', 'type', 'status', 'hash' ),
+						'field'  => null,
+					),
+					array(
+						'ID'     => $redirect_id,
+						'from'   => '/one-item',
+						'to'     => 'https://example.com/dest',
+						'type'   => 'url',
+						'status' => 'enabled',
+						'hash'   => md5( '/one-item' ),
+					),
+				),
+			),
+			$GLOBALS['wp_cli_display_item_calls']
+		);
+	}
+
+	/**
+	 * Formats get accepts.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_formats(): array {
+		return array(
+			'table' => array( 'table' ),
+			'json'  => array( 'json' ),
+			'csv'   => array( 'csv' ),
+			'yaml'  => array( 'yaml' ),
+		);
+	}
+}

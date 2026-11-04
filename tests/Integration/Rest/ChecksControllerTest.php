@@ -1,0 +1,704 @@
+<?php
+/**
+ * ChecksController REST integration tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Integration\Rest
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration\Rest;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Tests\Integration\TestCase;
+
+/**
+ * Integration tests for the REST check endpoints.
+ *
+ * Requests are dispatched through a real WP_REST_Server, so routes,
+ * argument handling, permission callbacks, and the response shapes consumed
+ * by js/admin-redirect-form.js and the inline list table script are all
+ * exercised end to end. The routes are registered by the plugin's own
+ * rest_api_init hook, wired in PluginBootstrapper.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ChecksController
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Rest\ValidateAllController
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ * @uses \Automattic\LegacyRedirector\Application\AmbiguousSourceException
+ */
+final class ChecksControllerTest extends TestCase {
+
+	/**
+	 * Spin up a REST server and mock outbound HTTP.
+	 *
+	 * @return void
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		( new Capability() )->register();
+
+		global $wp_rest_server;
+		$wp_rest_server = new \WP_REST_Server();
+		do_action( 'rest_api_init', $wp_rest_server );
+
+		// The reachability check and the live probe would otherwise make real
+		// requests. Default to reachable; tests that need something else add
+		// their own filter, which runs later and wins.
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			)
+		);
+	}
+
+	/**
+	 * Drop the REST server, which the framework leaves set.
+	 *
+	 * @return void
+	 */
+	public function tear_down(): void {
+		global $wp_rest_server;
+		$wp_rest_server = null;
+
+		parent::tear_down();
+	}
+
+	/**
+	 * Sign in as a user able to manage redirects.
+	 *
+	 * @return void
+	 */
+	private function login_as_redirect_manager(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$user    = wp_set_current_user( $user_id );
+		$user->add_cap( Capability::MANAGE_REDIRECTS_CAPABILITY );
+	}
+
+	/**
+	 * Dispatch a REST request and return the response.
+	 *
+	 * @param string               $method Request method.
+	 * @param string               $route  Route, without the /wp-json prefix.
+	 * @param array<string, mixed> $params Request parameters.
+	 * @return \WP_REST_Response The dispatched response.
+	 */
+	private function do_request( string $method, string $route, array $params = array() ): \WP_REST_Response {
+		$request = new \WP_REST_Request( $method, $route );
+
+		foreach ( $params as $key => $value ) {
+			$request->set_param( $key, $value );
+		}
+
+		return rest_get_server()->dispatch( $request );
+	}
+
+	/**
+	 * Test all three routes reject an anonymous request.
+	 */
+	public function test_anonymous_request_is_rejected(): void {
+		$this->assertSame( 401, $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/old-page' ) )->get_status() );
+		$this->assertSame( 401, $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => '/new-page' ) )->get_status() );
+		$this->assertSame( 401, $this->do_request( 'POST', '/legacy-redirector/v1/redirects/1/test' )->get_status() );
+	}
+
+	/**
+	 * Test all three routes reject a user without the manage capability.
+	 */
+	public function test_request_without_capability_is_rejected(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+
+		$this->assertSame( 403, $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/old-page' ) )->get_status() );
+		$this->assertSame( 403, $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => '/new-page' ) )->get_status() );
+		$this->assertSame( 403, $this->do_request( 'POST', '/legacy-redirector/v1/redirects/1/test' )->get_status() );
+	}
+
+	/**
+	 * Test a source URL with an existing redirect reports a duplicate, and which redirect has it.
+	 */
+	public function test_existing_source_reports_duplicate(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/duplicated-page', 'https://example.com/destination' );
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/duplicated-page' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'exists'      => true,
+				'existing_id' => $redirect_id,
+				'reserved'    => false,
+				'occupied'    => false,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test a percent-encoded source finds the redirect stored for it.
+	 *
+	 * The form sends what the user typed, so an address-bar URL arrives
+	 * encoded; stripping the %xx sequences would test a different path.
+	 */
+	public function test_percent_encoded_source_reports_duplicate(): void {
+		$this->login_as_redirect_manager();
+		$this->create_redirect( '/caf%C3%A9', 'https://example.com/destination' );
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/caf%C3%A9' ) );
+
+		$this->assertTrue( $response->get_data()['exists'] );
+	}
+
+	/**
+	 * Test a source URL without a redirect reports no duplicate.
+	 */
+	public function test_unknown_source_reports_no_duplicate(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/never-redirected' ) );
+
+		$this->assertSame(
+			array(
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => false,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test the excluded redirect ID is not reported as its own duplicate.
+	 *
+	 * The edit form passes the redirect being edited as exclude_id so saving
+	 * without changing the source is not flagged.
+	 */
+	public function test_excluded_redirect_is_not_its_own_duplicate(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/edited-page', 'https://example.com/destination' );
+
+		$response = $this->do_request(
+			'GET',
+			'/legacy-redirector/v1/check-source',
+			array(
+				'source'     => '/edited-page',
+				'exclude_id' => $redirect_id,
+			)
+		);
+
+		$this->assertSame(
+			array(
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => false,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test an empty source URL reports no duplicate.
+	 */
+	public function test_empty_source_reports_no_duplicate(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source' );
+
+		$this->assertSame(
+			array(
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => false,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test a source that published content already answers is flagged.
+	 *
+	 * A warning too: the redirect would stay dormant, but the form can save it.
+	 */
+	public function test_source_answered_by_published_content_is_flagged(): void {
+		$this->login_as_redirect_manager();
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_name'   => 'already-a-page',
+			)
+		);
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => '/already-a-page' ) );
+
+		$this->assertSame(
+			array(
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => false,
+				'occupied'    => true,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test a source WordPress itself serves is flagged as reserved.
+	 *
+	 * It is a warning, not a duplicate: the form can still save it.
+	 */
+	public function test_reserved_source_is_flagged(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-source', array( 'source' => 'wp-admin/' ) );
+
+		$this->assertSame(
+			array(
+				'exists'      => false,
+				'existing_id' => 0,
+				'reserved'    => true,
+				'occupied'    => false,
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test an allowed external host reports host_allowed.
+	 */
+	public function test_allowed_host_reports_allowed(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => 'https://example.com/page' ) );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'host_allowed' => true ), $response->get_data() );
+	}
+
+	/**
+	 * Test a host missing from allowed_redirect_hosts is flagged.
+	 */
+	public function test_disallowed_host_is_flagged(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => 'https://not-allowed.example.net/page' ) );
+
+		$this->assertSame( array( 'host_allowed' => false ), $response->get_data() );
+	}
+
+	/**
+	 * Test a relative path has no host to disallow.
+	 */
+	public function test_relative_destination_reports_allowed(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => '/new-page' ) );
+
+		$this->assertSame( array( 'host_allowed' => true ), $response->get_data() );
+	}
+
+	/**
+	 * Test a post ID destination has no host to disallow.
+	 */
+	public function test_post_id_destination_reports_allowed(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => '123' ) );
+
+		$this->assertSame( array( 'host_allowed' => true ), $response->get_data() );
+	}
+
+	/**
+	 * Test a malformed destination is left for submit-time validation.
+	 */
+	public function test_malformed_destination_reports_allowed(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'GET', '/legacy-redirector/v1/check-destination', array( 'destination' => 'ftp://example.com/file' ) );
+
+		$this->assertSame( array( 'host_allowed' => true ), $response->get_data() );
+	}
+
+	/**
+	 * Test an ID with no redirect behind it is a 404.
+	 */
+	public function test_unknown_redirect_id_is_not_found(): void {
+		$this->login_as_redirect_manager();
+
+		$response = $this->do_request( 'POST', '/legacy-redirector/v1/redirects/999999/test' );
+
+		$this->assertSame( 404, $response->get_status() );
+		$this->assertSame( 'legacy_redirector_not_found', $response->get_data()['code'] );
+	}
+
+	/**
+	 * Test a redirect to a reachable destination reports valid.
+	 */
+	public function test_reachable_destination_reports_valid(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/validated-page', 'https://example.com/destination' );
+
+		$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'valid'    => true,
+				'status'   => 'valid',
+				'message'  => 'Redirect is valid.',
+				'warnings' => array(),
+				// The blanket 200 mock means the probe sees the source
+				// serving content rather than redirecting.
+				'probe'    => array(
+					'status'  => 'dormant',
+					'message' => 'The source currently serves content, so the redirect lies dormant and did not fire.',
+					'remedy'  => 'Unpublish the content at the source if the redirect should fire; otherwise the redirect is a fallback for when it goes.',
+				),
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test the probe confirms a source that live-redirects to its destination.
+	 */
+	public function test_probe_confirms_a_live_redirect(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/probe-source', 'https://example.com/destination' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( (string) $url, '/probe-source' ) ) {
+				return array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/destination' ),
+				);
+			}
+
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond, 20, 3 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 20 );
+		}
+
+		$data = $response->get_data();
+		$this->assertTrue( $data['valid'] );
+		$this->assertSame( 'confirmed', $data['probe']['status'] );
+		$this->assertStringContainsString( 'Confirmed live', $data['probe']['message'] );
+	}
+
+	/**
+	 * Test the probe reports a redirect that is not firing.
+	 */
+	public function test_probe_reports_a_redirect_that_does_not_fire(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/probe-missing', 'https://example.com/destination' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( (string) $url, '/probe-missing' ) ) {
+				return array( 'response' => array( 'code' => 404 ) );
+			}
+
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond, 20, 3 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 20 );
+		}
+
+		$data = $response->get_data();
+		$this->assertSame( 'not-firing', $data['probe']['status'] );
+		$this->assertStringContainsString( 'did not fire', $data['probe']['message'] );
+		$this->assertStringContainsString( 'Check the source matches the URL visitors request', $data['probe']['remedy'] );
+	}
+
+	/**
+	 * Test a server error at the source is reported as unknown, not as content.
+	 *
+	 * A 503 is the site failing to answer. Calling it dormant would tell the
+	 * editor a page is winning over the redirect when nothing is.
+	 */
+	public function test_probe_reports_a_server_error_as_unreachable(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/probe-erroring', 'https://example.com/destination' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( (string) $url, '/probe-erroring' ) ) {
+				return array( 'response' => array( 'code' => 503 ) );
+			}
+
+			return array(
+				'response' => array( 'code' => 200 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond, 20, 3 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 20 );
+		}
+
+		$data = $response->get_data();
+		$this->assertSame( 'unreachable', $data['probe']['status'] );
+		$this->assertStringContainsString( 'Could not confirm live behavior', $data['probe']['message'] );
+	}
+
+	/**
+	 * Run the Test route on a redirect, noting every URL it requests.
+	 *
+	 * @param int $redirect_id The redirect to test.
+	 * @return array{0: array<string, mixed>, 1: string[]} The response data and the URLs requested.
+	 */
+	private function test_and_record_requests( int $redirect_id ): array {
+		$requested = array();
+		$record    = static function ( $preempt, $args, $url ) use ( &$requested ) {
+			$requested[] = (string) $url;
+
+			return $preempt;
+		};
+		add_filter( 'pre_http_request', $record, 5, 3 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $record, 5 );
+		}
+
+		return array( $response->get_data(), $requested );
+	}
+
+	/**
+	 * Test a disabled redirect's source is not requested, as the CLI and the ability do not.
+	 *
+	 * It is not meant to fire, so a 404 there says nothing about it.
+	 */
+	public function test_disabled_redirect_is_not_probed(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_legacy_redirect( '/probe-disabled', 'https://example.com/destination' );
+
+		[ $data, $requested ] = $this->test_and_record_requests( $redirect_id );
+
+		$this->assertSame(
+			array(
+				'valid'    => true,
+				'status'   => 'valid',
+				'message'  => 'Redirect is valid. Source not requested: the redirect is disabled.',
+				'warnings' => array(),
+				'probe'    => null,
+			),
+			$data
+		);
+		$this->assertSame( array( 'https://example.com/destination' ), $requested );
+	}
+
+	/**
+	 * Test a disabled redirect still reports what is wrong with its destination.
+	 */
+	public function test_disabled_redirect_still_reports_its_destination(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_legacy_redirect( '/probe-disabled-broken', 'https://not-allowed.example.net/page' );
+
+		[ $data ] = $this->test_and_record_requests( $redirect_id );
+
+		$this->assertFalse( $data['valid'] );
+		$this->assertSame( 'external_host_not_allowed', $data['status'] );
+		$this->assertNull( $data['probe'] );
+	}
+
+	/**
+	 * Test a duplicate the upgrade disabled is not reported as diverted by its live twin.
+	 */
+	public function test_disabled_duplicate_is_not_probed(): void {
+		$this->login_as_redirect_manager();
+		$live_id      = $this->create_redirect( '/probe-clash', 'https://example.com/live' );
+		$duplicate_id = $this->insert_disabled_duplicate( '/probe-clash/', $live_id );
+
+		[ $data, $requested ] = $this->test_and_record_requests( $duplicate_id );
+
+		$this->assertTrue( $data['valid'] );
+		$this->assertNull( $data['probe'] );
+		$this->assertSame( array( 'https://example.com/duplicate' ), $requested );
+	}
+
+	/**
+	 * Test a corrupt row's finding is the whole answer, with nothing requested.
+	 */
+	public function test_corrupt_row_is_not_probed(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+
+		[ $data, $requested ] = $this->test_and_record_requests( $redirect_id );
+
+		$this->assertFalse( $data['valid'] );
+		$this->assertSame( 'corrupt_data', $data['status'] );
+		$this->assertStringContainsString( 'Invalid source:', $data['message'] );
+		$this->assertSame( 'Delete it, or edit it with a full new source and destination.', $data['remedy'] );
+		$this->assertNull( $data['probe'] );
+		$this->assertSame( array(), $requested );
+	}
+
+	/**
+	 * Test a valid redirect with a reserved source reports success with the
+	 * warning riding along, instead of hiding it behind a clean pass.
+	 */
+	public function test_reserved_source_reports_valid_with_warning(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/wp-admin/', 'https://example.com/destination' );
+
+		$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+
+		$data = $response->get_data();
+		$this->assertTrue( $data['valid'] );
+		$this->assertSame( 'valid', $data['status'] );
+		$this->assertCount( 1, $data['warnings'] );
+		$this->assertSame( 'Reserved WordPress path', $data['warnings'][0]['label'] );
+		$this->assertStringContainsString( 'path WordPress itself serves', $data['warnings'][0]['description'] );
+	}
+
+	/**
+	 * Test a redirect closing a loop reports success with the loop warning.
+	 */
+	public function test_loop_member_reports_valid_with_warning(): void {
+		$this->login_as_redirect_manager();
+		$this->create_redirect( '/rest-loop-a', '/rest-loop-b' );
+		$redirect_id = $this->create_redirect( '/rest-loop-b', '/rest-loop-a' );
+
+		$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+
+		$data = $response->get_data();
+		$this->assertTrue( $data['valid'] );
+		$this->assertCount( 1, $data['warnings'] );
+		$this->assertSame( 'Possible redirect loop', $data['warnings'][0]['label'] );
+		$this->assertStringContainsString( 'leads back to this one', $data['warnings'][0]['description'] );
+	}
+
+	/**
+	 * Test a destination returning HTTP 404 reports the 404 status.
+	 *
+	 * A failing redirect is still a successful test, so this is a 200 with
+	 * valid: false, not an HTTP error.
+	 */
+	public function test_unreachable_destination_reports_404(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/broken-page', 'https://example.com/gone' );
+
+		$respond_404 = static function () {
+			return array(
+				'response' => array( 'code' => 404 ),
+				'body'     => '',
+			);
+		};
+		add_filter( 'pre_http_request', $respond_404, 20 );
+
+		try {
+			$response = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" );
+		} finally {
+			remove_filter( 'pre_http_request', $respond_404, 20 );
+		}
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame(
+			array(
+				'valid'    => false,
+				'status'   => 'url_not_found',
+				'message'  => 'The destination URL returns a 404 Not Found response.',
+				'remedy'   => 'Point this redirect at a page that exists, or delete it.',
+				'warnings' => array(),
+				// The blanket 404 mock means the probed source 404s
+				// without redirecting, too.
+				'probe'    => array(
+					'status'  => 'not-firing',
+					'message' => 'The source returns a 404 without redirecting: the redirect did not fire.',
+					'remedy'  => 'Check the source matches the URL visitors request, including its encoding and the site\'s path, then test again.',
+				),
+			),
+			$response->get_data()
+		);
+	}
+
+	/**
+	 * Test a finding reaches the Test button in the user's language.
+	 *
+	 * The Domain words findings in English for the CLI; the REST response must
+	 * go through translation instead, or every locale sees English.
+	 */
+	public function test_finding_text_is_translated(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/translated-page', 'https://example.com/gone' );
+
+		$translate   = static function ( string $translation, string $text, string $domain ): string {
+			$german = array(
+				'The destination URL returns a 404 Not Found response.'   => 'Die Ziel-URL antwortet mit 404 Nicht gefunden.',
+				'Point this redirect at a page that exists, or delete it.' => 'Lass diese Weiterleitung auf eine vorhandene Seite zeigen oder lösche sie.',
+			);
+
+			return 'legacy-redirector' === $domain && isset( $german[ $text ] ) ? $german[ $text ] : $translation;
+		};
+		$respond_404 = static fn(): array => array(
+			'response' => array( 'code' => 404 ),
+			'body'     => '',
+		);
+		add_filter( 'gettext', $translate, 10, 3 );
+		add_filter( 'pre_http_request', $respond_404, 20 );
+
+		try {
+			$data = $this->do_request( 'POST', "/legacy-redirector/v1/redirects/{$redirect_id}/test" )->get_data();
+		} finally {
+			remove_filter( 'gettext', $translate );
+			remove_filter( 'pre_http_request', $respond_404, 20 );
+		}
+
+		$this->assertSame( 'Die Ziel-URL antwortet mit 404 Nicht gefunden.', $data['message'] );
+		$this->assertSame( 'Lass diese Weiterleitung auf eine vorhandene Seite zeigen oder lösche sie.', $data['remedy'] );
+	}
+}

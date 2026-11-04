@@ -1,0 +1,300 @@
+<?php
+/**
+ * RedirectRequestHandler unit tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Unit\Infrastructure\WordPress;
+
+use Automattic\LegacyRedirector\Application\RedirectResolver;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler;
+use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use Brain\Monkey\Filters;
+use Brain\Monkey\Functions;
+use Mockery;
+
+/**
+ * RedirectRequestHandlerTest class.
+ *
+ * Tests the request-handling shell around RedirectResolver: the early-exit
+ * paths and the Cache-Control header, which a CLI test run cannot observe.
+ * The redirect itself, and the allowed_redirect_hosts check before it, are
+ * tested against real WordPress in the integration RedirectRequestHandlerTest.
+ *
+ * RedirectResolver is final, so the handler is tested with a real resolver
+ * over a mocked repository.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectHttpStatus
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ */
+final class RedirectRequestHandlerTest extends MonkeyStubs {
+
+	/**
+	 * The mock repository backing the resolver.
+	 *
+	 * @var RedirectRepositoryInterface&Mockery\MockInterface
+	 */
+	private $repository;
+
+	/**
+	 * The handler under test.
+	 *
+	 * @var RedirectRequestHandler
+	 */
+	private RedirectRequestHandler $handler;
+
+	/**
+	 * REQUEST_URI before the test, restored in tear_down() even if the test fails.
+	 *
+	 * @var string|null
+	 */
+	private $original_request_uri;
+
+	/**
+	 * Sets up test fixtures.
+	 *
+	 * @return void
+	 */
+	protected function set_up(): void {
+		parent::set_up();
+
+		$this->repository = Mockery::mock( RedirectRepositoryInterface::class );
+		$this->handler    = new RedirectRequestHandler( new RedirectResolver( $this->repository ) );
+
+		$GLOBALS['legacy_redirector_sent_headers'] = array();
+		$this->original_request_uri                = $_SERVER['REQUEST_URI'] ?? null;
+
+		Functions\when( 'is_user_logged_in' )->justReturn( false );
+	}
+
+	/**
+	 * Restores REQUEST_URI.
+	 *
+	 * @return void
+	 */
+	protected function tear_down(): void {
+		if ( null !== $this->original_request_uri ) {
+			$_SERVER['REQUEST_URI'] = $this->original_request_uri;
+		} else {
+			unset( $_SERVER['REQUEST_URI'] );
+		}
+
+		parent::tear_down();
+	}
+
+	/**
+	 * Invoke the private Cache-Control header method.
+	 *
+	 * The method is reached in production only via perform_redirect(), which
+	 * ends in exit, so it is driven directly here.
+	 *
+	 * @param string $url         The destination URL.
+	 * @param int    $status_code The HTTP status code.
+	 * @return string[] The headers sent, as recorded by the header() stub.
+	 */
+	private function send_cache_control_header( string $url, int $status_code ): array {
+		( new \ReflectionMethod( $this->handler, 'send_cache_control_header' ) )
+			->invoke( $this->handler, $url, $status_code );
+
+		return $GLOBALS['legacy_redirector_sent_headers'];
+	}
+
+	/**
+	 * Test the max-age defaults to one minute for a non-permanent redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 */
+	public function test_cache_control_max_age_defaults_to_a_minute_for_temporary_redirects(): void {
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )
+			->once()
+			->with( MINUTE_IN_SECONDS, 'https://example.com/destination', 302 )
+			->andReturnFirstArg();
+
+		$this->assertSame(
+			array( 'Cache-Control: max-age=60' ),
+			$this->send_cache_control_header( 'https://example.com/destination', 302 )
+		);
+	}
+
+	/**
+	 * Test the filter overrides the default max-age.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 */
+	public function test_cache_control_max_age_can_be_overridden_by_the_filter(): void {
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )
+			->once()
+			->with( DAY_IN_SECONDS, 'https://example.com/destination', 301 )
+			->andReturn( 3600 );
+
+		$this->assertSame(
+			array( 'Cache-Control: max-age=3600' ),
+			$this->send_cache_control_header( 'https://example.com/destination', 301 )
+		);
+	}
+
+	/**
+	 * Test a logged-in user gets no max-age, keeping core's no-cache headers.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 */
+	public function test_cache_control_header_is_not_sent_to_logged_in_users(): void {
+		Functions\when( 'is_user_logged_in' )->justReturn( true );
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )->never();
+
+		$this->assertSame(
+			array(),
+			$this->send_cache_control_header( 'https://example.com/destination', 301 )
+		);
+	}
+
+	/**
+	 * Test a filtered max-age of zero or less suppresses the header.
+	 *
+	 * @dataProvider data_suppressing_max_ages
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::send_cache_control_header
+	 *
+	 * @param int $max_age The filtered max-age.
+	 * @return void
+	 */
+	public function test_cache_control_header_is_suppressed_by_a_non_positive_max_age( int $max_age ): void {
+		Filters\expectApplied( 'legacy_redirector_redirect_max_age' )
+			->once()
+			->andReturn( $max_age );
+
+		$this->assertSame(
+			array(),
+			$this->send_cache_control_header( 'https://example.com/destination', 301 )
+		);
+	}
+
+	/**
+	 * Data provider for max-ages that suppress the header.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public static function data_suppressing_max_ages(): array {
+		return array(
+			'zero'     => array( 0 ),
+			'negative' => array( -1 ),
+		);
+	}
+
+	/**
+	 * Test maybe_redirect exits early when not 404.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::maybe_redirect
+	 */
+	public function test_maybe_redirect_exits_early_when_not_404(): void {
+		Functions\expect( 'is_404' )
+			->once()
+			->andReturn( false );
+
+		// The repository should NOT be consulted since we exit early.
+		$this->repository
+			->shouldNotReceive( 'find_by_source' );
+
+		$this->handler->maybe_redirect();
+	}
+
+	/**
+	 * Test maybe_redirect exits early when REQUEST_URI is empty.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::maybe_redirect
+	 */
+	public function test_maybe_redirect_exits_early_when_request_uri_empty(): void {
+		$_SERVER['REQUEST_URI'] = '';
+
+		Functions\expect( 'is_404' )
+			->once()
+			->andReturn( true );
+
+		// The repository should NOT be consulted since REQUEST_URI is empty.
+		$this->repository
+			->shouldNotReceive( 'find_by_source' );
+
+		$this->handler->maybe_redirect();
+	}
+
+	/**
+	 * Test maybe_redirect exits early when no redirect found.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::maybe_redirect
+	 */
+	public function test_maybe_redirect_exits_early_when_no_redirect_found(): void {
+		Functions\when( 'home_url' )->justReturn( 'https://example.com' );
+
+		$_SERVER['REQUEST_URI'] = '/nonexistent-page';
+
+		Functions\expect( 'is_404' )
+			->once()
+			->andReturn( true );
+
+		Filters\expectApplied( 'legacy_redirector_request_path' )
+			->once()
+			->andReturnFirstArg();
+
+		Filters\expectApplied( 'legacy_redirector_preserve_query_params' )
+			->once()
+			->andReturn( array() );
+
+		$this->repository
+			->shouldReceive( 'find_by_source' )
+			->once()
+			->andReturn( null );
+
+		// wp_safe_redirect should NOT be called.
+		Functions\expect( 'wp_safe_redirect' )
+			->never();
+
+		$this->handler->maybe_redirect();
+	}
+
+	/**
+	 * Test a destination WordPress will not redirect to is left as a 404.
+	 *
+	 * Left unchecked, wp_safe_redirect() would send the visitor to its own
+	 * fallback, admin_url(), so the destination is tested before it gets there.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\RedirectRequestHandler::perform_redirect
+	 */
+	public function test_a_disallowed_destination_does_not_redirect(): void {
+		Functions\expect( 'wp_validate_redirect' )
+			->once()
+			->with( 'https://external-site.com/destination', '' )
+			->andReturn( '' );
+
+		Functions\expect( 'wp_safe_redirect' )->never();
+
+		$this->perform_redirect( 'https://external-site.com/destination', 301 );
+
+		$this->assertSame(
+			array(),
+			$GLOBALS['legacy_redirector_sent_headers'],
+			'A refused destination must not send a Cache-Control header either.'
+		);
+	}
+
+	/**
+	 * Invoke the private redirect method.
+	 *
+	 * Only safe to drive for destinations that are refused, since an allowed
+	 * one ends in exit.
+	 *
+	 * @param string $url         The destination URL.
+	 * @param int    $status_code The HTTP status code.
+	 * @return void
+	 */
+	private function perform_redirect( string $url, int $status_code ): void {
+		( new \ReflectionMethod( $this->handler, 'perform_redirect' ) )
+			->invoke( $this->handler, $url, $status_code );
+	}
+}

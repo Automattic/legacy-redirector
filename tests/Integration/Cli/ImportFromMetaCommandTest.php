@@ -1,0 +1,611 @@
+<?php
+/**
+ * ImportFromMetaCommand CLI integration tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Integration\Cli
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
+
+use Automattic\LegacyRedirector\Domain\SourceUrl;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaCommand;
+
+/**
+ * Integration tests for ImportFromMetaCommand.
+ *
+ * Note: the WP_CLI stub used by these tests does not halt execution on
+ * WP_CLI::error(), unlike the real WP-CLI runner. Tests therefore assert on
+ * the recorded error rather than on execution stopping.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ImportFromMetaCommand
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectResolver
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
+ */
+final class ImportFromMetaCommandTest extends CliTestCase {
+
+	/**
+	 * The command under test.
+	 *
+	 * @var ImportFromMetaCommand
+	 */
+	private ImportFromMetaCommand $command;
+
+	/**
+	 * Meta key unique to the current test.
+	 *
+	 * Posts and post meta are rolled back with WP_UnitTestCase's per-test
+	 * transaction, so the unique key is not needed for isolation.
+	 *
+	 * @var string
+	 */
+	private string $meta_key;
+
+	/**
+	 * Set up test fixtures.
+	 *
+	 * @return void
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		$this->meta_key = 'legacy-url-' . uniqid();
+		$this->command  = new ImportFromMetaCommand(
+			$this->manager(),
+			$this->repository()
+		);
+	}
+
+	/**
+	 * Create a published post carrying a legacy URL in post meta.
+	 *
+	 * @param string $legacy_url The legacy URL to store in meta.
+	 * @return int The post ID.
+	 */
+	private function create_post_with_legacy_url( string $legacy_url ): int {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		add_post_meta( $post_id, $this->meta_key, $legacy_url );
+
+		return $post_id;
+	}
+
+	/**
+	 * Look up a redirect by its source path.
+	 *
+	 * @param string $source The source path.
+	 * @return \Automattic\LegacyRedirector\Domain\Redirect|null The redirect, or null.
+	 */
+	private function find_redirect( string $source ) {
+		return $this->repository()->find_by_source( SourceUrl::from_string( $source ) );
+	}
+
+	/**
+	 * Test importing redirects from post meta.
+	 */
+	public function test_imports_redirects_from_post_meta(): void {
+		$first  = $this->create_post_with_legacy_url( '/legacy-one' );
+		$second = $this->create_post_with_legacy_url( '/legacy-two' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'table',
+			)
+		);
+
+		$this->assert_stdout_contains( '---Live Run---' );
+		$this->assert_stdout_contains( 'All of your redirects have been imported' );
+
+		$redirect = $this->find_redirect( '/legacy-one' );
+		$this->assertNotNull( $redirect );
+		$this->assertTrue( $redirect->destination()->is_post_id() );
+		$this->assertSame( $first, $redirect->destination()->as_post_id()->value() );
+
+		$redirect = $this->find_redirect( '/legacy-two' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $second, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test that full URLs in meta are reduced to their path.
+	 */
+	public function test_imports_full_urls_as_paths(): void {
+		$post_id = $this->create_post_with_legacy_url( 'https://example.com/archive/old-story' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$redirect = $this->find_redirect( '/archive/old-story' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $post_id, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test legacy URLs that differ only by query import as separate redirects.
+	 */
+	public function test_keeps_query_string_of_legacy_url(): void {
+		$first  = $this->create_post_with_legacy_url( '/article.php?id=5' );
+		$second = $this->create_post_with_legacy_url( '/article.php?id=6' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'table',
+			)
+		);
+
+		$this->assert_stdout_contains( 'All of your redirects have been imported' );
+		$this->assertNull( $this->find_redirect( '/article.php' ) );
+
+		$redirect = $this->resolver()->find_redirect( '/article.php?id=5' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $first, $redirect->destination()->as_post_id()->value() );
+
+		$redirect = $this->resolver()->find_redirect( '/article.php?id=6' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( $second, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test a legacy URL that is only a query on the root keeps the query.
+	 *
+	 * @dataProvider data_query_only_legacy_urls
+	 *
+	 * @param string $legacy_url The meta value.
+	 */
+	public function test_imports_query_on_root( string $legacy_url ): void {
+		$post_id = $this->create_post_with_legacy_url( $legacy_url );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$redirect = $this->find_redirect( '/?p=123' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( '/?p=123', $redirect->source()->path() );
+		$this->assertSame( $post_id, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Meta values that are a query on the root.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_query_only_legacy_urls(): array {
+		return array(
+			'rooted'   => array( '/?p=123' ),
+			'no path'  => array( '?p=123' ),
+			'full URL' => array( 'https://old.example.com?p=123' ),
+		);
+	}
+
+	/**
+	 * Test a full URL keeps its query as well as its path.
+	 */
+	public function test_imports_full_url_with_query(): void {
+		$post_id = $this->create_post_with_legacy_url( 'https://old.example.com/a?b=1' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$redirect = $this->find_redirect( '/a?b=1' );
+		$this->assertNotNull( $redirect );
+		$this->assertSame( '/a?b=1', $redirect->source()->path() );
+		$this->assertSame( $post_id, $redirect->destination()->as_post_id()->value() );
+	}
+
+	/**
+	 * Test --skip-dupes skips a row whose source a redirect already has, and leaves that redirect untouched.
+	 *
+	 * @dataProvider data_existing_sources
+	 *
+	 * @param string $source The source the existing redirect and the meta row share.
+	 */
+	public function test_skip_dupes_preserves_existing_redirect( string $source ): void {
+		$this->create_redirect( $source, '/original-destination' );
+		$this->create_post_with_legacy_url( $source );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key'   => $this->meta_key,
+				'format'     => 'csv',
+				'skip-dupes' => true,
+				'verbose'    => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Skipped - Redirect for this from URL already exists' );
+
+		$redirect = $this->find_redirect( $source );
+		$this->assertNotNull( $redirect );
+		$this->assertTrue( $redirect->destination()->is_url() );
+		$this->assertSame( '/original-destination', $redirect->destination()->as_url()->value() );
+	}
+
+	/**
+	 * Sources an existing redirect can share with a meta row.
+	 *
+	 * @return array<string, array{string}>
+	 */
+	public static function data_existing_sources(): array {
+		return array(
+			'path'           => array( '/already-mapped' ),
+			// The match is on path and query, not the path alone.
+			'path and query' => array( '/article.php?id=7' ),
+		);
+	}
+
+	/**
+	 * Test verbose mode reports each successful import.
+	 */
+	public function test_verbose_reports_successful_imports(): void {
+		$this->create_post_with_legacy_url( '/verbose-import' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+				'verbose'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Successfully imported' );
+		$this->assert_stdout_contains( '/verbose-import' );
+	}
+
+	/**
+	 * Test the start offset skips earlier meta rows.
+	 */
+	public function test_start_offset_skips_earlier_rows(): void {
+		$this->create_post_with_legacy_url( '/offset-first' );
+		$this->create_post_with_legacy_url( '/offset-second' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+				'start'    => 1,
+			)
+		);
+
+		$this->assertNull( $this->find_redirect( '/offset-first' ) );
+		$this->assertNotNull( $this->find_redirect( '/offset-second' ) );
+	}
+
+	/**
+	 * Test dry run reports the run type and creates nothing.
+	 */
+	public function test_dry_run_creates_no_redirects(): void {
+		$this->create_post_with_legacy_url( '/dry-run-source' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'table',
+				'dry-run'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( '---Dry Run---' );
+		$this->assertNull( $this->find_redirect( '/dry-run-source' ) );
+	}
+
+	/**
+	 * Test a meta value with no path is reported and skipped.
+	 */
+	public function test_skips_meta_value_without_path(): void {
+		$this->create_post_with_legacy_url( 'https://example.com' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$this->assert_stdout_contains( 'Invalid source URL - no path found' );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+	}
+
+	/**
+	 * Test a live run reports a row whose destination post is unpublished, and ends in an error naming the count.
+	 */
+	public function test_failed_rows_are_an_error(): void {
+		$this->create_post_with_legacy_url( '/meta-good' );
+		$draft = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		add_post_meta( $draft, $this->meta_key, '/meta-bad' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'csv',
+			)
+		);
+
+		$this->assertNotNull( $this->find_redirect( '/meta-good' ) );
+		$this->assertNull( $this->find_redirect( '/meta-bad' ) );
+		$this->assertStringContainsString( '/meta-bad', $this->get_output() );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+		$this->assert_error_contains( 'Processed 1 of 2 rows: 1 failed.' );
+	}
+
+	/**
+	 * Test re-running without --skip-dupes refuses the rows already imported, naming the redirect that has each.
+	 */
+	public function test_rerun_without_skip_dupes_reports_each_existing_redirect(): void {
+		$this->create_post_with_legacy_url( '/meta-rerun' );
+		$assoc_args = array(
+			'meta-key' => $this->meta_key,
+			'format'   => 'csv',
+		);
+
+		$this->invoke_command( $this->command, array(), $assoc_args );
+		$this->assertFalse( $this->output->had_error() );
+		$existing = $this->find_redirect( '/meta-rerun' );
+
+		$this->invoke_command( $this->command, array(), $assoc_args );
+
+		$this->assert_stdout_contains( sprintf( 'Redirect #%d already has the source', $existing->id() ) );
+		$this->assert_error_contains( 'Processed 0 of 1 row: 1 failed.' );
+		$this->assertSame( $existing->id(), $this->find_redirect( '/meta-rerun' )->id() );
+	}
+
+	/**
+	 * Test an error is raised when the meta key matches no rows.
+	 */
+	public function test_errors_when_no_meta_rows_found(): void {
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => 'no-such-meta-key',
+				'format'   => 'csv',
+			)
+		);
+
+		$this->assert_error_contains( 'No redirects found for meta_key: no-such-meta-key' );
+	}
+
+	/**
+	 * Test an error is raised when no meta key is supplied at all.
+	 */
+	public function test_errors_when_meta_key_missing(): void {
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'format' => 'csv' )
+		);
+
+		$this->assert_error_contains( 'No redirects found for meta_key' );
+	}
+
+	/**
+	 * Test a dry run reports each row the live run would refuse, without failing.
+	 *
+	 * One row for each way a row fails: no path, a source already taken, and
+	 * an unpublished destination.
+	 */
+	public function test_dry_run_reports_what_the_live_run_would_refuse(): void {
+		$this->create_post_with_legacy_url( 'https://example.com' );
+		$existing = $this->create_redirect( '/dry-run-taken', '/original-destination' );
+		$this->create_post_with_legacy_url( '/dry-run-taken' );
+		$draft = self::factory()->post->create( array( 'post_status' => 'draft' ) );
+		add_post_meta( $draft, $this->meta_key, '/dry-run-draft' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'dry-run'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Invalid source URL - no path found' );
+		$this->assert_stdout_contains( sprintf( 'Redirect #%d already has the source "/dry-run-taken"', $existing ) );
+		$this->assert_stdout_contains( 'not published' );
+		$this->assert_warning_contains( 'Dry run: 3 rows would fail. Nothing was changed.' );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+		$this->assertFalse( $this->output->had_error() );
+		$this->assertNull( $this->find_redirect( '/dry-run-draft' ) );
+	}
+
+	/**
+	 * Test a clean dry run says nothing was imported, rather than that everything was.
+	 */
+	public function test_clean_dry_run_does_not_claim_an_import(): void {
+		$this->create_post_with_legacy_url( '/dry-run-clean' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'dry-run'  => true,
+				'verbose'  => true,
+			)
+		);
+
+		$this->assert_stdout_contains( 'Would be imported' );
+		$this->assert_success_contains( 'Dry run: no problems found. Nothing was changed.' );
+		$this->assert_stdout_not_contains( 'All of your redirects have been imported' );
+	}
+
+	/**
+	 * Test structured formats print the notices alone, with no run heading or closing line.
+	 */
+	public function test_structured_format_prints_only_the_notices(): void {
+		$this->create_post_with_legacy_url( '/json-clean' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+			)
+		);
+
+		$this->assertSame( '', $this->get_stdout() );
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'] );
+		$this->assertSame( 'json', $GLOBALS['wp_cli_format_items_calls'][0][0] );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'][0][1] );
+		$this->assertNotNull( $this->find_redirect( '/json-clean' ) );
+	}
+
+	/**
+	 * Test --end stops at the row it names, not at the end of a page.
+	 */
+	public function test_end_offset_stops_within_a_page(): void {
+		$this->create_post_with_legacy_url( '/end-first' );
+		$this->create_post_with_legacy_url( '/end-second' );
+		$this->create_post_with_legacy_url( '/end-third' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'start'    => 1,
+				'end'      => 2,
+			)
+		);
+
+		$this->assertNull( $this->find_redirect( '/end-first' ) );
+		$this->assertNotNull( $this->find_redirect( '/end-second' ) );
+		$this->assertNull( $this->find_redirect( '/end-third' ) );
+	}
+
+	/**
+	 * Test rows that fail still count towards clearing the object cache, and
+	 * only a live run pauses.
+	 */
+	public function test_failing_rows_clear_cache_and_only_a_live_run_pauses(): void {
+		$post_id = self::factory()->post->create();
+		foreach ( range( 1, 101 ) as $i ) {
+			add_post_meta( $post_id, $this->meta_key, "https://example.com#$i" );
+		}
+		wp_cache_set( 'sentinel', 'kept', 'legacy-redirector-test' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+				'dry-run'  => true,
+			)
+		);
+
+		$this->assertFalse( wp_cache_get( 'sentinel', 'legacy-redirector-test' ), 'The row after the hundredth clears the object cache.' );
+		$this->assertSame( array(), $GLOBALS['legacy_redirector_cli_sleeps'], 'A dry run writes nothing, so never pauses.' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+			)
+		);
+
+		$this->assertSame( array( 1 ), $GLOBALS['legacy_redirector_cli_sleeps'], 'A live run pauses once per hundred rows.' );
+	}
+
+	/**
+	 * Test rows on one post that span a page boundary are each read once, and
+	 * the next page starts after the last meta_id read rather than at an offset.
+	 */
+	public function test_rows_on_one_post_spanning_a_page_are_each_read_once(): void {
+		// Rows with no path fail before any lookup, which keeps 1,001 rows fast.
+		$post_id  = self::factory()->post->create();
+		$meta_ids = array();
+		foreach ( range( 1, 1001 ) as $i ) {
+			$meta_ids[] = add_post_meta( $post_id, $this->meta_key, "https://example.com#$i" );
+		}
+
+		$queries = array();
+		$capture = function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+		add_filter( 'query', $capture );
+		$GLOBALS['wp_cli_format_items_calls'] = array();
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'meta-key' => $this->meta_key,
+				'format'   => 'json',
+				'dry-run'  => true,
+			)
+		);
+		remove_filter( 'query', $capture );
+
+		$read = array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'redirect_from' );
+		$this->assertCount( 1001, $read );
+		$this->assertCount( 1001, array_unique( $read ) );
+		$this->assertNotEmpty( preg_grep( '/AND meta_id > ' . $meta_ids[999] . ' ORDER BY meta_id ASC LIMIT 1$/', $queries ), 'The second page is a range from the last meta_id read.' );
+	}
+}

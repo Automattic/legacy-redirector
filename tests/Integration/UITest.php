@@ -1,0 +1,1094 @@
+<?php
+/**
+ * Admin UI tests
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+
+/**
+ * Admin UI tests class.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::duplicate_count
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
+ */
+final class UITest extends TestCase {
+
+	/**
+	 * Instance of ViewFilters.
+	 *
+	 * @var ViewFilters
+	 */
+	private ViewFilters $view_filters;
+
+	/**
+	 * Instance of ValidationNotices.
+	 *
+	 * @var ValidationNotices
+	 */
+	private ValidationNotices $notices;
+
+	/**
+	 * Set up test fixtures.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		$this->view_filters = new ViewFilters( $this->query_repository(), new AuditFlags() );
+
+		$this->notices = new ValidationNotices(
+			$this->repository(),
+			$this->auditor()
+		);
+
+		// Register capabilities for tests.
+		( new Capability() )->register();
+
+		// Validation notices are only rendered for users who manage redirects.
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+	}
+
+	/**
+	 * Test add_removable_args adds expected query args.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::add_removable_args
+	 */
+	public function test_add_removable_arg_adds_expected_args(): void {
+		$initial_args = array( 'existing_arg' );
+		$result       = $this->notices->add_removable_args( $initial_args );
+
+		$this->assertContains( 'existing_arg', $result );
+		$this->assertContains( 'validate', $result );
+		$this->assertContains( 'ids', $result );
+	}
+
+	/**
+	 * Test customize_views renames statuses.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
+	 */
+	public function test_vip_redirects_custom_post_status_filters_renames_statuses(): void {
+		// Core's markup, with the labels a non-English site would show: the
+		// rename must not depend on the English words.
+		$views = array(
+			'all'     => '<a href="#">All</a>',
+			'publish' => '<a href="#" class="current" aria-current="page">Publiés <span class="count">(5)</span></a>',
+			'draft'   => '<a href="#">Brouillon <span class="count">(1)</span></a>',
+			'trash'   => '<a href="#">Trash</a>',
+		);
+
+		$result = $this->view_filters->customize_views( $views );
+
+		$this->assertArrayHasKey( 'all', $result );
+		$this->assertArrayHasKey( 'publish', $result );
+		$this->assertArrayHasKey( 'draft', $result );
+		$this->assertArrayHasKey( 'trash', $result );
+
+		$this->assertSame( '<a href="#" class="current" aria-current="page">Enabled <span class="count">(5)</span></a>', $result['publish'] );
+		$this->assertSame( '<a href="#">Disabled <span class="count">(1)</span></a>', $result['draft'] );
+	}
+
+	/**
+	 * Test display_validation_notices renders an audit finding as an error notice.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_host_not_allowed_notice(): void {
+		$_GET['validate'] = 'external_host_not_allowed';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( 'not valid', $output );
+		$this->assertStringContainsString( 'allowed_redirect_hosts', $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs correct notice for 404.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_404_notice(): void {
+		$_GET['validate'] = 'url_not_found';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( '404', $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs correct notice for valid redirect.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_valid_notice(): void {
+		$_GET['validate'] = 'valid';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-success', $output );
+		$this->assertStringContainsString( 'valid', $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs correct notice for an unpublished destination.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_unpublished_notice(): void {
+		$_GET['validate'] = 'post_unpublished';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( 'not published', $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs correct notice for a deleted destination post.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_deleted_post_notice(): void {
+		$_GET['validate'] = 'post_deleted';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( 'no longer exists', $output );
+	}
+
+	/**
+	 * Test display_validation_notices reports a redirect ID that no longer resolves.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_not_found_notice(): void {
+		$_GET['validate'] = 'not-found';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-error', $output );
+		$this->assertStringContainsString( 'Redirect not found', $output );
+	}
+
+	/**
+	 * Test warnings carried on the request render as warning notices.
+	 *
+	 * Only warning-severity types render: the query arg is uncontrolled, so a
+	 * crafted URL must not present a problem finding under warning styling.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_shows_warnings_alongside_valid(): void {
+		$_GET['validate'] = 'valid';
+		$_GET['warnings'] = 'reserved_source,possible_loop,post_deleted,bogus';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'notice-success', $output );
+		$this->assertStringContainsString( 'notice-warning', $output );
+		$this->assertStringContainsString( 'path WordPress itself serves', $output );
+		$this->assertStringContainsString( 'leads back to this one', $output );
+		// A problem type smuggled into the warnings arg must not render.
+		$this->assertStringNotContainsString( 'no longer exists', $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs nothing for an unrecognised result.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_outputs_nothing_for_unknown_result(): void {
+		$_GET['validate'] = 'something-else';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertEmpty( $output );
+	}
+
+	/**
+	 * Test display_validation_notices outputs nothing when no validate param.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_validate_redirects_notices_outputs_nothing_without_param(): void {
+		unset( $_GET['validate'] );
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = ob_get_clean();
+
+		$this->assertEmpty( $output );
+	}
+
+	/**
+	 * Test the no-JS Test row action runs only with its own nonce.
+	 *
+	 * The action is a GET link, so without the nonce a crafted link could
+	 * make a manager's browser run live requests; with the wrong or no nonce
+	 * it must do nothing at all.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 * @dataProvider data_validation_action_nonces
+	 *
+	 * @param string|null $nonce_action The action the nonce was made for, or null for no nonce.
+	 * @param bool        $runs         Whether the action should run and redirect.
+	 */
+	public function test_validation_action_runs_only_with_its_nonce( ?string $nonce_action, bool $runs ): void {
+		$redirect_id = $this->create_redirect( '/nonce-checked', 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn() => array(
+				'response' => array( 'code' => 200 ),
+				'headers'  => array(),
+				'body'     => '',
+			)
+		);
+
+		$_GET = array(
+			'action' => 'validate',
+			'post'   => (string) $redirect_id,
+		);
+		if ( null !== $nonce_action ) {
+			$_REQUEST['_validate_redirect'] = wp_create_nonce( $nonce_action );
+		}
+
+		try {
+			$sent = $this->redirect_sent_by( array( $this->notices, 'handle_validation_action' ) );
+		} finally {
+			unset( $_REQUEST['_validate_redirect'] );
+		}
+
+		$this->assertSame( $runs, null !== $sent );
+	}
+
+	/**
+	 * Data provider for the Test action's nonce.
+	 *
+	 * @return array<string, array{0: string|null, 1: bool}>
+	 */
+	public static function data_validation_action_nonces(): array {
+		return array(
+			'its own nonce'           => array( 'validate_vip_legacy_redirect', true ),
+			'a nonce for another one' => array( 'disable_redirect', false ),
+			'no nonce'                => array( null, false ),
+		);
+	}
+
+	/**
+	 * Test the no-JS Test action sends back the first problem as the result, with warnings carried alongside.
+	 *
+	 * A warning does not fail the redirect, so it rides along in `warnings`
+	 * rather than turning the result red.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 * @dataProvider data_validation_action_results
+	 *
+	 * @param string      $source    The redirect's source.
+	 * @param int         $http_code What requesting the destination gets.
+	 * @param string      $validate  The expected result.
+	 * @param string|null $warnings  The expected carried warnings, or null for none.
+	 */
+	public function test_validation_action_reports_the_problem_and_carries_the_warnings( string $source, int $http_code, string $validate, ?string $warnings ): void {
+		$redirect_id = $this->create_redirect( $source, 'https://example.com/landing' );
+		// The source fires as stored; only the destination's answer varies.
+		add_filter(
+			'pre_http_request',
+			static fn( $preempt, $args, $url ) => str_contains( (string) $url, 'validated' )
+				? array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/landing' ),
+					'body'     => '',
+				)
+				: array(
+					'response' => array( 'code' => $http_code ),
+					'headers'  => array(),
+					'body'     => '',
+				),
+			10,
+			3
+		);
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( $validate, $query['validate'] );
+		$this->assertSame( $warnings, $query['warnings'] ?? null );
+		$this->assertSame( (string) $redirect_id, $query['ids'] );
+	}
+
+	/**
+	 * Test the no-JS Test action reports what requesting the source found, as the JS one does.
+	 *
+	 * A source that could not be checked is no verdict on the redirect, so it
+	 * rides along with the warnings rather than turning the result red.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 * @dataProvider data_validation_action_source_results
+	 *
+	 * @param int         $source_code What requesting the source gets.
+	 * @param string      $validate    The expected result.
+	 * @param string|null $warnings    The expected carried warnings, or null for none.
+	 * @param string      $notice      The notice class expected for the result, or its warning.
+	 */
+	public function test_validation_action_reports_the_source_probe( int $source_code, string $validate, ?string $warnings, string $notice ): void {
+		$redirect_id = $this->create_redirect( '/probed-source', 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn( $preempt, $args, $url ) => array(
+				'response' => array( 'code' => str_contains( (string) $url, '/probed-source' ) ? $source_code : 200 ),
+				'headers'  => array(),
+				'body'     => '',
+			),
+			10,
+			3
+		);
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( $validate, $query['validate'] );
+		$this->assertSame( $warnings, $query['warnings'] ?? null );
+
+		$_GET = $query;
+		ob_start();
+		$this->notices->display_validation_notices();
+		$this->assertStringContainsString( $notice, (string) ob_get_clean() );
+	}
+
+	/**
+	 * Data provider for what requesting the source finds.
+	 *
+	 * @return array<string, array{0: int, 1: string, 2: string|null, 3: string}>
+	 */
+	public static function data_validation_action_source_results(): array {
+		return array(
+			'not firing'   => array( 404, 'source_not_firing', null, 'returns a 404 without redirecting' ),
+			'dormant'      => array( 200, 'valid', 'source_serves_content', 'serves its own content' ),
+			'inconclusive' => array( 503, 'valid', 'source_request_failed', 'whether the redirect fires is unknown' ),
+		);
+	}
+
+	/**
+	 * Test the no-JS Test action leaves a disabled redirect's source alone, and says so.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 */
+	public function test_validation_action_does_not_probe_a_disabled_redirect(): void {
+		$redirect_id = $this->create_legacy_redirect( '/probed-disabled', 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn( $preempt, $args, $url ) => array(
+				'response' => array( 'code' => str_contains( (string) $url, '/probed-disabled' ) ? 404 : 200 ),
+				'headers'  => array(),
+				'body'     => '',
+			),
+			10,
+			3
+		);
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( 'valid', $query['validate'] );
+
+		$_GET = $query;
+		ob_start();
+		$this->notices->display_validation_notices();
+		$this->assertStringContainsString( 'Source not requested: the redirect is disabled.', (string) ob_get_clean() );
+	}
+
+	/**
+	 * Test the no-JS Test action gives a corrupt row's finding as the whole answer.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 */
+	public function test_validation_action_reports_a_corrupt_row(): void {
+		$redirect_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( 'corrupt_data', $query['validate'] );
+		$this->assertArrayNotHasKey( 'warnings', $query );
+	}
+
+	/**
+	 * Test the warnings arg shows a source that could not be checked, and no other non-warning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_warnings_arg_rejects_problems_but_not_an_unchecked_source(): void {
+		$_GET['validate'] = 'valid';
+		$_GET['warnings'] = 'source_request_failed,source_not_firing,url_request_failed';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'whether the redirect fires is unknown', $output );
+		$this->assertStringNotContainsString( 'returns a 404 without redirecting', $output );
+		$this->assertStringNotContainsString( 'Failed to connect', $output );
+	}
+
+	/**
+	 * Data provider for the Test action's results.
+	 *
+	 * @return array<string, array{0: string, 1: int, 2: string, 3: string|null}>
+	 */
+	public static function data_validation_action_results(): array {
+		return array(
+			'clean'               => array( '/validated-clean', 200, 'valid', null ),
+			'problem only'        => array( '/validated-broken', 404, 'url_not_found', null ),
+			'warning only'        => array( '/wp-admin/validated-warning', 200, 'valid', 'reserved_source' ),
+			'problem and warning' => array( '/wp-admin/validated-both', 404, 'url_not_found', 'reserved_source' ),
+		);
+	}
+
+	/**
+	 * Test the no-JS Test action on an ID that is not a redirect says so.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 */
+	public function test_validation_action_reports_a_missing_redirect(): void {
+		$post_id = self::factory()->post->create();
+
+		$query = $this->validation_action_result( $post_id );
+
+		$this->assertSame( 'not-found', $query['validate'] );
+		$this->assertSame( (string) $post_id, $query['ids'] );
+	}
+
+	/**
+	 * Run the no-JS Test action with a valid nonce and return the query args it sends back.
+	 *
+	 * @param int $post_id The post ID the action is run on.
+	 * @return array<string, string> The query args of the redirect back to the list.
+	 */
+	private function validation_action_result( int $post_id ): array {
+		$_GET                           = array(
+			'action' => 'validate',
+			'post'   => (string) $post_id,
+		);
+		$_REQUEST['_validate_redirect'] = wp_create_nonce( 'validate_vip_legacy_redirect' );
+
+		try {
+			$sent = $this->redirect_sent_by( array( $this->notices, 'handle_validation_action' ) );
+		} finally {
+			unset( $_REQUEST['_validate_redirect'] );
+		}
+
+		$this->assertNotNull( $sent, 'The action should redirect back to the list.' );
+		wp_parse_str( (string) wp_parse_url( $sent['location'], PHP_URL_QUERY ), $query );
+
+		return $query;
+	}
+
+	/**
+	 * Test customize_views adds destination type filters with counts.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
+	 */
+	public function test_vip_redirects_custom_post_status_filters_adds_destination_type_filters(): void {
+		// Clean up any existing redirects from other tests.
+		$this->delete_all_redirects();
+
+		// Create a destination post for post_id redirects.
+		$destination_post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => 'Destination Post',
+			)
+		);
+
+		// Create redirect to post ID (post_parent > 0, empty post_excerpt).
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-post',
+				'post_parent'  => $destination_post_id,
+				'post_excerpt' => '', // Explicitly empty to indicate post ID redirect.
+			)
+		);
+
+		// Create redirect to internal path (post_excerpt contains relative path starting with /).
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-path',
+				'post_excerpt' => '/some-internal-path',
+			)
+		);
+
+		// Create redirect to external URL.
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-external',
+				'post_excerpt' => 'https://external-site.com/page',
+			)
+		);
+
+		$views = array(
+			'all'     => '<a href="#">All</a>',
+			'publish' => '<a href="#">Published (3)</a>',
+		);
+
+		$result = $this->view_filters->customize_views( $views );
+
+		// Should have "To ID" filter.
+		$this->assertArrayHasKey( 'to_id', $result );
+		$this->assertStringContainsString( 'To ID', $result['to_id'] );
+		$this->assertStringContainsString( 'destination_type=post_id', $result['to_id'] );
+		$this->assertStringContainsString( '(1)', $result['to_id'] );
+
+		// Should have "To Path" filter.
+		$this->assertArrayHasKey( 'to_path', $result );
+		$this->assertStringContainsString( 'To Path', $result['to_path'] );
+		$this->assertStringContainsString( 'destination_type=path', $result['to_path'] );
+		// Count should be 1 (only internal path starting with /).
+		$this->assertStringContainsString( '(1)', $result['to_path'] );
+
+		// Should have "To External" filter.
+		$this->assertArrayHasKey( 'to_external', $result );
+		$this->assertStringContainsString( 'To External', $result['to_external'] );
+		$this->assertStringContainsString( 'destination_type=external', $result['to_external'] );
+		$this->assertStringContainsString( '(1)', $result['to_external'] );
+	}
+
+	/**
+	 * Helper method to delete all redirect posts.
+	 *
+	 * @return void
+	 */
+	private function delete_all_redirects(): void {
+		$redirects = get_posts(
+			array(
+				'post_type'      => PostType::POST_TYPE,
+				'posts_per_page' => -1,
+				'post_status'    => 'any',
+				'fields'         => 'ids',
+			)
+		);
+
+		foreach ( $redirects as $redirect_id ) {
+			wp_delete_post( $redirect_id, true );
+		}
+	}
+
+	/**
+	 * Test destination type filters are not shown when counts are zero.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
+	 */
+	public function test_vip_redirects_custom_post_status_filters_hides_empty_destination_types(): void {
+		// Clean up any existing redirects from other tests.
+		$this->delete_all_redirects();
+
+		// Don't create any redirects - all counts should be zero.
+		$views = array(
+			'all' => '<a href="#">All</a>',
+		);
+
+		$result = $this->view_filters->customize_views( $views );
+
+		// None of the destination type filters should be present.
+		$this->assertArrayNotHasKey( 'to_id', $result );
+		$this->assertArrayNotHasKey( 'to_path', $result );
+		$this->assertArrayNotHasKey( 'to_external', $result );
+	}
+
+	/**
+	 * Test destination type filter shows "current" class when active.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
+	 */
+	public function test_vip_redirects_custom_post_status_filters_marks_current_destination_type(): void {
+		// Create a redirect to external URL.
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-external',
+				'post_excerpt' => 'https://external-site.com/page',
+			)
+		);
+
+		// Set the current destination type filter.
+		$_GET['destination_type'] = 'external';
+
+		$views  = array( 'all' => '<a href="#">All</a>' );
+		$result = $this->view_filters->customize_views( $views );
+
+		// External filter should have "current" class.
+		$this->assertArrayHasKey( 'to_external', $result );
+		$this->assertStringContainsString( 'class="current"', $result['to_external'] );
+		$this->assertStringContainsString( 'aria-current="page"', $result['to_external'] );
+	}
+
+	/**
+	 * Test the post_id destination filter returns only post-ID redirects.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
+	 */
+	public function test_filter_by_destination_type_sets_query_for_post_id(): void {
+		// Set up test data.
+		$this->delete_all_redirects();
+
+		$destination_post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => 'Destination Post',
+			)
+		);
+
+		// Create redirect to post ID.
+		$post_id_redirect = self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-post',
+				'post_parent'  => $destination_post_id,
+				'post_excerpt' => '',
+			)
+		);
+
+		// Create redirect to URL (should not be returned).
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-url',
+				'post_excerpt' => 'https://example.com/page',
+			)
+		);
+
+		// Add the post_id filter via posts_where.
+		$this->view_filters->register();
+
+		// Add a filter to set the query var at the right time (before posts_where).
+		$set_filter_var = function ( \WP_Query $query ) {
+			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
+				$query->query_vars['legacy_redirector_destination_type'] = 'post_id';
+			}
+		};
+		add_action( 'pre_get_posts', $set_filter_var, 1 );
+
+		$query = new \WP_Query(
+			array(
+				'post_type' => PostType::POST_TYPE,
+			)
+		);
+
+		remove_action( 'pre_get_posts', $set_filter_var, 1 );
+
+		// Should only return the post ID redirect.
+		$this->assertCount( 1, $query->posts );
+		$this->assertEquals( $post_id_redirect, $query->posts[0]->ID );
+	}
+
+	/**
+	 * Test add_destination_type_where_clause filters internal path redirects correctly.
+	 *
+	 * Tests the path filtering by directly querying with the filter applied.
+	 * Path filter includes: relative paths starting with / OR URLs containing home host.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
+	 */
+	public function test_path_filter_returns_only_internal_redirects(): void {
+		$this->delete_all_redirects();
+
+		// Create destination post.
+		$destination_post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => 'Destination Post',
+			)
+		);
+
+		// Create redirect to post ID (no post_excerpt, should not be returned).
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-post',
+				'post_parent'  => $destination_post_id,
+				'post_excerpt' => '',
+			)
+		);
+
+		// Create redirect to internal relative path (should be returned).
+		$path_redirect = self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-path',
+				'post_excerpt' => '/some-internal-page',
+			)
+		);
+
+		// Create redirect to external URL (should not be returned).
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-external',
+				'post_excerpt' => 'https://external-domain.com/page',
+			)
+		);
+
+		// Add the path filter via posts_where.
+		$this->view_filters->register();
+
+		// Add a filter to set the query var at the right time (before posts_where).
+		$set_filter_var = function ( \WP_Query $query ) {
+			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
+				$query->query_vars['legacy_redirector_destination_type'] = 'path';
+			}
+		};
+		add_action( 'pre_get_posts', $set_filter_var, 1 );
+
+		$query = new \WP_Query(
+			array(
+				'post_type' => PostType::POST_TYPE,
+			)
+		);
+
+		remove_action( 'pre_get_posts', $set_filter_var, 1 );
+
+		// Should only return the internal path redirect.
+		$this->assertCount( 1, $query->posts );
+		$this->assertEquals( $path_redirect, $query->posts[0]->ID );
+	}
+
+	/**
+	 * Test add_destination_type_where_clause filters external redirects correctly.
+	 *
+	 * Tests the external filtering by directly querying with the filter applied.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
+	 */
+	public function test_external_filter_returns_only_external_urls(): void {
+		$this->delete_all_redirects();
+
+		// Create redirect to internal URL. Internal destinations are stored
+		// relative by construction (absolute forms are normalized on save).
+		self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-internal',
+				'post_excerpt' => '/internal-page',
+			)
+		);
+
+		// Create redirect to external URL.
+		$external_redirect = self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-external',
+				'post_excerpt' => 'https://external-domain.com/page',
+			)
+		);
+
+		// An external URL that merely mentions the home host must still count
+		// as external; the old NOT LIKE predicate misclassified it.
+		$home_host          = wp_parse_url( home_url(), PHP_URL_HOST );
+		$lookalike_redirect = self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-lookalike',
+				'post_excerpt' => 'https://external-domain.com/?ref=' . $home_host,
+			)
+		);
+
+		// Add the external filter via posts_where.
+		$this->view_filters->register();
+
+		// Add a filter to set the query var at the right time (before posts_where).
+		$set_filter_var = function ( \WP_Query $query ) {
+			if ( PostType::POST_TYPE === $query->get( 'post_type' ) ) {
+				$query->query_vars['legacy_redirector_destination_type'] = 'external';
+			}
+		};
+		add_action( 'pre_get_posts', $set_filter_var, 1 );
+
+		$query = new \WP_Query(
+			array(
+				'post_type' => PostType::POST_TYPE,
+			)
+		);
+
+		remove_action( 'pre_get_posts', $set_filter_var, 1 );
+
+		// Should return both external redirects and not the internal one.
+		$this->assertCount( 2, $query->posts );
+		$returned_ids = wp_list_pluck( $query->posts, 'ID' );
+		$this->assertContains( $external_redirect, $returned_ids );
+		$this->assertContains( $lookalike_redirect, $returned_ids );
+	}
+
+	/**
+	 * Test filter_by_destination_type does nothing for non-admin queries.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::filter_by_destination_type
+	 */
+	public function test_filter_by_destination_type_ignores_non_admin_queries(): void {
+		// Clean up any existing redirects from other tests.
+		$this->delete_all_redirects();
+
+		// Create redirect to URL.
+		$url_redirect = self::factory()->post->create(
+			array(
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'publish',
+				'post_title'   => '/redirect-to-url',
+				'post_excerpt' => 'https://example.com/page',
+			)
+		);
+
+		// Create redirect to post ID.
+		$destination_post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+			)
+		);
+		$post_id_redirect    = self::factory()->post->create(
+			array(
+				'post_type'   => PostType::POST_TYPE,
+				'post_status' => 'publish',
+				'post_title'  => '/redirect-to-post',
+				'post_parent' => $destination_post_id,
+			)
+		);
+
+		// Set the filter (but we're not in admin context).
+		$_GET['destination_type'] = 'url';
+
+		// Simulate non-admin by using a non-main query.
+		$query = new \WP_Query(
+			array(
+				'post_type' => PostType::POST_TYPE,
+			)
+		);
+
+		// Filter should not apply to non-main queries, so both redirects returned.
+		// Note: In integration tests, is_admin() returns true due to WP_ADMIN constant.
+		// The filter also checks is_main_query() which is false for this query.
+		$this->assertCount( 2, $query->posts );
+	}
+
+	/**
+	 * Test filter_by_destination_type does nothing for other post types.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::filter_by_destination_type
+	 */
+	public function test_filter_by_destination_type_ignores_other_post_types(): void {
+		// Create a regular post with unique title for identification.
+		$unique_title = 'Regular Post for filter test ' . uniqid();
+		$regular_post = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => $unique_title,
+			)
+		);
+
+		// Set destination type filter.
+		$_GET['destination_type'] = 'url';
+
+		// Initialize the UI hooks.
+		$this->view_filters->register();
+
+		// Query for the specific regular post by ID.
+		$query = new \WP_Query(
+			array(
+				'post_type' => 'post',
+				'p'         => $regular_post,
+			)
+		);
+
+		// Should return the regular post unaffected by the destination_type filter.
+		$this->assertCount( 1, $query->posts );
+		$this->assertEquals( $regular_post, $query->posts[0]->ID );
+	}
+
+	/**
+	 * Test add_destination_type_where_clause adds correct WHERE clause for path filter.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
+	 */
+	public function test_filter_external_redirects_where_adds_path_clause(): void {
+		// Create query, parse basic args, then use set() to add the filter flag.
+		$query = new \WP_Query();
+		$query->parse_query( array() );
+		$query->set( 'legacy_redirector_destination_type', 'path' );
+
+		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
+		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );
+
+		// Verify the flag was set.
+		$this->assertSame( 'path', $query->get( 'legacy_redirector_destination_type' ), 'Query var should be set' );
+
+		// Verify the WHERE clause filters for paths starting with /.
+		$this->assertStringContainsString( 'post_excerpt LIKE', $result, 'WHERE clause should filter for paths' );
+	}
+
+	/**
+	 * Test add_destination_type_where_clause adds correct WHERE clause for external filter.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
+	 */
+	public function test_filter_external_redirects_where_adds_external_clause(): void {
+		// Create and initialize query object with parse_query, then set the filter flag.
+		$query = new \WP_Query();
+		$query->parse_query( array( 'legacy_redirector_destination_type' => 'external' ) );
+
+		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
+		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );
+
+		// Should filter for URLs starting with http (wpdb->prepare escapes % to a hash).
+		// Check the clause structure is present.
+		$this->assertStringContainsString( 'post_excerpt LIKE', $result );
+		$this->assertStringContainsString( 'http', $result );
+
+		// Internal destinations are stored relative by construction, so there
+		// is no host exclusion any more.
+		$this->assertStringNotContainsString( 'NOT LIKE', $result );
+	}
+
+	/**
+	 * Test add_destination_type_where_clause does nothing without filter flags.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::add_destination_type_where_clause
+	 */
+	public function test_filter_external_redirects_where_unchanged_without_flags(): void {
+		$query = new \WP_Query();
+
+		$where  = " AND wp_posts.post_type = 'vip-legacy-redirect'";
+		$result = $this->view_filters->add_destination_type_where_clause( $where, $query );
+
+		// Should be unchanged.
+		$this->assertSame( $where, $result );
+	}
+
+	/**
+	 * Test customize_views removes mine filter.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters::customize_views
+	 */
+	public function test_vip_redirects_custom_post_status_filters_removes_mine(): void {
+		$views = array(
+			'all'  => '<a href="#">All</a>',
+			'mine' => '<a href="#">Mine (5)</a>',
+		);
+
+		$result = $this->view_filters->customize_views( $views );
+
+		$this->assertArrayNotHasKey( 'mine', $result );
+		$this->assertArrayHasKey( 'all', $result );
+	}
+}
