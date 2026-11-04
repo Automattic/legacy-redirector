@@ -1,0 +1,1882 @@
+# Copyright (C) 2026 Automattic / WordPress VIP
+# This file is distributed under the same license as the Legacy Redirector plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Legacy Redirector 2.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/lr-rebase\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-11-04T14:52:05+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: legacy-redirector\n"
+
+#. Plugin Name of the plugin
+#: wpcom-legacy-redirector.php
+msgid "Legacy Redirector"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: wpcom-legacy-redirector.php
+msgid "https://github.com/Automattic/legacy-redirector"
+msgstr ""
+
+#. Description of the plugin
+#: wpcom-legacy-redirector.php
+msgid "Simple plugin for handling legacy redirects in a scalable manner."
+msgstr ""
+
+#. Author of the plugin
+#: wpcom-legacy-redirector.php
+msgid "Automattic / WordPress VIP"
+msgstr ""
+
+#. Author URI of the plugin
+#: wpcom-legacy-redirector.php
+msgid "https://wpvip.com"
+msgstr ""
+
+#: src/Application/ErrorText.php:51
+msgid "The URL does not validate."
+msgstr ""
+
+#: src/Application/ErrorText.php:52
+msgid "The URL contains neither a path nor query string."
+msgstr ""
+
+#: src/Application/ErrorText.php:53
+msgid "The URL could not be parsed."
+msgstr ""
+
+#: src/Application/ErrorText.php:54
+msgid "The URL is not valid UTF-8."
+msgstr ""
+
+#: src/Application/ErrorText.php:55
+msgid "Destination URL cannot be empty."
+msgstr ""
+
+#: src/Application/ErrorText.php:56
+msgid "Absolute destination URLs must use http or https scheme."
+msgstr ""
+
+#: src/Application/ErrorText.php:57
+msgid "Absolute destination URLs must include a host."
+msgstr ""
+
+#: src/Application/ErrorText.php:58
+msgid "Post ID must be a positive integer."
+msgstr ""
+
+#: src/Application/ErrorText.php:59
+msgid "Post ID must contain only digits."
+msgstr ""
+
+#. translators: 1: source path, 2: why WordPress refused the write
+#: src/Application/ErrorText.php:74
+#, php-format
+msgid "Failed to save redirect for \"%1$s\": %2$s"
+msgstr ""
+
+#. translators: %s: source path
+#: src/Application/ErrorText.php:80
+#, php-format
+msgid "A redirect already exists for \"%s\""
+msgstr ""
+
+#. translators: 1: ID of the redirect that has the source, 2: source path
+#: src/Application/ErrorText.php:85
+#, php-format
+msgid "Redirect #%1$d already has the source \"%2$s\", and a source can answer for only one redirect. Change the destination of #%1$d instead, or delete one of the two."
+msgstr ""
+
+#. translators: %d: redirect ID
+#: src/Application/ErrorText.php:91
+#, php-format
+msgid "Redirect %d holds corrupt stored data and cannot be re-saved; delete it, or update it with a new source and destination."
+msgstr ""
+
+#: src/Application/FindingText.php:36
+msgid "Post trashed"
+msgstr ""
+
+#: src/Application/FindingText.php:37
+msgid "Post deleted"
+msgstr ""
+
+#: src/Application/FindingText.php:38
+msgid "Post not published"
+msgstr ""
+
+#: src/Application/FindingText.php:39
+msgid "Destination host not allowed"
+msgstr ""
+
+#: src/Application/FindingText.php:40
+msgid "Destination returns 404"
+msgstr ""
+
+#: src/Application/FindingText.php:41
+msgid "Destination returns server error"
+msgstr ""
+
+#: src/Application/FindingText.php:42
+msgid "Request failed"
+msgstr ""
+
+#: src/Application/FindingText.php:43
+msgid "Corrupt stored data"
+msgstr ""
+
+#: src/Application/FindingText.php:44
+msgid "Reserved WordPress path"
+msgstr ""
+
+#: src/Application/FindingText.php:45
+msgid "Possible redirect loop"
+msgstr ""
+
+#: src/Application/FindingText.php:46
+msgid "Source redirects elsewhere"
+msgstr ""
+
+#: src/Application/FindingText.php:47
+msgid "Redirect did not fire"
+msgstr ""
+
+#: src/Application/FindingText.php:48
+msgid "Source serves content"
+msgstr ""
+
+#: src/Application/FindingText.php:49
+msgid "Source could not be checked"
+msgstr ""
+
+#: src/Application/FindingText.php:62
+msgid "The destination post has been moved to trash."
+msgstr ""
+
+#: src/Application/FindingText.php:63
+msgid "The destination post no longer exists."
+msgstr ""
+
+#: src/Application/FindingText.php:64
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:640
+msgid "The destination post is not published."
+msgstr ""
+
+#: src/Application/FindingText.php:65
+msgid "The destination host is not allowed, so the redirect will not run."
+msgstr ""
+
+#: src/Application/FindingText.php:66
+msgid "The destination URL returns a 404 Not Found response."
+msgstr ""
+
+#: src/Application/FindingText.php:67
+msgid "The destination URL returns a server error."
+msgstr ""
+
+#: src/Application/FindingText.php:68
+msgid "Failed to connect to the destination URL."
+msgstr ""
+
+#: src/Application/FindingText.php:69
+msgid "The stored row cannot be read as a valid redirect."
+msgstr ""
+
+#: src/Application/FindingText.php:70
+msgid "The source is a path WordPress itself serves. The redirect lies dormant while that path works, but answers it if the path ever returns a 404; for /wp-admin or /wp-login.php that locks you out of the dashboard."
+msgstr ""
+
+#: src/Application/FindingText.php:71
+msgid "Following the destination through the stored redirects leads back to this one. The loop only runs while every source in it returns a 404."
+msgstr ""
+
+#: src/Application/FindingText.php:72
+msgid "Visiting the source redirects somewhere other than this redirect's destination, so something else is answering it first: another plugin, a server rule, or WordPress's own canonical redirect."
+msgstr ""
+
+#: src/Application/FindingText.php:73
+msgid "Visiting the source returns a 404 without redirecting, so the redirect is not matching the URL visitors request."
+msgstr ""
+
+#: src/Application/FindingText.php:74
+msgid "The site serves its own content at the source, such as a published post or page. Redirects only answer 404s, so this one lies dormant while that content is there."
+msgstr ""
+
+#: src/Application/FindingText.php:75
+msgid "The request to the source failed or the site answered with an error, so whether the redirect fires is unknown."
+msgstr ""
+
+#. translators: 1: what is wrong, a full sentence; 2: the specific fact behind it, such as "Post status: Draft."
+#: src/Application/FindingText.php:83
+#, php-format
+msgctxt "finding description, then its detail"
+msgid "%1$s %2$s"
+msgstr ""
+
+#: src/Application/FindingText.php:94
+msgid "Restore the post from the trash, or point this redirect elsewhere."
+msgstr ""
+
+#: src/Application/FindingText.php:95
+msgid "Point this redirect at another destination, or delete it."
+msgstr ""
+
+#: src/Application/FindingText.php:96
+msgid "Publish the post, or point this redirect elsewhere."
+msgstr ""
+
+#. translators: allowed_redirect_hosts is the name of a WordPress filter; do not translate it.
+#: src/Application/FindingText.php:98
+msgid "Add the host to the allowed_redirect_hosts filter in code, or point this redirect elsewhere."
+msgstr ""
+
+#: src/Application/FindingText.php:99
+msgid "Point this redirect at a page that exists, or delete it."
+msgstr ""
+
+#: src/Application/FindingText.php:100
+msgid "Test again later; if the error persists, point this redirect elsewhere."
+msgstr ""
+
+#: src/Application/FindingText.php:101
+msgid "Test again later: the request may have timed out or been throttled."
+msgstr ""
+
+#: src/Application/FindingText.php:102
+msgid "Delete it, or edit it with a full new source and destination."
+msgstr ""
+
+#: src/Application/FindingText.php:103
+msgid "Keep it only if the path is a genuine legacy URL; otherwise delete it."
+msgstr ""
+
+#: src/Application/FindingText.php:104
+msgid "Point one redirect in the loop elsewhere, or disable it."
+msgstr ""
+
+#: src/Application/FindingText.php:105
+msgid "Find what else redirects this URL (another plugin or a server rule) and remove that, or delete this redirect."
+msgstr ""
+
+#: src/Application/FindingText.php:106
+msgid "Check the source matches the URL visitors request, including its encoding and the site's path, then test again."
+msgstr ""
+
+#: src/Application/FindingText.php:107
+msgid "Unpublish the content at the source if the redirect should fire; otherwise the redirect is a fallback for when it goes."
+msgstr ""
+
+#: src/Application/FindingText.php:108
+msgid "Test again later: the site may have been busy or throttling requests to itself."
+msgstr ""
+
+#. translators: 1: what is wrong, one or more full sentences; 2: what to do about it, a full sentence
+#: src/Application/FindingText.php:121
+#, php-format
+msgctxt "finding description, then its remedy"
+msgid "%1$s %2$s"
+msgstr ""
+
+#. translators: %s: post status name, such as Draft
+#: src/Application/FindingText.php:137
+#, php-format
+msgid "Post status: %s."
+msgstr ""
+
+#. translators: %s: post type name, such as Template
+#: src/Application/FindingText.php:142
+#, php-format
+msgid "Post type: %s."
+msgstr ""
+
+#. translators: %s: host name, such as example.com
+#: src/Application/FindingText.php:146
+#, php-format
+msgid "Host: %s."
+msgstr ""
+
+#. translators: %s: HTTP status code, such as 503
+#: src/Application/FindingText.php:150
+#, php-format
+msgid "HTTP status: %s."
+msgstr ""
+
+#. translators: %s: URL
+#: src/Application/FindingText.php:154
+#, php-format
+msgid "It redirected to %s."
+msgstr ""
+
+#. translators: %s: the source paths in the loop, in order, such as "/a → /b → /a"
+#: src/Application/FindingText.php:158
+#, php-format
+msgid "Loop: %s."
+msgstr ""
+
+#. translators: %s: the source paths in the loop, in order, such as "/a → /b → /a"
+#: src/Application/FindingText.php:158
+msgctxt "separator between the redirects of a loop"
+msgid " → "
+msgstr ""
+
+#: src/Application/FindingText.php:161
+msgid "The response had no status code."
+msgstr ""
+
+#: src/Application/FindingText.php:164
+msgid "The destination redirected too many times."
+msgstr ""
+
+#. translators: 1: number of redirects, always two or more; 2: list of their IDs, such as "7 and 9"
+#: src/Application/RedirectFetcher.php:71
+#, php-format
+msgid "%1$s redirect has this source, IDs %2$s. Name one by its ID."
+msgid_plural "%1$s redirects share this source, IDs %2$s. Name one by its ID."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Application/RedirectManager.php:76
+msgid "Redirect creation is only allowed from WP-CLI and for users who can manage redirects. Use the legacy_redirector_allow_insert filter to allow it elsewhere."
+msgstr ""
+
+#. translators: %s: source path.
+#: src/Application/RedirectManager.php:329
+#, php-format
+msgid "No redirect found for source: %s"
+msgstr ""
+
+#. translators: %d: redirect ID.
+#: src/Application/RedirectManager.php:488
+#, php-format
+msgid "No redirect found with ID %d."
+msgstr ""
+
+#. translators: %d: redirect ID.
+#: src/Application/RedirectManager.php:505
+#, php-format
+msgid "Redirect %d is corrupt and cannot be re-saved. Repair it with a new source and destination on its edit screen or with `wp legacy-redirector import --mode=upsert`, or delete it."
+msgstr ""
+
+#. translators: 1: existing redirect ID, 2: source path.
+#: src/Application/RedirectValidator.php:83
+#, php-format
+msgid "Redirect #%1$d already has the source \"%2$s\". Update redirect #%1$d instead."
+msgstr ""
+
+#: src/Application/RedirectValidator.php:127
+#: src/Application/RedirectValidator.php:158
+msgid "The source and destination are the same, so the redirect would loop."
+msgstr ""
+
+#: src/Application/RedirectValidator.php:185
+msgid "Redirect is pointing to a Post ID that does not exist."
+msgstr ""
+
+#: src/Application/RedirectValidator.php:190
+msgid "You are trying to redirect to content that is not published."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/AbilitiesRegistrar.php:139
+msgid "Legacy Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/AbilitiesRegistrar.php:140
+msgid "Abilities that inspect and manage redirects from legacy URLs."
+msgstr ""
+
+#. translators: %s: error message.
+#: src/Infrastructure/WordPress/Abilities/BatchFailures.php:39
+#, php-format
+msgid "Not a valid redirect ID or source path (%s)."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/BatchFailures.php:43
+msgid "No redirect found."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/CreateRedirectAbility.php:69
+msgid "Create Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/CreateRedirectAbility.php:70
+msgid "Creates a redirect from a path on this site to a new destination, so visitors and search engines following the old URL are sent to the right place. The destination may be a path, an absolute URL, or the ID of a post on this site. Fails if a redirect already exists for the path, or if the destination is invalid. Returns the redirect as saved, with any warnings about it, such as a possible loop."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/CreateRedirectAbility.php:78
+msgid "The path to redirect from, e.g. /old-page or /old-page/?utm_source=news."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/CreateRedirectAbility.php:82
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:50
+msgid "The destination: a path, an absolute URL, or a post ID."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/CreateRedirectAbility.php:88
+msgid "Whether the redirect starts out being served to visitors. Defaults to enabled."
+msgstr ""
+
+#. translators: 1: source path, 2: destination, 3: error message.
+#: src/Infrastructure/WordPress/Abilities/CreateRedirectAbility.php:127
+#, php-format
+msgid "Could not create a redirect from %1$s to %2$s: %3$s"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/DeleteRedirectAbility.php:65
+msgid "Delete Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/DeleteRedirectAbility.php:66
+msgid "Permanently deletes one or more redirects. Visitors following those paths will get whatever the site would otherwise serve, usually a 404. To stop serving a redirect while keeping it, update its status to disabled instead."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/DeleteRedirectAbility.php:73
+msgid "The redirects to delete, each given as a redirect ID or the path it redirects from."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/DeleteRedirectAbility.php:84
+msgid "How many redirects were deleted."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/DeleteRedirectAbility.php:119
+msgid "The redirect could not be deleted."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/FindRedirectDomainsAbility.php:61
+msgid "Find Redirect Domains"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/FindRedirectDomainsAbility.php:62
+msgid "Returns the unique external domains that redirects on this site point at. Useful when deciding which hosts to allow as redirect destinations, since WordPress only redirects to hosts on its allow list."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/FindRedirectDomainsAbility.php:70
+msgid "How many unique domains were found."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/FindRedirectDomainsAbility.php:74
+msgid "The domains, in alphabetical order."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/GetRedirectAbility.php:57
+msgid "Get Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/GetRedirectAbility.php:58
+msgid "Returns a single redirect, looked up by its ID or by the path it redirects from. Use this to check whether a path already has a redirect before creating one, or to see where an existing redirect points."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/GetRedirectAbility.php:66
+msgid "A redirect ID, or the path it redirects from, e.g. /old-page."
+msgstr ""
+
+#. translators: 1: identifier, 2: error message.
+#: src/Infrastructure/WordPress/Abilities/GetRedirectAbility.php:104
+#, php-format
+msgid "Not a valid redirect ID or source path: %1$s (%2$s)"
+msgstr ""
+
+#. translators: %s: identifier.
+#: src/Infrastructure/WordPress/Abilities/GetRedirectAbility.php:116
+#, php-format
+msgid "No redirect found for %s."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:62
+msgid "List Redirects"
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:64
+msgid "Returns a page of redirects, optionally filtered by whether they are enabled, by what kind of destination they point at, or by a search term matched against their source paths. The total count of matching redirects is returned alongside the page, so further pages can be requested with an offset."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:73
+msgid "Only return redirects with this status."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:79
+msgid "Only return redirects pointing at a post ID, or at a URL."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:83
+msgid "Only return redirects whose source path contains this text."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:90
+msgid "How many redirects to return."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:96
+msgid "How many redirects to skip, for paging through the results."
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:109
+msgid "How many redirects match the filters, ignoring limit and offset."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ListRedirectsAbility.php:113
+msgid "The matching redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:42
+msgid "The redirect ID."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:46
+msgid "The source path this redirect matches, including any query string."
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:56
+msgid "Whether the destination is a post ID or a URL. \"corrupt\" marks a row whose stored data is unreadable; its from/to values are placeholders."
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:62
+msgid "Whether the redirect is served to visitors. \"trashed\" marks a redirect in the Trash, which is not served; enabling it restores it from the Trash."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:144
+msgid "The redirects given that could not be acted on, and why."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:151
+msgid "The identifier that was passed in."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:155
+msgid "Why the redirect could not be acted on."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/RedirectSchema.php:173
+msgid "Warnings about the saved redirects: each works, but deserves a look. Empty when there are none."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/SetRedirectStatusAbility.php:70
+msgid "Enable or Disable Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/SetRedirectStatusAbility.php:71
+msgid "Turns redirects on or off without deleting them or changing where they point. A disabled redirect stays in the list and keeps its destination, but is no longer served to visitors, who get whatever the site would otherwise serve for that path. Accepts one redirect or several."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/SetRedirectStatusAbility.php:78
+msgid "The redirects to enable or disable, each given as a redirect ID or the path it redirects from."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/SetRedirectStatusAbility.php:83
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:97
+msgid "Whether the redirects should be served to visitors."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/SetRedirectStatusAbility.php:94
+msgid "How many redirects had their status set."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/SetRedirectStatusAbility.php:130
+msgid "The redirect status could not be changed."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:74
+msgid "Test Redirects"
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:76
+msgid "Checks named redirects live. Runs every stored-details check validate-redirects runs, requests the destination where only a request can judge it (a URL, or a path that resolves to no post), and requests the source to see whether visiting it redirects to the destination. A disabled redirect's source is not requested. Each finding says what is wrong and what to do about it; a timeout or an error from a server is reported as inconclusive rather than broken. Nothing is recorded, but this is not read-only: it makes live HTTP requests from the server, to each destination and to this site's own source URLs. Slow, because each redirect is up to two HTTP requests."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:89
+msgid "The redirects to test, each given as a redirect ID or the path it redirects from."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:94
+msgid "Run just one of the two checks. If omitted, both run."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:105
+msgid "How many redirects were tested."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:109
+msgid "One entry per redirect tested."
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:120
+msgid "What requesting the source got: confirmed (it redirected to the destination), diverted (it redirected elsewhere), dormant (the site served content), not-firing (a 404), unreachable (the check could not tell), or null if the source was not requested."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/TestRedirectsAbility.php:124
+msgid "What was found; empty when the redirect works."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:79
+msgid "Update Redirects"
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:81
+msgid "Changes where one or more existing redirects point, and optionally their status at the same time. At least one of the destination or the status must be given. To only turn redirects on or off, use set-redirect-status instead. Returns any warnings about the redirects as saved, such as a possible loop."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:88
+msgid "The redirects to update, each given as a redirect ID or the path it redirects from."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:92
+msgid "The new destination: a path, an absolute URL, or a post ID."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:108
+msgid "How many redirects were updated."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:142
+msgid "Pass a new destination, a new status, or both."
+msgstr ""
+
+#. translators: 1: destination, 2: error message.
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:156
+#, php-format
+msgid "Not a valid destination: %1$s (%2$s)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/UpdateRedirectAbility.php:188
+msgid "The redirect could not be saved."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:104
+msgid "Validate Redirects"
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:106
+msgid "Checks redirects' stored details for problems, without requesting any URL: destination posts that have been deleted, trashed, or unpublished, external hosts missing from the allowed_redirect_hosts filter, and rows whose data cannot be read. Also warns about sources on paths WordPress itself serves, such as /wp-admin, sources a published post or page already answers, and possible loops through other redirects. Each finding says what is wrong and what to do about it. Records the result, so the admin \"Has issues\" view and menu badge stay in step. Given no redirects, it re-checks the ones the background check flagged, a page at a time: pass next_offset back as offset to continue. To check whether a redirect works live, use test-redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:117
+msgid "Specific redirects to check, each given as a redirect ID or the path it redirects from. If omitted, the redirects the background check flagged are re-checked."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:124
+msgid "How many flagged redirects to re-check when none are given."
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:131
+msgid "How many flagged redirects to skip when none are given. Use the next_offset from the previous call."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:143
+msgid "How many redirects were checked."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:147
+msgid "What was found, one entry per finding."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:152
+msgid "How many redirects are flagged now, after this check."
+msgstr ""
+
+#. translators: Quoted words, ability names such as validate-redirects, and field names such as offset and next_offset are values a program reads; do not translate them.
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:157
+msgid "The offset for the next page of flagged redirects, or null when there are no more (or redirects were named)."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:161
+msgid "When every redirect was last checked, as an ISO 8601 date, or null if never."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:247
+msgid "A problem means the redirect is broken; a warning that it works but deserves a look; inconclusive that the check could not tell."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:251
+msgid "A short label for what is wrong."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:255
+msgid "A fuller explanation of what is wrong."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Abilities/ValidateRedirectsAbility.php:259
+msgid "What can be done about it."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/BulkActionsHandler.php:72
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:140
+msgid "Enable"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/BulkActionsHandler.php:73
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:119
+msgid "Disable"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/BulkActionsHandler.php:78
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:155
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:163
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:212
+msgctxt "verb: check a redirect live"
+msgid "Test"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:101
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:136
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:72
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:82
+msgid "Redirect From"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:102
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:137
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:80
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:115
+msgid "Redirect To"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:103
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:138
+msgid "Health"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:104
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:139
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:134
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:137
+msgid "Status"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:105
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:140
+msgid "Date"
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:228
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:98
+#, php-format
+msgid "Edit redirect from &#8220;%s&#8221;"
+msgstr ""
+
+#. translators: %d: destination post ID
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:260
+#, php-format
+msgid "Post %d"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:302
+msgid "Not fully checked"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:304
+msgid "External destination: only a request can tell whether it responds. Use Test."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:305
+msgid "No post serves this path, but it may be an archive, a rewrite endpoint, or served outside WordPress. Use Test to check it responds."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:310
+msgid "No issues found"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:320
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:215
+msgid "Warning:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:320
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:214
+msgid "Problem:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:426
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:140
+msgctxt "status of one redirect"
+msgid "Enabled"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:429
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:146
+msgctxt "status of one redirect"
+msgid "Disabled"
+msgstr ""
+
+#. translators: %s: a redirect's ID, shown as the text of a link to it
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:453
+#, php-format
+msgctxt "redirect ID"
+msgid "#%s"
+msgstr ""
+
+#. translators: %1$s: link to the enabled redirect, e.g. "#12"
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:458
+#, php-format
+msgid "Duplicate source: %1$s has the same source and is enabled. This one never fired under 1.x, so disabling it changed nothing for visitors: trash it unless you want its destination."
+msgstr ""
+
+#. translators: %1$s: link to the enabled redirect, e.g. "#12"
+#: src/Infrastructure/WordPress/Admin/ListTable/ColumnsManager.php:460
+#, php-format
+msgid "Duplicate source: %1$s has the same source and is enabled, so visitors who used this spelling now reach its destination. To keep that destination, trash this one. To keep this one's, edit %1$s to use it, then trash this one."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:45
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:64
+msgid "Overview"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:53
+msgid "Columns"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:61
+msgid "Actions"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:69
+msgid "Filters"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:77
+msgid "Validate and Test"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:85
+msgid "What is checked"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:99
+msgid "Multisite"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:109
+msgid "Base URL"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:124
+msgid "This screen lists all redirects managed by the Legacy Redirector plugin. Redirects automatically send visitors from old URLs to new destinations."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:125
+msgid "Redirects are triggered when a visitor requests a URL that would otherwise return a 404 (Not Found) error. If a matching redirect exists and is enabled, the visitor is automatically redirected to the destination."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:134
+msgid "The list table displays the following columns:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:136
+msgid "The source URL path that triggers the redirect. Trailing slashes are ignored, so <code>/old-page</code> and <code>/old-page/</code> are the same redirect and only one of them needs creating."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:137
+msgid "The destination where visitors are sent. Can be a relative path, absolute URL, or post ID."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:138
+msgid "What the checks found wrong with the redirect, if anything. Select a finding to read what it means and what to do about it. A tick means nothing was found; \"Not fully checked\" means only a Test can tell."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:139
+msgid "Whether the redirect is Enabled or Disabled."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:140
+msgid "When the redirect was created."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:142
+msgid "Click the column headers to sort by that column."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:151
+msgid "Hover over a redirect to reveal these actions:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:153
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:99
+msgid "Edit"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:153
+msgid "Modify the redirect source or destination."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:154
+msgid "Enable/Disable"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:154
+msgid "Toggle whether the redirect is enabled."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:155
+msgid "The full, live check of one redirect: runs every stored-data check, requests the destination over HTTP, and requests the source to confirm the redirect actually fires."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:156
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:174
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:36
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:43
+msgctxt "verb: open the source URL"
+msgid "Follow"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:156
+msgid "Visit the source URL in a new tab, to see the redirect as a visitor does."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:157
+msgctxt "verb: move a redirect to the trash"
+msgid "Trash"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:157
+msgid "Move the redirect to the trash."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:167
+msgid "Use the status filters above the table to view:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:169
+msgctxt "view of every redirect"
+msgid "All"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:169
+msgid "All redirects regardless of status."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:170
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:78
+msgctxt "view of the redirects that are enabled"
+msgid "Enabled"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:170
+msgid "Only enabled redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:171
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:79
+msgctxt "view of the redirects that are disabled"
+msgid "Disabled"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:171
+msgid "Only disabled redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:172
+msgctxt "noun: the view of trashed redirects"
+msgid "Trash"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:172
+msgid "Deleted redirects awaiting permanent removal."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:174
+msgid "Additionally, you can filter by destination type:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:176
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:139
+msgid "To ID"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:176
+msgid "Redirects pointing to a specific post by ID."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:177
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:145
+msgid "To Path"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:177
+msgid "Redirects to relative paths on this site."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:178
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:151
+msgid "To External"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:178
+msgid "Redirects to absolute URLs (may include external sites)."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:180
+msgid "While the 2.0 migration has left redirects disabled because another redirect has the same source, a <strong>Duplicate sources</strong> filter lists them, and the Status column of each says how to settle it."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:181
+msgid "Once every redirect has been checked, by the background check or <strong>Validate all redirects</strong>, a <strong>Has issues</strong> filter shows only the redirects the check flagged, so bulk actions can be applied straight to them. The filter is a snapshot labeled with when the last full check finished: editing a redirect clears its flag until it is next checked. See the Validate and Test help tab for what validation can and cannot see."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:193
+msgid "There are two ways to check redirects, and they look at different evidence:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:195
+msgid "<strong>Validate all redirects</strong> (the toolbar button) checks the <em>stored details</em> of every redirect, enabled and disabled, in batches. Validation never requests a URL, so it is safe to run at any size, but it cannot see problems only a live request reveals. The same check runs in the background, a few seconds every five minutes, so every redirect is checked regularly without anyone pressing the button; the line beside the button says when the last full check finished and how long one takes."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:196
+msgid "<strong>Test</strong> (the row action, also available as a bulk action) checks <em>one redirect live</em>: it runs every stored-data check, requests the destination over HTTP, and, unless the redirect is disabled, requests the source to confirm the redirect actually fires. Test results appear in the Health column and are not stored, because a timeout says nothing definite about a redirect."
+msgstr ""
+
+#. translators: 1: a WP-CLI command, wp legacy-redirector test; 2: a WP-CLI command, wp legacy-redirector validate. Do not translate the commands.
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:200
+#, php-format
+msgid "So a clean validation does not prove a redirect works end to end - a destination page can still be down, and only a Test (or %1$s) can see that. On the command line, %2$s and %1$s do the same two jobs. A <strong>problem</strong> means the redirect is broken and will not do its job; a <strong>warning</strong> means it works but deserves a human look. Every finding says what to do about it: select it in the Health column to read more. Nothing disables a redirect automatically, because almost no problem has a fix the plugin can safely apply."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:212
+msgid "The source path (Redirect From) is checked for:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:214
+msgid "<strong>Reserved WordPress paths</strong> (warning): a source WordPress itself serves, such as <code>/wp-admin</code>, <code>/wp-login.php</code>, the other root <code>wp-*.php</code> files, <code>/xmlrpc.php</code>, or anything under <code>/wp-json</code>, <code>/wp-content</code> or <code>/wp-includes</code>. Such a redirect lies dormant while the path works, because redirects only answer 404s, but it takes over the moment that path breaks; for <code>/wp-admin</code> or <code>/wp-login.php</code> that locks you out of the dashboard. Keep it only if it is a genuine legacy URL."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:215
+msgid "<strong>Published content at the source</strong> (warning): a published post or page of any public type already lives at the source path. Redirects only answer 404s, so the redirect lies dormant while that content is there. Unpublish the content if the redirect should fire; otherwise it is a fallback for when the content goes. Other content, such as an archive or a feed, is only found by Test."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:217
+msgid "The destination (Redirect To) is checked according to its form:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:219
+msgid "<strong>Post ID destinations</strong>: the post must still exist, not be in the trash, and be published. Media attachments count as published."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:220
+msgid "<strong>Relative path destinations</strong>: the path is resolved to a post of any registered post type, including via dated permalinks, and that post must be published. A path whose post was trashed is recognized even though trashing renames the slug. A path that resolves to no post at all - an archive, a rewrite endpoint, a page served outside WordPress - is not reported, because only a live request can judge it."
+msgstr ""
+
+#. translators: %s: the name of a WordPress filter, allowed_redirect_hosts; do not translate it.
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:223
+#, php-format
+msgid "<strong>External URL destinations</strong>: the host must be in the %s filter, or WordPress will refuse the redirect at request time and the visitor gets a 404."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:226
+msgid "<strong>Possible loops</strong> (warning): a destination that is itself another redirect's source, with the hops leading back to where they started. A loop only runs while every source in it returns a 404 - any member serving real content keeps it dormant - so a person should judge it; break a cycle by re-pointing or disabling one member."
+msgstr ""
+
+#. translators: %s: a WP-CLI command, wp legacy-redirector test; do not translate it.
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:230
+#, php-format
+msgid "Whether a destination actually responds, and whether the redirect fires for a visitor, are live questions. The Test action answers both for the redirects you pick, as %s does from the command line."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:244
+msgid "On multisite installations, each site manages its own redirects independently. Redirects created on one site do not affect other sites in the network."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:256
+msgid "This site is installed below the domain root, so redirect paths are stored relative to the site's base URL rather than to the domain."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:257
+msgid "In the Redirect From and Redirect To columns, paths are shown with a gray prefix giving that base URL. This makes clear that a path like <code>/hello-world</code> resolves against the site, not the domain root."
+msgstr ""
+
+#. translators: 1: example base URL, 2: example path, 3: example resulting URL
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:260
+#, php-format
+msgid "For example, on a site at %1$s, the path %2$s refers to %3$s."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:273
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:172
+msgid "For more information:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:274
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:173
+msgid "Plugin Documentation"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:274
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:275
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:173
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:174
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:36
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:43
+msgid "(opens in a new tab)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:275
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:174
+msgid "Report an Issue"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ListScreenSetup.php:299
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:146
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:147
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:243
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:158
+#: src/Infrastructure/WordPress/PostType.php:262
+#: src/Infrastructure/WordPress/PostType.php:263
+msgid "Add Redirect"
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:118
+#, php-format
+msgid "Disable redirect from &#8220;%s&#8221;"
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:139
+#, php-format
+msgid "Enable redirect from &#8220;%s&#8221;"
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:162
+#, php-format
+msgid "Test redirect from &#8220;%s&#8221;"
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:173
+#, php-format
+msgid "Follow redirect from &#8220;%s&#8221; (opens in a new tab)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:211
+msgid "Testing…"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:213
+msgid "Test request failed."
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:216
+#, php-format
+msgid "Tested %s:"
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:217
+msgid "Finished testing the selected redirects. The results are in the Health column."
+msgstr ""
+
+#. translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences.
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:218
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:199
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:160
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:204
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:262
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:95
+#, php-format
+msgctxt "two sentences, one after the other"
+msgid "%1$s %2$s"
+msgstr ""
+
+#. translators: 1: a severity, such as "Warning:"; 2: what was found
+#: src/Infrastructure/WordPress/Admin/ListTable/RowActionsManager.php:219
+#, php-format
+msgctxt "severity, then the finding"
+msgid "%1$s %2$s"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:115
+msgid "Continue validating"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:116
+msgid "Validate all redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:121
+msgid "Validation is already under way in the background. Continue it here to finish sooner; you can leave this page at any time."
+msgstr ""
+
+#. translators: %s: a WP-CLI command, wp legacy-redirector validate; do not translate it.
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:123
+#, php-format
+msgid "Validation is under way but the background check is turned off, so continue it here, or with %s."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:126
+msgid "Checks every redirect’s stored details for problems, without requesting any URLs. You can leave this page at any time: validation carries on in the background. Use the Test action on a row to check live behavior."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:127
+msgid "Checks every redirect’s stored details for problems, without requesting any URLs. The background check is turned off, so stay on this page until it finishes. Use the Test action on a row to check live behavior."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:141
+msgid "Validation progress"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:144
+msgid "Show flagged redirects"
+msgstr ""
+
+#. translators: %s: time since the last full check, e.g. "3 hours"
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:164
+#, php-format
+msgid "Every redirect was last checked %s ago."
+msgstr ""
+
+#. translators: %s: number of redirects with problems
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:166
+#, php-format
+msgid "%s redirect has a problem."
+msgid_plural "%s redirects have problems."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of redirects with warnings
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:169
+#, php-format
+msgid "%s redirect has a warning."
+msgid_plural "%s redirects have warnings."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:172
+msgid "Not every redirect has been checked yet."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:176
+msgid "The background check is turned off."
+msgstr ""
+
+#. translators: %s: estimated time for a full check, e.g. "2 days"
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:183
+#, php-format
+msgid "A full check in the background takes about %s."
+msgstr ""
+
+#. translators: 1: redirects checked so far, 2: total redirects
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:219
+#, php-format
+msgid "Validation in progress: %1$s of %2$s redirect checked. Stay on this page until it finishes."
+msgid_plural "Validation in progress: %1$s of %2$s redirects checked. Stay on this page until it finishes."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: redirects checked so far, 2: total redirects
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:227
+#, php-format
+msgid "Validation in progress: %1$s of %2$s redirect checked. It carries on in the background if you leave this page."
+msgid_plural "Validation in progress: %1$s of %2$s redirects checked. It carries on in the background if you leave this page."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ValidateAllButton.php:250
+msgid "Validation stopped; the redirects validated so far are flagged. Reload and try again."
+msgstr ""
+
+#. translators: %s: how long ago the last full check completed, e.g. "2 hours"
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:195
+#, php-format
+msgid "Has issues (checked %s ago)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:253
+msgid "Duplicate source"
+msgid_plural "Duplicate sources"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: a list view's name, such as Enabled; 2: how many redirects it holds, in brackets
+#: src/Infrastructure/WordPress/Admin/ListTable/ViewFilters.php:290
+#, php-format
+msgctxt "view name, then its count"
+msgid "%1$s %2$s"
+msgstr ""
+
+#. translators: %s: number of redirects with problems
+#: src/Infrastructure/WordPress/Admin/MenuBadge.php:86
+#, php-format
+msgid "%s redirect with problems"
+msgid_plural "%s redirects with problems"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/DuplicateSourcesNotice.php:59
+msgid "For each redirect listed here, decide which destination is right. To keep the enabled redirect's, trash the disabled one. To keep the disabled one's, edit the enabled redirect (linked in the Status column) to use it, then trash the disabled one. A disabled duplicate cannot be enabled while the enabled redirect has its source."
+msgstr ""
+
+#. translators: 1: number of redirects, 2: link to the Duplicate sources view
+#: src/Infrastructure/WordPress/Admin/Notices/DuplicateSourcesNotice.php:62
+#, php-format
+msgid "The 2.0 migration disabled %1$s redirect because it has the same source as another redirect but a different destination, and only one redirect can answer a source. %2$s"
+msgid_plural "The 2.0 migration disabled %1$s redirects because each has the same source as another redirect but a different destination, and only one redirect can answer a source. %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/DuplicateSourcesNotice.php:69
+msgid "Review duplicate sources"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:75
+msgid "Testing several redirects at once needs JavaScript. Use the Test link on each row instead, or <code>wp legacy-redirector test</code>."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:115
+msgid "Redirect enabled."
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:121
+#, php-format
+msgid "Redirect from %s enabled."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:135
+msgid "Redirect disabled."
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:141
+#, php-format
+msgid "Redirect from %s disabled."
+msgstr ""
+
+#. translators: 1: number of redirects enabled, 2: number selected
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:163
+#, php-format
+msgid "Enabled %1$s of %2$s redirect."
+msgid_plural "Enabled %1$s of %2$s redirects."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of redirects that could not be enabled
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:169
+#, php-format
+msgid "%s could not be enabled."
+msgid_plural "%s could not be enabled."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of redirects enabled
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:183
+#, php-format
+msgid "%s redirect enabled."
+msgid_plural "%s redirects enabled."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: 1: number of redirects disabled, 2: number selected
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:207
+#, php-format
+msgid "Disabled %1$s of %2$s redirect."
+msgid_plural "Disabled %1$s of %2$s redirects."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of redirects that could not be disabled
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:213
+#, php-format
+msgid "%s could not be disabled."
+msgid_plural "%s could not be disabled."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: number of redirects disabled
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:227
+#, php-format
+msgid "%s redirect disabled."
+msgid_plural "%s redirects disabled."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: link to the Duplicate sources view
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:248
+#, php-format
+msgid "It shares its source with an enabled redirect, and a source can answer for only one: see %s."
+msgstr ""
+
+#. translators: %s: link to the Duplicate sources view
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:250
+#, php-format
+msgid "The first shares its source with an enabled redirect, and a source can answer for only one: see %s."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:251
+msgid "Duplicate sources"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:255
+msgid "It could not be saved."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/StatusChangeNotices.php:256
+msgid "The first could not be saved."
+msgstr ""
+
+#. translators: %s: WP-CLI command
+#: src/Infrastructure/WordPress/Admin/Notices/UpgradeNotice.php:81
+#, php-format
+msgid "Redirect data migration is in progress and completes automatically in the background. Older redirects may not work or display consistently until it finishes. To finish it now, run: %s"
+msgstr ""
+
+#. translators: 1: number of redirects, 2: WP-CLI command
+#: src/Infrastructure/WordPress/Admin/Notices/UpgradeNotice.php:96
+#, php-format
+msgid "%1$s redirect could not be migrated, and may not work until it is. To retry it, and see why if it fails again, run: %2$s"
+msgid_plural "%1$s redirects could not be migrated, and may not work until they are. To retry them, and see why any fail again, run: %2$s"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:173
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:272
+msgid "Redirect is valid."
+msgstr ""
+
+#. translators: %s: source URL path
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:175
+#, php-format
+msgid "Redirect from %s is valid."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:177
+msgid "Source not requested: the redirect is disabled."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:185
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:225
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:220
+msgid "Redirect not found."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:195
+msgid "Redirect is not valid."
+msgstr ""
+
+#. translators: %s: source URL path
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:197
+#, php-format
+msgid "Redirect from %s is not valid."
+msgstr ""
+
+#. translators: 1: problem found, e.g. "Source serves content", 2: source URL path
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:234
+#, php-format
+msgid "%1$s for %2$s"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Notices/ValidationNotices.php:282
+msgid "You do not have permission to validate redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:41
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:156
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:157
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:243
+#: src/Infrastructure/WordPress/PostType.php:265
+msgid "Edit Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:88
+msgid "Tips"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:102
+msgid "Use this form to create or edit a redirect. A redirect automatically sends visitors from one URL to another."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:103
+msgid "Redirects are only triggered when the source URL would otherwise return a 404 (Not Found) error. If content already exists at the source URL, the redirect will not activate."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:112
+msgid "The <strong>Redirect From</strong> field specifies the old URL path that should trigger the redirect."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:113
+msgid "The site's home URL is shown before the field, so just enter the path. For example:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:119
+msgid "The path is read relative to that home URL, which on a site installed in a subdirectory is not the domain root. Do not include the domain name."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:120
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:121
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:143
+msgid "Note:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:120
+msgid "Each source path can only have one redirect. Duplicate sources are not allowed."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:121
+msgid "A source on a path WordPress itself serves, such as <code>wp-admin</code> or <code>wp-login.php</code>, is accepted with a warning: the redirect lies dormant while that path works, but takes over if the path ever returns a 404. A source a published post or page already answers gets a warning too: the redirect stays dormant until that content goes."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:130
+msgid "The <strong>Redirect To</strong> field specifies where visitors should be sent. You can use three formats:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:131
+msgid "1. Relative Path"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:132
+msgid "A path on the same site, starting with a forward slash:"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:137
+msgid "2. Absolute URL"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:138
+msgid "A full URL including the domain, useful for external redirects:"
+msgstr ""
+
+#. translators: %s: the name of a WordPress filter, allowed_redirect_hosts; do not translate it.
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:145
+#, php-format
+msgid "External domains must be allowed via the %s filter before a redirect can point at them."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:148
+msgid "3. Post ID"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:149
+msgid "Select an existing post or page using the search field. The redirect will point to that content's permalink, which automatically updates if the slug changes."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:159
+msgid "<strong>Test your redirects</strong> &mdash; After saving, use the \"Follow\" link or visit the source URL to verify it works."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:160
+msgid "<strong>Use Post IDs for internal content</strong> &mdash; If redirecting to a post or page on your site, selecting it by Post ID ensures the redirect stays valid even if the slug changes."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:161
+msgid "<strong>Avoid redirect chains and loops</strong> &mdash; Don't create redirects where the destination is another redirect source. A chain slows visitors down, and a set of redirects pointing back at each other is warned about as a possible loop."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/FormScreenSetup.php:162
+msgid "<strong>Check for existing content</strong> &mdash; Redirects only work when the source URL returns a 404. If a page exists at that URL, delete or rename it first."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:119
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:636
+msgid "A redirect already exists for this source URL."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:121
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:52
+msgid "Edit the existing redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:125
+msgid "Suggestions available. Use the up and down arrow keys to choose one, and Enter to select it."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:126
+msgid "No matching posts or pages."
+msgstr ""
+
+#. translators: 1: post title or post type name, 2: post ID
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:128
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:484
+#, php-format
+msgid "%1$s (ID: %2$s)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:220
+msgid "Invalid redirect ID."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:353
+#: src/Infrastructure/WordPress/Admin/StatusActionsHandler.php:93
+msgid "Security check failed."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:358
+msgid "You do not have permission to manage redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:498
+msgid "This redirect is in the Trash. Restore it before editing."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:500
+msgid "Go to the Trash"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:532
+msgid "This is a path WordPress itself serves. The redirect stays dormant while that path works, but takes over if the path ever returns a 404. For wp-admin or wp-login.php, that locks you out of the dashboard. Keep it only if this is a genuine legacy URL."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:544
+msgid "Published content already lives at this path. Redirects only answer 404s, so this one stays dormant while that content is there. Unpublish the content if the redirect should fire; otherwise it is a fallback for when the content goes."
+msgstr ""
+
+#. translators: %s: the name of a WordPress filter, allowed_redirect_hosts; do not translate it.
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:558
+#, php-format
+msgid "The destination domain is not allowed, so the redirect would never run. Add the domain to the \"%s\" filter first."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:632
+msgid "Redirect From and Redirect To are required fields."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:633
+msgid "The destination is not valid."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:634
+msgid "The source URL is not valid."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:635
+msgid "That source is a placeholder for this corrupt redirect, not a real path. Enter the source it should answer."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:637
+msgid "Redirect From and Redirect To must not be the same. This would create a redirect loop."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:638
+msgid "Failed to save the redirect. Please try again."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:639
+msgid "The destination post ID does not exist."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:641
+msgid "The destination path does not exist."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/RedirectFormPage.php:645
+msgid "An error occurred."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:35
+msgid "Redirect created successfully."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:42
+msgid "Redirect updated successfully."
+msgstr ""
+
+#. translators: 1: an example path, old-page, as typed in the field; 2: the full URL it resolves to, e.g. https://example.com/blog/old-page.
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:98
+#, php-format
+msgid "The source path that should redirect, always read relative to this site. Entering %1$s matches %2$s."
+msgstr ""
+
+#. translators: 1: example path without a trailing slash, 2: the same path with one.
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:104
+#, php-format
+msgid "Trailing slashes are ignored, so %1$s and %2$s are the same redirect."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:121
+msgid "Enter a relative path (e.g., /new-page), post ID, or full URL. Start typing to search for posts."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:122
+msgid "Matching posts and pages"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:141
+msgid "(Visitors are redirected)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:147
+msgid "(Visitors are not redirected)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:158
+msgid "Update Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/Pages/views/redirect-form.php:166
+msgid "Back to Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/StatusActionsHandler.php:84
+msgid "No redirect specified."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/StatusActionsHandler.php:98
+msgid "You do not have permission to modify redirects."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Admin/StatusActionsHandler.php:105
+#: src/Infrastructure/WordPress/Admin/StatusActionsHandler.php:116
+msgid "Invalid redirect."
+msgstr ""
+
+#: src/Infrastructure/WordPress/AuditSweep.php:177
+msgid "Every five minutes (Legacy Redirector background check)"
+msgstr ""
+
+#: src/Infrastructure/WordPress/CoreEditGuard.php:160
+msgid "Redirects can only be edited from the Redirects screens."
+msgstr ""
+
+#. translators: %s: redirect source path
+#: src/Infrastructure/WordPress/PostType.php:201
+#, php-format
+msgid "Redirect from %s moved to the Trash."
+msgstr ""
+
+#. translators: %s: Number of redirects.
+#: src/Infrastructure/WordPress/PostType.php:206
+#, php-format
+msgid "%s redirect moved to the Trash."
+msgid_plural "%s redirects moved to the Trash."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: Number of redirects.
+#: src/Infrastructure/WordPress/PostType.php:216
+#, php-format
+msgid "%s redirect updated."
+msgid_plural "%s redirects updated."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/PostType.php:223
+msgid "1 redirect not updated, somebody is editing it."
+msgstr ""
+
+#. translators: %s: Number of redirects.
+#: src/Infrastructure/WordPress/PostType.php:225
+#, php-format
+msgid "%s redirect not updated, somebody is editing it."
+msgid_plural "%s redirects not updated, somebody is editing them."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: Number of redirects.
+#: src/Infrastructure/WordPress/PostType.php:232
+#, php-format
+msgid "%s redirect permanently deleted."
+msgid_plural "%s redirects permanently deleted."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: Number of redirects.
+#: src/Infrastructure/WordPress/PostType.php:240
+#, php-format
+msgid "%s redirect restored from the Trash."
+msgid_plural "%s redirects restored from the Trash."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/Infrastructure/WordPress/PostType.php:258
+msgctxt "Post type general name"
+msgid "Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:259
+msgctxt "Post type singular name"
+msgid "Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:260
+msgctxt "Admin Menu text"
+msgid "Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:261
+msgctxt "Add New on Toolbar"
+msgid "Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:264
+msgid "New Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:266
+msgid "View Redirect"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:267
+msgid "All Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:268
+msgid "Search Redirects"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:269
+msgid "No redirects found."
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:270
+msgid "No redirects found in Trash."
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:271
+msgctxt "Screen reader text for the filter links heading on the post type listing screen. Default \"Filter posts list\"/\"Filter pages list\". Added in 4.4"
+msgid "Filter redirects list"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:272
+msgctxt "Screen reader text for the pagination heading on the post type listing screen. Default \"Posts list navigation\"/\"Pages list navigation\". Added in 4.4"
+msgid "Redirect list navigation"
+msgstr ""
+
+#: src/Infrastructure/WordPress/PostType.php:273
+msgctxt "Screen reader text for the items list heading on the post type listing screen. Default \"Posts list\"/\"Pages list\". Added in 4.4"
+msgid "Redirects list"
+msgstr ""
+
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:271
+msgid "Redirect is valid. Source not requested: the redirect is disabled."
+msgstr ""
+
+#. translators: %s: the URL the source redirected to
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:290
+#, php-format
+msgid "Confirmed live: the source redirects to %s."
+msgstr ""
+
+#. translators: %s: the URL the source redirected to
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:292
+#, php-format
+msgid "The source redirects, but to %s rather than the stored destination."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:293
+msgid "The source currently serves content, so the redirect lies dormant and did not fire."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:294
+msgid "The source returns a 404 without redirecting: the redirect did not fire."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Rest/ChecksController.php:295
+msgid "Could not confirm live behavior: the request to the source failed, or the site answered with an error. Try again later."
+msgstr ""
+
+#: src/Infrastructure/WordPress/Rest/ValidateAllController.php:132
+msgid "Another check is running. Try again in a minute."
+msgstr ""
