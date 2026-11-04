@@ -786,7 +786,7 @@ final class ListRedirectsTest extends TestCase {
 	}
 
 	/**
-	 * Test the Test result shows no green "No issues found" beside a live check.
+	 * Test the Test result shows no plain green tick beside a live check.
 	 *
 	 * The live check is the row's verdict, so a probe that found the redirect
 	 * not firing must not be followed by a tick. There is no JS harness, so
@@ -801,6 +801,6 @@ final class ListRedirectsTest extends TestCase {
 
 		set_current_screen( 'front' );
 
-		$this->assertStringContainsString( 'if ( ! warnings.length && ! probe ) {', $script );
+		$this->assertStringContainsString( 'if ( ! probe ) {', $script );
 	}
 }

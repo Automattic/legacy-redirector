@@ -210,7 +210,6 @@ final class RowActionsManager {
 			var i18n = {
 				testing: '<?php echo esc_js( __( 'Testing…', 'legacy-redirector' ) ); ?>',
 				test: '<?php echo esc_js( _x( 'Test', 'verb: check a redirect live', 'legacy-redirector' ) ); ?>',
-				noIssues: '<?php echo esc_js( __( 'No issues found', 'legacy-redirector' ) ); ?>',
 				requestFailed: '<?php echo esc_js( __( 'Test request failed.', 'legacy-redirector' ) ); ?>',
 				problem: '<?php echo esc_js( __( 'Problem:', 'legacy-redirector' ) ); ?>',
 				warning: '<?php echo esc_js( __( 'Warning:', 'legacy-redirector' ) ); ?>',
@@ -291,10 +290,10 @@ final class RowActionsManager {
 				}
 
 				if ( result.valid ) {
-					// A probe line is the row's verdict, so the plain tick is
-					// only for a response that has none.
-					if ( ! warnings.length && ! probe ) {
-						add( 'dashicons-yes-alt', '#00a32a', '', i18n.noIssues );
+					// A probe line is the row's verdict. Without one the redirect
+					// is disabled, and the message says what was checked.
+					if ( ! probe ) {
+						add( 'dashicons-yes-alt', '#00a32a', '', result.message );
 					}
 				} else {
 					add( 'dashicons-warning', '#d63638', i18n.problem, result.message || i18n.requestFailed, result.remedy );

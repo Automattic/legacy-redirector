@@ -12,9 +12,9 @@ namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Rest;
 use Automattic\LegacyRedirector\Application\FindingText;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\AuditFinding;
 use Automattic\LegacyRedirector\Domain\AuditFindingType;
 use Automattic\LegacyRedirector\Domain\Destination;
-use Automattic\LegacyRedirector\Domain\Redirect;
 use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
@@ -206,10 +206,10 @@ final class ChecksController {
 	}
 
 	/**
-	 * Audit a redirect and probe its source live.
+	 * Test a redirect live, as the CLI and the ability do.
 	 *
 	 * @param \WP_REST_Request $request The request.
-	 * @return array{valid: bool, status: string, message: string, remedy?: string, warnings: array<int, array{label: string, description: string, remedy: string}>, probe: array{status: string, message: string, remedy: string}}|\WP_Error The test result, or a 404 error for an unknown redirect.
+	 * @return array{valid: bool, status: string, message: string, remedy?: string, warnings: array<int, array{label: string, description: string, remedy: string}>, probe: array{status: string, message: string, remedy: string}|null}|\WP_Error The test result, with a null probe when the source was not requested, or a 404 error for an unknown redirect.
 	 */
 	public function test_redirect( \WP_REST_Request $request ): array|\WP_Error {
 		$redirect = $this->repository->find_by_id( (int) $request->get_param( 'id' ) );
@@ -222,11 +222,16 @@ final class ChecksController {
 			);
 		}
 
-		$findings = $this->auditor->audit( $redirect, true );
+		$test     = $this->auditor->test( $redirect );
 		$problems = array();
 		$warnings = array();
 
-		foreach ( $findings as $finding ) {
+		foreach ( $test['findings'] as $finding ) {
+			// The probe line below speaks for the source's own finding.
+			if ( $finding === $test['source_finding'] ) {
+				continue;
+			}
+
 			if ( $finding->is_warning() ) {
 				$warnings[] = array(
 					'label'       => FindingText::label( $finding->type() ),
@@ -238,10 +243,11 @@ final class ChecksController {
 			}
 		}
 
-		// The live probe: request the source and see what actually happens,
-		// which no static check can - a source serving content, a redirect
-		// not firing, or a hop to somewhere other than the stored destination.
-		$probe = $this->probe( $redirect );
+		// The live probe: what actually happens at the source, which no static
+		// check can see - a source serving content, a redirect not firing, or
+		// a hop to somewhere other than the stored destination. The auditor
+		// skips it for a disabled or corrupt redirect, which is not meant to fire.
+		$probe = null === $test['source'] ? null : $this->describe_probe( $test['source'], $test['source_finding'] );
 
 		// A warning does not fail the redirect - it works, but a person should
 		// look - so it rides along rather than turning the result red.
@@ -261,20 +267,22 @@ final class ChecksController {
 		return array(
 			'valid'    => true,
 			'status'   => 'valid',
-			'message'  => __( 'Redirect is valid.', 'legacy-redirector' ),
+			'message'  => null === $probe
+				? __( 'Redirect is valid. Source not requested: the redirect is disabled.', 'legacy-redirector' )
+				: __( 'Redirect is valid.', 'legacy-redirector' ),
 			'warnings' => $warnings,
 			'probe'    => $probe,
 		);
 	}
 
 	/**
-	 * Probe the source and phrase the outcome for display.
+	 * Phrase a source probe's outcome for display.
 	 *
-	 * @param Redirect $redirect The redirect to probe.
+	 * @param array{status: string, location?: string} $probe   The outcome of requesting the source.
+	 * @param AuditFinding|null                        $finding The source's finding, if anything is wrong.
 	 * @return array{status: string, message: string, remedy: string} The probe outcome, its message, and what to do about it (empty when nothing is wrong).
 	 */
-	private function probe( Redirect $redirect ): array {
-		$probe    = $this->auditor->probe_source( $redirect );
+	private function describe_probe( array $probe, ?AuditFinding $finding ): array {
 		$location = $probe['location'] ?? '';
 
 		$message = match ( $probe['status'] ) {
@@ -286,8 +294,6 @@ final class ChecksController {
 			'not-firing' => __( 'The source returns a 404 without redirecting: the redirect did not fire.', 'legacy-redirector' ),
 			default      => __( 'Could not confirm live behavior: the request to the source failed, or the site answered with an error. Try again later.', 'legacy-redirector' ),
 		};
-
-		$finding = $this->auditor->finding_for_probe( $redirect, $probe );
 
 		return array(
 			'status'  => $probe['status'],

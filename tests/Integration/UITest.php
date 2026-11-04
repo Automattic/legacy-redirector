@@ -361,13 +361,22 @@ final class UITest extends TestCase {
 	 */
 	public function test_validation_action_reports_the_problem_and_carries_the_warnings( string $source, int $http_code, string $validate, ?string $warnings ): void {
 		$redirect_id = $this->create_redirect( $source, 'https://example.com/landing' );
+		// The source fires as stored; only the destination's answer varies.
 		add_filter(
 			'pre_http_request',
-			static fn() => array(
-				'response' => array( 'code' => $http_code ),
-				'headers'  => array(),
-				'body'     => '',
-			)
+			static fn( $preempt, $args, $url ) => str_contains( (string) $url, 'validated' )
+				? array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/landing' ),
+					'body'     => '',
+				)
+				: array(
+					'response' => array( 'code' => $http_code ),
+					'headers'  => array(),
+					'body'     => '',
+				),
+			10,
+			3
 		);
 
 		$query = $this->validation_action_result( $redirect_id );
@@ -375,6 +384,149 @@ final class UITest extends TestCase {
 		$this->assertSame( $validate, $query['validate'] );
 		$this->assertSame( $warnings, $query['warnings'] ?? null );
 		$this->assertSame( (string) $redirect_id, $query['ids'] );
+	}
+
+	/**
+	 * Test the no-JS Test action reports what requesting the source found, as the JS one does.
+	 *
+	 * A source that could not be checked is no verdict on the redirect, so it
+	 * rides along with the warnings rather than turning the result red.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\HomePath
+	 * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+	 * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 * @dataProvider data_validation_action_source_results
+	 *
+	 * @param int         $source_code What requesting the source gets.
+	 * @param string      $validate    The expected result.
+	 * @param string|null $warnings    The expected carried warnings, or null for none.
+	 * @param string      $notice      The notice class expected for the result, or its warning.
+	 */
+	public function test_validation_action_reports_the_source_probe( int $source_code, string $validate, ?string $warnings, string $notice ): void {
+		$redirect_id = $this->create_redirect( '/probed-source', 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn( $preempt, $args, $url ) => array(
+				'response' => array( 'code' => str_contains( (string) $url, '/probed-source' ) ? $source_code : 200 ),
+				'headers'  => array(),
+				'body'     => '',
+			),
+			10,
+			3
+		);
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( $validate, $query['validate'] );
+		$this->assertSame( $warnings, $query['warnings'] ?? null );
+
+		$_GET = $query;
+		ob_start();
+		$this->notices->display_validation_notices();
+		$this->assertStringContainsString( $notice, (string) ob_get_clean() );
+	}
+
+	/**
+	 * Data provider for what requesting the source finds.
+	 *
+	 * @return array<string, array{0: int, 1: string, 2: string|null, 3: string}>
+	 */
+	public static function data_validation_action_source_results(): array {
+		return array(
+			'not firing'   => array( 404, 'source_not_firing', null, 'returns a 404 without redirecting' ),
+			'dormant'      => array( 200, 'valid', 'source_serves_content', 'serves its own content' ),
+			'inconclusive' => array( 503, 'valid', 'source_request_failed', 'whether the redirect fires is unknown' ),
+		);
+	}
+
+	/**
+	 * Test the no-JS Test action leaves a disabled redirect's source alone, and says so.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+	 * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 */
+	public function test_validation_action_does_not_probe_a_disabled_redirect(): void {
+		$redirect_id = $this->create_legacy_redirect( '/probed-disabled', 'https://example.com/landing' );
+		add_filter(
+			'pre_http_request',
+			static fn( $preempt, $args, $url ) => array(
+				'response' => array( 'code' => str_contains( (string) $url, '/probed-disabled' ) ? 404 : 200 ),
+				'headers'  => array(),
+				'body'     => '',
+			),
+			10,
+			3
+		);
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( 'valid', $query['validate'] );
+
+		$_GET = $query;
+		ob_start();
+		$this->notices->display_validation_notices();
+		$this->assertStringContainsString( 'Source not requested: the redirect is disabled.', (string) ob_get_clean() );
+	}
+
+	/**
+	 * Test the no-JS Test action gives a corrupt row's finding as the whole answer.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::handle_validation_action
+	 * @uses \Automattic\LegacyRedirector\Domain\Destination
+	 * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+	 * @uses \Automattic\LegacyRedirector\Domain\Redirect
+	 * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+	 * @uses \Automattic\LegacyRedirector\Domain\Url
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+	 */
+	public function test_validation_action_reports_a_corrupt_row(): void {
+		$redirect_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+
+		$query = $this->validation_action_result( $redirect_id );
+
+		$this->assertSame( 'corrupt_data', $query['validate'] );
+		$this->assertArrayNotHasKey( 'warnings', $query );
+	}
+
+	/**
+	 * Test the warnings arg shows a source that could not be checked, and no other non-warning.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices\ValidationNotices::display_validation_notices
+	 */
+	public function test_warnings_arg_rejects_problems_but_not_an_unchecked_source(): void {
+		$_GET['validate'] = 'valid';
+		$_GET['warnings'] = 'source_request_failed,source_not_firing,url_request_failed';
+
+		ob_start();
+		$this->notices->display_validation_notices();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'whether the redirect fires is unknown', $output );
+		$this->assertStringNotContainsString( 'returns a 404 without redirecting', $output );
+		$this->assertStringNotContainsString( 'Failed to connect', $output );
 	}
 
 	/**
