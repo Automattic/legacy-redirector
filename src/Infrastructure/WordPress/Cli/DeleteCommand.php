@@ -71,7 +71,7 @@ final class DeleteCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector delete /old-page /other-page --yes
 	 *
 	 *     # Delete all disabled redirects.
-	 *     $ wp legacy-redirector list --status=disabled --limit=100000 --format=ids | xargs wp legacy-redirector delete --yes
+	 *     $ wp legacy-redirector list --status=disabled --limit=100000 --format=ids | xargs -r wp legacy-redirector delete --yes
 	 *
 	 * @when after_wp_load
 	 *

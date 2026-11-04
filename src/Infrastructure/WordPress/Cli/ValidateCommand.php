@@ -116,7 +116,7 @@ final class ValidateCommand extends WP_CLI_Command {
 	 *     $ wp legacy-redirector validate /old-page
 	 *
 	 *     # Re-check every redirect the background check flagged as a problem.
-	 *     $ wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs wp legacy-redirector validate
+	 *     $ wp legacy-redirector list --has-issues=problem --limit=100000 --format=ids | xargs -r wp legacy-redirector validate
 	 *
 	 * @when after_wp_load
 	 *
