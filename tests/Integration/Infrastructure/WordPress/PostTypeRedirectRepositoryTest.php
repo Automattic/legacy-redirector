@@ -210,81 +210,25 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	}
 
 	/**
-	 * Test exists returns true for an existing published redirect.
+	 * Test exists counts a disabled redirect as holding its source, and a trashed one not.
+	 *
+	 * It is get_id_by_source() > 0, so the lookup's own tests cover the rest;
+	 * this pins the one place it differs from find_by_source(), which finds
+	 * only live redirects.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
 	 */
-	public function test_exists_returns_true_for_published_redirect(): void {
-		$source      = SourceUrl::from_string( '/exists-published-test' );
-		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
-		$redirect    = Redirect::create( $source, $destination );
-
-		$this->repository->save( $redirect );
-
-		$exists = $this->repository->exists( $source );
-
-		$this->assertTrue( $exists );
-	}
-
-	/**
-	 * Test exists returns false for a trashed redirect.
-	 *
-	 * The trash holds no source: the lookup leaves trashed rows out
-	 * explicitly, whatever their post_name.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
-	 */
-	public function test_exists_returns_false_for_trashed_redirect(): void {
-		$source      = SourceUrl::from_string( '/exists-trashed-test' );
-		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
-		$redirect    = Redirect::create( $source, $destination );
-
-		$saved = $this->repository->save( $redirect );
-
-		// Trash the post.
-		wp_trash_post( $saved->id() );
-
-		$exists = $this->repository->exists( $source );
-
-		$this->assertFalse( $exists );
-	}
-
-	/**
-	 * Test exists returns true for a draft redirect.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
-	 */
-	public function test_exists_returns_true_for_draft_redirect(): void {
-		$source      = SourceUrl::from_string( '/exists-draft-test' );
-		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
-		$redirect    = Redirect::create( $source, $destination );
-
-		$saved = $this->repository->save( $redirect );
-
-		// Change to draft.
-		wp_update_post(
-			array(
-				'ID'          => $saved->id(),
-				'post_status' => 'draft',
-			)
+	public function test_exists_counts_a_draft_but_not_the_trash(): void {
+		$source = SourceUrl::from_string( '/exists-test' );
+		$saved  = $this->repository->save(
+			Redirect::create( $source, Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) ) )->with_status( 'draft' )
 		);
 
-		$exists = $this->repository->exists( $source );
+		$this->assertTrue( $this->repository->exists( $source ) );
 
-		$this->assertTrue( $exists );
-	}
+		wp_trash_post( $saved->id() );
 
-	/**
-	 * Test exists returns false for non-existent source.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::exists
-	 */
-	public function test_exists_returns_false_for_nonexistent(): void {
-		$source = SourceUrl::from_string( '/does-not-exist-' . wp_generate_uuid4() );
-
-		$exists = $this->repository->exists( $source );
-
-		$this->assertFalse( $exists );
+		$this->assertFalse( $this->repository->exists( $source ) );
 	}
 
 	/**
@@ -540,43 +484,11 @@ final class PostTypeRedirectRepositoryTest extends TestCase {
 	}
 
 	/**
-	 * Test get_id_by_source returns 0 for non-existent source.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
-	 */
-	public function test_get_id_by_source_returns_zero_for_nonexistent(): void {
-		$source = SourceUrl::from_string( '/does-not-exist-' . wp_generate_uuid4() );
-
-		$id = $this->repository->get_id_by_source( $source );
-
-		$this->assertSame( 0, $id );
-	}
-
-	/**
-	 * Test get_id_by_source returns 0 for trashed redirect.
+	 * Test get_id_by_source answers with the live row where several have the key, and never with the trash.
 	 *
 	 * The trash holds no source: the lookup leaves trashed rows out
-	 * explicitly, whatever their post_name.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
-	 */
-	public function test_get_id_by_source_returns_zero_for_trashed(): void {
-		$source      = SourceUrl::from_string( '/get-id-by-source-trashed' );
-		$destination = Destination::from_url( DestinationUrl::from_string( 'https://example.com/destination' ) );
-		$redirect    = Redirect::create( $source, $destination );
-
-		$saved = $this->repository->save( $redirect );
-
-		// Trash the post.
-		wp_trash_post( $saved->id() );
-
-		$id = $this->repository->get_id_by_source( $source );
-
-		$this->assertSame( 0, $id );
-	}
-
-	/**
-	 * Test get_id_by_source answers with the live row where several have the key, and never with the trash.
+	 * explicitly, whatever their post_name, so a trashed row alone on the key
+	 * answers 0, as no row at all does.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository::get_id_by_source
 	 */

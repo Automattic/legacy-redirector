@@ -46,17 +46,6 @@ final class ListScreenHelpTest extends TestCase {
 	}
 
 	/**
-	 * Tears down test fixtures.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		remove_filter( 'home_url', array( $this, 'filter_home_url' ) );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * Move home into a subdirectory, so the home path is non-empty.
 	 *
 	 * @param string $url The home URL.

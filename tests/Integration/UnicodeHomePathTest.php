@@ -76,17 +76,6 @@ final class UnicodeHomePathTest extends TestCase {
 	}
 
 	/**
-	 * Tears down test fixtures.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		remove_filter( 'home_url', array( $this, 'filter_home_url' ) );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * Move home into a non-ASCII subdirectory.
 	 *
 	 * @param string $url The home URL.

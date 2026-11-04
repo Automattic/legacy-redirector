@@ -69,22 +69,6 @@ final class ValidateAllButtonTest extends TestCase {
 	}
 
 	/**
-	 * Clean up the sweep's state, the badge, the screen and the user.
-	 *
-	 * @return void
-	 */
-	public function tear_down(): void {
-		foreach ( array( AuditSweep::STATE_OPTION, AuditSweep::LOCK_OPTION, AuditFlags::CHECKED_AT_OPTION, AuditFlags::COUNTS_OPTION ) as $option ) {
-			delete_option( $option );
-		}
-
-		set_current_screen( 'front' );
-		wp_set_current_user( 0 );
-
-		parent::tear_down();
-	}
-
-	/**
 	 * The sweep the button reports on.
 	 *
 	 * @return AuditSweep
