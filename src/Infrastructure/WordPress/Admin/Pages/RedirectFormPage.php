@@ -9,6 +9,7 @@ declare( strict_types = 1 );
 
 namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages;
 
+use Automattic\LegacyRedirector\Application\FindingText;
 use Automattic\LegacyRedirector\Application\HomePath;
 use Automattic\LegacyRedirector\Application\RedirectAuditor;
 use Automattic\LegacyRedirector\Application\RedirectManager;
@@ -20,6 +21,7 @@ use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
 use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
 
 /**
  * Handles the Add and Edit redirect admin pages.
@@ -245,6 +247,7 @@ final class RedirectFormPage {
 		$redirect_status     = 'publish';
 		$destination_value   = '';
 		$destination_display = '';
+		$corruption_notice   = '';
 
 		if ( $is_edit ) {
 			// Editing existing redirect - render from the entity.
@@ -258,6 +261,19 @@ final class RedirectFormPage {
 			} else {
 				$destination_value   = $destination->as_url()->value();
 				$destination_display = $destination_value;
+			}
+
+			// A corrupt row's entity holds placeholders, and Update would store
+			// them as real values. Show what the row holds instead, however
+			// broken or empty, and say what is wrong with it.
+			if ( $redirect->is_corrupt() ) {
+				$post                = get_post( (int) $redirect->id() );
+				$redirect_from       = Upgrader::hashed_text( $post->post_title, $post->post_name );
+				$destination_value   = $post->post_parent > 0 ? $post->post_parent : trim( $post->post_excerpt );
+				$destination_display = is_int( $destination_value ) ? self::post_id_display( $destination_value ) : $destination_value;
+
+				$finding           = $this->auditor->audit( $redirect )[0];
+				$corruption_notice = FindingText::summary( $finding->type(), $finding->detail() );
 			}
 		}
 
@@ -391,6 +407,12 @@ final class RedirectFormPage {
 			// The form has no trash status to submit, so saving would publish it.
 			if ( 'trash' === $existing->status() ) {
 				self::refuse_trashed();
+			}
+
+			// Saved, the placeholder would become a real source and the row's
+			// corruption finding would vanish.
+			if ( $existing->is_corrupt() && PostType::CORRUPT_SOURCE_PREFIX . $redirect_id === $source->path() ) {
+				$this->redirect_with_error( $redirect_id, 'placeholder_source', '', $redirect_to, $redirect_status );
 			}
 
 			$proposed = $existing->with_source( $source )->with_destination( $destination );
@@ -610,6 +632,7 @@ final class RedirectFormPage {
 			'empty_fields'            => __( 'Redirect From and Redirect To are required fields.', 'legacy-redirector' ),
 			'invalid_destination'     => __( 'The destination is not valid.', 'legacy-redirector' ),
 			'invalid_source'          => __( 'The source URL is not valid.', 'legacy-redirector' ),
+			'placeholder_source'      => __( 'That source is a placeholder for this corrupt redirect, not a real path. Enter the source it should answer.', 'legacy-redirector' ),
 			'duplicate'               => __( 'A redirect already exists for this source URL.', 'legacy-redirector' ),
 			'same_source_destination' => __( 'Redirect From and Redirect To must not be the same. This would create a redirect loop.', 'legacy-redirector' ),
 			'save_failed'             => __( 'Failed to save the redirect. Please try again.', 'legacy-redirector' ),
