@@ -208,9 +208,16 @@ final class ValidateRedirectsAbility implements AbilityInterface {
 
 		$findings      = $this->sweep->validate_redirects( $redirects );
 		$still_flagged = count( array_unique( array_map( static fn( AuditFinding $finding ) => $finding->redirect_id(), $findings ) ) );
-		$flagged       = $this->query_repository->count_matching( new RedirectCriteria( null, null, null, 'ID', 'ASC', 1, 0, 'any' ) );
 		$next_offset   = $offset + $still_flagged;
 		$checked_at    = $this->flags->checked_at();
+
+		// Validating stores the counts it has just made, so they are read
+		// back rather than counted again. With nothing validated nothing was
+		// stored, and a pass in progress has written flags since the last
+		// store, so then the flags are counted.
+		$flagged = array() === $redirects
+			? $this->query_repository->count_matching( new RedirectCriteria( null, null, null, 'ID', 'ASC', 1, 0, 'any' ) )
+			: array_sum( $this->flags->stored_counts() );
 
 		return array(
 			'checked'         => count( $redirects ),

@@ -265,6 +265,32 @@ final class AuditSweepTest extends TestCase {
 	}
 
 	/**
+	 * Test named redirects are validated a batch at a time, so a long list
+	 * never becomes one query naming every row, and each is still flagged.
+	 */
+	public function test_named_redirects_are_validated_a_batch_at_a_time(): void {
+		global $wpdb;
+
+		$ids       = $this->create_broken_redirects( AuditSweep::BATCH_SIZE + 1, 'sweep-named' );
+		$redirects = array_map( fn( int $id ): Redirect => $this->repository()->find_by_id( $id ), $ids );
+
+		$reads = array();
+		$log   = static function ( string $query ) use ( &$reads, $wpdb ): string {
+			if ( str_starts_with( $query, "SELECT post_id, meta_value FROM {$wpdb->postmeta}" ) ) {
+				$reads[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->sweep()->validate_redirects( $redirects );
+		remove_filter( 'query', $log );
+
+		$this->assertCount( 2, $reads, 'One flag read per batch.' );
+		$this->assertSame( AuditSweep::BATCH_SIZE + 1, ( new AuditFlags() )->problem_count() );
+	}
+
+	/**
 	 * Test the total counts enabled and disabled redirects, not the Trash,
 	 * and a batch's flag writes leave it cached.
 	 */
@@ -284,6 +310,70 @@ final class AuditSweepTest extends TestCase {
 		$queries = $wpdb->num_queries;
 		$this->assertSame( 2, $sweep->total() );
 		$this->assertSame( $queries, $wpdb->num_queries, 'The total must come from the cache.' );
+	}
+
+	/**
+	 * Test a pass over rows whose flags have not changed reads the flags in
+	 * one query and writes none.
+	 *
+	 * Recorded one row at a time, every clean row cost a meta lookup even
+	 * when there was nothing to clear: millions of queries a pass on a large
+	 * site. Counting queries are excluded, as they read the posts table.
+	 */
+	public function test_a_pass_over_unchanged_rows_reads_flags_once_and_writes_none(): void {
+		global $wpdb;
+
+		$broken = $this->create_broken_redirects( 3, 'sweep-steady' );
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$this->create_redirect( "/sweep-steady-clean-{$i}", 'https://example.com/fine' );
+		}
+
+		$sweep = $this->sweep();
+		$this->run_pass( $sweep );
+
+		$queries = array();
+		$log     = static function ( string $query ) use ( &$queries, $wpdb ): string {
+			if ( str_contains( $query, $wpdb->postmeta ) && ! str_contains( $query, "FROM {$wpdb->posts} " ) ) {
+				$queries[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->run_pass( $sweep );
+		remove_filter( 'query', $log );
+
+		$this->assertCount( 1, $queries, implode( "\n", $queries ) );
+		$this->assertSame( 'problem', get_post_meta( $broken[0], AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test a steady-state pass over post-ID rows costs the same number of
+	 * queries however many rows it covers.
+	 *
+	 * Uses the full auditor, source lookups included. Each row's source was
+	 * looked up with a query of its own, and each row's flag with another.
+	 */
+	public function test_a_steady_state_pass_costs_no_queries_per_row(): void {
+		global $wpdb;
+
+		$target = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$sweep  = new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() );
+		$counts = array();
+
+		foreach ( array( 5, 10 ) as $total ) {
+			for ( $i = count( $counts ) * 5 + 1; $i <= $total; $i++ ) {
+				$this->create_redirect( "/sweep-steady-post-{$i}", $target );
+			}
+
+			$this->run_pass( $sweep );
+
+			$queries = $wpdb->num_queries;
+			$this->run_pass( $sweep );
+			$counts[] = $wpdb->num_queries - $queries;
+		}
+
+		$this->assertSame( $counts[0], $counts[1] );
 	}
 
 	/**

@@ -117,6 +117,35 @@ final class PostTypeRedirectQueryRepositoryTest extends TestCase {
 	}
 
 	/**
+	 * A page and its total come from one search of the table, the total
+	 * agreeing with count_matching().
+	 */
+	public function test_find_page_takes_the_total_from_the_same_search(): void {
+		global $wpdb;
+
+		$this->create_redirects_with_one_date( 3 );
+
+		$searches = array();
+		$log      = static function ( string $sql ) use ( &$searches, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts}" ) && str_contains( $sql, 'LIKE' ) ) {
+				$searches[] = $sql;
+			}
+			return $sql;
+		};
+
+		$criteria = new RedirectCriteria( null, null, 'same-second', 'date', 'DESC', 2 );
+
+		add_filter( 'query', $log );
+		$page = $this->query_repository()->find_page( $criteria );
+		remove_filter( 'query', $log );
+
+		$this->assertCount( 1, $searches, implode( "\n", $searches ) );
+		$this->assertCount( 2, $page['redirects'] );
+		$this->assertSame( 3, $page['total'] );
+		$this->assertSame( $this->query_repository()->count_matching( $criteria ), $page['total'] );
+	}
+
+	/**
 	 * Destination type counts are exact, cover disabled redirects but not the
 	 * Trash, count a row in every type it matches, and take one query.
 	 */

@@ -177,6 +177,37 @@ final class AbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * Test validate reports the flagged total from the counts it has just
+	 * stored, rather than counting the flags a second time.
+	 *
+	 * The stored counts are by severity; a recount over every flag reads
+	 * the flag key alone.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reads_back_the_counts_it_stored(): void {
+		global $wpdb;
+
+		$this->create_redirect( '/stored-count-a', 'https://not-allowed.example.net/a' );
+		$this->create_redirect( '/stored-count-b', 'https://not-allowed.example.net/b' );
+
+		$recounts = array();
+		$log      = static function ( string $sql ) use ( &$recounts, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts} " ) && str_contains( $sql, AuditFlags::META_KEY ) && ! str_contains( $sql, 'meta_value' ) ) {
+				$recounts[] = $sql;
+			}
+			return $sql;
+		};
+
+		add_filter( 'query', $log );
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/stored-count-a', '/stored-count-b' ) ) );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 2, $result['flagged'] );
+		$this->assertSame( array(), $recounts );
+	}
+
+	/**
 	 * Test paging through flagged redirects reaches every one, even as checking unflags some.
 	 *
 	 * A redirect found fine drops off the flagged list when it is checked,
@@ -403,6 +434,41 @@ final class AbilitiesTest extends TestCase {
 		$enabled = $this->ability( 'list-redirects' )->execute( array( 'status' => 'enabled' ) );
 
 		$this->assertSame( 0, $enabled['total'] );
+	}
+
+	/**
+	 * Test a searched list runs its search once, taking the total from the
+	 * page's own query rather than searching again to count.
+	 *
+	 * @return void
+	 */
+	public function test_searched_list_searches_once(): void {
+		global $wpdb;
+
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$this->create_redirect( "/searched-once-{$i}", 'https://example.com/searched' );
+		}
+
+		$searches = array();
+		$log      = static function ( string $sql ) use ( &$searches, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts}" ) && str_contains( $sql, 'searched-once' ) ) {
+				$searches[] = $sql;
+			}
+			return $sql;
+		};
+
+		add_filter( 'query', $log );
+		$listed = $this->ability( 'list-redirects' )->execute(
+			array(
+				'search' => 'searched-once',
+				'limit'  => 1,
+			)
+		);
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 3, $listed['total'] );
+		$this->assertCount( 1, $listed['redirects'] );
+		$this->assertCount( 1, $searches, implode( "\n", $searches ) );
 	}
 
 	/**

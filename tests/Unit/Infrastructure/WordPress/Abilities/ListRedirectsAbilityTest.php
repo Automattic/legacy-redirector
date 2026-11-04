@@ -74,8 +74,13 @@ final class ListRedirectsAbilityTest extends MonkeyStubs {
 			'publish'
 		);
 
-		$this->query_repository->shouldReceive( 'find_matching' )->once()->andReturn( array( $redirect ) );
-		$this->query_repository->shouldReceive( 'count_matching' )->once()->andReturn( 57 );
+		$this->query_repository->shouldReceive( 'find_page' )->once()->andReturn(
+			array(
+				'redirects' => array( $redirect ),
+				'total'     => 57,
+			)
+		);
+		$this->query_repository->shouldNotReceive( 'count_matching' );
 
 		$result = $this->ability->execute( array( 'limit' => 1 ) );
 
@@ -91,7 +96,7 @@ final class ListRedirectsAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility::filter_value
 	 */
 	public function test_execute_treats_any_as_no_filter(): void {
-		$this->query_repository->shouldReceive( 'find_matching' )
+		$this->query_repository->shouldReceive( 'find_page' )
 			->once()
 			->with(
 				Mockery::on(
@@ -103,9 +108,12 @@ final class ListRedirectsAbilityTest extends MonkeyStubs {
 					}
 				)
 			)
-			->andReturn( array() );
-
-		$this->query_repository->shouldReceive( 'count_matching' )->andReturn( 0 );
+			->andReturn(
+				array(
+					'redirects' => array(),
+					'total'     => 0,
+				)
+			);
 
 		$this->ability->execute(
 			array(
@@ -122,7 +130,7 @@ final class ListRedirectsAbilityTest extends MonkeyStubs {
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility::execute
 	 */
 	public function test_execute_passes_filters_to_the_criteria(): void {
-		$this->query_repository->shouldReceive( 'find_matching' )
+		$this->query_repository->shouldReceive( 'find_page' )
 			->once()
 			->with(
 				Mockery::on(
@@ -133,9 +141,12 @@ final class ListRedirectsAbilityTest extends MonkeyStubs {
 					}
 				)
 			)
-			->andReturn( array() );
-
-		$this->query_repository->shouldReceive( 'count_matching' )->andReturn( 0 );
+			->andReturn(
+				array(
+					'redirects' => array(),
+					'total'     => 0,
+				)
+			);
 
 		$this->ability->execute(
 			array(

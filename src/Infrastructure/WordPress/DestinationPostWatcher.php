@@ -211,10 +211,14 @@ final class DestinationPostWatcher {
 			return;
 		}
 
+		$this->auditor->prime( $redirects );
+
+		$findings = array();
 		foreach ( $redirects as $redirect ) {
-			$this->flags->record_row( (int) $redirect->id(), $this->auditor->audit( $redirect ) );
+			$findings[ (int) $redirect->id() ] = $this->auditor->audit( $redirect );
 		}
 
+		$this->flags->record_rows( $findings );
 		$this->flags->store_counts();
 	}
 }

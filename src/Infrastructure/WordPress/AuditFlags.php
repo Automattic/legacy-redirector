@@ -92,31 +92,75 @@ final class AuditFlags {
 	}
 
 	/**
-	 * Record a row's audit outcome.
+	 * Record rows' audit outcomes.
 	 *
-	 * Written with update_post_meta, which does not fire save_post, so
-	 * recording a flag does not immediately clear it again.
+	 * The rows' current flags are read in one query and only the flags that
+	 * change are written, so a pass over an unchanged table writes nothing:
+	 * delete_post_meta() and update_post_meta() would each query every row
+	 * to find out there was nothing to do, and update_post_meta() would load
+	 * the row's meta into the object cache too. Writes go through those
+	 * functions, which do not fire save_post, so recording a flag does not
+	 * immediately clear it again.
 	 *
-	 * @param int            $post_id  The redirect post ID.
-	 * @param AuditFinding[] $findings The findings the audit produced for this row.
+	 * @param array<int, AuditFinding[]> $findings The findings the audit produced, keyed by redirect post ID.
 	 * @return void
 	 */
-	public function record_row( int $post_id, array $findings ): void {
-		if ( array() === $findings ) {
-			delete_post_meta( $post_id, self::META_KEY );
+	public function record_rows( array $findings ): void {
+		global $wpdb;
 
+		if ( array() === $findings ) {
 			return;
 		}
 
-		$severity = 'warning';
+		$ids = array_keys( $findings );
+
+		// A refused read says nothing about the stored flags, so every row is
+		// then written, as each would be on its own. query()'s return value
+		// says so; last_error may still hold an earlier query's error, or none.
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- One read for the batch, where the meta cache would load every key of every row; the interpolated fragment is only %d placeholders.
+		$known = false !== $wpdb->query(
+			$wpdb->prepare(
+				"SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = %s AND post_id IN (" . implode( ',', array_fill( 0, count( $ids ), '%d' ) ) . ')',
+				self::META_KEY,
+				...$ids
+			)
+		);
+		// phpcs:enable
+		$current = $known ? array_column( $wpdb->last_result, 'meta_value', 'post_id' ) : array();
+
+		foreach ( $findings as $post_id => $found ) {
+			$severity = self::severity( $found );
+
+			if ( $known && ( $current[ $post_id ] ?? null ) === $severity ) {
+				continue;
+			}
+
+			if ( null === $severity ) {
+				delete_post_meta( $post_id, self::META_KEY );
+			} else {
+				update_post_meta( $post_id, self::META_KEY, $severity );
+			}
+		}
+	}
+
+	/**
+	 * The flag a row's findings earn: the worst severity, or none.
+	 *
+	 * @param AuditFinding[] $findings The row's findings.
+	 * @return string|null 'problem', 'warning', or null for no flag.
+	 */
+	private static function severity( array $findings ): ?string {
+		if ( array() === $findings ) {
+			return null;
+		}
+
 		foreach ( $findings as $finding ) {
 			if ( ! $finding->is_warning() ) {
-				$severity = 'problem';
-				break;
+				return 'problem';
 			}
 		}
 
-		update_post_meta( $post_id, self::META_KEY, $severity );
+		return 'warning';
 	}
 
 	/**

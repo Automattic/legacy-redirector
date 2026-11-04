@@ -262,7 +262,9 @@ final class ListCommand extends WP_CLI_Command {
 		}
 
 		// Table, JSON and YAML need every row at once to lay out their output.
-		$redirects = $this->query_repository->find_matching( $criteria );
+		// The page's own query counts the total the table shows too.
+		$page      = $this->query_repository->find_page( $criteria );
+		$redirects = $page['redirects'];
 
 		// Only a table says so in words; JSON and YAML print an empty list.
 		if ( empty( $redirects ) && 'table' === $format ) {
@@ -280,7 +282,7 @@ final class ListCommand extends WP_CLI_Command {
 
 		// Show pagination info for table format.
 		if ( 'table' === $format ) {
-			$total_count = $this->query_repository->count_matching( $criteria );
+			$total_count = $page['total'];
 			if ( $total_count > count( $redirects ) ) {
 				WP_CLI::line( '' );
 				WP_CLI::line(
