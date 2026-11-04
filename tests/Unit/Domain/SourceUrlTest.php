@@ -11,7 +11,7 @@ namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\SourceUrl;
 use InvalidArgumentException;
-use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
+use PHPUnit\Framework\TestCase;
 
 /**
  * SourceUrlTest class.
@@ -23,7 +23,7 @@ use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
  * @uses \Automattic\LegacyRedirector\Domain\Url
  * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
-final class SourceUrlTest extends YoastTestCase {
+final class SourceUrlTest extends TestCase {
 
 	/**
 	 * Test from_string creates valid SourceUrl from path.
@@ -70,87 +70,65 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test a full URL on a subsite loses the subsite prefix.
+	 * Test a full URL loses the site's home path.
 	 *
 	 * Stored sources are relative to the site's home URL, and the resolver
-	 * strips the subsite prefix from every request before looking one up. A
-	 * full URL that kept the prefix would be saved under a key no request can
-	 * produce, so the redirect would silently never fire.
+	 * strips the home path from every request before looking one up. A full
+	 * URL that kept it would be saved under a key no request can produce, so
+	 * the redirect would silently never fire.
+	 *
+	 * This is SourceUrl's own stripping, not HomePath's: Domain cannot call
+	 * the Application layer, so the cases are kept here as well.
+	 *
+	 * @dataProvider data_home_path_stripping
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 *
+	 * @param string $url       The source as entered.
+	 * @param string $home_path The site's home path.
+	 * @param string $expected  The stored path.
 	 */
-	public function test_from_string_strips_subsite_home_path(): void {
-		$source = SourceUrl::from_string( 'https://example.com/subsite1/old-page', '/subsite1' );
-
-		$this->assertSame( '/old-page', $source->path() );
+	public function test_from_string_strips_home_path( string $url, string $home_path, string $expected ): void {
+		$this->assertSame( $expected, SourceUrl::from_string( $url, $home_path )->path() );
 	}
 
 	/**
-	 * Test the subsite home path is stripped once, not everywhere it appears.
+	 * Data provider of sources, home paths and the path each is stored as.
 	 *
-	 * On a subsite at /subsite1, the real URL example.com/subsite1/subsite1/x
-	 * must be stored as /subsite1/x. Only the leading prefix comes off.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
+	 * @return array<string, array{string, string, string}>
 	 */
-	public function test_from_string_strips_only_the_leading_subsite_home_path(): void {
-		$source = SourceUrl::from_string( 'https://example.com/subsite1/subsite1/old-page', '/subsite1' );
-
-		$this->assertSame( '/subsite1/old-page', $source->path() );
+	public static function data_home_path_stripping(): array {
+		return array(
+			'prefix stripped'                  => array( 'https://example.com/subsite1/old-page', '/subsite1', '/old-page' ),
+			'unicode prefix stripped'          => array( 'https://example.com/日本/ページ', '/日本', '/ページ' ),
+			// The home path arrives decoded (home_url() is not percent-encoded)
+			// while a copied browser URL arrives encoded; stripping happens
+			// after decoding, so the two forms meet.
+			'encoded URL, decoded home'        => array( 'https://example.com/%E6%97%A5%E6%9C%AC/%E3%83%9A%E3%83%BC%E3%82%B8', '/日本', '/ページ' ),
+			'unicode path under ascii home'    => array( 'https://example.com/subsite1/日本語', '/subsite1', '/日本語' ),
+			// Only the leading prefix comes off: example.com/subsite1/subsite1/x
+			// is /subsite1/x on that subsite.
+			'only the leading prefix'          => array( 'https://example.com/subsite1/subsite1/old-page', '/subsite1', '/subsite1/old-page' ),
+			'only the leading unicode prefix'  => array( 'https://example.com/日本/日本/ページ', '/日本', '/日本/ページ' ),
+			// Stripping leaves '/', which must survive trailing-slash removal
+			// rather than being emptied.
+			'home itself becomes root'         => array( 'https://example.com/subsite1/', '/subsite1', '/' ),
+			'unicode home itself becomes root' => array( 'https://example.com/日本/', '/日本', '/' ),
+			// A byte-prefix match without the '/' boundary would corrupt these
+			// into '0/old-page' and '語/ページ'.
+			'partial segment kept'             => array( 'https://example.com/subsite10/old-page', '/subsite1', '/subsite10/old-page' ),
+			'unicode partial segment kept'     => array( 'https://example.com/日本語/ページ', '/日本', '/日本語/ページ' ),
+			'query kept'                       => array( 'https://example.com/subsite1/old-page?foo=bar', '/subsite1', '/old-page?foo=bar' ),
+			'unicode query kept'               => array( 'https://example.com/日本/ページ?тест=да', '/日本', '/ページ?тест=да' ),
+			// The resolver has already removed the prefix by the time a bare
+			// request path reaches here, so stripping again would mangle it.
+			'hostless path untouched'          => array( '/subsite1/old-page', '/subsite1', '/subsite1/old-page' ),
+			'hostless unicode path untouched'  => array( '/日本/ページ', '/日本', '/日本/ページ' ),
+		);
 	}
 
 	/**
-	 * Test a full URL for the subsite's own home page normalizes to '/'.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_subsite_home_url_becomes_root(): void {
-		$source = SourceUrl::from_string( 'https://example.com/subsite1/', '/subsite1' );
-
-		$this->assertSame( '/', $source->path() );
-	}
-
-	/**
-	 * Test a path that merely resembles the subsite prefix is left alone.
-	 *
-	 * '/subsite10' is not inside '/subsite1', so a naive prefix match would
-	 * corrupt it into '0'.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_does_not_strip_partial_segment_match(): void {
-		$source = SourceUrl::from_string( 'https://example.com/subsite10/old-page', '/subsite1' );
-
-		$this->assertSame( '/subsite10/old-page', $source->path() );
-	}
-
-	/**
-	 * Test a bare request path is never stripped, whatever the home path.
-	 *
-	 * The resolver has already removed the prefix by the time a request path
-	 * reaches here, so stripping again would mangle the hot path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_leaves_hostless_path_untouched_on_subsite(): void {
-		$source = SourceUrl::from_string( '/subsite1/old-page', '/subsite1' );
-
-		$this->assertSame( '/subsite1/old-page', $source->path() );
-	}
-
-	/**
-	 * Test the query string survives subsite prefix stripping.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_strips_subsite_home_path_and_keeps_query(): void {
-		$source = SourceUrl::from_string( 'https://example.com/subsite1/old-page?foo=bar', '/subsite1' );
-
-		$this->assertSame( '/old-page?foo=bar', $source->path() );
-	}
-
-	/**
-	 * Test hash returns consistent MD5.
+	 * Test hash is the md5 of the normalized path, the stored lookup key.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::hash
 	 */
@@ -158,18 +136,6 @@ final class SourceUrlTest extends YoastTestCase {
 		$source = SourceUrl::from_string( '/test-page' );
 
 		$this->assertSame( md5( '/test-page' ), $source->hash() );
-	}
-
-	/**
-	 * Test hash is consistent for same path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::hash
-	 */
-	public function test_hash_is_consistent(): void {
-		$source1 = SourceUrl::from_string( '/test-page' );
-		$source2 = SourceUrl::from_string( '/test-page' );
-
-		$this->assertSame( $source1->hash(), $source2->hash() );
 	}
 
 	/**
@@ -217,28 +183,6 @@ final class SourceUrlTest extends YoastTestCase {
 		$this->expectExceptionMessage( 'The URL does not validate.' );
 
 		SourceUrl::from_string( '' );
-	}
-
-	/**
-	 * Test from_string handles unicode paths.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_handles_unicode(): void {
-		$source = SourceUrl::from_string( '/فوتوغرافيا' );
-
-		$this->assertSame( '/فوتوغرافيا', $source->path() );
-	}
-
-	/**
-	 * Test from_string handles unicode with query string.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_handles_unicode_with_query(): void {
-		$source = SourceUrl::from_string( '/فوتوغرافيا?test=فوتوغرافيا' );
-
-		$this->assertSame( '/فوتوغرافيا?test=فوتوغرافيا', $source->path() );
 	}
 
 	/**
@@ -537,106 +481,6 @@ final class SourceUrlTest extends YoastTestCase {
 	}
 
 	/**
-	 * Test a unicode path under an ASCII subsite prefix is stripped correctly.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_strips_ascii_home_path_from_unicode_path(): void {
-		$source = SourceUrl::from_string( 'https://example.com/subsite1/日本語', '/subsite1' );
-
-		$this->assertSame( '/日本語', $source->path() );
-	}
-
-	/**
-	 * Test a unicode home path is stripped from a unicode path.
-	 *
-	 * Stripping compares and slices bytes, not characters, so a
-	 * multibyte prefix only works because both sides have already been decoded
-	 * to the same UTF-8 bytes by mb_parse_url(). A substr() on a character
-	 * count here would cut a multibyte sequence in half.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_strips_unicode_home_path(): void {
-		$source = SourceUrl::from_string( 'https://example.com/日本/ページ', '/日本' );
-
-		$this->assertSame( '/ページ', $source->path() );
-	}
-
-	/**
-	 * Test a percent-encoded full URL still matches a decoded unicode home path.
-	 *
-	 * The home path arrives decoded (home_url() is not percent-encoded) while
-	 * a copied browser URL arrives encoded. Stripping happens after
-	 * mb_parse_url() has decoded the path, so the two forms meet.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_strips_unicode_home_path_from_encoded_url(): void {
-		$source = SourceUrl::from_string( 'https://example.com/%E6%97%A5%E6%9C%AC/%E3%83%9A%E3%83%BC%E3%82%B8', '/日本' );
-
-		$this->assertSame( '/ページ', $source->path() );
-	}
-
-	/**
-	 * Test a unicode subsite's own home URL normalizes to '/'.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_unicode_subsite_home_url_becomes_root(): void {
-		$source = SourceUrl::from_string( 'https://example.com/日本/', '/日本' );
-
-		$this->assertSame( '/', $source->path() );
-	}
-
-	/**
-	 * Test a unicode path that merely shares a prefix is left alone.
-	 *
-	 * '/日本語' is not inside '/日本', so a byte-prefix match without the '/'
-	 * boundary would corrupt it into '語'.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_does_not_strip_partial_unicode_segment_match(): void {
-		$source = SourceUrl::from_string( 'https://example.com/日本語/ページ', '/日本' );
-
-		$this->assertSame( '/日本語/ページ', $source->path() );
-	}
-
-	/**
-	 * Test a unicode query string survives unicode home path stripping.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_strips_unicode_home_path_and_keeps_unicode_query(): void {
-		$source = SourceUrl::from_string( 'https://example.com/日本/ページ?тест=да', '/日本' );
-
-		$this->assertSame( '/ページ?тест=да', $source->path() );
-	}
-
-	/**
-	 * Test the unicode home path is stripped once, not everywhere it appears.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_strips_only_the_leading_unicode_home_path(): void {
-		$source = SourceUrl::from_string( 'https://example.com/日本/日本/ページ', '/日本' );
-
-		$this->assertSame( '/日本/ページ', $source->path() );
-	}
-
-	/**
-	 * Test a bare unicode request path is never stripped, whatever the home path.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_leaves_hostless_unicode_path_untouched(): void {
-		$source = SourceUrl::from_string( '/日本/ページ', '/日本' );
-
-		$this->assertSame( '/日本/ページ', $source->path() );
-	}
-
-	/**
 	 * Test a trailing slash is removed from the source path.
 	 *
 	 * @dataProvider data_trailing_slash_paths
@@ -700,20 +544,6 @@ final class SourceUrlTest extends YoastTestCase {
 				$spelling . ' should hash as /old-page'
 			);
 		}
-	}
-
-	/**
-	 * Test a subsite's own home URL with a trailing slash still becomes root.
-	 *
-	 * Home-path stripping leaves '/', which must survive slash removal rather
-	 * than being emptied.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Domain\SourceUrl::from_string
-	 */
-	public function test_from_string_subsite_home_url_with_slash_becomes_root(): void {
-		$source = SourceUrl::from_string( 'https://example.com/blog/', '/blog' );
-
-		$this->assertSame( '/', $source->path() );
 	}
 
 	/**

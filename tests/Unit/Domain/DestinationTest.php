@@ -13,7 +13,7 @@ use Automattic\LegacyRedirector\Domain\Destination;
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
 use Automattic\LegacyRedirector\Domain\DestinationUrl;
 use Automattic\LegacyRedirector\Domain\InvalidRedirectValue;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 use LogicException;
 
 /**
@@ -25,7 +25,7 @@ use LogicException;
  * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  * @uses \Automattic\LegacyRedirector\Domain\Url
  */
-final class DestinationTest extends MonkeyStubs {
+final class DestinationTest extends TestCase {
 
 	/**
 	 * Test from_url creates URL destination.

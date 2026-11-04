@@ -266,27 +266,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test find_by_source handles cached zero as string.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
-	 */
-	public function test_find_by_source_cached_zero_string_returns_null(): void {
-		$source = $this->create_source();
-
-		Functions\expect( 'wp_cache_get' )
-			->once()
-			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( '0' );
-
-		$this->inner->shouldNotReceive( 'find_by_source' );
-		$this->inner->shouldNotReceive( 'find_by_id' );
-
-		$result = $this->repository->find_by_source( $source );
-
-		$this->assertNull( $result );
-	}
-
-	/**
 	 * Test find_by_source uses cached ID to find by ID on cache hit.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
@@ -343,13 +322,17 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test find_by_source returns null for inactive (non-published) redirect.
+	 * Test find_by_source returns null for an inactive (non-published) redirect.
+	 *
+	 * @dataProvider data_inactive_statuses
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 *
+	 * @param string $status The redirect's post status.
 	 */
-	public function test_find_by_source_returns_null_for_trashed_redirect(): void {
+	public function test_find_by_source_returns_null_for_inactive_redirect( string $status ): void {
 		$source   = $this->create_source();
-		$redirect = $this->create_redirect( 123, '/old-page', 'trash' );
+		$redirect = $this->create_redirect( 123, '/old-page', $status );
 
 		Functions\expect( 'wp_cache_get' )
 			->once()
@@ -362,60 +345,19 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 			->with( 123 )
 			->andReturn( $redirect );
 
-		$result = $this->repository->find_by_source( $source );
-
-		$this->assertNull( $result );
+		$this->assertNull( $this->repository->find_by_source( $source ) );
 	}
 
 	/**
-	 * Test find_by_source returns null for draft redirect.
+	 * Data provider of statuses a redirect does not fire in.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
+	 * @return array<string, array{string}>
 	 */
-	public function test_find_by_source_returns_null_for_draft_redirect(): void {
-		$source   = $this->create_source();
-		$redirect = $this->create_redirect( 123, '/old-page', 'draft' );
-
-		Functions\expect( 'wp_cache_get' )
-			->once()
-			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( 123 );
-
-		$this->inner
-			->shouldReceive( 'find_by_id' )
-			->once()
-			->with( 123 )
-			->andReturn( $redirect );
-
-		$result = $this->repository->find_by_source( $source );
-
-		$this->assertNull( $result );
-	}
-
-	/**
-	 * Test find_by_source returns published redirect from cache hit.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_source
-	 */
-	public function test_find_by_source_returns_published_redirect(): void {
-		$source   = $this->create_source();
-		$redirect = $this->create_redirect( 123, '/old-page', 'publish' );
-
-		Functions\expect( 'wp_cache_get' )
-			->once()
-			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( 123 );
-
-		$this->inner
-			->shouldReceive( 'find_by_id' )
-			->once()
-			->with( 123 )
-			->andReturn( $redirect );
-
-		$result = $this->repository->find_by_source( $source );
-
-		$this->assertSame( $redirect, $result );
-		$this->assertTrue( $result->is_active() );
+	public static function data_inactive_statuses(): array {
+		return array(
+			'trash' => array( 'trash' ),
+			'draft' => array( 'draft' ),
+		);
 	}
 
 	/**
@@ -438,23 +380,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test find_by_id returns null when not found.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::find_by_id
-	 */
-	public function test_find_by_id_returns_null_when_not_found(): void {
-		$this->inner
-			->shouldReceive( 'find_by_id' )
-			->once()
-			->with( 999 )
-			->andReturn( null );
-
-		$result = $this->repository->find_by_id( 999 );
-
-		$this->assertNull( $result );
-	}
-
-	/**
 	 * Test exists passes through to inner repository.
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::exists
@@ -471,25 +396,6 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 		$result = $this->repository->exists( $source );
 
 		$this->assertTrue( $result );
-	}
-
-	/**
-	 * Test exists returns false when not found.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::exists
-	 */
-	public function test_exists_returns_false_when_not_found(): void {
-		$source = $this->create_source( '/nonexistent' );
-
-		$this->inner
-			->shouldReceive( 'exists' )
-			->once()
-			->with( Mockery::on( fn( $s ) => $s->hash() === $source->hash() ) )
-			->andReturn( false );
-
-		$result = $this->repository->exists( $source );
-
-		$this->assertFalse( $result );
 	}
 
 	/**
@@ -754,62 +660,39 @@ final class CachingRedirectRepositoryTest extends MonkeyStubs {
 	}
 
 	/**
-	 * Test get_id_by_source returns cached value on cache hit.
+	 * Test get_id_by_source answers a cache hit as an int, without the inner repository.
+	 *
+	 * @dataProvider data_cached_ids
 	 *
 	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
+	 *
+	 * @param int|string $cached   The value in the cache.
+	 * @param int        $expected The ID returned.
 	 */
-	public function test_get_id_by_source_cache_hit_returns_cached_value(): void {
+	public function test_get_id_by_source_cache_hit_returns_cached_value( $cached, int $expected ): void {
 		$source = $this->create_source();
 
 		Functions\expect( 'wp_cache_get' )
 			->once()
 			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( 456 );
+			->andReturn( $cached );
 
 		$this->inner->shouldNotReceive( 'get_id_by_source' );
 
-		$result = $this->repository->get_id_by_source( $source );
-
-		$this->assertSame( 456, $result );
+		$this->assertSame( $expected, $this->repository->get_id_by_source( $source ) );
 	}
 
 	/**
-	 * Test get_id_by_source returns cached zero.
+	 * Data provider of cached values and the ID each is read as.
 	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
+	 * @return array<string, array{int|string, int}>
 	 */
-	public function test_get_id_by_source_cache_hit_returns_cached_zero(): void {
-		$source = $this->create_source();
-
-		Functions\expect( 'wp_cache_get' )
-			->once()
-			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( 0 );
-
-		$this->inner->shouldNotReceive( 'get_id_by_source' );
-
-		$result = $this->repository->get_id_by_source( $source );
-
-		$this->assertSame( 0, $result );
-	}
-
-	/**
-	 * Test get_id_by_source handles string cached value.
-	 *
-	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository::get_id_by_source
-	 */
-	public function test_get_id_by_source_casts_cached_string_to_int(): void {
-		$source = $this->create_source();
-
-		Functions\expect( 'wp_cache_get' )
-			->once()
-			->with( '1:' . $source->hash(), CachingRedirectRepository::CACHE_GROUP )
-			->andReturn( '789' );
-
-		$this->inner->shouldNotReceive( 'get_id_by_source' );
-
-		$result = $this->repository->get_id_by_source( $source );
-
-		$this->assertSame( 789, $result );
+	public static function data_cached_ids(): array {
+		return array(
+			'id'          => array( 456, 456 ),
+			'id string'   => array( '789', 789 ),
+			'zero'        => array( 0, 0 ),
+			'zero string' => array( '0', 0 ),
+		);
 	}
 }

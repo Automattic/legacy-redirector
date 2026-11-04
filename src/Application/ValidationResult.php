@@ -105,17 +105,4 @@ final class ValidationResult {
 	public function error_message(): ?string {
 		return $this->error_message;
 	}
-
-	/**
-	 * Convert to WP_Error if invalid.
-	 *
-	 * @return \WP_Error|null WP_Error if invalid, null if valid.
-	 */
-	public function to_wp_error(): ?\WP_Error {
-		if ( $this->is_valid ) {
-			return null;
-		}
-
-		return new \WP_Error( $this->error_code, $this->error_message );
-	}
 }

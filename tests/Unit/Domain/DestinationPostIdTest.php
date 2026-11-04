@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\DestinationPostId;
-use Automattic\LegacyRedirector\Tests\Unit\MonkeyStubs;
+use PHPUnit\Framework\TestCase;
 use InvalidArgumentException;
 
 /**
@@ -19,7 +19,7 @@ use InvalidArgumentException;
  * @covers \Automattic\LegacyRedirector\Domain\DestinationPostId
  * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
  */
-final class DestinationPostIdTest extends MonkeyStubs {
+final class DestinationPostIdTest extends TestCase {
 
 	/**
 	 * Test from_int creates valid DestinationPostId.

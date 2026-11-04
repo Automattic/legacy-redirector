@@ -56,7 +56,7 @@ final class FindingTextTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditFindingType}>
 	 */
-	public function type_provider(): array {
+	public static function type_provider(): array {
 		$cases = array();
 
 		foreach ( AuditFindingType::cases() as $type ) {
@@ -129,7 +129,7 @@ final class FindingTextTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{AuditDetail, string}>
 	 */
-	public function detail_provider(): array {
+	public static function detail_provider(): array {
 		return array(
 			'host'               => array( AuditDetail::host( 'example.com' ), 'Host: example.com.' ),
 			'http status'        => array( AuditDetail::http_status( 503 ), 'HTTP status: 503.' ),

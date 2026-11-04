@@ -72,7 +72,7 @@ final class InternalDestinationNormalizerTest extends MonkeyStubs {
 	 *
 	 * @return array<string, array{string, string, string}>
 	 */
-	public function data_normalize(): array {
+	public static function data_normalize(): array {
 		return array(
 			// Single site.
 			'relative path untouched'           => array( 'https://example.com', '/foo', '/foo' ),

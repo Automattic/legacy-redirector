@@ -10,7 +10,7 @@ declare( strict_types = 1 );
 namespace Automattic\LegacyRedirector\Tests\Unit\Domain;
 
 use Automattic\LegacyRedirector\Domain\Url;
-use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
+use PHPUnit\Framework\TestCase;
 
 /**
  * UrlTest class.
@@ -19,7 +19,7 @@ use Yoast\WPTestUtils\BrainMonkey\YoastTestCase;
  *
  * @covers \Automattic\LegacyRedirector\Domain\Url
  */
-final class UrlTest extends YoastTestCase {
+final class UrlTest extends TestCase {
 
 	/**
 	 * Run a callback with LC_CTYPE forced to a UTF-8 locale.
