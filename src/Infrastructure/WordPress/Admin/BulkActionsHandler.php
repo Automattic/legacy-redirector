@@ -71,7 +71,12 @@ final class BulkActionsHandler {
 
 		$actions['enable_redirects']  = __( 'Enable', 'legacy-redirector' );
 		$actions['disable_redirects'] = __( 'Disable', 'legacy-redirector' );
-		$actions['test_redirects']    = _x( 'Test', 'verb: check a redirect live', 'legacy-redirector' );
+
+		// Test runs through each row's Test link, which trashed rows don't have.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for admin list display.
+		if ( ! isset( $_GET['post_status'] ) || 'trash' !== $_GET['post_status'] ) {
+			$actions['test_redirects'] = _x( 'Test', 'verb: check a redirect live', 'legacy-redirector' );
+		}
 
 		return $actions;
 	}
