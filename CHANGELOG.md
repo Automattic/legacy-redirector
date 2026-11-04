@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-11-04
 
 2.0.0 is a rewrite of the plugin. The entries below describe the difference between 1.3.0, the last tagged release, and 2.0.0; work that only fixed code added during the 2.0 development cycle is folded into the entry for the feature it belongs to.
 
