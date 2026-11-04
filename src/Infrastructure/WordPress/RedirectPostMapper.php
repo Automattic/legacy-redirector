@@ -49,7 +49,7 @@ trait RedirectPostMapper {
 			// key no request produces.
 			$source = SourceUrl::from_string( Upgrader::hashed_text( $post->post_title, $post->post_name ) );
 		} catch ( InvalidArgumentException $e ) {
-			$source     = SourceUrl::from_string( '/__corrupt__/' . $post->ID );
+			$source     = SourceUrl::from_string( PostType::CORRUPT_SOURCE_PREFIX . $post->ID );
 			$corruption = 'Invalid source: ' . $e->getMessage();
 		}
 

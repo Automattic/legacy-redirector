@@ -1253,6 +1253,215 @@ final class RedirectFormPageTest extends TestCase {
 	}
 
 	/**
+	 * Insert a redirect whose source reads but whose destination does not.
+	 *
+	 * @param string $source  The stored source.
+	 * @param string $excerpt The stored destination; empty for none at all.
+	 * @return int The post ID.
+	 */
+	private function insert_corrupt_destination( string $source, string $excerpt = '' ): int {
+		return $this->insert_redirect_post(
+			array(
+				'post_name'    => md5( $source ),
+				'post_title'   => $source,
+				'post_excerpt' => $excerpt,
+			)
+		);
+	}
+
+	/**
+	 * Test a row with no stored destination opens with an empty field and says why.
+	 *
+	 * The mapper's placeholder is '/': showing it would invent a destination,
+	 * and pressing Update would store it.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_corrupt_row_without_destination_shows_empty_field_and_notice(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_corrupt_destination( '/form-no-destination' );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'form-no-destination', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( '', $this->rendered_value( $html, 'redirect_to_display' ) );
+		$this->assertSame( '', $this->rendered_value( $html, 'redirect_to' ) );
+		$this->assertStringContainsString( 'The stored row cannot be read as a valid redirect.', $html );
+		$this->assertStringContainsString( 'No destination stored.', $html );
+	}
+
+	/**
+	 * Test pressing Update unchanged cannot turn a missing destination into a redirect home.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_corrupt_row_without_destination_resubmitted_unchanged_stays_corrupt(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_corrupt_destination( '/form-unchanged' );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => $this->rendered_value( $html, 'redirect_from' ),
+				'redirect_to'     => $this->rendered_value( $html, 'redirect_to' ),
+				'redirect_status' => 'publish',
+			)
+		);
+
+		$this->assertStringContainsString( 'error=empty_fields', $this->capture_redirect() );
+		$this->assertTrue( $this->repository()->find_by_id( $redirect_id )->is_corrupt() );
+	}
+
+	/**
+	 * Test a row with an invalid source opens with what it stores, not the placeholder.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_corrupt_row_with_invalid_source_shows_empty_field_and_notice(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( '', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( 'https://example.com/destination', $this->rendered_value( $html, 'redirect_to' ) );
+		$this->assertStringNotContainsString( '__corrupt__', $html );
+		$this->assertStringContainsString( 'Invalid source:', $html );
+	}
+
+	/**
+	 * Test an unreadable destination is shown as stored, so it can be corrected.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_corrupt_row_shows_its_stored_invalid_destination(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_corrupt_destination( '/form-bad-destination', 'ftp://example.com/nope' );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'ftp://example.com/nope', $this->rendered_value( $html, 'redirect_to_display' ) );
+		$this->assertSame( 'ftp://example.com/nope', $this->rendered_value( $html, 'redirect_to' ) );
+		$this->assertStringContainsString( 'Invalid destination:', $html );
+	}
+
+	/**
+	 * Test a destination post survives on a row whose source does not.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_corrupt_row_shows_its_stored_destination_post(): void {
+		$this->login_as_redirect_manager();
+		$post_id     = self::factory()->post->create(
+			array(
+				'post_title'  => 'Kept Destination',
+				'post_status' => 'publish',
+			)
+		);
+		$redirect_id = $this->insert_redirect_post(
+			array(
+				'post_excerpt' => '',
+				'post_parent'  => $post_id,
+			)
+		);
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+		$html = $this->render_edit_page();
+
+		$this->assertSame( 'Kept Destination (ID: ' . $post_id . ')', $this->rendered_value( $html, 'redirect_to_display' ) );
+		$this->assertSame( (string) $post_id, $this->rendered_value( $html, 'redirect_to' ) );
+	}
+
+	/**
+	 * Test a healthy redirect's form carries no corruption notice.
+	 *
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 */
+	public function test_healthy_row_shows_no_corruption_notice(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->create_redirect( '/form-healthy', 'https://example.com/destination' );
+
+		$_GET = array( 'redirect_id' => (string) $redirect_id );
+
+		$this->assertStringNotContainsString( 'The stored row cannot be read', $this->render_edit_page() );
+	}
+
+	/**
+	 * The ways a form can submit the placeholder source.
+	 *
+	 * @return array<string, array{0: string, 1: string}>
+	 */
+	public function data_placeholder_spellings(): array {
+		return array(
+			'as mapped'             => array( '/__corrupt__/', '' ),
+			'without leading slash' => array( '__corrupt__/', '' ),
+			'with a trailing slash' => array( '/__corrupt__/', '/' ),
+		);
+	}
+
+	/**
+	 * Test the placeholder source is refused, and the field is cleared of it.
+	 *
+	 * Saved, it would become a real source and the row's finding would vanish.
+	 *
+	 * @dataProvider data_placeholder_spellings
+	 * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Pages\RedirectFormPage::render_edit_page
+	 *
+	 * @param string $prefix What comes before the placeholder's ID.
+	 * @param string $suffix What comes after it.
+	 */
+	public function test_placeholder_source_is_refused( string $prefix, string $suffix ): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_redirect_post( array( 'post_title' => '' ) );
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => $prefix . $redirect_id . $suffix,
+				'redirect_to'     => 'https://example.com/destination',
+				'redirect_status' => 'publish',
+			)
+		);
+
+		$this->follow( $this->capture_redirect() );
+		$html = $this->render_edit_page();
+
+		$this->assertStringContainsString( 'That source is a placeholder', $html );
+		$this->assertSame( '', $this->rendered_value( $html, 'redirect_from' ) );
+		$this->assertSame( 'https://example.com/destination', $this->rendered_value( $html, 'redirect_to' ) );
+		$this->assertTrue( $this->repository()->find_by_id( $redirect_id )->is_corrupt() );
+	}
+
+	/**
+	 * Test the form stays a repair route: real values replace the corrupt row in place.
+	 */
+	public function test_corrupt_row_is_repaired_with_real_values(): void {
+		$this->login_as_redirect_manager();
+		$redirect_id = $this->insert_corrupt_destination( '/form-repaired' );
+
+		$this->submit(
+			array(
+				'redirect_id'     => (string) $redirect_id,
+				'redirect_from'   => 'form-repaired',
+				'redirect_to'     => 'https://example.com/fixed',
+				'redirect_status' => 'publish',
+			)
+		);
+
+		$this->assertStringContainsString( 'message=updated', $this->capture_redirect() );
+
+		$redirect = $this->repository()->find_by_id( $redirect_id );
+		$this->assertFalse( $redirect->is_corrupt() );
+		$this->assertSame( 'https://example.com/fixed', $redirect->destination()->as_url()->value() );
+	}
+
+	/**
 	 * The two form screens' hook suffixes.
 	 *
 	 * @return array<string, array{0: string}>

@@ -16,6 +16,7 @@
  * @var string   $error_message       Resolved error message, or '' if none.
  * @var string   $duplicate_url       Edit URL of the redirect that already has the source, or ''.
  * @var string   $source_warning      The warning for the stored source, or '' if none.
+ * @var string   $corruption_notice   Why the stored row is corrupt and what to do about it, or '' if healthy.
  *
  * @package Automattic\LegacyRedirector
  */
@@ -51,6 +52,12 @@ use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
 					<a href="<?php echo esc_url( $duplicate_url ); ?>"><?php esc_html_e( 'Edit the existing redirect', 'legacy-redirector' ); ?></a>
 				<?php endif; ?>
 			</p>
+		</div>
+	<?php endif; ?>
+
+	<?php if ( '' !== $corruption_notice ) : ?>
+		<div class="notice notice-error">
+			<p><?php echo esc_html( $corruption_notice ); ?></p>
 		</div>
 	<?php endif; ?>
 

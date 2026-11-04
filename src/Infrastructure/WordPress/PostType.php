@@ -26,6 +26,11 @@ final class PostType {
 	public const string POST_TYPE = 'vip-legacy-redirect';
 
 	/**
+	 * What a corrupt row's placeholder source starts with, before its post ID.
+	 */
+	public const string CORRUPT_SOURCE_PREFIX = '/__corrupt__/';
+
+	/**
 	 * Register the post type.
 	 *
 	 * @return void
