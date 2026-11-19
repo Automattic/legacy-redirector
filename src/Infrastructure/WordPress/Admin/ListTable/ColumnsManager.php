@@ -1,0 +1,467 @@
+<?php
+/**
+ * Manages custom columns for the redirects list table.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable;
+
+use Automattic\LegacyRedirector\Application\FindingText;
+use Automattic\LegacyRedirector\Application\HomePath;
+use Automattic\LegacyRedirector\Application\RedirectAuditor;
+use Automattic\LegacyRedirector\Domain\Redirect;
+use Automattic\LegacyRedirector\Domain\RedirectRepositoryInterface;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
+
+/**
+ * Handles column definitions, content rendering, and sorting for the redirects list table.
+ */
+final class ColumnsManager {
+
+	/**
+	 * Redirect repository.
+	 *
+	 * @var RedirectRepositoryInterface
+	 */
+	private RedirectRepositoryInterface $repository;
+
+	/**
+	 * Redirect auditor, the single owner of destination-health rules.
+	 *
+	 * @var RedirectAuditor
+	 */
+	private RedirectAuditor $auditor;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param RedirectRepositoryInterface $repository Redirect repository.
+	 * @param RedirectAuditor             $auditor    Redirect auditor.
+	 */
+	public function __construct( RedirectRepositoryInterface $repository, RedirectAuditor $auditor ) {
+		$this->repository = $repository;
+		$this->auditor    = $auditor;
+	}
+
+	/**
+	 * Register hooks.
+	 *
+	 * @return void
+	 */
+	public function register(): void {
+		add_filter( 'manage_' . PostType::POST_TYPE . '_posts_columns', array( $this, 'set_columns' ) );
+		add_action( 'manage_' . PostType::POST_TYPE . '_posts_custom_column', array( $this, 'render_column' ), 10, 2 );
+		add_filter( 'manage_edit-' . PostType::POST_TYPE . '_sortable_columns', array( $this, 'set_sortable_columns' ) );
+		add_action( 'pre_get_posts', array( $this, 'handle_sorting' ) );
+		add_filter( 'the_posts', array( $this, 'prime_destination_posts' ), 10, 2 );
+		add_filter( 'list_table_primary_column', array( $this, 'set_primary_column' ), 10, 2 );
+	}
+
+	/**
+	 * Whether a query is the redirect list screen's own.
+	 *
+	 * @param \WP_Query $query The query object.
+	 * @return bool True for the list table's main query.
+	 */
+	private static function is_list_query( \WP_Query $query ): bool {
+		return is_admin() && $query->is_main_query() && PostType::POST_TYPE === $query->get( 'post_type' );
+	}
+
+	/**
+	 * Load the page's post ID destinations in one query.
+	 *
+	 * The To and Health columns each need every row's destination post, and
+	 * would otherwise load them one row at a time. A post ID destination is
+	 * stored as the row's post_parent.
+	 *
+	 * @param \WP_Post[] $posts The page of redirect posts.
+	 * @param \WP_Query  $query The query object.
+	 * @return \WP_Post[] The posts, unchanged.
+	 */
+	public function prime_destination_posts( array $posts, \WP_Query $query ): array {
+		if ( self::is_list_query( $query ) ) {
+			update_post_parent_caches( $posts );
+		}
+
+		return $posts;
+	}
+
+	/**
+	 * Set column definitions.
+	 *
+	 * @return array<string, string> Column definitions.
+	 */
+	public function set_columns(): array {
+		return array(
+			'cb'     => '<input type="checkbox" />',
+			'from'   => __( 'Redirect From', 'legacy-redirector' ),
+			'to'     => __( 'Redirect To', 'legacy-redirector' ),
+			'health' => __( 'Health', 'legacy-redirector' ),
+			'status' => __( 'Status', 'legacy-redirector' ),
+			'date'   => __( 'Date', 'legacy-redirector' ),
+		);
+	}
+
+	/**
+	 * Set sortable columns.
+	 *
+	 * Redirect To is not sortable. A post ID destination is stored as a post
+	 * ID, not the permalink the column shows, so no SQL ordering matches what
+	 * a person reads, and sorting by the unindexed stored value would cost a
+	 * full table sort per page for an order nobody can follow. WP_Query does
+	 * not accept post_excerpt as an orderby anyway, so it never sorted.
+	 *
+	 * @param array<string, string> $columns Existing sortable columns.
+	 * @return array<string, string> Modified sortable columns.
+	 */
+	public function set_sortable_columns( array $columns ): array {
+		$columns['from'] = 'from';
+		return $columns;
+	}
+
+	/**
+	 * Set the primary column for row actions placement.
+	 *
+	 * @param string $column    Current primary column.
+	 * @param string $screen_id The screen ID.
+	 * @return string Primary column name.
+	 */
+	public function set_primary_column( string $column, string $screen_id ): string {
+		if ( 'edit-' . PostType::POST_TYPE === $screen_id ) {
+			return 'from';
+		}
+		return $column;
+	}
+
+	/**
+	 * Handle custom column sorting.
+	 *
+	 * @param \WP_Query $query The query object.
+	 * @return void
+	 */
+	public function handle_sorting( \WP_Query $query ): void {
+		if ( ! self::is_list_query( $query ) ) {
+			return;
+		}
+
+		$orderby = $query->get( 'orderby' );
+
+		// Both orderings need an ID tiebreaker: an import creates hundreds of
+		// rows in the same second, duplicates the 2.0 migration disabled keep
+		// the live redirect's source as their title, and ties ordered
+		// arbitrarily by the database make pagination unstable - a row can
+		// appear on no page (and another on two) while the item count says
+		// otherwise.
+		if ( '' === $orderby || 'date' === $orderby || 'from' === $orderby ) {
+			$order  = strtoupper( (string) $query->get( 'order' ) );
+			$order  = 'ASC' === $order ? 'ASC' : 'DESC';
+			$column = 'from' === $orderby ? 'title' : 'date';
+			$query->set(
+				'orderby',
+				array(
+					$column => $order,
+					'ID'    => $order,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Render column content.
+	 *
+	 * @param string $column  The column name.
+	 * @param int    $post_id The post ID.
+	 * @return void
+	 */
+	public function render_column( string $column, int $post_id ): void {
+		$redirect = $this->repository->find_by_id( $post_id );
+		if ( null === $redirect ) {
+			return;
+		}
+
+		switch ( $column ) {
+			case 'from':
+				$this->render_from_column( $redirect );
+				break;
+			case 'to':
+				$this->render_to_column( $redirect );
+				break;
+			case 'health':
+				$this->render_health_column( $redirect );
+				break;
+			case 'status':
+				$this->render_status_column( $redirect );
+				break;
+		}
+	}
+
+	/**
+	 * Render the "from" column.
+	 *
+	 * The source path is site-relative, so it gets the same gray home URL
+	 * prefix as the "to" column. The prefix sits outside the anchor so the
+	 * clickable row title stays the path itself.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return void
+	 */
+	private function render_from_column( Redirect $redirect ): void {
+		$source = $redirect->source()->path();
+		$this->render_home_url_prefix( $source );
+
+		// A trashed redirect can't be edited until it is restored, so, as core
+		// does for row titles in the Trash, there is nothing to link to.
+		if ( 'trash' === $redirect->status() ) {
+			printf( '<strong>%s</strong>', esc_html( $source ) );
+			return;
+		}
+
+		$edit_link = admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $redirect->id() );
+		printf(
+			'<strong><a class="row-title" href="%1$s" aria-label="%2$s">%3$s</a></strong>',
+			esc_url( $edit_link ),
+			/* translators: %s: redirect source path */
+			esc_attr( sprintf( __( 'Edit redirect from &#8220;%s&#8221;', 'legacy-redirector' ), $source ) ),
+			esc_html( $source )
+		);
+	}
+
+	/**
+	 * Render the "to" column: the destination, and nothing else.
+	 *
+	 * Findings about the destination live in the Health column, so this cell
+	 * stays a stable place to read where the redirect points.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return void
+	 */
+	private function render_to_column( Redirect $redirect ): void {
+		// A corrupt row's stored destination is a placeholder; showing it would
+		// present invented data as real. The Health column names the corruption.
+		if ( $redirect->is_corrupt() ) {
+			echo '&mdash;';
+			return;
+		}
+
+		$destination = $redirect->destination();
+
+		if ( $destination->is_post_id() ) {
+			$post_id   = $destination->as_post_id()->value();
+			$permalink = get_permalink( $post_id );
+
+			// A deleted destination has no permalink to show; name the post it
+			// pointed at so the row still reads.
+			if ( ! is_string( $permalink ) ) {
+				/* translators: %d: destination post ID */
+				echo esc_html( sprintf( __( 'Post %d', 'legacy-redirector' ), $post_id ) );
+				return;
+			}
+
+			$this->render_relative_path_with_prefix( str_replace( home_url(), '', $permalink ) );
+		} elseif ( $destination->as_url()->is_absolute() ) {
+			$url = $destination->as_url()->value();
+			// Bold for consistency with the prefixed relative paths alongside it.
+			if ( '' !== $this->home_url_prefix() ) {
+				printf( '<strong>%s</strong>', esc_url( $url ) );
+			} else {
+				echo esc_url( $url );
+			}
+		} else {
+			$this->render_relative_path_with_prefix( $destination->as_url()->value() );
+		}
+	}
+
+	/**
+	 * Render the "health" column: every finding the auditor can report
+	 * without HTTP requests, or a tick when there are none.
+	 *
+	 * The same auditor backs `validate`, the background check and the Test
+	 * row action - whose fresh, HTTP-inclusive result replaces this cell's
+	 * content - so no surface can disagree.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return void
+	 */
+	private function render_health_column( Redirect $redirect ): void {
+		$findings = $this->auditor->audit( $redirect );
+
+		if ( array() === $findings ) {
+			// A tick must not overclaim: for a destination only an HTTP request
+			// can judge, "no findings" means "nothing conclusive", not "fine".
+			if ( $this->auditor->destination_needs_http( $redirect ) ) {
+				$is_external = ! $redirect->destination()->is_post_id() && $redirect->destination()->as_url()->is_absolute();
+
+				self::render_finding(
+					'dashicons-editor-help',
+					'#787c82',
+					'',
+					__( 'Not fully checked', 'legacy-redirector' ),
+					$is_external
+						? __( 'External destination: only a request can tell whether it responds. Use Test.', 'legacy-redirector' )
+						: __( 'No post serves this path, but it may be an archive, a rewrite endpoint, or served outside WordPress. Use Test to check it responds.', 'legacy-redirector' )
+				);
+				return;
+			}
+
+			echo '<span class="dashicons dashicons-yes-alt" style="color: #00a32a;" aria-hidden="true"></span><span class="screen-reader-text">' . esc_html__( 'No issues found', 'legacy-redirector' ) . '</span>';
+			return;
+		}
+
+		foreach ( $findings as $finding ) {
+			$is_warning = $finding->is_warning();
+
+			self::render_finding(
+				$is_warning ? 'dashicons-flag' : 'dashicons-warning',
+				$is_warning ? '#dba617' : '#d63638',
+				$is_warning ? __( 'Warning:', 'legacy-redirector' ) : __( 'Problem:', 'legacy-redirector' ),
+				FindingText::label( $finding->type() ),
+				FindingText::summary( $finding->type(), $finding->detail() )
+			);
+		}
+	}
+
+	/**
+	 * Render one Health line: a severity icon and label that open to say what
+	 * is wrong and what to do about it.
+	 *
+	 * A native disclosure rather than a title tooltip, so the detail is in
+	 * reach of keyboard and touch users, not only a hovering mouse. The Test
+	 * script builds the same markup for its fresh result.
+	 *
+	 * @param string $icon     Dashicons class.
+	 * @param string $color    Icon color.
+	 * @param string $severity Screen reader prefix, such as "Warning:", or ''.
+	 * @param string $label    Short label.
+	 * @param string $detail   What is wrong and what to do about it.
+	 * @return void
+	 */
+	private static function render_finding( string $icon, string $color, string $severity, string $label, string $detail ): void {
+		printf(
+			'<details class="legacy-redirector-finding"><summary><span class="dashicons %1$s" style="color: %2$s;" aria-hidden="true"></span>%3$s%4$s</summary><p>%5$s</p></details>',
+			esc_attr( $icon ),
+			esc_attr( $color ),
+			'' === $severity ? '' : '<span class="screen-reader-text">' . esc_html( $severity ) . ' </span>',
+			esc_html( $label ),
+			esc_html( $detail )
+		);
+	}
+
+	/**
+	 * Render a relative path with the site's base URL as a gray prefix.
+	 *
+	 * Where home is not the domain root, this clarifies that /path resolves
+	 * against the site's base URL. Shows the prefix in gray followed by the
+	 * path in bold; where home is the root, the path is plain text, because
+	 * there is nothing to disambiguate.
+	 *
+	 * @param string $path The relative path (e.g., "/hello-world").
+	 * @return void
+	 */
+	private function render_relative_path_with_prefix( string $path ): void {
+		if ( '' === $this->home_url_prefix() || ! str_starts_with( $path, '/' ) ) {
+			echo esc_html( $path );
+			return;
+		}
+
+		$this->render_home_url_prefix( $path );
+		printf( '<strong>%s</strong>', esc_html( $path ) );
+	}
+
+	/**
+	 * Render this site's base URL as a gray prefix ahead of a relative path.
+	 *
+	 * Prints nothing where home is the domain root, and nothing for anything
+	 * that is not a site-relative path.
+	 *
+	 * @param string $path The relative path (e.g., "/hello-world").
+	 * @return void
+	 */
+	private function render_home_url_prefix( string $path ): void {
+		$prefix = $this->home_url_prefix();
+
+		if ( '' === $prefix || ! str_starts_with( $path, '/' ) ) {
+			return;
+		}
+
+		printf( '<span style="color: #646970;">%s</span>', esc_html( $prefix ) );
+	}
+
+	/**
+	 * This site's base URL, when stored paths hang off something other than
+	 * the domain root.
+	 *
+	 * Sources are stored relative to home, and RedirectResolver strips the
+	 * home path on every lookup regardless of multisite, so the question the
+	 * display has to answer is "is home the domain root?", not "is this
+	 * multisite?". A single site installed at example.com/blog is every bit
+	 * as ambiguous as a subsite at example.com/subsite1, and on such a site
+	 * example.com/old-page never reaches WordPress at all, so a bare
+	 * /old-page in the UI points at the one reading that cannot work.
+	 *
+	 * @return string The base URL without a trailing slash, or '' when home
+	 *                is the domain root and no prefix is warranted.
+	 */
+	private function home_url_prefix(): string {
+		if ( '' === HomePath::current() ) {
+			return '';
+		}
+
+		return untrailingslashit( home_url() );
+	}
+
+	/**
+	 * Render the "status" column.
+	 *
+	 * @param Redirect $redirect The redirect.
+	 * @return void
+	 */
+	private function render_status_column( Redirect $redirect ): void {
+		if ( $redirect->is_active() ) {
+			// The icon repeats the text beside it, so it is hidden from screen readers.
+			echo '<span class="dashicons dashicons-yes-alt" style="color: #00a32a;" aria-hidden="true"></span> ';
+			echo esc_html_x( 'Enabled', 'status of one redirect', 'legacy-redirector' );
+		} else {
+			echo '<span class="dashicons dashicons-no" style="color: #d63638;" aria-hidden="true"></span> ';
+			echo esc_html_x( 'Disabled', 'status of one redirect', 'legacy-redirector' );
+			$this->render_duplicate_note( $redirect );
+		}
+	}
+	/**
+	 * Explain a duplicate the 2.0 upgrade disabled, and how to settle it.
+	 *
+	 * Enabling it would be refused - the live redirect holds its source - so
+	 * the choices are spelled out where the Enable action would have been.
+	 *
+	 * @param Redirect $redirect The disabled redirect.
+	 * @return void
+	 */
+	private function render_duplicate_note( Redirect $redirect ): void {
+		$live_id = (int) get_post_meta( $redirect->id(), Upgrader::DUPLICATE_META_KEY, true );
+
+		if ( 0 === $live_id ) {
+			return;
+		}
+
+		$live_link = sprintf(
+			'<a href="%1$s">%2$s</a>',
+			esc_url( admin_url( 'edit.php?post_type=' . PostType::POST_TYPE . '&page=edit-redirect&redirect_id=' . $live_id ) ),
+			/* translators: %s: a redirect's ID, shown as the text of a link to it */
+			esc_html( sprintf( _x( '#%s', 'redirect ID', 'legacy-redirector' ), number_format_i18n( $live_id ) ) )
+		);
+
+		$message = (bool) get_post_meta( $redirect->id(), Upgrader::NEVER_FIRED_META_KEY, true )
+			/* translators: %1$s: link to the enabled redirect, e.g. "#12" */
+			? __( 'Duplicate source: %1$s has the same source and is enabled. This one never fired under 1.x, so disabling it changed nothing for visitors: trash it unless you want its destination.', 'legacy-redirector' )
+			/* translators: %1$s: link to the enabled redirect, e.g. "#12" */
+			: __( 'Duplicate source: %1$s has the same source and is enabled, so visitors who used this spelling now reach its destination. To keep that destination, trash this one. To keep this one\'s, edit %1$s to use it, then trash this one.', 'legacy-redirector' );
+
+		printf(
+			'<p class="description">%s</p>',
+			wp_kses( sprintf( $message, $live_link ), array( 'a' => array( 'href' => array() ) ) )
+		);
+	}
+}

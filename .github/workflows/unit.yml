@@ -1,0 +1,75 @@
+name: Unit Tests
+
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'phpunit.xml.dist'
+      - '.github/workflows/unit.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'phpunit.xml.dist'
+      - '.github/workflows/unit.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allowed_failure }}
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.3'
+            allowed_failure: false
+            coverage: none
+          - php: '8.4'
+            allowed_failure: false
+            coverage: none
+          # One coverage-enabled run: PHPUnit only enforces the strict
+          # covers-annotation settings when a coverage driver is active.
+          - php: '8.5'
+            allowed_failure: false
+            coverage: xdebug
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: ${{ matrix.coverage }}
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+
+      - name: Show PHP and PHPUnit version info
+        run: |
+          php --version
+          ./vendor/bin/phpunit --version
+
+      - name: Run unit tests
+        if: ${{ matrix.coverage == 'none' }}
+        run: composer test:unit
+
+      - name: Run unit tests with strict coverage
+        if: ${{ matrix.coverage != 'none' }}
+        run: composer coverage-ci

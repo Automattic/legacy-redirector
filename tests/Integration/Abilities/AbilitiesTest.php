@@ -1,0 +1,873 @@
+<?php
+/**
+ * Abilities API integration tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Integration\Abilities
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration\Abilities;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Capability;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper;
+use Automattic\LegacyRedirector\Tests\Integration\TestCase;
+use WP_Ability;
+
+/**
+ * Integration tests for the abilities this plugin registers.
+ *
+ * These run the abilities the way a client does: through the registry, so
+ * that input and output are validated against the registered schemas and the
+ * permission callbacks are enforced.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\AbilitiesRegistrar
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\BatchFailures
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\CreateRedirectAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\DeleteRedirectAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\FindRedirectDomainsAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\GetRedirectAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ListRedirectsAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\SetRedirectStatusAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\TestRedirectsAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\UpdateRedirectAbility
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\ValidateRedirectsAbility
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectBatch
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectFetcher
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Application\ValidationResult
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditSweep
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Capability
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+ * @uses \Automattic\LegacyRedirector\Domain\AuditDetail
+ * @uses \Automattic\LegacyRedirector\Application\FindingText
+ * @uses \Automattic\LegacyRedirector\Domain\InvalidRedirectValue
+ * @uses \Automattic\LegacyRedirector\Application\ErrorText
+ */
+final class AbilitiesTest extends TestCase {
+
+	/**
+	 * Set up test fixtures.
+	 *
+	 * @return void
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		if ( ! function_exists( 'wp_get_ability' ) ) {
+			$this->markTestSkipped( 'The Abilities API is only available in WordPress 6.9 and later.' );
+		}
+
+		( new Capability() )->register();
+
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$user    = wp_set_current_user( $user_id );
+		$user->add_cap( Capability::MANAGE_REDIRECTS_CAPABILITY );
+	}
+
+	/**
+	 * Get a registered ability.
+	 *
+	 * @param string $name The ability name, without the plugin namespace.
+	 * @return WP_Ability The ability.
+	 */
+	private function ability( string $name ): WP_Ability {
+		$ability = wp_get_ability( 'legacy-redirector/' . $name );
+
+		$this->assertInstanceOf( WP_Ability::class, $ability, $name . ' should be registered.' );
+
+		return $ability;
+	}
+
+	/**
+	 * Create a published post and return the path that resolves to it.
+	 *
+	 * Creation validates the destination, so tests need somewhere real to
+	 * point at.
+	 *
+	 * @param string $slug The post slug.
+	 * @return string The post's path, relative to the site root.
+	 */
+	private function path_to_new_post( string $slug ): string {
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_name'   => $slug,
+			)
+		);
+
+		return '/' . $slug;
+	}
+
+	/**
+	 * Test the plugin registers its abilities and their category.
+	 *
+	 * @return void
+	 */
+	public function test_abilities_are_registered(): void {
+		$this->assertTrue( wp_has_ability_category( AbilitiesRegistrar::CATEGORY ) );
+
+		// The refusal test's provider is the list, so a new ability cannot skip it.
+		$expected   = array_keys( self::data_every_ability_with_valid_input() );
+		$registered = array();
+		foreach ( wp_get_abilities() as $ability ) {
+			if ( str_starts_with( $ability->get_name(), 'legacy-redirector/' ) ) {
+				$registered[] = substr( $ability->get_name(), strlen( 'legacy-redirector/' ) );
+			}
+		}
+		$this->assertEqualsCanonicalizing( $expected, $registered );
+
+		foreach ( $expected as $name ) {
+			$this->assertSame(
+				AbilitiesRegistrar::CATEGORY,
+				$this->ability( $name )->get_category(),
+				$name . ' should be in the plugin category.'
+			);
+		}
+	}
+
+	/**
+	 * Test validate with named redirects records their flags, so a fixed one drops out of "Has issues".
+	 *
+	 * @return void
+	 */
+	public function test_validate_records_a_named_redirects_flag(): void {
+		$redirect_id = $this->create_redirect( '/to-a-disallowed-host', 'https://not-allowed.example.net/x' );
+
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/to-a-disallowed-host' ) ) );
+
+		$this->assertSame( 1, $result['checked'] );
+		$this->assertSame( 'Destination host not allowed', $result['issues'][0]['issue'] );
+		$this->assertSame( 'problem', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test validate reports the flagged total from the counts it has just
+	 * stored, rather than counting the flags a second time.
+	 *
+	 * The stored counts are by severity; a recount over every flag reads
+	 * the flag key alone.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reads_back_the_counts_it_stored(): void {
+		global $wpdb;
+
+		$this->create_redirect( '/stored-count-a', 'https://not-allowed.example.net/a' );
+		$this->create_redirect( '/stored-count-b', 'https://not-allowed.example.net/b' );
+
+		$recounts = array();
+		$log      = static function ( string $sql ) use ( &$recounts, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts} " ) && str_contains( $sql, AuditFlags::META_KEY ) && ! str_contains( $sql, 'meta_value' ) ) {
+				$recounts[] = $sql;
+			}
+			return $sql;
+		};
+
+		add_filter( 'query', $log );
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/stored-count-a', '/stored-count-b' ) ) );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 2, $result['flagged'] );
+		$this->assertSame( array(), $recounts );
+	}
+
+	/**
+	 * Test paging through flagged redirects reaches every one, even as checking unflags some.
+	 *
+	 * A redirect found fine drops off the flagged list when it is checked,
+	 * so a plain offset would skip the one that moved into its place.
+	 *
+	 * @return void
+	 */
+	public function test_validate_pages_through_flagged_redirects_without_skipping(): void {
+		$fixed  = $this->create_redirect( '/page-a', 'https://later-allowed.example.net/a' );
+		$second = $this->create_redirect( '/page-b', 'https://not-allowed.example.net/b' );
+		$third  = $this->create_redirect( '/page-c', 'https://not-allowed.example.net/c' );
+		foreach ( array( $fixed, $second, $third ) as $id ) {
+			update_post_meta( $id, AuditFlags::META_KEY, 'problem' );
+		}
+
+		// The first redirect's host is allowed after it was flagged.
+		$allow = static fn( array $hosts ): array => array_merge( $hosts, array( 'later-allowed.example.net' ) );
+		add_filter( 'allowed_redirect_hosts', $allow );
+
+		try {
+			$first_page  = $this->ability( 'validate-redirects' )->execute( array( 'limit' => 2 ) );
+			$second_page = $this->ability( 'validate-redirects' )->execute(
+				array(
+					'limit'  => 2,
+					'offset' => $first_page['next_offset'],
+				)
+			);
+		} finally {
+			remove_filter( 'allowed_redirect_hosts', $allow );
+		}
+
+		$this->assertSame( 2, $first_page['checked'] );
+		$this->assertSame( 1, $first_page['next_offset'] );
+		$this->assertSame( 2, $first_page['flagged'] );
+		$this->assertSame( array( '/page-c' ), array_column( $second_page['issues'], 'from' ) );
+		$this->assertNull( $second_page['next_offset'] );
+	}
+
+	/**
+	 * Test a redirect can be created, read, updated and deleted through the abilities.
+	 *
+	 * @return void
+	 */
+	public function test_redirect_round_trip(): void {
+		$first  = $this->path_to_new_post( 'first-target' );
+		$second = $this->path_to_new_post( 'second-target' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/old-page',
+				'to'   => $first,
+			)
+		);
+
+		$this->assertIsArray( $created, 'Creation should succeed.' );
+		$this->assertSame( '/old-page', $created['from'] );
+		$this->assertSame( 'enabled', $created['status'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => '/old-page' ) );
+
+		$this->assertSame( $created['id'], $fetched['id'] );
+		$this->assertSame( $first, $fetched['to'] );
+
+		$updated = $this->ability( 'update-redirect' )->execute(
+			array(
+				'redirects' => array( '/old-page' ),
+				'to'        => $second,
+				'status'    => 'disabled',
+			)
+		);
+
+		$this->assertSame( 1, $updated['updated'] );
+		$this->assertSame( array(), $updated['failed'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( $second, $fetched['to'] );
+		$this->assertSame( 'disabled', $fetched['status'] );
+
+		$deleted = $this->ability( 'delete-redirect' )->execute(
+			array( 'redirects' => array( $created['id'] ) )
+		);
+
+		$this->assertSame( 1, $deleted['deleted'] );
+		$this->assertInstanceOf(
+			'WP_Error',
+			$this->ability( 'get-redirect' )->execute( array( 'redirect' => '/old-page' ) ),
+			'The redirect should be gone.'
+		);
+	}
+
+	/**
+	 * Test creation reports the redirect as stored, not as typed.
+	 *
+	 * An internal absolute URL is stored as its relative path, so the created
+	 * redirect must read the same as fetching it afterwards.
+	 *
+	 * @return void
+	 */
+	public function test_create_reports_the_stored_redirect(): void {
+		$path = $this->path_to_new_post( 'stored-target' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/stored-source',
+				'to'   => home_url( $path ),
+			)
+		);
+
+		$this->assertIsArray( $created, 'Creation should succeed.' );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( $path, $created['to'] );
+		$this->assertSame( array(), $created['warnings'] );
+		unset( $created['warnings'] );
+		$this->assertSame( $fetched, $created );
+	}
+
+	/**
+	 * Test create and update report the warnings CLI create prints, but still write.
+	 *
+	 * @return void
+	 */
+	public function test_writes_report_warnings_about_what_they_saved(): void {
+		$this->create_redirect( '/warn-first', '/warn-second' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/warn-second',
+				'to'   => '/warn-first',
+			)
+		);
+
+		$this->assertIsArray( $created, 'Creation should succeed despite the warning.' );
+		$this->assertCount( 1, $created['warnings'] );
+		$this->assertSame( $created['id'], $created['warnings'][0]['id'] );
+		$this->assertSame( 'warning', $created['warnings'][0]['severity'] );
+		$this->assertSame( 'Possible redirect loop', $created['warnings'][0]['issue'] );
+
+		$updated = $this->ability( 'update-redirect' )->execute(
+			array(
+				'redirects' => array( '/warn-first' ),
+				'to'        => '/warn-second',
+			)
+		);
+
+		$this->assertSame( 1, $updated['updated'] );
+		$this->assertCount( 1, $updated['warnings'] );
+		$this->assertSame( '/warn-first', $updated['warnings'][0]['from'] );
+		$this->assertSame( 'Possible redirect loop', $updated['warnings'][0]['issue'] );
+	}
+
+	/**
+	 * Test a duplicate source names the redirect that already has it.
+	 *
+	 * @return void
+	 */
+	public function test_create_on_a_taken_source_names_the_existing_redirect(): void {
+		$existing = $this->create_redirect( '/taken-source', 'https://example.org/somewhere' );
+
+		$result = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/taken-source',
+				'to'   => 'https://example.org/elsewhere',
+			)
+		);
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'legacy_redirector_duplicate_redirect_uri', $result->get_error_code() );
+		$this->assertStringContainsString( sprintf( 'Redirect #%d already has the source', $existing ), $result->get_error_message() );
+	}
+
+	/**
+	 * Test why a source was refused reaches the caller in the user's language.
+	 *
+	 * The Domain's exception message is English, for logs and the CLI; the
+	 * ability must say it through translation instead.
+	 *
+	 * @return void
+	 */
+	public function test_refused_source_reason_is_translated(): void {
+		$translate = static function ( string $translation, string $text, string $domain ): string {
+			return 'legacy-redirector' === $domain && 'The URL contains neither a path nor query string.' === $text
+				? 'Die URL enthält weder einen Pfad noch eine Abfrage.'
+				: $translation;
+		};
+		add_filter( 'gettext', $translate, 10, 3 );
+
+		try {
+			$result = $this->ability( 'create-redirect' )->execute(
+				array(
+					'from' => 'http://example.com',
+					'to'   => '/somewhere',
+				)
+			);
+		} finally {
+			remove_filter( 'gettext', $translate );
+		}
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertStringContainsString( 'Die URL enthält weder einen Pfad noch eine Abfrage.', $result->get_error_message() );
+	}
+
+	/**
+	 * Test a redirect created through an ability is visible to the admin list.
+	 *
+	 * @return void
+	 */
+	public function test_created_redirect_is_listed(): void {
+		$this->ability( 'create-redirect' )->execute(
+			array(
+				'from'   => '/listed',
+				'to'     => $this->path_to_new_post( 'listed-target' ),
+				'status' => 'disabled',
+			)
+		);
+
+		$listed = $this->ability( 'list-redirects' )->execute( array( 'status' => 'disabled' ) );
+
+		$this->assertSame( 1, $listed['total'] );
+		$this->assertSame( '/listed', $listed['redirects'][0]['from'] );
+
+		$enabled = $this->ability( 'list-redirects' )->execute( array( 'status' => 'enabled' ) );
+
+		$this->assertSame( 0, $enabled['total'] );
+	}
+
+	/**
+	 * Test a searched list runs its search once, taking the total from the
+	 * page's own query rather than searching again to count.
+	 *
+	 * @return void
+	 */
+	public function test_searched_list_searches_once(): void {
+		global $wpdb;
+
+		for ( $i = 1; $i <= 3; $i++ ) {
+			$this->create_redirect( "/searched-once-{$i}", 'https://example.com/searched' );
+		}
+
+		$searches = array();
+		$log      = static function ( string $sql ) use ( &$searches, $wpdb ): string {
+			if ( str_contains( $sql, "FROM {$wpdb->posts}" ) && str_contains( $sql, 'searched-once' ) ) {
+				$searches[] = $sql;
+			}
+			return $sql;
+		};
+
+		add_filter( 'query', $log );
+		$listed = $this->ability( 'list-redirects' )->execute(
+			array(
+				'search' => 'searched-once',
+				'limit'  => 1,
+			)
+		);
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 3, $listed['total'] );
+		$this->assertCount( 1, $listed['redirects'] );
+		$this->assertCount( 1, $searches, implode( "\n", $searches ) );
+	}
+
+	/**
+	 * Test a redirect can be turned off and back on without changing where it points.
+	 *
+	 * @return void
+	 */
+	public function test_set_redirect_status_toggles_a_redirect(): void {
+		$destination = $this->path_to_new_post( 'status-target' );
+
+		$created = $this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/toggled',
+				'to'   => $destination,
+			)
+		);
+
+		$disabled = $this->ability( 'set-redirect-status' )->execute(
+			array(
+				'redirects' => array( '/toggled' ),
+				'status'    => 'disabled',
+			)
+		);
+
+		$this->assertSame( 1, $disabled['updated'] );
+		$this->assertSame( array(), $disabled['failed'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( 'disabled', $fetched['status'] );
+		$this->assertSame( $destination, $fetched['to'], 'The destination should be untouched.' );
+
+		$enabled = $this->ability( 'set-redirect-status' )->execute(
+			array(
+				'redirects' => array( $created['id'] ),
+				'status'    => 'enabled',
+			)
+		);
+
+		$this->assertSame( 1, $enabled['updated'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $created['id'] ) );
+
+		$this->assertSame( 'enabled', $fetched['status'] );
+	}
+
+	/**
+	 * Test a redirect pointing at a deleted post is reported as broken.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reports_a_broken_redirect(): void {
+		$post_id = self::factory()->post->create();
+
+		$this->ability( 'create-redirect' )->execute(
+			array(
+				'from' => '/points-at-a-post',
+				'to'   => $post_id,
+			)
+		);
+
+		wp_delete_post( $post_id, true );
+
+		$result = $this->ability( 'validate-redirects' )->execute( array() );
+
+		$this->assertSame( 1, $result['checked'] );
+		$this->assertCount( 1, $result['issues'] );
+		$this->assertSame( '/points-at-a-post', $result['issues'][0]['from'] );
+		$this->assertNotEmpty( $result['issues'][0]['description'] );
+		$this->assertSame( 'problem', $result['issues'][0]['severity'] );
+		$this->assertSame( 'Point this redirect at another destination, or delete it.', $result['issues'][0]['remedy'] );
+		$this->assertNull( $result['last_full_check'] );
+	}
+
+	/**
+	 * Test a trashed redirect is reported as trashed, not disabled, and passes output validation.
+	 *
+	 * @return void
+	 */
+	public function test_get_redirect_reports_a_trashed_redirect(): void {
+		$redirect_id = $this->create_redirect( '/trashed', '/new' );
+		wp_trash_post( $redirect_id );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => $redirect_id ) );
+
+		$this->assertSame( 'trashed', $fetched['status'] );
+	}
+
+	/**
+	 * Test the outbound domains of external redirects are reported, leaving out the trash.
+	 *
+	 * @return void
+	 */
+	public function test_find_redirect_domains_reports_external_hosts(): void {
+		$this->create_redirect( '/one', 'https://example.org/a' );
+		$this->create_redirect( '/two', 'https://example.org/b' );
+		$this->create_redirect( '/three', 'https://example.net/c' );
+		wp_trash_post( $this->create_redirect( '/four', 'https://example.com/d' ) );
+
+		$result = $this->ability( 'find-redirect-domains' )->execute();
+
+		$this->assertSame( 2, $result['count'] );
+		$this->assertSame( array( 'example.net', 'example.org' ), $result['domains'] );
+	}
+
+	/**
+	 * Test a redirect cannot be updated to point back at its own source.
+	 *
+	 * @return void
+	 */
+	public function test_update_to_own_source_is_rejected(): void {
+		$this->create_redirect( '/loop-me', 'https://example.org/somewhere' );
+
+		$result = $this->ability( 'update-redirect' )->execute(
+			array(
+				'redirects' => array( '/loop-me' ),
+				'to'        => '/loop-me',
+			)
+		);
+
+		$this->assertSame( 0, $result['updated'] );
+		$this->assertCount( 1, $result['failed'] );
+
+		$fetched = $this->ability( 'get-redirect' )->execute( array( 'redirect' => '/loop-me' ) );
+
+		$this->assertSame( 'https://example.org/somewhere', $fetched['to'], 'The destination should be untouched.' );
+	}
+
+	/**
+	 * Test input that does not match the schema is rejected before execution.
+	 *
+	 * @return void
+	 */
+	public function test_invalid_input_is_rejected_by_the_schema(): void {
+		$result = $this->ability( 'create-redirect' )->execute( array( 'from' => '/only-a-source' ) );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'ability_invalid_input', $result->get_error_code() );
+	}
+
+	/**
+	 * Test a list of redirects longer than the cap is rejected before any lookup.
+	 *
+	 * @dataProvider data_abilities_taking_a_redirect_list
+	 *
+	 * @param string               $name  The ability name, without the plugin namespace.
+	 * @param array<string, mixed> $input The rest of the input.
+	 * @return void
+	 */
+	public function test_over_long_redirect_list_is_rejected_by_the_schema( string $name, array $input ): void {
+		$too_many = range( 1, RedirectSchema::MAX_IDENTIFIERS + 1 );
+
+		$result = $this->ability( $name )->execute( array( 'redirects' => $too_many ) + $input );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'ability_invalid_input', $result->get_error_code() );
+	}
+
+	/**
+	 * Every ability that takes a list of redirects, with the rest of a valid input.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>}> The cases.
+	 */
+	public static function data_abilities_taking_a_redirect_list(): array {
+		return array(
+			'validate-redirects'  => array( 'validate-redirects', array() ),
+			'update-redirect'     => array( 'update-redirect', array( 'to' => '/new' ) ),
+			'set-redirect-status' => array( 'set-redirect-status', array( 'status' => 'disabled' ) ),
+			'delete-redirect'     => array( 'delete-redirect', array() ),
+		);
+	}
+
+	/**
+	 * Test an administrator can use the abilities on a site nobody has opened wp-admin on.
+	 *
+	 * A headless site (abilities over REST or MCP) may never fire admin_init,
+	 * so the plugin's init callback alone has to grant the capability.
+	 *
+	 * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper::register_capability
+	 *
+	 * @return void
+	 */
+	public function test_administrator_is_granted_the_capability_on_init(): void {
+		$this->reset_manage_redirects_capability();
+
+		$this->assertSame( 0, did_action( 'admin_init' ) );
+
+		$granted = false;
+		foreach ( $GLOBALS['wp_filter']['init']->callbacks as $callbacks ) {
+			foreach ( $callbacks as $callback ) {
+				if ( is_array( $callback['function'] )
+					&& $callback['function'][0] instanceof PluginBootstrapper
+					&& 'register_capability' === $callback['function'][1]
+				) {
+					call_user_func( $callback['function'] );
+					$granted = true;
+				}
+			}
+		}
+
+		$this->assertTrue( $granted, 'The plugin should grant its capability on init.' );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$listed = $this->ability( 'list-redirects' )->execute( array() );
+
+		$this->assertIsArray( $listed );
+	}
+
+	/**
+	 * Test a user without the capability is refused by every ability, and changes nothing.
+	 *
+	 * Each ability names its own permission callback, so one ability left on
+	 * __return_true would pass a test of the others.
+	 *
+	 * @dataProvider data_every_ability_with_valid_input
+	 *
+	 * @param string                    $name  The ability name, without the plugin namespace.
+	 * @param array<string, mixed>|null $input Input that passes the ability's schema, or null for an ability that takes none.
+	 * @return void
+	 */
+	public function test_every_ability_refuses_a_user_without_the_capability( string $name, ?array $input ): void {
+		$redirect_id = $this->create_redirect( '/private', 'https://example.com/destination' );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+
+		$result = $this->ability( $name )->execute( $input );
+
+		$this->assertInstanceOf( 'WP_Error', $result );
+		$this->assertSame( 'ability_invalid_permissions', $result->get_error_code() );
+
+		$post = get_post( $redirect_id );
+		$this->assertNotNull( $post, 'The redirect is still there.' );
+		$this->assertSame( 'publish', $post->post_status );
+		$this->assertSame( 'https://example.com/destination', $post->post_excerpt );
+	}
+
+	/**
+	 * Data provider: every ability the plugin registers, with input its schema accepts.
+	 *
+	 * The registration test fails if an ability is added without a row here.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>|null}>
+	 */
+	public static function data_every_ability_with_valid_input(): array {
+		return array(
+			'create-redirect'       => array(
+				'create-redirect',
+				array(
+					'from' => '/new-source',
+					'to'   => 'https://example.com/elsewhere',
+				),
+			),
+			'get-redirect'          => array( 'get-redirect', array( 'redirect' => '/private' ) ),
+			'list-redirects'        => array( 'list-redirects', array() ),
+			'update-redirect'       => array(
+				'update-redirect',
+				array(
+					'redirects' => array( '/private' ),
+					'to'        => 'https://example.com/elsewhere',
+				),
+			),
+			'set-redirect-status'   => array(
+				'set-redirect-status',
+				array(
+					'redirects' => array( '/private' ),
+					'status'    => 'disabled',
+				),
+			),
+			'delete-redirect'       => array( 'delete-redirect', array( 'redirects' => array( '/private' ) ) ),
+			'validate-redirects'    => array( 'validate-redirects', array( 'redirects' => array( '/private' ) ) ),
+			'test-redirects'        => array( 'test-redirects', array( 'redirects' => array( '/private' ) ) ),
+			'find-redirect-domains' => array( 'find-redirect-domains', null ),
+		);
+	}
+
+	/**
+	 * Test the test ability requests a redirect live and records nothing.
+	 *
+	 * @return void
+	 */
+	public function test_test_redirects_checks_a_redirect_live(): void {
+		$redirect_id = $this->create_redirect( '/tested-live', 'https://example.com/live-target' );
+
+		$respond = static function ( $preempt, $args, $url ) {
+			if ( str_contains( $url, '/tested-live' ) ) {
+				return array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/live-target' ),
+				);
+			}
+
+			return array( 'response' => array( 'code' => 404 ) );
+		};
+		add_filter( 'pre_http_request', $respond, 10, 3 );
+
+		try {
+			$result = $this->ability( 'test-redirects' )->execute( array( 'redirects' => array( '/tested-live' ) ) );
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 10 );
+		}
+
+		$this->assertSame( 1, $result['tested'] );
+		$this->assertSame( 'confirmed', $result['results'][0]['source'] );
+		$this->assertCount( 1, $result['results'][0]['issues'] );
+		$this->assertSame( 'Destination returns 404', $result['results'][0]['issues'][0]['issue'] );
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test `only` runs just the one check it names, requesting just that URL.
+	 *
+	 * @dataProvider data_test_redirects_only
+	 *
+	 * @param string      $only      The check to run.
+	 * @param string      $requested The one URL path that should be requested.
+	 * @param string|null $source    The expected source outcome.
+	 * @param string[]    $issues    The expected issue labels.
+	 * @return void
+	 */
+	public function test_test_redirects_only_runs_the_named_check( string $only, string $requested, ?string $source, array $issues ): void {
+		$this->create_redirect( '/tested-once', 'https://example.com/once-target' );
+
+		$urls    = array();
+		$respond = static function ( $preempt, $args, $url ) use ( &$urls ) {
+			$urls[] = (string) wp_parse_url( $url, PHP_URL_PATH );
+
+			if ( str_contains( $url, '/tested-once' ) ) {
+				return array(
+					'response' => array( 'code' => 301 ),
+					'headers'  => array( 'location' => 'https://example.com/once-target' ),
+				);
+			}
+
+			return array( 'response' => array( 'code' => 404 ) );
+		};
+		add_filter( 'pre_http_request', $respond, 10, 3 );
+
+		try {
+			$result = $this->ability( 'test-redirects' )->execute(
+				array(
+					'redirects' => array( '/tested-once' ),
+					'only'      => $only,
+				)
+			);
+		} finally {
+			remove_filter( 'pre_http_request', $respond, 10 );
+		}
+
+		$this->assertSame( array( $requested ), $urls );
+		$this->assertSame( $source, $result['results'][0]['source'] );
+		$this->assertSame( $issues, array_column( $result['results'][0]['issues'], 'issue' ) );
+	}
+
+	/**
+	 * Data provider: each value of `only`, and what it should request and report.
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: string|null, 3: string[]}>
+	 */
+	public static function data_test_redirects_only(): array {
+		return array(
+			'source'      => array( 'source', '/tested-once', 'confirmed', array() ),
+			'destination' => array( 'destination', '/once-target', null, array( 'Destination returns 404' ) ),
+		);
+	}
+
+	/**
+	 * Test validate reports a named redirect that does not exist, and checks the rest.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reports_an_unknown_named_redirect_as_failed(): void {
+		$this->create_redirect( '/validated-and-known', 'https://example.com/fine' );
+
+		$result = $this->ability( 'validate-redirects' )->execute( array( 'redirects' => array( '/validated-and-known', '/never-created' ) ) );
+
+		$this->assertSame( 1, $result['checked'] );
+		$this->assertSame( array( '/never-created' ), array_column( $result['failed'], 'redirect' ) );
+	}
+
+	/**
+	 * Test validate says when the last full pass finished, once one has.
+	 *
+	 * @return void
+	 */
+	public function test_validate_reports_when_the_last_full_check_finished(): void {
+		$this->create_redirect( '/swept', 'https://example.com/fine' );
+
+		$sweep = new AuditSweep( $this->query_repository(), $this->auditor(), new AuditFlags() );
+		$this->assertTrue( $sweep->lock( 0 ) );
+		try {
+			$sweep->start_pass();
+			$sweep->run_batch();
+		} finally {
+			$sweep->unlock();
+		}
+
+		$result = $this->ability( 'validate-redirects' )->execute( array() );
+
+		$this->assertSame( gmdate( 'c', ( new AuditFlags() )->checked_at() ), $result['last_full_check'] );
+	}
+}

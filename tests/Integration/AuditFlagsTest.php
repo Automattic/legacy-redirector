@@ -1,0 +1,334 @@
+<?php
+/**
+ * Per-row audit flags and "Has issues" view integration tests.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
+
+/**
+ * Integration tests for the stored per-row flags and the list-table view
+ * that reads them.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFinding
+ * @uses \Automattic\LegacyRedirector\Domain\AuditFindingType
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PluginBootstrapper
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::duplicate_count
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::forget_duplicate
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader::hashed_text
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ * @uses \Automattic\LegacyRedirector\Application\PostPathResolver
+ * @uses \Automattic\LegacyRedirector\Application\SourceOccupancy
+ */
+final class AuditFlagsTest extends TestCase {
+
+	/**
+	 * The flags store under test.
+	 *
+	 * @return AuditFlags
+	 */
+	private function flags(): AuditFlags {
+		return new AuditFlags();
+	}
+
+	/**
+	 * Test a row with a problem finding is flagged 'problem'.
+	 */
+	public function test_problem_findings_flag_the_row_as_problem(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/flag-problem', $post_id );
+		wp_delete_post( $post_id, true );
+
+		$redirect = $this->repository()->find_by_id( $redirect_id );
+		$this->flags()->record_rows( array( $redirect_id => $this->auditor()->audit( $redirect ) ) );
+
+		$this->assertSame( 'problem', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test a row with only warnings is flagged 'warning'.
+	 */
+	public function test_warning_only_findings_flag_the_row_as_warning(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/wp-admin/', $post_id );
+
+		$redirect = $this->repository()->find_by_id( $redirect_id );
+		$this->flags()->record_rows( array( $redirect_id => $this->auditor()->audit( $redirect ) ) );
+
+		$this->assertSame( 'warning', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test a clean row gets no flag, and a re-check clears a stale one.
+	 */
+	public function test_no_findings_leave_no_flag_and_clear_a_stale_one(): void {
+		$post_id     = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$redirect_id = $this->create_redirect( '/flag-clean', $post_id );
+
+		update_post_meta( $redirect_id, AuditFlags::META_KEY, 'problem' );
+
+		$redirect = $this->repository()->find_by_id( $redirect_id );
+		$this->flags()->record_rows( array( $redirect_id => $this->auditor()->audit( $redirect ) ) );
+
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test recording reads the rows' flags in one query and writes only the
+	 * ones that change, including a change of severity.
+	 */
+	public function test_record_rows_writes_only_changed_flags(): void {
+		global $wpdb;
+
+		$post_id   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$deleted   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$unchanged = $this->create_redirect( '/flag-batch-unchanged', $deleted );
+		$severity  = $this->create_redirect( '/wp-admin/flag-batch', $post_id );
+		$cleared   = $this->create_redirect( '/flag-batch-cleared', $post_id );
+		wp_delete_post( $deleted, true );
+
+		update_post_meta( $unchanged, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $severity, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $cleared, AuditFlags::META_KEY, 'warning' );
+
+		// A sweep reads rows the meta cache has not seen.
+		foreach ( array( $unchanged, $severity, $cleared ) as $id ) {
+			wp_cache_delete( $id, 'post_meta' );
+		}
+
+		$findings = array(
+			$unchanged => $this->auditor()->audit( $this->repository()->find_by_id( $unchanged ) ),
+			$severity  => $this->auditor()->audit( $this->repository()->find_by_id( $severity ) ),
+			$cleared   => array(),
+		);
+
+		$queries = array();
+		$log     = static function ( string $query ) use ( &$queries, $wpdb ): string {
+			if ( str_contains( $query, $wpdb->postmeta ) ) {
+				$queries[] = $query;
+			}
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->flags()->record_rows( $findings );
+		remove_filter( 'query', $log );
+
+		$this->assertSame( 'problem', get_post_meta( $unchanged, AuditFlags::META_KEY, true ) );
+		$this->assertSame( 'warning', get_post_meta( $severity, AuditFlags::META_KEY, true ) );
+		$this->assertSame( '', get_post_meta( $cleared, AuditFlags::META_KEY, true ) );
+
+		// The meta cache loads a row as `post_id IN (ID)`, and a lookup or
+		// write of one row's key as `post_id = ID`.
+		foreach ( $queries as $query ) {
+			$this->assertDoesNotMatchRegularExpression( "/= {$unchanged}\\b|IN \\({$unchanged}\\)/", $query, 'An unchanged flag must not be looked up or written on its own.' );
+		}
+		$this->assertStringContainsString( 'post_id IN (', $queries[0], 'The flags must be read for the whole batch first.' );
+	}
+
+	/**
+	 * Test a refused read of the batch's flags is not taken as "no flags":
+	 * every row is written instead, so a stale flag is still cleared.
+	 */
+	public function test_record_rows_writes_every_row_when_the_read_is_refused(): void {
+		$redirect_id = $this->create_redirect( '/flag-batch-refused', 'https://example.com/fine' );
+		update_post_meta( $redirect_id, AuditFlags::META_KEY, 'problem' );
+
+		// An emptied query is refused before wpdb clears its last error.
+		$refuse = static fn( string $query ): string => str_contains( $query, 'SELECT post_id, meta_value' ) ? '' : $query;
+		add_filter( 'query', $refuse );
+		$this->flags()->record_rows( array( $redirect_id => array() ) );
+		remove_filter( 'query', $refuse );
+
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test saving a redirect clears its flag, so a flag never outlives the
+	 * row it described.
+	 */
+	public function test_saving_a_redirect_clears_its_flag(): void {
+		$flags = $this->flags();
+		$flags->register();
+
+		$redirect_id = $this->create_redirect( '/flag-save-clears', 'https://example.com/destination' );
+		update_post_meta( $redirect_id, AuditFlags::META_KEY, 'problem' );
+
+		wp_update_post(
+			array(
+				'ID'          => $redirect_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->assertSame( '', get_post_meta( $redirect_id, AuditFlags::META_KEY, true ) );
+	}
+
+	/**
+	 * Test saving flagged rows recounts the flags once, at the end of the
+	 * request, rather than once per row.
+	 */
+	public function test_saved_flags_are_recounted_once_at_the_end_of_the_request(): void {
+		$flags = $this->flags();
+
+		$ids = array(
+			$this->create_redirect( '/flag-recount-one', 'https://example.com/one' ),
+			$this->create_redirect( '/flag-recount-two', 'https://example.com/two' ),
+		);
+
+		foreach ( $ids as $id ) {
+			update_post_meta( $id, AuditFlags::META_KEY, 'problem' );
+		}
+		$flags->store_counts();
+
+		// As each row's save would call it.
+		foreach ( $ids as $id ) {
+			$flags->clear( $id, get_post( $id ), true );
+		}
+
+		$this->assertSame( 2, $flags->problem_count(), 'The saves must not recount.' );
+		$this->assertSame( 10, has_action( 'shutdown', array( $flags, 'store_counts' ) ) );
+
+		$flags->store_counts();
+		$this->assertSame( 0, $flags->problem_count() );
+	}
+
+	/**
+	 * Test creating a redirect looks up neither a flag nor a duplicate
+	 * marker, since a new row has neither.
+	 */
+	public function test_creating_a_redirect_runs_no_flag_or_marker_lookups(): void {
+		$keys    = array( AuditFlags::META_KEY, Upgrader::DUPLICATE_META_KEY, Upgrader::NEVER_FIRED_META_KEY );
+		$queries = array();
+		$log     = static function ( string $query ) use ( &$queries ): string {
+			$queries[] = $query;
+			return $query;
+		};
+
+		add_filter( 'query', $log );
+		$this->create_redirect( '/flag-new-row', 'https://example.com/new' );
+		remove_filter( 'query', $log );
+
+		$this->assertNotEmpty( $queries );
+		foreach ( $queries as $query ) {
+			foreach ( $keys as $key ) {
+				$this->assertStringNotContainsString( $key, $query );
+			}
+		}
+	}
+
+	/**
+	 * Test the counts come from the stored flags, by severity.
+	 */
+	public function test_counts_report_flagged_rows_by_severity(): void {
+		$problem_id = $this->create_redirect( '/flag-count-problem', 'https://example.com/a' );
+		$warning_id = $this->create_redirect( '/flag-count-warning', 'https://example.com/b' );
+		$this->create_redirect( '/flag-count-clean', 'https://example.com/c' );
+
+		update_post_meta( $problem_id, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $warning_id, AuditFlags::META_KEY, 'warning' );
+
+		$this->assertSame(
+			array(
+				'problem' => 1,
+				'warning' => 1,
+			),
+			$this->flags()->counts()
+		);
+	}
+
+	/**
+	 * Test no run timestamp exists until a run completes.
+	 */
+	public function test_checked_at_null_until_a_run_completes(): void {
+		$flags = $this->flags();
+
+		$this->assertNull( $flags->checked_at() );
+
+		$flags->mark_run_complete();
+
+		$this->assertIsInt( $flags->checked_at() );
+	}
+
+	/**
+	 * The view filters wired like production.
+	 *
+	 * @return ViewFilters
+	 */
+	private function view_filters(): ViewFilters {
+		return new ViewFilters( $this->query_repository(), $this->flags() );
+	}
+
+	/**
+	 * Test the "Has issues" view only appears once a run has completed, and
+	 * carries the flagged count and the check time.
+	 */
+	public function test_has_issues_view_appears_after_a_completed_run(): void {
+		$this->assertArrayNotHasKey( 'audit_flagged', $this->view_filters()->customize_views( array() ) );
+
+		$redirect_id = $this->create_redirect( '/flag-view', 'https://example.com/a' );
+		update_post_meta( $redirect_id, AuditFlags::META_KEY, 'problem' );
+		$this->flags()->mark_run_complete();
+
+		$views = $this->view_filters()->customize_views( array() );
+
+		$this->assertArrayHasKey( 'audit_flagged', $views );
+		$this->assertStringContainsString( 'Has issues (checked ', $views['audit_flagged'] );
+		$this->assertStringContainsString( '(1)', $views['audit_flagged'] );
+		$this->assertStringContainsString( 'audit_flagged=1', $views['audit_flagged'] );
+	}
+
+	/**
+	 * Test the view's query restricts the list to flagged rows.
+	 */
+	public function test_audit_flagged_query_returns_only_flagged_rows(): void {
+		$flagged_id = $this->create_redirect( '/flag-query-flagged', 'https://example.com/a' );
+		$this->create_redirect( '/flag-query-clean', 'https://example.com/b' );
+		update_post_meta( $flagged_id, AuditFlags::META_KEY, 'problem' );
+
+		$_GET['audit_flagged'] = '1';
+		$this->view_filters()->register();
+
+		$query = new \WP_Query();
+		// The filter only touches the main admin query.
+		$GLOBALS['wp_the_query'] = $query; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- Restored by the WP test framework per test.
+
+		$posts = $query->query(
+			array(
+				'post_type'   => PostType::POST_TYPE,
+				'post_status' => array( 'publish', 'draft' ),
+				'fields'      => 'ids',
+			)
+		);
+
+		$this->assertSame( array( $flagged_id ), $posts );
+	}
+}

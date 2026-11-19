@@ -1,0 +1,114 @@
+name: Integration Tests
+
+on:
+  push:
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'phpunit-integration.xml.dist'
+      - '.wp-env.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/integration.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - '**.php'
+      - 'composer.json'
+      - 'phpunit-integration.xml.dist'
+      - '.wp-env.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/integration.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  integration-tests:
+    name: WP ${{ matrix.wordpress }} on PHP ${{ matrix.php }}${{ matrix.multisite && ' (MS)' || '' }}${{ matrix.coverage && ' (strict coverage)' || '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Check lowest supported WP version, with the lowest supported PHP.
+          - wordpress: '6.8'
+            php: '8.3'
+          # Check multisite on the lowest supported WP version too: subsite
+          # routing and home URLs come from core, so they can differ by version.
+          - wordpress: '6.8'
+            php: '8.3'
+            multisite: true
+          # Check multisite on latest WP with the latest PHP. The multisite-only
+          # tests skip elsewhere, so this is the only run that can check their
+          # covers annotations, hence coverage rather than a plain run.
+          - wordpress: 'master'
+            php: '8.5'
+            multisite: true
+            coverage: true
+          # One single-site coverage-enabled run: PHPUnit only enforces the
+          # strict covers-annotation settings when a coverage driver is active,
+          # and single site exercises different branches to multisite.
+          - wordpress: 'master'
+            php: '8.5'
+            coverage: true
+
+    env:
+      WP_ENV_CORE: WordPress/WordPress#${{ matrix.wordpress }}
+      # The tests run inside the wp-env container, so the matrix PHP version has
+      # to reach wp-env too. Without this it would fall back to .wp-env.json and
+      # every job would run on the same PHP, whatever the job name claimed.
+      WP_ENV_PHP_VERSION: ${{ matrix.php }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # package.json also holds the E2E toolchain for e2e.yml; this job only
+      # needs wp-env, at the version the lockfile pins.
+      - name: Install wp-env
+        run: npm install -g "@wordpress/env@$(jq -r '.packages["node_modules/@wordpress/env"].version' package-lock.json)"
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+
+      - name: Start wp-env
+        run: npx wp-env start ${{ matrix.coverage && '--xdebug=coverage' || '' }}
+
+      - name: Run integration tests (single site)
+        if: ${{ ! matrix.coverage && ! matrix.multisite }}
+        run: composer test:integration
+
+      - name: Run integration tests (multisite)
+        if: ${{ ! matrix.coverage && matrix.multisite }}
+        run: composer test:integration-ms
+
+      - name: Run integration tests (single site) with strict coverage
+        if: ${{ matrix.coverage && ! matrix.multisite }}
+        run: composer test:integration-coverage
+
+      - name: Run integration tests (multisite) with strict coverage
+        if: ${{ matrix.coverage && matrix.multisite }}
+        run: composer test:integration-ms-coverage

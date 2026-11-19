@@ -1,0 +1,268 @@
+<?php
+/**
+ * Status change notices for redirects.
+ *
+ * @package Automattic\LegacyRedirector
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\Notices;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Admin\ListTable\ViewFilters;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+
+/**
+ * Displays admin notices after redirect status changes (enable/disable).
+ */
+final class StatusChangeNotices {
+
+	/**
+	 * Notice arguments shared by every status change notice.
+	 *
+	 * The `message` ID is the identifier core's list tables have always used
+	 * for this slot, so it is kept for anything styling or scripting against it.
+	 *
+	 * @var array<string, bool|string>
+	 */
+	private const array NOTICE_ARGS = array(
+		'type'        => 'success',
+		'id'          => 'message',
+		'dismissible' => true,
+	);
+
+	/**
+	 * Register hooks.
+	 *
+	 * @return void
+	 */
+	public function register(): void {
+		add_action( 'admin_notices', array( $this, 'display' ) );
+	}
+
+	/**
+	 * Display admin notices for status changes.
+	 *
+	 * @return void
+	 */
+	public function display(): void {
+		$screen = get_current_screen();
+		if ( ! $screen || 'edit-' . PostType::POST_TYPE !== $screen->id ) {
+			return;
+		}
+
+		// Get the redirect source if provided.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Reading URL param for notice display; escaped on output, where sanitize_text_field() would delete %xx sequences.
+		$redirect_source = isset( $_GET['redirect_source'] ) ? wp_unslash( $_GET['redirect_source'] ) : '';
+
+		// Single redirect enabled.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.
+		if ( isset( $_GET['redirect_enabled'] ) && '1' === $_GET['redirect_enabled'] ) {
+			$this->display_single_enabled_notice( $redirect_source );
+		}
+
+		// Single redirect disabled.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.
+		if ( isset( $_GET['redirect_disabled'] ) && '1' === $_GET['redirect_disabled'] ) {
+			$this->display_single_disabled_notice( $redirect_source );
+		}
+
+		// The Test bulk action submitted without JavaScript.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Reading URL param for notice display.
+		if ( isset( $_GET['bulk_test_needs_js'] ) ) {
+			wp_admin_notice(
+				wp_kses(
+					__( 'Testing several redirects at once needs JavaScript. Use the Test link on each row instead, or <code>wp legacy-redirector test</code>.', 'legacy-redirector' ),
+					array( 'code' => array() )
+				),
+				array( 'type' => 'warning' ) + self::NOTICE_ARGS
+			);
+		}
+
+		// Rows a bulk action could not change, and why the first one failed.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Reading URL params for notice display.
+		$failed = isset( $_GET['bulk_redirects_failed'] ) ? absint( $_GET['bulk_redirects_failed'] ) : 0;
+		$reason = isset( $_GET['bulk_redirects_reason'] ) && 'duplicate' === $_GET['bulk_redirects_reason'] ? 'duplicate' : 'failed';
+
+		// Bulk redirects enabled.
+		if ( isset( $_GET['bulk_redirects_enabled'] ) ) {
+			$count = absint( $_GET['bulk_redirects_enabled'] );
+			$this->display_bulk_enabled_notice( $count, $failed, $reason );
+		}
+
+		// Bulk redirects disabled.
+		if ( isset( $_GET['bulk_redirects_disabled'] ) ) {
+			$count = absint( $_GET['bulk_redirects_disabled'] );
+			$this->display_bulk_disabled_notice( $count, $failed, $reason );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		// A notice shows once. Core takes removable arguments out of the address
+		// bar and the pagination links, but builds the sort links and the bulk
+		// form's referer from the request URI, so a sort or a bulk action would
+		// repeat the notice. Core's edit.php does this for its own arguments.
+		$_SERVER['REQUEST_URI'] = remove_query_arg( wp_removable_query_args() );
+	}
+
+	/**
+	 * Display notice for single redirect enabled.
+	 *
+	 * @param string $redirect_source The redirect source path.
+	 * @return void
+	 */
+	private function display_single_enabled_notice( string $redirect_source ): void {
+		if ( '' === $redirect_source ) {
+			wp_admin_notice( esc_html__( 'Redirect enabled.', 'legacy-redirector' ), self::NOTICE_ARGS );
+			return;
+		}
+
+		$message = sprintf(
+			/* translators: %s: redirect source path */
+			__( 'Redirect from %s enabled.', 'legacy-redirector' ),
+			'<code>' . esc_html( $redirect_source ) . '</code>'
+		);
+		wp_admin_notice( wp_kses( $message, array( 'code' => array() ) ), self::NOTICE_ARGS );
+	}
+
+	/**
+	 * Display notice for single redirect disabled.
+	 *
+	 * @param string $redirect_source The redirect source path.
+	 * @return void
+	 */
+	private function display_single_disabled_notice( string $redirect_source ): void {
+		if ( '' === $redirect_source ) {
+			wp_admin_notice( esc_html__( 'Redirect disabled.', 'legacy-redirector' ), self::NOTICE_ARGS );
+			return;
+		}
+
+		$message = sprintf(
+			/* translators: %s: redirect source path */
+			__( 'Redirect from %s disabled.', 'legacy-redirector' ),
+			'<code>' . esc_html( $redirect_source ) . '</code>'
+		);
+		wp_admin_notice( wp_kses( $message, array( 'code' => array() ) ), self::NOTICE_ARGS );
+	}
+
+	/**
+	 * Display notice for bulk redirects enabled.
+	 *
+	 * @param int    $count  Number of redirects enabled.
+	 * @param int    $failed Number of selected redirects that could not be enabled.
+	 * @param string $reason Why the first of them failed: 'duplicate' or 'failed'.
+	 * @return void
+	 */
+	private function display_bulk_enabled_notice( int $count, int $failed, string $reason ): void {
+		if ( $failed > 0 ) {
+			$this->display_bulk_refusal_notice(
+				sprintf(
+					/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+					_x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ),
+					sprintf(
+						/* translators: 1: number of redirects enabled, 2: number selected */
+						_n( 'Enabled %1$s of %2$s redirect.', 'Enabled %1$s of %2$s redirects.', $count + $failed, 'legacy-redirector' ),
+						number_format_i18n( $count ),
+						number_format_i18n( $count + $failed )
+					),
+					sprintf(
+						/* translators: %s: number of redirects that could not be enabled */
+						_n( '%s could not be enabled.', '%s could not be enabled.', $failed, 'legacy-redirector' ),
+						number_format_i18n( $failed )
+					)
+				),
+				$failed,
+				$reason
+			);
+			return;
+		}
+
+		wp_admin_notice(
+			esc_html(
+				sprintf(
+					/* translators: %s: number of redirects enabled */
+					_n( '%s redirect enabled.', '%s redirects enabled.', $count, 'legacy-redirector' ),
+					number_format_i18n( $count )
+				)
+			),
+			self::NOTICE_ARGS
+		);
+	}
+
+	/**
+	 * Display notice for bulk redirects disabled.
+	 *
+	 * @param int    $count  Number of redirects disabled.
+	 * @param int    $failed Number of selected redirects that could not be disabled.
+	 * @param string $reason Why the first of them failed: 'duplicate' or 'failed'.
+	 * @return void
+	 */
+	private function display_bulk_disabled_notice( int $count, int $failed, string $reason ): void {
+		if ( $failed > 0 ) {
+			$this->display_bulk_refusal_notice(
+				sprintf(
+					/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+					_x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ),
+					sprintf(
+						/* translators: 1: number of redirects disabled, 2: number selected */
+						_n( 'Disabled %1$s of %2$s redirect.', 'Disabled %1$s of %2$s redirects.', $count + $failed, 'legacy-redirector' ),
+						number_format_i18n( $count ),
+						number_format_i18n( $count + $failed )
+					),
+					sprintf(
+						/* translators: %s: number of redirects that could not be disabled */
+						_n( '%s could not be disabled.', '%s could not be disabled.', $failed, 'legacy-redirector' ),
+						number_format_i18n( $failed )
+					)
+				),
+				$failed,
+				$reason
+			);
+			return;
+		}
+
+		wp_admin_notice(
+			esc_html(
+				sprintf(
+					/* translators: %s: number of redirects disabled */
+					_n( '%s redirect disabled.', '%s redirects disabled.', $count, 'legacy-redirector' ),
+					number_format_i18n( $count )
+				)
+			),
+			self::NOTICE_ARGS
+		);
+	}
+
+	/**
+	 * Display a warning for a bulk action that could not change every row.
+	 *
+	 * @param string $summary How many changed out of how many selected.
+	 * @param int    $failed  Number of selected redirects that could not be changed.
+	 * @param string $reason  Why the first of them failed: 'duplicate' or 'failed'.
+	 * @return void
+	 */
+	private function display_bulk_refusal_notice( string $summary, int $failed, string $reason ): void {
+		if ( 'duplicate' === $reason ) {
+			$why = sprintf(
+				1 === $failed
+					/* translators: %s: link to the Duplicate sources view */
+					? esc_html__( 'It shares its source with an enabled redirect, and a source can answer for only one: see %s.', 'legacy-redirector' )
+					/* translators: %s: link to the Duplicate sources view */
+					: esc_html__( 'The first shares its source with an enabled redirect, and a source can answer for only one: see %s.', 'legacy-redirector' ),
+				'<a href="' . esc_url( ViewFilters::duplicate_sources_url() ) . '">' . esc_html__( 'Duplicate sources', 'legacy-redirector' ) . '</a>'
+			);
+		} else {
+			$why = 1 === $failed
+				? esc_html__( 'It could not be saved.', 'legacy-redirector' )
+				: esc_html__( 'The first could not be saved.', 'legacy-redirector' );
+		}
+
+		wp_admin_notice(
+			wp_kses(
+				/* translators: 1: a sentence; 2: the sentence after it. Translate the space between them as your language separates sentences. */
+				sprintf( _x( '%1$s %2$s', 'two sentences, one after the other', 'legacy-redirector' ), esc_html( $summary ), $why ),
+				array( 'a' => array( 'href' => array() ) )
+			),
+			array( 'type' => 'warning' ) + self::NOTICE_ARGS
+		);
+	}
+}

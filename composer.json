@@ -1,20 +1,83 @@
 {
-  "name"       : "automattic/wpcom-legacy-redirector",
-  "description": "WordPress plugin for handling large volumes of legacy redirects in a scalable manner.",
-  "homepage"   : "https://github.com/Automattic/WPCOM-Legacy-Redirector",
-  "type"       : "wordpress-plugin",
-  "license"    : "GPL-2.0+",
-  "authors"    : [
-    {
-      "name"    : "Automattic",
-      "homepage": "http://automattic.com/"
-    }
-  ],
-  "support"    : {
-    "issues": "https://github.com/Automattic/WPCOM-Legacy-Redirector/issues",
-    "source": "https://github.com/Automattic/WPCOM-Legacy-Redirector"
-  },
-  "require": {
-    "composer/installers": "~1.0"
-  }
+	"name": "automattic/wpcom-legacy-redirector",
+	"description": "WordPress plugin for handling large volumes of legacy redirects in a scalable manner.",
+	"license": "GPL-2.0-or-later",
+	"type": "wordpress-plugin",
+	"authors": [
+		{
+			"name": "Automattic",
+			"homepage": "http://automattic.com/"
+		}
+	],
+	"homepage": "https://github.com/Automattic/legacy-redirector",
+	"support": {
+		"issues": "https://github.com/Automattic/legacy-redirector/issues",
+		"source": "https://github.com/Automattic/legacy-redirector"
+	},
+	"require": {
+		"php": ">=8.3",
+		"composer/installers": "^1.0 || ^2.0"
+	},
+	"require-dev": {
+		"automattic/behat-wp-env-context": "^0.1.0",
+		"automattic/vipwpcs": "^3.0",
+		"mockery/mockery": "^1.6",
+		"php-parallel-lint/php-parallel-lint": "^1.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"phpunit/phpunit": "^9.6",
+		"yoast/wp-test-utils": "^1.2"
+	},
+	"autoload": {
+		"psr-4": {
+			"Automattic\\LegacyRedirector\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"Automattic\\LegacyRedirector\\Tests\\": "tests/"
+		}
+	},
+	"config": {
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		},
+		"sort-packages": true
+	},
+	"scripts": {
+		"coverage": "@php ./vendor/bin/phpunit --coverage-html ./build/coverage-html",
+		"coverage-ci": "@php ./vendor/bin/phpunit --coverage-text=/dev/null",
+		"cs": "@php ./vendor/bin/phpcs -q",
+		"cs-fix": "@php ./vendor/bin/phpcbf -q",
+		"i18n": "@php wp i18n make-pot . ./languages/legacy-redirector.pot",
+		"lint": "@php ./vendor/php-parallel-lint/php-parallel-lint/parallel-lint . -e php --exclude vendor --exclude .git",
+		"seed": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") wp eval-file bin/seed-dev-data.php",
+		"lint-ci": "@php ./vendor/php-parallel-lint/php-parallel-lint/parallel-lint . -e php --exclude vendor --exclude .git --checkstyle",
+		"test": ["@test:unit", "@test:integration"],
+		"test:behat": "behat --colors",
+		"test:behat-rerun": "behat --colors --rerun",
+		"test:unit": "@php ./vendor/bin/phpunit --testdox --no-coverage",
+		"test:integration": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist",
+		"test:integration-coverage": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'XDEBUG_MODE=coverage ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist --coverage-text=/dev/null'",
+		"test:integration-ms": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist'",
+		"test:integration-ms-coverage": "npx wp-env run cli --env-cwd=wp-content/plugins/$(basename \"$PWD\") /bin/bash -c 'WP_MULTISITE=1 XDEBUG_MODE=coverage ./vendor/bin/phpunit --testsuite integration -c phpunit-integration.xml.dist --coverage-text=/dev/null'"
+	},
+	"scripts-descriptions": {
+		"coverage": "Run tests with code coverage reporting",
+		"coverage-ci": "Run unit tests with a coverage driver, so the strict covers-annotation checks apply",
+		"cs": "Run PHP Code Sniffer",
+		"cs-fix": "Run PHP Code Sniffer and fix violations",
+		"i18n": "Generate a POT file for translation",
+		"lint": "Run PHP linting",
+		"lint-ci": "Run PHP linting and send results to stdout",
+		"seed": "Seed the wp-env dev site with redirect edge cases (pass a number for extra bulk rows)",
+		"test": "Run all tests",
+		"test:behat": "Run Behat WP-CLI tests",
+		"test:behat-rerun": "Rerun failed Behat tests",
+		"test:unit": "Run unit tests",
+		"test:integration": "Run integration tests",
+		"test:integration-coverage": "Run integration tests with a coverage driver so strict coverage annotations are enforced",
+		"test:integration-ms": "Run integration tests in multisite mode",
+		"test:integration-ms-coverage": "Run multisite integration tests with a coverage driver so strict coverage annotations are enforced"
+	}
 }

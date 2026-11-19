@@ -1,0 +1,131 @@
+# Legacy Redirector
+
+Handles large volumes of redirects for a site's legacy URLs.
+
+## Project Knowledge
+
+| Property | Value |
+|----------|-------|
+| **Main file** | `wpcom-legacy-redirector.php` (kept from the pre-2.0 name so upgrades do not deactivate the plugin) |
+| **Text domain** | `legacy-redirector` |
+| **Namespace** | `Automattic\LegacyRedirector` |
+| **Composer package** | `automattic/wpcom-legacy-redirector` (kept from the pre-2.0 name; see below) |
+| **WP-CLI namespace** | `legacy-redirector` (plus `wpcom-legacy-redirector` as a deprecated alias) |
+| **Filter prefix** | `legacy_redirector_` |
+| **Post type** | `vip-legacy-redirect` |
+| **Source directory** | `src/` |
+| **Version** | 2.0.0 |
+| **Requires PHP** | 8.3+ |
+| **Requires WP** | 6.8+ |
+
+The plugin was renamed from "WPCOM Legacy Redirector" in 2.0. Five things deliberately keep the old name, and each would cost a user something to change. Do not "tidy" them:
+
+- **`wpcom-legacy-redirector.php`** — renaming the main file deactivates the plugin on update.
+- **`wpcom-legacy-redirector/`** — the plugin folder, hard-coded as the release ZIP's root in `release.yml`. 1.x sites and Composer installs use it, and a ZIP with another root installs a second copy beside 1.x instead of replacing it.
+- **`automattic/wpcom-legacy-redirector`** — Packagist cannot rename a package, so moving means publishing a new one and abandoning this one, and every consumer has to edit their own `require` line or silently stop receiving updates. `dev-develop` is the most-installed version, so that is the majority of users.
+- **`vip-legacy-redirect`** — the post type is in the database.
+- **`wpcom_legacy_redirector_db_version` / `_upgrade_started_gmt` / `_upgrade_cursor`** — these options hold live upgrade state.
+
+### Directory Structure
+
+```
+legacy-redirector/
+├── src/
+│   ├── Domain/             # Value objects, entities, repository interfaces
+│   │   ├── Redirect.php, SourceUrl.php, DestinationUrl.php
+│   │   ├── RedirectHttpStatus.php, RedirectCriteria.php
+│   │   └── AuditFinding.php, AuditFindingType.php
+│   ├── Application/        # Use cases and services
+│   │   ├── RedirectManager.php     # Create, update, delete redirects
+│   │   ├── RedirectResolver.php    # Runtime redirect resolution
+│   │   ├── RedirectAuditor.php     # What is wrong with a redirect (findings, warnings)
+│   │   └── RedirectValidator.php   # Write gate: may this redirect be stored?
+│   └── Infrastructure/     # WordPress integration, persistence
+│       ├── DI/             # Service container
+│       └── WordPress/      # PostType, PostTypeRedirectRepository, CachingRedirectRepository, Upgrader, AuditSweep
+│           ├── Abilities/  # Abilities API registrations (WordPress 6.9+)
+│           ├── Admin/      # Admin UI (BulkActionsHandler, ListTable/, Notices/, Pages/)
+│           ├── Cli/        # WP-CLI commands (Create, List, Validate, Import, FindDomains, etc.)
+│           └── Rest/       # REST controllers behind the admin UI's checks (ChecksController, ValidateAllController)
+├── tests/
+│   ├── Unit/               # Unit tests (Brain Monkey)
+│   ├── Integration/        # Integration tests (wp-env, separate phpunit config)
+│   └── e2e/                # Playwright tests for the admin JavaScript (wp-env)
+├── features/               # Behat feature files (.feature)
+├── behat.yml               # Behat configuration
+├── phpunit.xml.dist        # Unit test config
+├── phpunit-integration.xml.dist  # Integration test config (separate)
+├── .github/workflows/      # CI: behat, cs-lint, e2e (JS lint + Playwright), integration, unit
+└── .phpcs.xml.dist         # PHPCS configuration
+```
+
+### Key Classes
+
+- **Domain**: `Redirect`, `SourceUrl`, `DestinationUrl` (value objects); `RedirectHttpStatus`, `RedirectCriteria`; `AuditFinding`, `AuditFindingType`; repository interfaces
+- **Application**: `RedirectManager` (CRUD), `RedirectResolver` (runtime resolution), `RedirectAuditor` (findings and warnings), `RedirectValidator` (write gate), `ValidationResult`
+- **Infrastructure**: `PostTypeRedirectRepository`, `CachingRedirectRepository`, `RedirectRequestHandler` (performs the HTTP redirect), admin UI components, WP-CLI commands (create, list, validate, import CSV, find domains, etc.), `AbilitiesRegistrar` and the `*Ability` classes behind it
+
+### Dependencies
+
+- **Dev**: `automattic/vipwpcs`, `yoast/wp-test-utils`, `behat/behat`
+
+## Commands
+
+```bash
+composer cs                # Check code standards (PHPCS)
+composer cs-fix            # Auto-fix code standard violations
+composer lint              # PHP syntax lint
+composer test:unit         # Run unit tests
+composer test:integration  # Run integration tests (requires wp-env)
+composer test:integration-ms  # Run multisite integration tests
+composer test              # Run unit + integration tests
+composer coverage          # Run tests with HTML coverage report
+composer test:behat        # Run Behat BDD scenarios (requires wp-env)
+composer test:behat-rerun  # Re-run failed Behat scenarios
+npm run lint:js            # Lint js/ and tests/e2e/ (wp-scripts)
+npm run test:e2e           # Run Playwright E2E tests (requires wp-env; WP_ENV_PORT for another port)
+```
+
+**Note:** This plugin uses separate PHPUnit config files: `phpunit.xml.dist` for unit tests and `phpunit-integration.xml.dist` for integration tests.
+
+## Conventions
+
+Follow the standards documented in `~/code/plugin-standards/` for full details. Key points:
+
+- **Commits**: Use the `/commit` skill. Favor explaining "why" over "what".
+- **PRs**: Use the `/pr` skill. Squash and merge by default.
+- **Branch naming**: `feature/description`, `fix/description` from `develop`.
+- **Testing**: Four test types here:
+  - **Unit tests**: For isolated domain/application logic. Use `Yoast\WPTestUtils\BrainMonkey\YoastTestCase`.
+  - **Integration tests**: For WordPress-dependent behavior. Use `Yoast\WPTestUtils\WPIntegration\TestCase`. Uses a separate config file (`phpunit-integration.xml.dist`).
+  - **Behat tests**: For CLI contract verification and critical happy paths only. Keep Behat scenarios minimal (2-5 per command).
+  - **E2E tests**: Playwright, in `tests/e2e/`, for the admin JavaScript only (the form script and the list screen's inline scripts). Keep to critical flows, and query by accessible role and name.
+- **Code style**: WordPress coding standards via PHPCS. Tabs for indentation.
+- **i18n**: All user-facing strings must use the `legacy-redirector` text domain.
+- **DDD layering**: Domain classes must not depend on Infrastructure or Application.
+
+## Architectural Decisions
+
+- **Domain-Driven Design with CQRS elements**: Three-layer architecture (Domain/Application/Infrastructure). The RedirectManager handles writes, RedirectResolver handles reads. Do not bypass layers.
+- **Only the Domain layer is WordPress-free** (decided in VIPPLUG-119): Application services call WordPress APIs (`get_post`, `apply_filters`, `current_user_can`, `__()`, etc.) directly and are tested with Brain Monkey. Do not introduce ports/adapters (clock, HTTP, permalink, translation interfaces) to make Application WordPress-independent — the plugin only ever runs inside WordPress. The layering rules that do hold: Domain must not `use` Application or Infrastructure, and Application must not `use` Infrastructure.
+- **Value objects for URLs**: `SourceUrl` and `DestinationUrl` are distinct value objects (not plain strings). This prevents accidentally swapping source and destination. Always use the appropriate value object.
+- **Custom post type for storage**: Redirects are stored as a custom post type for performance and compatibility with VIP Go's infrastructure. Do not switch to custom database tables or options.
+- **Three client surfaces, one application layer**: the admin UI, WP-CLI, and the Abilities API are all presentation only. Each translates its own input into calls on `RedirectManager`, `RedirectAuditor`, and the repositories. Behavior that any two of them need belongs in Application, not in a command or an ability. The abilities deliberately mirror the CLI verbs so the three surfaces stay in step.
+- **Caching repository decorator**: `CachingRedirectRepository` wraps `PostTypeRedirectRepository` with object cache. Redirect lookups happen on every page load, so caching is critical for performance.
+- **Separate PHPUnit configs**: Unit and integration tests use different PHPUnit config files because integration tests need WordPress loaded and use wp-env.
+- **One wp-env environment**: `.wp-env.json` sets `"testsEnvironment": false`, so `wp-env start` brings up a single environment and every test runs in the `cli` container. There is no `tests-cli`.
+- **Tier 1 plugin**: This is a well-maintained, modernised plugin. It serves as a reference implementation for the standards.
+
+## Common Pitfalls
+
+- Do not edit WordPress core files or bundled dependencies in `vendor/`.
+- Run `composer cs` before committing. CI will reject code standard violations.
+- Integration tests require `npx wp-env start` running first.
+- **Do not violate DDD layer boundaries**: Domain must not `use` anything from Infrastructure or Application.
+- **Value objects are immutable**: Never add setters to `SourceUrl`, `DestinationUrl`, `Redirect`, or other domain value objects. Create new instances instead.
+- **Performance is critical**: The `RedirectResolver` runs on every 404 to check for redirects. Any performance regression here affects every request on the site. Always profile changes to the redirect resolution path.
+- Do not bypass the caching layer. Always access redirects through the repository interface, which includes caching.
+- **Redirect loops**: `RedirectValidator` refuses only a redirect to itself. A longer loop (A→B→A) is not refused: `RedirectAuditor::warnings()` reports it, and a new write path should print those warnings as the existing ones do.
+- Behat tests are slow (~2 seconds per scenario, against real WordPress in Docker). Do not write Behat tests for edge cases — use integration tests instead.
+- The plugin has two PHPUnit config files. Make sure you run the correct one: `composer test:unit` uses `phpunit.xml.dist`, `composer test:integration` uses `phpunit-integration.xml.dist`.
+- In production code, wire services through the DI container rather than scattering `new` calls; the test suite deliberately constructs services directly (see tests/Integration/RedirectTestHelper.php).

@@ -1,14 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <phpunit
-	bootstrap="tests/bootstrap.php"
-	backupGlobals="false"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+	beStrictAboutChangesToGlobalState="true"
+	beStrictAboutCoversAnnotation="true"
+	beStrictAboutOutputDuringTests="true"
+	bootstrap="tests/Unit/bootstrap.php"
 	colors="true"
-	convertErrorsToExceptions="true"
-	convertNoticesToExceptions="true"
-	convertWarningsToExceptions="true"
-	>
+	convertDeprecationsToExceptions="true"
+	failOnRisky="true"
+	failOnWarning="true"
+	forceCoversAnnotation="true"
+	verbose="true"
+>
+	<coverage processUncoveredFiles="true">
+		<include>
+			<directory suffix=".php">./src</directory>
+		</include>
+		<exclude>
+			<!-- View templates are include()d markup, not coverable classes; processUncoveredFiles would execute them. -->
+			<directory suffix=".php">./src/Infrastructure/WordPress/Admin/Pages/views</directory>
+		</exclude>
+	</coverage>
 	<testsuites>
-		<testsuite>
-			<directory prefix="test-" suffix=".php">./tests/</directory>
+		<testsuite name="unit">
+			<directory>./tests/Unit/</directory>
 		</testsuite>
 	</testsuites>
 </phpunit>

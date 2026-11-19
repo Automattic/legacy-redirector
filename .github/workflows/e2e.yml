@@ -1,0 +1,109 @@
+name: JS Lint and E2E Tests
+
+on:
+  push:
+    paths:
+      - '**.js'
+      - '**.jsx'
+      - '**.scss'
+      - '**.css'
+      # The list screen's scripts are inline in these PHP files, and the
+      # routes every script calls are registered here.
+      - 'src/Infrastructure/WordPress/Admin/**'
+      - 'src/Infrastructure/WordPress/Rest/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.wp-env.json'
+      - 'tests/e2e/**'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - '**.js'
+      - '**.jsx'
+      - '**.scss'
+      - '**.css'
+      - 'src/Infrastructure/WordPress/Admin/**'
+      - 'src/Infrastructure/WordPress/Rest/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.wp-env.json'
+      - 'tests/e2e/**'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+
+# Disable all permissions by default; grant minimal permissions per job.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: JS Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Lint JavaScript
+        run: npm run lint:js
+
+  e2e:
+    name: Playwright E2E (admin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # The plugin falls back to its own autoloader, as the release ZIP does,
+      # so the site needs no Composer install.
+      - name: Start wp-env
+        run: npx wp-env start
+
+      # playwright.config.js points at wp-env's default port, 8888.
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright traces
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-artifacts
+          path: artifacts/test-results
+          retention-days: 7
+          if-no-files-found: ignore

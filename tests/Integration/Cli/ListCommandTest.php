@@ -1,0 +1,644 @@
+<?php
+/**
+ * ListCommand CLI integration tests.
+ *
+ * @package Automattic\LegacyRedirector\Tests\Integration\Cli
+ */
+
+declare( strict_types = 1 );
+
+namespace Automattic\LegacyRedirector\Tests\Integration\Cli;
+
+use Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\PostType;
+use Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader;
+
+/**
+ * Integration tests for ListCommand.
+ *
+ * @covers \Automattic\LegacyRedirector\Infrastructure\WordPress\Cli\ListCommand
+ * @uses \Automattic\LegacyRedirector\Application\HomePath
+ * @uses \Automattic\LegacyRedirector\Application\InternalDestinationNormalizer
+ * @uses \Automattic\LegacyRedirector\Application\LoopDetector
+ * @uses \Automattic\LegacyRedirector\Application\RedirectAuditor
+ * @uses \Automattic\LegacyRedirector\Application\RedirectCreationResult
+ * @uses \Automattic\LegacyRedirector\Application\RedirectManager
+ * @uses \Automattic\LegacyRedirector\Application\RedirectValidator
+ * @uses \Automattic\LegacyRedirector\Domain\Destination
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationPostId
+ * @uses \Automattic\LegacyRedirector\Domain\DestinationUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Redirect
+ * @uses \Automattic\LegacyRedirector\Domain\RedirectCriteria
+ * @uses \Automattic\LegacyRedirector\Domain\SourceUrl
+ * @uses \Automattic\LegacyRedirector\Domain\Url
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\AuditFlags
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::undo_ampersand_escaping
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::invalidate_lookup_cache
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostType::key_redirect_leaving_the_trash
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Upgrader
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\CachingRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectQueryRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\PostTypeRedirectRepository
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\Abilities\RedirectSchema::status_label
+ * @uses \Automattic\LegacyRedirector\Infrastructure\WordPress\DestinationPostWatcher
+ */
+final class ListCommandTest extends CliTestCase {
+
+	/**
+	 * The command under test.
+	 *
+	 * @var ListCommand
+	 */
+	private ListCommand $command;
+
+	/**
+	 * Set up test fixtures.
+	 *
+	 * @return void
+	 */
+	public function set_up(): void {
+		parent::set_up();
+
+		$this->command = new ListCommand( $this->query_repository(), $this->repository(), new Upgrader() );
+	}
+
+	/**
+	 * Test listing all redirects.
+	 */
+	public function test_list_all_redirects(): void {
+		$this->create_redirect( '/page-one', 'https://example.com/one' );
+		$this->create_redirect( '/page-two', 'https://example.com/two' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array()
+		);
+
+		$this->assertFalse( $this->output->had_error() );
+		$this->assert_stdout_contains( '/page-one' );
+		$this->assert_stdout_contains( '/page-two' );
+	}
+
+	/**
+	 * Test listing shows redirect details.
+	 */
+	public function test_list_shows_redirect_details(): void {
+		$this->create_redirect( '/detail-test', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array()
+		);
+
+		$this->assert_stdout_contains( '/detail-test' );
+		$this->assert_stdout_contains( 'https://example.com/dest' );
+		$this->assert_stdout_contains( 'url' );
+		$this->assert_stdout_contains( 'enabled' );
+	}
+
+	/**
+	 * Test warning when no redirects found.
+	 */
+	public function test_list_empty_shows_warning(): void {
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array()
+		);
+
+		$this->assertTrue( $this->output->had_warning() );
+		$this->assert_warning_contains( 'No redirects found' );
+	}
+
+	/**
+	 * Test listing only enabled redirects.
+	 */
+	public function test_list_enabled_only(): void {
+		$enabled_id  = $this->create_redirect( '/enabled-page', 'https://example.com/one' );
+		$disabled_id = $this->create_redirect( '/disabled-page', 'https://example.com/two' );
+
+		wp_update_post(
+			array(
+				'ID'          => $disabled_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'status' => 'enabled' )
+		);
+
+		$this->assert_stdout_contains( '/enabled-page' );
+		$this->assert_stdout_not_contains( '/disabled-page' );
+	}
+
+	/**
+	 * Test listing only disabled redirects.
+	 */
+	public function test_list_disabled_only(): void {
+		$enabled_id  = $this->create_redirect( '/enabled-page2', 'https://example.com/one' );
+		$disabled_id = $this->create_redirect( '/disabled-page2', 'https://example.com/two' );
+
+		wp_update_post(
+			array(
+				'ID'          => $disabled_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'status' => 'disabled' )
+		);
+
+		$this->assert_stdout_contains( '/disabled-page2' );
+		$this->assert_stdout_not_contains( '/enabled-page2' );
+	}
+
+	/**
+	 * Test listing only URL redirects.
+	 */
+	public function test_list_url_type_only(): void {
+		$this->create_redirect( '/url-redirect', 'https://example.com/dest' );
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/post-redirect', $post_id );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'destination-type' => 'url' )
+		);
+
+		$this->assert_stdout_contains( '/url-redirect' );
+		$this->assert_stdout_not_contains( '/post-redirect' );
+	}
+
+	/**
+	 * Test listing only post redirects.
+	 */
+	public function test_list_post_type_only(): void {
+		$this->create_redirect( '/url-redirect2', 'https://example.com/dest' );
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->create_redirect( '/post-redirect2', $post_id );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'destination-type' => 'post' )
+		);
+
+		$this->assert_stdout_contains( '/post-redirect2' );
+		$this->assert_stdout_not_contains( '/url-redirect2' );
+	}
+
+	/**
+	 * Test searching redirects.
+	 */
+	public function test_list_with_search(): void {
+		$this->create_redirect( '/blog/article-one', 'https://example.com/one' );
+		$this->create_redirect( '/news/story-two', 'https://example.com/two' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'search' => 'blog' )
+		);
+
+		$this->assert_stdout_contains( '/blog/article-one' );
+		$this->assert_stdout_not_contains( '/news/story-two' );
+	}
+
+	/**
+	 * Search matches source paths only, so a redirect that merely points at
+	 * the term is neither listed nor counted.
+	 */
+	public function test_list_search_ignores_destinations(): void {
+		$source_match = $this->create_redirect( '/old-section/y', '/new' );
+		$this->create_redirect( '/a', 'https://example.com/old-section/x' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'search' => 'old-section',
+				'format' => 'ids',
+			)
+		);
+
+		$this->assertSame( (string) $source_match, trim( $this->get_stdout() ) );
+
+		$this->output->reset();
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'search' => 'old-section',
+				'format' => 'count',
+			)
+		);
+
+		$this->assertSame( '1', trim( $this->get_stdout() ) );
+	}
+
+	/**
+	 * Test listing with limit.
+	 */
+	public function test_list_with_limit(): void {
+		$this->create_redirect( '/limit-one', 'https://example.com/one' );
+		$this->create_redirect( '/limit-two', 'https://example.com/two' );
+		$this->create_redirect( '/limit-three', 'https://example.com/three' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'limit' => '2' )
+		);
+
+		$stdout = $this->get_stdout();
+		// Count how many redirects are shown (look for paths).
+		$matches = preg_match_all( '/\/limit-(one|two|three)/', $stdout );
+		$this->assertEquals( 2, $matches, 'Should only show 2 redirects with limit=2' );
+		$this->assertStringContainsString( 'Showing 1-2 of 3 redirects.', $stdout, 'Should show pagination info when more results exist' );
+	}
+
+	/**
+	 * Test count format.
+	 */
+	public function test_list_count_format(): void {
+		$this->create_redirect( '/count-one', 'https://example.com/one' );
+		$this->create_redirect( '/count-two', 'https://example.com/two' );
+		$this->create_redirect( '/count-three', 'https://example.com/three' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'format' => 'count' )
+		);
+
+		$stdout = trim( $this->get_stdout() );
+		$this->assertEquals( '3', $stdout );
+	}
+
+	/**
+	 * Test ids format.
+	 */
+	public function test_list_ids_format(): void {
+		$id1 = $this->create_redirect( '/ids-one', 'https://example.com/one' );
+		$id2 = $this->create_redirect( '/ids-two', 'https://example.com/two' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'format' => 'ids' )
+		);
+
+		$stdout = trim( $this->get_stdout() );
+		$this->assertStringContainsString( (string) $id1, $stdout );
+		$this->assertStringContainsString( (string) $id2, $stdout );
+		// IDs should be space-separated.
+		$ids = explode( ' ', $stdout );
+		$this->assertCount( 2, $ids );
+	}
+
+	/**
+	 * A csv or ids export bigger than one page is read a page at a time, yet
+	 * prints every row once, in order, under a single header.
+	 */
+	public function test_large_exports_are_read_a_page_at_a_time(): void {
+		global $wpdb;
+
+		// One page is 5,000 rows; insert directly, as creating 5,001 redirects
+		// through the manager would take most of a minute.
+		$values = array();
+		for ( $i = 1; $i <= 5001; $i++ ) {
+			$values[] = "('2026-01-01 00:00:00', '2026-01-01 00:00:00', '', '/export-$i', '/target', 'publish', 'vip-legacy-redirect', '', '', '')";
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- Bulk fixture of literal values.
+		$wpdb->query( "INSERT INTO {$wpdb->posts} (post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_type, to_ping, pinged, post_content_filtered) VALUES " . implode( ',', $values ) );
+		$ids = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s ORDER BY ID DESC", PostType::POST_TYPE ) ) );
+
+		$pages = array();
+		add_action(
+			'pre_get_posts',
+			static function ( \WP_Query $query ) use ( &$pages ): void {
+				$pages[] = array( (int) $query->get( 'posts_per_page' ), $query->get( 'fields' ) );
+			}
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'format' => 'ids',
+				'limit'  => '100000',
+			)
+		);
+		$this->assertSame( implode( ' ', $ids ), trim( $this->get_stdout() ) );
+		$this->assertSame( array( array( 5000, 'ids' ), array( 5000, 'ids' ) ), $pages, 'Each query reads at most one page of IDs, not rows.' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'format' => 'csv',
+				'limit'  => '100000',
+			)
+		);
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'], 'One formatter call writes one header.' );
+		$this->assertSame( $ids, array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'ID' ) );
+	}
+
+	/**
+	 * Test combining status and destination type filters.
+	 */
+	public function test_list_combined_filters(): void {
+		// Create various redirects.
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$enabled_url_id  = $this->create_redirect( '/enabled-url', 'https://example.com/dest' );
+		$enabled_post_id = $this->create_redirect( '/enabled-post', $post_id );
+		$disabled_url_id = $this->create_redirect( '/disabled-url', 'https://example.com/dest2' );
+
+		wp_update_post(
+			array(
+				'ID'          => $disabled_url_id,
+				'post_status' => 'draft',
+			)
+		);
+
+		// Filter for enabled URL redirects only.
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'status'           => 'enabled',
+				'destination-type' => 'url',
+			)
+		);
+
+		$this->assert_stdout_contains( '/enabled-url' );
+		$this->assert_stdout_not_contains( '/enabled-post' );
+		$this->assert_stdout_not_contains( '/disabled-url' );
+	}
+
+	/**
+	 * Test limiting output to selected fields.
+	 */
+	public function test_list_limited_fields(): void {
+		$this->create_redirect( '/fields-limited', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'fields' => 'from' )
+		);
+
+		$this->assert_stdout_contains( '/fields-limited' );
+		$this->assert_stdout_not_contains( 'https://example.com/dest' );
+	}
+
+	/**
+	 * Test error for invalid --fields value.
+	 */
+	public function test_list_invalid_fields(): void {
+		$this->create_redirect( '/fields-bad', 'https://example.com/dest' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array( 'fields' => 'from,bogus' )
+		);
+
+		$this->assert_error_contains( 'Invalid fields' );
+	}
+
+	/**
+	 * Test listing the duplicate sources the migration disabled.
+	 */
+	public function test_list_duplicates(): void {
+		delete_option( Upgrader::VERSION_OPTION );
+		foreach ( array( 'started_gmt', 'cursor', 'ceiling' ) as $option ) {
+			delete_option( 'wpcom_legacy_redirector_upgrade_' . $option );
+		}
+
+		$live_id     = $this->insert_legacy_redirect( '/clash', 'https://example.com/one' );
+		$disabled_id = $this->insert_legacy_redirect( '/clash/', 'https://example.com/two' );
+		$this->insert_legacy_redirect( '/unrelated', 'https://example.com/three' );
+
+		( new Upgrader() )->run_batch( 100 );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'duplicates' => true,
+				'format'     => 'csv',
+			)
+		);
+
+		$this->assertSame(
+			array(
+				array(
+					'csv',
+					array(
+						array(
+							'ID'                => $disabled_id,
+							'from'              => '/clash/',
+							'to'                => 'https://example.com/two',
+							'never_fired'       => 'no',
+							'duplicate_of'      => $live_id,
+							'duplicate_of_from' => '/clash',
+							'duplicate_of_to'   => 'https://example.com/one',
+						),
+					),
+					array( 'ID', 'from', 'to', 'never_fired', 'duplicate_of', 'duplicate_of_from', 'duplicate_of_to' ),
+				),
+			),
+			$GLOBALS['wp_cli_format_items_calls']
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'duplicates' => true,
+				'format'     => 'ids',
+			)
+		);
+		$this->assert_stdout_contains( (string) $disabled_id );
+	}
+
+	/**
+	 * Test listing duplicates when there are none says so.
+	 */
+	public function test_list_duplicates_with_none(): void {
+		$this->invoke_command( $this->command, array(), array( 'duplicates' => true ) );
+
+		$this->assert_success_contains( 'No redirects are disabled as duplicate sources.' );
+	}
+
+	/**
+	 * Test structured formats print an empty list rather than a sentence.
+	 *
+	 * @dataProvider data_empty_structured_lists
+	 *
+	 * @param array<string, mixed> $assoc_args The command's flags.
+	 */
+	public function test_empty_structured_list_is_data_not_prose( array $assoc_args ): void {
+		$this->invoke_command( $this->command, array(), $assoc_args );
+
+		$this->assertSame( '', $this->get_stdout() );
+		$this->assertCount( 1, $GLOBALS['wp_cli_format_items_calls'] );
+		$this->assertSame( $assoc_args['format'], $GLOBALS['wp_cli_format_items_calls'][0][0] );
+		$this->assertSame( array(), $GLOBALS['wp_cli_format_items_calls'][0][1] );
+	}
+
+	/**
+	 * Empty listings in each structured format.
+	 *
+	 * @return array<string, array{array<string, mixed>}>
+	 */
+	public static function data_empty_structured_lists(): array {
+		return array(
+			'json'            => array( array( 'format' => 'json' ) ),
+			'yaml'            => array( array( 'format' => 'yaml' ) ),
+			'csv'             => array( array( 'format' => 'csv' ) ),
+			'duplicates json' => array(
+				array(
+					'duplicates' => true,
+					'format'     => 'json',
+				),
+			),
+		);
+	}
+
+	/**
+	 * Test --duplicates validates fields against its own set.
+	 */
+	public function test_list_duplicates_rejects_fields_it_does_not_have(): void {
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'duplicates' => true,
+				'fields'     => 'ID,status',
+			)
+		);
+
+		$this->assert_error_contains( 'Invalid fields: status. Available fields: ID, from, to, never_fired, duplicate_of, duplicate_of_from, duplicate_of_to' );
+	}
+
+	/**
+	 * Store a redirect exactly as version 1.x did.
+	 *
+	 * @param string $source      The source path.
+	 * @param string $destination The destination URL.
+	 * @return int The post ID.
+	 */
+	private function insert_legacy_redirect( string $source, string $destination ): int {
+		return (int) wp_insert_post(
+			array(
+				'post_name'    => md5( $source ),
+				'post_title'   => $source,
+				'post_excerpt' => $destination,
+				'post_type'    => PostType::POST_TYPE,
+				'post_status'  => 'draft',
+			)
+		);
+	}
+
+	/**
+	 * Test --has-issues lists the flagged redirects, as the admin "Has issues" view does.
+	 */
+	public function test_list_has_issues_reads_the_flags(): void {
+		$problem = $this->create_redirect( '/flagged-problem', 'https://example.com/a' );
+		$warning = $this->create_redirect( '/flagged-warning', 'https://example.com/b' );
+		$this->create_redirect( '/not-flagged', 'https://example.com/c' );
+		update_post_meta( $problem, AuditFlags::META_KEY, 'problem' );
+		update_post_meta( $warning, AuditFlags::META_KEY, 'warning' );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'has-issues' => true,
+				'format'     => 'ids',
+				'orderby'    => 'title',
+				'order'      => 'ASC',
+			)
+		);
+		$this->assertSame( "{$problem} {$warning}", trim( $this->get_stdout() ) );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'has-issues' => 'problem',
+				'format'     => 'ids',
+			)
+		);
+		$this->assertSame( (string) $problem, trim( $this->get_stdout() ) );
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'has-issues' => 'warning',
+				'format'     => 'count',
+			)
+		);
+		$this->assertSame( '1', trim( $this->get_stdout() ) );
+	}
+
+	/**
+	 * Test --has-issues refuses a severity it does not know.
+	 */
+	public function test_list_has_issues_refuses_an_unknown_severity(): void {
+		$this->invoke_command( $this->command, array(), array( 'has-issues' => 'broken' ) );
+
+		$this->assert_command_error();
+		$this->assert_error_contains( 'Invalid --has-issues severity: broken' );
+	}
+
+	/**
+	 * Test a csv export whose limit ends part-way through a page stops at the limit.
+	 */
+	public function test_csv_export_stops_at_a_limit_inside_a_page(): void {
+		global $wpdb;
+
+		// One page is 5,000 rows, so the limit ends two rows into the second.
+		$values = array();
+		for ( $i = 1; $i <= 5003; $i++ ) {
+			$values[] = "('2026-01-01 00:00:00', '2026-01-01 00:00:00', '', '/limited-$i', '/target', 'publish', 'vip-legacy-redirect', '', '', '')";
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared -- Bulk fixture of literal values.
+		$wpdb->query( "INSERT INTO {$wpdb->posts} (post_date, post_date_gmt, post_content, post_title, post_excerpt, post_status, post_type, to_ping, pinged, post_content_filtered) VALUES " . implode( ',', $values ) );
+		$ids = array_map( 'intval', $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM {$wpdb->posts} WHERE post_type = %s ORDER BY ID DESC LIMIT 5002", PostType::POST_TYPE ) ) );
+
+		$pages = array();
+		add_action(
+			'pre_get_posts',
+			static function ( \WP_Query $query ) use ( &$pages ): void {
+				$pages[] = (int) $query->get( 'posts_per_page' );
+			}
+		);
+
+		$this->invoke_command(
+			$this->command,
+			array(),
+			array(
+				'format' => 'csv',
+				'limit'  => '5002',
+			)
+		);
+
+		$this->assertSame( array( 5000, 2 ), $pages );
+		$this->assertSame( $ids, array_column( $GLOBALS['wp_cli_format_items_calls'][0][1], 'ID' ) );
+	}
+}

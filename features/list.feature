@@ -1,0 +1,52 @@
+Feature: List redirects
+  As a site administrator
+  I want to list all redirects
+  So that I can see what redirects exist
+
+  Background:
+    Given a WP installation with the Legacy Redirector plugin
+
+  # Smoke test: verifies basic list output format via CLI.
+  Scenario: List all redirects
+    Given there is a published post with a slug of "list-destination"
+    And there is a redirect from "/list-test-1" to "/list-destination"
+    And there is a redirect from "/list-test-2" to "/list-destination"
+
+    When I run `wp legacy-redirector list`
+    Then STDOUT should contain:
+      """
+      /list-test-1
+      """
+    And STDOUT should contain:
+      """
+      /list-test-2
+      """
+
+    # Newest first, so the second redirect created is listed first.
+    When I run `wp legacy-redirector list --format=json`
+    Then STDOUT should be JSON containing:
+      """
+      [
+        {"from": "/list-test-2", "to": "/list-destination", "type": "url", "status": "enabled"},
+        {"from": "/list-test-1", "to": "/list-destination", "type": "url", "status": "enabled"}
+      ]
+      """
+
+  # Contract test: CSV format is the supported export path, so its header and
+  # columns are what scripts parse. import.feature reads one back in.
+  Scenario: Export redirects as CSV
+    Given there is a published post with a slug of "csv-destination"
+    And there is a redirect from "/csv-test-1" to "/csv-destination"
+
+    When I run `wp legacy-redirector list --format=csv`
+    Then STDOUT should match #^ID,from,to,type,status\n\d+,/csv-test-1,/csv-destination,url,enabled$#
+
+  # Contract test: machine-readable formats print the data alone, so an empty
+  # listing parses as an empty list rather than as a sentence.
+  Scenario: An empty JSON listing is an empty list
+    When I try `wp legacy-redirector list --format=json`
+    Then the return code should be 0
+    And STDOUT should be:
+      """
+      []
+      """

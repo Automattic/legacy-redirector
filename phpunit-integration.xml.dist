@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+	beStrictAboutChangesToGlobalState="true"
+	beStrictAboutCoversAnnotation="true"
+	beStrictAboutOutputDuringTests="true"
+	bootstrap="tests/Integration/bootstrap.php"
+	colors="true"
+	convertDeprecationsToExceptions="true"
+	failOnRisky="true"
+	failOnWarning="true"
+	forceCoversAnnotation="true"
+	verbose="true"
+>
+	<coverage processUncoveredFiles="true">
+		<include>
+			<directory suffix=".php">./src</directory>
+		</include>
+		<exclude>
+			<!-- View templates are include()d markup, not coverable classes; processUncoveredFiles would execute them. -->
+			<directory suffix=".php">./src/Infrastructure/WordPress/Admin/Pages/views</directory>
+		</exclude>
+	</coverage>
+	<testsuites>
+		<testsuite name="integration">
+			<directory>./tests/Integration/</directory>
+		</testsuite>
+	</testsuites>
+	<php>
+		<!-- wp-env runs as one environment, so the tests share the development site's database. The test suite drops and reinstalls every table with its prefix, so give the tests their own. wp-env's wp-config.php reads this variable. -->
+		<env name="WORDPRESS_TABLE_PREFIX" value="wptests_"/>
+	</php>
+</phpunit>

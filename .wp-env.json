@@ -1,0 +1,13 @@
+{
+  "plugins": [
+    "."
+  ],
+  "core": "WordPress/WordPress#master",
+  "phpVersion": "8.5",
+  "testsEnvironment": false,
+  "config": {
+    "WP_DEBUG": true,
+    "WP_DEBUG_LOG": true,
+    "SCRIPT_DEBUG": true
+  }
+}
