@@ -90,10 +90,10 @@ npm run test:e2e           # Run Playwright E2E tests (requires wp-env; WP_ENV_P
 
 ## Conventions
 
-Follow the standards documented in `~/code/plugin-standards/` for full details. Key points:
+See `CONTRIBUTING.md` for setup, checks and the contribution workflow. Key points:
 
-- **Commits**: Use the `/commit` skill. Favor explaining "why" over "what".
-- **PRs**: Use the `/pr` skill. Squash and merge by default.
+- **Commits**: Every commit must be signed; `develop` and `main` reject unsigned commits. Use a [Conventional Commits](https://www.conventionalcommits.org/) prefix (`fix:`, `feat:`, `test:`, `docs:`, `ci:`, `chore:` and so on) with an imperative subject of about 50 characters, and a body that explains why the change was needed rather than what changed. One concern per commit.
+- **PRs**: Open against `develop`. The title describes the outcome in sentence case, without a conventional commit prefix. The description explains the problem first, then how the PR solves it. PRs land as merge commits (squash and rebase merging are disabled), so every commit message reaches `develop` as written.
 - **Branch naming**: `feature/description`, `fix/description` from `develop`.
 - **Testing**: Four test types here:
   - **Unit tests**: For isolated domain/application logic. Use `Yoast\WPTestUtils\BrainMonkey\YoastTestCase`.
@@ -107,14 +107,13 @@ Follow the standards documented in `~/code/plugin-standards/` for full details. 
 ## Architectural Decisions
 
 - **Domain-Driven Design with CQRS elements**: Three-layer architecture (Domain/Application/Infrastructure). The RedirectManager handles writes, RedirectResolver handles reads. Do not bypass layers.
-- **Only the Domain layer is WordPress-free** (decided in VIPPLUG-119): Application services call WordPress APIs (`get_post`, `apply_filters`, `current_user_can`, `__()`, etc.) directly and are tested with Brain Monkey. Do not introduce ports/adapters (clock, HTTP, permalink, translation interfaces) to make Application WordPress-independent — the plugin only ever runs inside WordPress. The layering rules that do hold: Domain must not `use` Application or Infrastructure, and Application must not `use` Infrastructure.
+- **Only the Domain layer is WordPress-free**: Application services call WordPress APIs (`get_post`, `apply_filters`, `current_user_can`, `__()`, etc.) directly and are tested with Brain Monkey. Do not introduce ports/adapters (clock, HTTP, permalink, translation interfaces) to make Application WordPress-independent — the plugin only ever runs inside WordPress. The layering rules that do hold: Domain must not `use` Application or Infrastructure, and Application must not `use` Infrastructure.
 - **Value objects for URLs**: `SourceUrl` and `DestinationUrl` are distinct value objects (not plain strings). This prevents accidentally swapping source and destination. Always use the appropriate value object.
 - **Custom post type for storage**: Redirects are stored as a custom post type for performance and compatibility with VIP Go's infrastructure. Do not switch to custom database tables or options.
 - **Three client surfaces, one application layer**: the admin UI, WP-CLI, and the Abilities API are all presentation only. Each translates its own input into calls on `RedirectManager`, `RedirectAuditor`, and the repositories. Behavior that any two of them need belongs in Application, not in a command or an ability. The abilities deliberately mirror the CLI verbs so the three surfaces stay in step.
 - **Caching repository decorator**: `CachingRedirectRepository` wraps `PostTypeRedirectRepository` with object cache. Redirect lookups happen on every page load, so caching is critical for performance.
 - **Separate PHPUnit configs**: Unit and integration tests use different PHPUnit config files because integration tests need WordPress loaded and use wp-env.
 - **One wp-env environment**: `.wp-env.json` sets `"testsEnvironment": false`, so `wp-env start` brings up a single environment and every test runs in the `cli` container. There is no `tests-cli`.
-- **Tier 1 plugin**: This is a well-maintained, modernised plugin. It serves as a reference implementation for the standards.
 
 ## Common Pitfalls
 
