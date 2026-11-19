@@ -33,6 +33,28 @@ final class FeatureContext extends WpEnvFeatureContext {
 	private const CONTAINER_PLUGIN_PATH = '/var/www/html/wp-content/plugins/';
 
 	/**
+	 * Table prefix of the site the suite runs against.
+	 *
+	 * The suite shares wp-env's one environment, and so its database, with
+	 * the development site. Its own tables keep the resets from deleting the
+	 * site's content. wp-env's wp-config.php reads the prefix from
+	 * WORDPRESS_TABLE_PREFIX.
+	 *
+	 * @var string
+	 */
+	private const TABLE_PREFIX = 'wpbehat_';
+
+	/**
+	 * Request header that points a front-end request at the suite's tables.
+	 *
+	 * Apache reads WORDPRESS_TABLE_PREFIX once, when the container starts, so
+	 * a rule in .htaccess sets it for requests carrying this header instead.
+	 *
+	 * @var string
+	 */
+	private const PREFIX_HEADER = 'X-Legacy-Redirector-Behat';
+
+	/**
 	 * Resolved cli container name, or empty string when unavailable.
 	 *
 	 * Null means "not yet looked up". Empty string means "looked up and not
@@ -215,7 +237,8 @@ final class FeatureContext extends WpEnvFeatureContext {
 	 */
 	private static function run_in_container( string $shell_command, bool $in_plugin_dir = false ): array {
 		$exec_command = sprintf(
-			'docker exec %s%s sh -c %s',
+			'docker exec -e WORDPRESS_TABLE_PREFIX=%s %s%s sh -c %s',
+			self::TABLE_PREFIX,
 			$in_plugin_dir ? '-w ' . escapeshellarg( self::CONTAINER_PLUGIN_PATH . self::plugin_slug() ) . ' ' : '',
 			escapeshellarg( self::get_cli_container() ),
 			escapeshellarg( $shell_command )
@@ -372,11 +395,39 @@ RESET;
 	}
 
 	/**
+	 * Install the suite's own site, in the wpbehat_ tables, if it isn't there yet.
+	 *
+	 * Also adds the .htaccess rule that serves a request carrying
+	 * PREFIX_HEADER from those tables. Without the header, a request gets the
+	 * development site as before.
+	 *
+	 * @BeforeSuite
+	 * @throws RuntimeException If either step fails.
+	 * @return void
+	 */
+	public static function set_up_the_behat_site(): void {
+		$rule = sprintf(
+			"\n# BEGIN Legacy Redirector Behat\n<IfModule mod_setenvif.c>\nSetEnvIf %s . WORDPRESS_TABLE_PREFIX=%s\n</IfModule>\n# END Legacy Redirector Behat\n",
+			self::PREFIX_HEADER,
+			self::TABLE_PREFIX
+		);
+
+		list( $output, $exit_code ) = self::run_in_container(
+			'{ { wp core is-installed || wp core install --url="$(wp config get WP_HOME)" --title="Legacy Redirector Behat" --admin_user=admin --admin_password=password --admin_email=admin@example.org --skip-email; }'
+			. ' && { grep -q "BEGIN Legacy Redirector Behat" /var/www/html/.htaccess || printf %s ' . escapeshellarg( $rule ) . ' >> /var/www/html/.htaccess; }; } 2>&1'
+		);
+
+		if ( 0 !== $exit_code ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Exception messages don't require escaping.
+			throw new RuntimeException( "Could not set up the Behat site:\n" . implode( "\n", $output ) );
+		}
+	}
+
+	/**
 	 * Reset before the first scenario of a run, as well as after each one.
 	 *
 	 * The parent resets only after a scenario, so the first one would start on
-	 * whatever the dev site holds, seed data included, and pass or fail
-	 * depending on it.
+	 * whatever the previous run left, and pass or fail depending on it.
 	 *
 	 * @BeforeScenario
 	 * @return void
@@ -628,7 +679,8 @@ RESET;
 		// from inside the CLI container). The timeout keeps a hung request
 		// from stalling the job until CI kills it.
 		$container_script = sprintf(
-			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -gs -m 30 -D - -o /dev/null -H "Host: ${HOST_HEADER}" %s 2>&1',
+			'HOST_HEADER=$(wp eval \'$p = wp_parse_url( home_url() ); echo $p["host"] . ( isset( $p["port"] ) ? ":" . $p["port"] : "" );\'); curl -gs -m 30 -D - -o /dev/null -H "Host: ${HOST_HEADER}" -H %s %s 2>&1',
+			escapeshellarg( self::PREFIX_HEADER . ': 1' ),
 			escapeshellarg( 'http://wordpress' . $path )
 		);
 
