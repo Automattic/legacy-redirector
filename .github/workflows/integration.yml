@@ -47,6 +47,11 @@ jobs:
           - wordpress: '6.8'
             php: '8.3'
             multisite: true
+          # The WP version in the readme's "Tested up to", with the latest PHP.
+          # The master rows don't back that claim, so raise this row with each
+          # WordPress release.
+          - wordpress: '7.1'
+            php: '8.5'
           # Check multisite on latest WP with the latest PHP. The multisite-only
           # tests skip elsewhere, so this is the only run that can check their
           # covers annotations, hence coverage rather than a plain run.
