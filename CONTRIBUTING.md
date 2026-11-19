@@ -67,7 +67,7 @@ WP_ENV_PORT=8920 npm run test:e2e # Against a wp-env started on another port
 npm run test:e2e:debug            # Step through in the Playwright inspector
 ```
 
-The tests use the development site's database, as Behat does, so never run the two at once. Behat also deletes the site's posts, redirects and users other than `admin` before its first scenario and after each one. PHPUnit's integration suite has its own `wptests_` tables, so it leaves the site alone.
+The tests use the development site's database. PHPUnit's integration suite and Behat each have their own tables, `wptests_` and `wpbehat_`, so they leave the site alone.
 
 Test makes real requests to the site itself, which wp-env answers inside its container, so the tests need no network: every redirect they create points at a page on the same site.
 
