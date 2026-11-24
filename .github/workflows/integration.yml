@@ -65,6 +65,11 @@ jobs:
           - wordpress: 'master'
             php: '8.5'
             coverage: true
+          # Latest WP with the newest PHP. The coverage rows stay on 8.5
+          # because wp-env installs Xdebug with PECL, which the PHP 8.6 images
+          # no longer include.
+          - wordpress: 'master'
+            php: '8.6'
 
     env:
       WP_ENV_CORE: WordPress/WordPress#${{ matrix.wordpress }}
