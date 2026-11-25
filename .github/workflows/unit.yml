@@ -45,6 +45,11 @@ jobs:
           - php: '8.5'
             allowed_failure: false
             coverage: xdebug
+          # The newest PHP, without coverage: the coverage run stays on 8.5
+          # until Xdebug has a stable release for 8.6.
+          - php: '8.6'
+            allowed_failure: false
+            coverage: none
 
     steps:
       - name: Checkout code
